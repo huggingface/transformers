@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2026-02-17 and contributed to Hugging Face Transformers on 2026-06-17.*
+*This model was published in HF papers on 2026-02-17 and contributed to Hugging Face Transformers on 2026-02-09.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -34,7 +34,7 @@ GLM-5.2, our latest flagship model for long-horizon tasks. It marks a substantia
 GLM-5.2's new capabilities include:
 - **Solid 1M Context:** A solid 1M-token context that stably sustains long-horizon work
 - **Advanced Coding with Flexible Effort**: Stronger coding capabilities with multiple thinking effort levels to balance performance and latency
-- **Improved Architecture**: We propose [IndexShare](https://arxiv.org/abs/2603.12201), which reuses the same indexer across every four sparse attention layers, reducing per-token FLOPs by 2.9× at a 1M context length. We also improve GLM-5.2’s MTP layer for speculative decoding, increasing the acceptance length by up to 20%
+- **Improved Architecture**: We propose [IndexShare](https://huggingface.co/papers/2603.12201), which reuses the same indexer across every four sparse attention layers, reducing per-token FLOPs by 2.9× at a 1M context length. We also improve GLM-5.2’s MTP layer for speculative decoding, increasing the acceptance length by up to 20%
 
 ![bench_52](https://raw.githubusercontent.com/zai-org/GLM-5/refs/heads/main/resources/bench_52.png)
 
