@@ -471,8 +471,12 @@ class GenerationMixin(ContinuousMixin):
                 "`generate.py` file, can't load the custom generate function."
             )
 
-        # Handle opt-in `trust_remote_code` and related exceptions
-        is_local_code = os.path.exists(pretrained_model_name_or_path)
+        # Loading a custom generate function executes the repository's `custom_generate/generate.py`
+        # (via `get_class_in_module` below), so it is remote code and must be gated by
+        # `trust_remote_code` -- including when it is loaded from a local directory. `from_pretrained`
+        # likewise requires `trust_remote_code` for custom modeling code that lives in a local repo;
+        # treating a local path as trusted here previously let `custom_generate/generate.py` run with
+        # no opt-in.
         error_message = (
             f"The repository `{pretrained_model_name_or_path}` contains custom generation code that will override "
             "the default `generate` method."
@@ -480,8 +484,8 @@ class GenerationMixin(ContinuousMixin):
         resolve_trust_remote_code(
             trust_remote_code,
             pretrained_model_name_or_path,
-            has_local_code=is_local_code,
-            has_remote_code=not is_local_code,
+            has_local_code=False,
+            has_remote_code=True,
             error_message=error_message,
         )
 
@@ -598,6 +602,15 @@ class GenerationMixin(ContinuousMixin):
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(sequence_length, device=input_ids.device) + past_seen_tokens
             model_inputs["cache_position"] = cache_position
+
+        # 6. Move the tensors the forward consumes onto the model device, right before the call.
+        # It lets the caller intentionally keep inputs on a different device (e.g. Neuron/TPU) so
+        # the generation loop's growing-tensor bookkeeping stays off-device.
+        input_tensor = model_inputs.get("inputs_embeds", model_inputs[input_ids_key])  # input_ids is None for embeds
+        if self.device.type != "meta" and input_tensor is not None and input_tensor.device != self.device:
+            for key, value in model_inputs.items():
+                if isinstance(value, torch.Tensor):
+                    model_inputs[key] = value.to(self.device)
 
         return model_inputs
 
@@ -988,7 +1001,9 @@ class GenerationMixin(ContinuousMixin):
         # SinglePositionMultiTokenCandidateGenerator requires a target model that can provide, and an assistant model that
         # can work from a shared_kv_states dictionary. Currently, the only models that can provide this are Gemma 3n and
         # Gemma 4, and the only model that can work from it is a Gemma 4 Assistant
-        elif assistant_model is not None and assistant_model.__class__.__name__.startswith("Gemma4Assistant"):
+        elif assistant_model is not None and assistant_model.__class__.__name__.startswith(
+            ("Gemma4Assistant", "Gemma4UnifiedAssistant")
+        ):
             if not self.__class__.__name__.startswith(("Gemma4", "Gemma3n")):
                 raise ValueError(
                     f"Expected class name to start with Gemma4 or Gemma3n. Got {self.__class__.__name__}."
@@ -1493,6 +1508,13 @@ class GenerationMixin(ContinuousMixin):
     def _validate_generation_mode(
         self: "GenerativePreTrainedModel", generation_mode, generation_config, generation_mode_kwargs
     ):
+        supported_modes = getattr(self, "_supported_generation_modes", None)
+        if supported_modes is not None and generation_mode not in supported_modes:
+            raise ValueError(
+                f"{self.__class__.__name__} only supports {supported_modes}, but got "
+                f"generation mode '{generation_mode}'."
+            )
+
         if generation_mode == GenerationMode.BEAM_SEARCH and "streamer" in generation_mode_kwargs:
             raise ValueError(
                 "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
@@ -1827,9 +1849,13 @@ class GenerationMixin(ContinuousMixin):
             "rwkv",
             "xlstm",
         )
-        # name clash between minimax and minimax m2, so we add this "or"
-        return "minimaxm2" in cls.__name__.lower() or all(
-            unsupported_name not in cls.__name__.lower() for unsupported_name in unsupported_model_names
+        # The "minimax" exclusion targets the original linear-attention MiniMax (custom cache); the later
+        # MiniMax M2 / M3 are standard attention models that use the regular Dynamic/Static caches.
+        name = cls.__name__.lower()
+        return (
+            "minimaxm2" in name
+            or "minimaxm3" in name
+            or all(unsupported_name not in name for unsupported_name in unsupported_model_names)
         )
 
     def _prepare_cache_for_generation(
@@ -1891,13 +1917,7 @@ class GenerationMixin(ContinuousMixin):
             generation_config.cache_implementation = "dynamic_full"
 
         dynamic_cache_kwargs = {}
-        # linear attention models always need to pass the config, otherwise it will use an Attention cache for the LinearAttention layers
-        is_linear_attention = any(
-            x in ("mamba", "conv", "linear_attention")
-            for x in (getattr(self.config.get_text_config(decoder=True), "layer_types", []) or [])
-        )
-        if generation_config.cache_implementation != "dynamic_full" or is_linear_attention:
-            dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
+        dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
 
         if generation_config.cache_implementation == "offloaded":
             dynamic_cache_kwargs["offloading"] = True
@@ -2755,6 +2775,13 @@ class GenerationMixin(ContinuousMixin):
         batch_size = input_ids.shape[0]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+
+        # `pad_token_id` is created on `inputs_tensor.device` in `_prepare_special_tokens`. For multimodal models
+        # (e.g. BLIP-2, LLaVA) sharded across devices via `device_map="auto"`, `inputs_tensor` (e.g. `pixel_values`
+        # on the vision encoder) and `input_ids` (on the language model) can live on different devices, so we need to
+        # realign `pad_token_id` with `input_ids` to avoid cross-device ops below.
+        if pad_token_id is not None:
+            pad_token_id = pad_token_id.to(input_ids.device)
 
         model_forward = (
             self.get_compiled_call(generation_config.compile_config)

@@ -620,7 +620,9 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
             if deepstack_features is not None and layer_idx in deepstack_features:
                 features = deepstack_features[layer_idx].to(hidden_states.device, hidden_states.dtype)
                 mask = vision_mask.to(hidden_states.device)
-                hidden_states = hidden_states.masked_scatter(mask, (hidden_states[mask] + features.flatten()).view(-1))
+                hidden_states = hidden_states.masked_scatter(
+                    mask, (hidden_states[mask.squeeze(-1)] + features).view(-1)
+                )
 
             hidden_states = decoder_layer(
                 hidden_states,
@@ -784,12 +786,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
         )
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
@@ -955,9 +951,9 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
         )
         return special_image_mask
@@ -1048,12 +1044,6 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         self.model = Granite4VisionModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head

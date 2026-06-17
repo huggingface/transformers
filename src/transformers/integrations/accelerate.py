@@ -78,14 +78,14 @@ def get_module_size_with_ties(
     tied_module_names = []
     tied_modules = []
 
+    module_size_with_ties = module_size
     for tied_param in tied_params:
         tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if tied_param.startswith(n + ".")][0]
-        tied_module_names.append(modules_to_treat[tied_module_index][0])
-        tied_modules.append(modules_to_treat[tied_module_index][1])
-
-    module_size_with_ties = module_size
-    for tied_param, tied_module_name in zip(tied_params, tied_module_names):
-        module_size_with_ties += module_sizes[tied_module_name] - module_sizes[tied_param]
+        tied_module_name = modules_to_treat[tied_module_index][0]
+        if tied_module_name not in tied_module_names:
+            tied_module_names.append(tied_module_name)
+            tied_modules.append(modules_to_treat[tied_module_index][1])
+            module_size_with_ties += module_sizes[tied_module_name]
 
     return module_size_with_ties, tied_module_names, tied_modules
 
@@ -469,7 +469,9 @@ def accelerate_disk_offload(
 
         # Update the weight names according to the `weight_mapping`
         weight_renaming_map = {
-            rename_source_key(k, renamings, [], prefix=model.base_model_prefix, meta_state_dict=meta_state_dict)[0]: k
+            rename_source_key(
+                k, renamings, [], base_model_prefix=model.base_model_prefix, meta_state_dict=meta_state_dict
+            )[0]: k
             for k in weight_map
         }
 
@@ -764,7 +766,7 @@ def infer_auto_device_map(
 
             continue
 
-        # The current module itself fits, so we try to split the tied modules.
+        # The current module without tied submodules fits, so we try to split further
         if len(tied_params) > 0 and device_memory_used[device] + module_size <= current_max_size:
             # can we split one of the tied modules to make it smaller or do we need to go on the next device?
             if verbose:
@@ -803,41 +805,36 @@ def infer_auto_device_map(
             if split_happened:
                 continue
 
-            # If the tied module is not split, we go to the next device
-            if verbose:
-                print("None of the tied module can be split, going to the next device.")
-
-        # The current module itself doesn't fit, so we have to split it or go to the next device.
-        if device_memory_used[device] + module_size >= current_max_size:
-            # Split or not split?
-            modules_children = (
-                []
-                if isinstance(module, nn.Parameter) or isinstance(module, torch.Tensor)
-                else list(module.named_children())
+        # Fallback: we try to split modules and treat children separately as last resort
+        # Split or not split?
+        modules_children = (
+            []
+            if isinstance(module, nn.Parameter) or isinstance(module, torch.Tensor)
+            else list(module.named_children())
+        )
+        if verbose:
+            print(
+                f"Not enough space on {devices[current_device]} to put {name} (space available "
+                f"{current_max_size - device_memory_used[device]}, module size {module_size})."
             )
+        if len(modules_children) == 0 or module.__class__.__name__ in no_split_module_classes:
+            # -> no split, we go to the next device
             if verbose:
-                print(
-                    f"Not enough space on {devices[current_device]} to put {name} (space available "
-                    f"{current_max_size - device_memory_used[device]}, module size {module_size})."
-                )
-            if len(modules_children) == 0 or module.__class__.__name__ in no_split_module_classes:
-                # -> no split, we go to the next device
-                if verbose:
-                    print("This module cannot be split, going to the next device.")
+                print("This module cannot be split, going to the next device.")
 
-            else:
-                # -> split, we replace the module studied by its children + parameters
-                if verbose:
-                    print(f"Splitting {name}.")
-                modules_children = list(module.named_parameters(recurse=False)) + modules_children
-                modules_to_treat = [(f"{name}.{n}", v) for n, v in modules_children] + modules_to_treat
-                # Update the max layer size.
-                max_layer_size, max_layer_names = get_max_layer_size(
-                    [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
-                    module_sizes,
-                    no_split_module_classes,
-                )
-                continue
+        else:
+            # -> split, we replace the module studied by its children + parameters
+            if verbose:
+                print(f"Splitting {name}.")
+            modules_children = list(module.named_parameters(recurse=False)) + modules_children
+            modules_to_treat = [(f"{name}.{n}", v) for n, v in modules_children] + modules_to_treat
+            # Update the max layer size.
+            max_layer_size, max_layer_names = get_max_layer_size(
+                [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
+                module_sizes,
+                no_split_module_classes,
+            )
+            continue
 
         if device_memory_used[device] == 0:
             device_minimum_assignment_memory[device] = module_size_with_ties + current_memory_reserved

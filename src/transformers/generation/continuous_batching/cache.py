@@ -20,7 +20,6 @@ import torch
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
-from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .distributed import DistributedHelper
 from .initialization import resolve_max_memory_percent
@@ -60,7 +59,6 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
     return layer_groups, group_types
 
 
-@attach_tracer()
 class PagedAttentionCache:
     """
     Manages the cache for a paged attention mechanism, inspired by VLLM's hybrid allocator. The cache relies on making
@@ -294,9 +292,10 @@ class PagedAttentionCache:
         # For block table support, we lazy init the name of the block table key
         self._block_table_key = None
 
-    def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
-        """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful. The
-        number of newly allocated blocks needed is predicted by the following rules:
+    def blocks_needed(self, num_requested_blocks: int, allocated_blocks: int) -> int:
+        """Returns the number of physical blocks needed to allocate (num_requested_blocks) blocks to a request that
+        already has (allocated_blocks) blocks. The number of newly allocated blocks needed is predicted by the
+        following rules:
         - for full attention groups: since there is no sliding window for full attention layers, one requested block is
             always equivalent to one newly allocated block for EACH full attention group
         - for sliding window groups: because of the sliding window, the number of blocks allocated to a request is
@@ -310,9 +309,16 @@ class PagedAttentionCache:
         if self.num_sliding_attention_groups:
             blocks_left = max(self.max_sliding_window_blocks_per_request - allocated_blocks, 0)
             needed_blocks += min(blocks_left, num_requested_blocks) * self.num_sliding_attention_groups
-        return needed_blocks <= self.get_num_free_blocks()
+        return needed_blocks
 
-    @traced
+    def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
+        """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful."""
+        return self.blocks_needed(num_requested_blocks, allocated_blocks) <= self.get_num_free_blocks()
+
+    def blocks_in_use(self, request_id: str) -> int:
+        """Returns the total number of physical blocks currently referenced by a request across all layer groups."""
+        return sum(len(cm.block_table.get(request_id, ())) for cm in self.group_cache_managers)
+
     def allocate_blocks(self, n_blocks: int, request_id: str, allocated_blocks: int) -> int | None:
         """Allocate cache blocks across all layer groups for a given request. Actual allocation is done by the cache
         managers, and this method only returns the maximum number of blocks actually allocated across all managers."""
@@ -328,7 +334,6 @@ class PagedAttentionCache:
             max_allocated = max(max_allocated, num_allocated_blocks)
         return max_allocated
 
-    @traced
     def free_blocks(self, request_id: str) -> None:
         """Free all allocated cache blocks for a given request across all layer groups. Actual deallocation is done
         by the cache managers."""
@@ -339,7 +344,6 @@ class PagedAttentionCache:
         """Get the current number of unallocated blocks available for new requests."""
         return self._block_manager.num_free_blocks
 
-    @traced
     def extend_read_and_write_indices(
         self,
         request_id: str,
@@ -366,7 +370,6 @@ class PagedAttentionCache:
         for i, cm in enumerate(self.group_cache_managers):
             cm.fill_block_table(request_id, past_length, query_length, block_table[i])
 
-    @traced
     def get_seqlens_k(self, past_length: int, query_length: int) -> dict[str, int]:
         """Retrieve the key sequence length for the given request_id across all layer types. Returns a dictionary of
         layer types to their corresponding key sequence lengths."""
@@ -378,7 +381,6 @@ class PagedAttentionCache:
         # NOTE: when we add more attention types / different sliding windows, we can go back to looping over CMs
         return seqlens_k
 
-    @traced
     def update(
         self,
         key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_kv, head_dim]
@@ -511,6 +513,24 @@ class PagedAttentionCache:
         # FIXME: consolidate the cache into a single tensor of shape (group_size, 2, *self.k_or_v_cache_shape)
         # This will allow for  better .update and a single copy instead of one per cache tensor
 
+    def compute_max_num_forks(self, source_request_id: str) -> int:
+        """Computes the maximum number of children requests that can be forked from the source request."""
+        # Count, across all groups, the new blocks each fork would have to allocate (i.e. non-shareable blocks)
+        blocks_needed_per_fork = 0
+        for cm in self.group_cache_managers:
+            block_ids = cm.block_table[source_request_id]
+            shareable_blocks = 0
+            if cm.uses_block_sharing:
+                for block_id in block_ids:
+                    if not self._block_manager._id_to_block[block_id].is_complete:
+                        break
+                    shareable_blocks += 1
+            blocks_needed_per_fork += len(block_ids) - shareable_blocks
+        # If every block can be shared, no new allocations are needed and any number of forks is possible
+        if blocks_needed_per_fork == 0:
+            return 2**31  # absurdly large number, virtually infinite number of forks
+        return self.get_num_free_blocks() // blocks_needed_per_fork
+
     def fork_request(self, source_request_id: str, destination_request_ids: list[str]) -> tuple[list[int], list[int]]:
         """Fork the cache of a request (state) into the one of a list of requests with the given (dst_request_ids)."""
         # These lists will be the accumulators for the source and destination blocks for the cache copy
@@ -618,6 +638,8 @@ class PagedAttentionMemoryHandler:
             + k * self.num_groups * 8                  # write_index: [num_groups, M] int64
             + k * self.num_groups * 8                  # read_index: [num_groups, N + M] (M part only, int64)
         )
+        # TODO: the above could be refined by introducing the max_requests_per_batch, but then there is a min() and this
+        # is no longer a simple polynomial. Could be worth checking into.
         # -- N·M terms: cost per (page × batch token) --------------------------------------
         coeff_nm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (N·M part only)
         # -- M² terms: cost per (batch token squared) --------------------------------------

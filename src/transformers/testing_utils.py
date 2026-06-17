@@ -680,7 +680,7 @@ def require_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
     except Exception as _:
         kernels_available = False
 
@@ -721,7 +721,7 @@ def require_all_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
     except Exception as _:
         kernels_available = False
 
@@ -901,6 +901,19 @@ def require_torch_multi_accelerator(test_case):
     return unittest.skipUnless(backend_device_count(torch_device) > 1, "test requires multiple accelerators")(
         test_case
     )
+
+
+def require_torch_n_accelerators(n: int):
+    """Decorator marking a test that requires at least `n` accelerators (in PyTorch)."""
+
+    def decorator(test_case):
+        if not is_torch_available():
+            return unittest.skip(reason="test requires PyTorch")(test_case)
+        return unittest.skipUnless(backend_device_count(torch_device) >= n, f"test requires >= {n} accelerators")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_torch_non_multi_gpu(test_case):
@@ -1195,11 +1208,14 @@ def require_fp8(test_case):
 
 
 def require_cuda_capability_at_least(major, minor):
-    """Decorator to skip tests when CUDA capability is below the given version."""
+    """Decorator: when running on CUDA, skip if device capability is below the given
+    threshold. On non-CUDA backends this is a no-op — pair with :func:`require_torch_gpu`
+    if the test is CUDA-only, or leave alone if it should also run on other backends
+    (which won't be capability-gated)."""
     import torch
 
     if not torch.cuda.is_available():
-        return unittest.skip("CUDA not available")
+        return lambda test_case: test_case
     capability = torch.cuda.get_device_capability()
     return unittest.skipIf(capability < (major, minor), f"Requires CUDA capability >= {major}.{minor}")
 
@@ -3271,23 +3287,25 @@ def get_device_properties() -> DeviceProperties:
     if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
         import torch
 
-        major, minor = torch.cuda.get_device_capability()
-        if IS_ROCM_SYSTEM:
-            return ("rocm", major, minor)
-        else:
-            return ("cuda", major, minor)
-    elif IS_XPU_SYSTEM:
+        if torch.cuda.is_available():
+            major, minor = torch.cuda.get_device_capability()
+            if IS_ROCM_SYSTEM:
+                return ("rocm", major, minor)
+            else:
+                return ("cuda", major, minor)
+    if IS_XPU_SYSTEM:
         import torch
 
-        # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
-        arch = torch.xpu.get_device_capability()["architecture"]
-        gen_mask = 0x000000FF00000000
-        gen = (arch & gen_mask) >> 32
-        return ("xpu", gen, None)
-    elif IS_NPU_SYSTEM:
+        if torch.xpu.is_available():
+            # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
+            arch = torch.xpu.get_device_capability()["architecture"]
+            gen_mask = 0x000000FF00000000
+            gen = (arch & gen_mask) >> 32
+            return ("xpu", gen, None)
+    if IS_NPU_SYSTEM:
+        # TODO: after torch 2.5.1, use `if hasattr(torch, "npu") and torch.npu.is_available()` here for consistency with CUDA/XPU blocks
         return ("npu", None, None)
-    else:
-        return (torch_device, None, None)
+    return (torch_device, None, None)
 
 
 def unpack_device_properties(
