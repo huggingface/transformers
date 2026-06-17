@@ -156,20 +156,46 @@ def _clean_tokens(raw_tokens) -> list[str]:
 
 
 def _parse_single_output(text: str) -> dict:
-    """Parse a single decoded ASR string into language + transcription."""
+    """Parse a single decoded ASR string into language + transcription like the original implementation."""
+    if text is None:
+        return {"language": None, "transcription": ""}
+    text = str(text).strip()
+    if not text:
+        return {"language": None, "transcription": ""}
+
     if "assistant\n" in text:
         text = text.split("assistant\n", 1)[-1]
+
+    # Apply repetition fix from original implementation
+    text = _detect_and_fix_repetitions(text)
+
     marker = "<asr_text>"
     if marker not in text:
-        return {"language": None, "transcription": text}
+        # No tag — treat the whole string as plain transcription
+        return {"language": None, "transcription": text.strip()}
+
     prefix, transcription = text.split(marker, 1)
     prefix = prefix.strip()
+
+    # Empty-audio heuristic: "language None<asr_text>"
+    if prefix.lower() == "language none":
+        t = transcription.strip()
+        return {"language": None, "transcription": t}
+
     language = None
-    if prefix.startswith("language "):
-        language = prefix[len("language ") :].strip()
-    elif prefix:
-        language = prefix
-    return {"language": language, "transcription": transcription.strip()}
+    for line in prefix.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.lower().startswith("language "):
+            val = line[len("language ") :].strip()
+            if val:
+                language = val
+        else:
+            language = line
+        break  # only inspect the first non-empty line, matching the original
+
+    return {"language": language or None, "transcription": transcription.strip()}
 
 
 def _fix_timestamps(raw: np.ndarray) -> list[int]:
@@ -281,6 +307,79 @@ def _fix_timestamps(raw: np.ndarray) -> list[int]:
         block_start = block_end
 
     return [int(val) for val in result]
+
+
+def _detect_and_fix_repetitions(text, threshold=20):
+    """
+    Original implementation uses this post-processing to remove repeated characters and patterns in the ASR output
+    https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/utils.py#L432
+    """
+
+    def fix_char_repeats(s, thresh):
+        res = []
+        i = 0
+        n = len(s)
+        while i < n:
+            count = 1
+            while i + count < n and s[i + count] == s[i]:
+                count += 1
+
+            if count > thresh:
+                res.append(s[i])
+                i += count
+            else:
+                res.append(s[i : i + count])
+                i += count
+        return "".join(res)
+
+    def fix_pattern_repeats(s, thresh, max_len=20):
+        n = len(s)
+        min_repeat_chars = thresh * 2
+        if n < min_repeat_chars:
+            return s
+
+        i = 0
+        result = []
+        while i <= n - min_repeat_chars:
+            found = False
+            for k in range(1, max_len + 1):
+                if i + k * thresh > n:
+                    break
+
+                pattern = s[i : i + k]
+                valid = True
+                for rep in range(1, thresh):
+                    start_idx = i + rep * k
+                    if s[start_idx : start_idx + k] != pattern:
+                        valid = False
+                        break
+
+                if valid:
+                    total_rep = thresh
+                    end_index = i + thresh * k
+                    while end_index + k <= n and s[end_index : end_index + k] == pattern:
+                        total_rep += 1
+                        end_index += k
+                    result.append(pattern)
+                    result.append(fix_pattern_repeats(s[end_index:], thresh, max_len))
+                    i = n
+                    found = True
+                    break
+
+            if found:
+                break
+            else:
+                result.append(s[i])
+                i += 1
+
+        if not found:
+            result.append(s[i:])
+        return "".join(result)
+
+    text_raw = text
+    text = fix_char_repeats(text_raw, threshold)
+    text = fix_pattern_repeats(text, threshold)
+    return text
 
 
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
