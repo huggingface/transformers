@@ -93,14 +93,14 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             "has a build matching the current torch/CUDA."
         )
 
-    matmul = getattr(kernel, "matmul", None)
+    matmul = getattr(kernel, "matmul_2d", None)
     batched_matmul = getattr(kernel, "matmul_batched", None)
     grouped_matmul = getattr(kernel, "matmul_grouped", None)
 
     missing = [
         name
         for name, attr in [
-            ("matmul", matmul),
+            ("matmul_2d", matmul),
             ("matmul_batched", batched_matmul),
             ("matmul_grouped", grouped_matmul),
         ]

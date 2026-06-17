@@ -307,7 +307,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d", "version": 1},
     "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
     "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
-    "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 2},
+    "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 3},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
 }
