@@ -1,3 +1,4 @@
+import copy
 from collections.abc import Sequence
 from typing import Any
 
@@ -87,6 +88,9 @@ class Step3p7TextConfig(PretrainedConfig):
         moe_router_scaling_factor: float = 1.0,
         need_fp32_gate: bool = False,
         attention_other_setting: dict[str, Any] | None = None,
+        # Original checkpoints store sliding-layer head counts inside attention_other_setting;
+        # num_sliding_attention_heads is derived from it automatically so config.json need not change.
+        num_sliding_attention_heads: int | None = None,
         swiglu_limits: list[float | None] | None = None,
         swiglu_limits_shared: list[float | None] | None = None,
         use_rope_layers: list[bool] | None = None,
@@ -171,6 +175,9 @@ class Step3p7TextConfig(PretrainedConfig):
         self.moe_router_scaling_factor = moe_router_scaling_factor
         self.need_fp32_gate = need_fp32_gate
         self.attention_other_setting = attention_other_setting
+        if num_sliding_attention_heads is None and attention_other_setting:
+            num_sliding_attention_heads = attention_other_setting.get("num_attention_heads", num_attention_heads)
+        self.num_sliding_attention_heads = num_sliding_attention_heads or num_attention_heads
         self.swiglu_limits = swiglu_limits
         self.swiglu_limits_shared = swiglu_limits_shared
         self.use_rope_layers = use_rope_layers
@@ -179,6 +186,10 @@ class Step3p7TextConfig(PretrainedConfig):
         if torch_dtype is not None:
             self.torch_dtype = torch_dtype
         self.layer_types = layer_types
+
+    @property
+    def num_key_value_heads(self):
+        return self.num_attention_groups
 
     def to_dict(self):
         output = super().to_dict()
