@@ -3824,7 +3824,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             register_kernel_mapping_transformers()
 
             if kernel_config is not None:
-                if isinstance(kernel_config, KernelConfig):
+                if not isinstance(kernel_config, KernelConfig):
                     raise ValueError(f"Expeced `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}")
 
                 # Since kernel_config is a correct value, set it as an attribute of the model so it can be used.
