@@ -551,7 +551,7 @@ class DiffusionGemmaGenerationMixin:
         logits_processor: LogitsProcessorList | None = None,
         stopping_criteria: StoppingCriteriaList | None = None,
         **kwargs,
-    ) -> DiffusionGemmaGenerationOutput:
+    ) -> torch.LongTensor | DiffusionGemmaGenerationOutput:
         """
         Generates text using the diffusion model.
 
@@ -607,9 +607,11 @@ class DiffusionGemmaGenerationMixin:
                 forwarded to the `forward` function of the model. For instance, you can set the starting canvas with
                 `decoder_input_ids`.
 
-        Return:
-            [`DiffusionGemmaGenerationOutput`]: a `ModelOutput` instance containing the generated text (`sequences`),
-            as well as other optional outputs.
+        Returns:
+            `torch.LongTensor` or [`DiffusionGemmaGenerationOutput`]:
+            - `torch.LongTensor`: the generated text in ids.
+            - [`DiffusionGemmaGenerationOutput`]: a `ModelOutput` instance containing the generated text (`sequences`),
+              as well as other optional outputs.
 
         Examples:
 
@@ -631,7 +633,11 @@ class DiffusionGemmaGenerationMixin:
         # 0. Input preparation
         # 0.a. Prepare the generation config, respecting the kwarg-based parameterization from the original AR
         # `generate`
-        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+                return_dict_in_generate = (
+                    kwargs["return_dict_in_generate"] if "return_dict_in_generate" in kwargs else 
+                    getattr(generation_config, "return_dict_in_generate", False)
+                )
+                generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         # 0.b. Set generation or output control variables. As in AR generation, `max_new_tokens` takes precedence
         # over `max_length` (we check against the default value, 256).
@@ -824,6 +830,8 @@ class DiffusionGemmaGenerationMixin:
         # 2. Finalize and return
         if streamer is not None:
             streamer.end()
+        if not return_dict_in_generate:
+            return input_ids
 
         tokens_per_forward = self._compute_tokens_per_forward(
             input_ids, decoder_forward_passes, initial_input_ids_len, generation_config.pad_token_id
@@ -869,6 +877,7 @@ class DiffusionGemmaGenerationMixin:
         generation_config = copy.deepcopy(generation_config)
         # apply global defaults to unset parameters
         global_defaults = generation_config._get_default_generation_params()
+        generation_config.update(**self.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True)
         generation_config.update(**global_defaults, defaults_only=True)
         # kwargs rejected from updating the generation config are model_kwargs
         model_kwargs = generation_config.update(**kwargs)
