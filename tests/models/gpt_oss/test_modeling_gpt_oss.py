@@ -71,11 +71,18 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
     @require_kernels
     def test_kernelize_does_not_crash(self):
-        """Regression test #45799: `kernelize` should not crash with `use_kernelized_func` + `use_kernel_func_from_hub`."""
+        """Regression test #45799 and #46619: `kernelize` should not crash with `use_kernelized_func` + `use_kernel_func_from_hub`."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = GptOssModel(config).to(device=torch_device)
         # This used to raise TypeError because apply_rotary_pos_emb was not wrapped as nn.Module
         model.use_kernels = True
+
+        # Regression test #46619: stale `position_ids` in signature mismatch the hub kernel
+        from transformers.models.gpt_oss.modeling_gpt_oss import apply_rotary_pos_emb
+
+        forward = getattr(type(apply_rotary_pos_emb), "forward", apply_rotary_pos_emb)
+        params = [name for name in inspect.signature(forward).parameters if name != "self"]
+        self.assertEqual(params, ["q", "k", "cos", "sin", "unsqueeze_dim"])
 
     @require_kernels
     @pytest.mark.flash_attn_test
