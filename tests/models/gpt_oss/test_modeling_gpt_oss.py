@@ -76,7 +76,6 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         """Regression test #45799 and #46619: `kernelize` should not crash with `use_kernelized_func` + `use_kernel_func_from_hub`."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = GptOssModel(config).to(device=torch_device)
-        model.use_kernels = True
         model.set_use_kernels(True)
 
     @require_kernels
