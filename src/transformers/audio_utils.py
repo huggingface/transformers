@@ -24,6 +24,7 @@ import warnings
 from collections.abc import Sequence
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Union
+from urllib.parse import urlparse
 
 import httpx
 import numpy as np
@@ -66,43 +67,106 @@ def _fetch_audio_bytes(url: str, timeout: float | None = 10.0) -> bytes:
     return response.content
 
 
-# Video containers librosa cannot decode; loading audio from these requires torchcodec.
-VIDEO_CONTAINER_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv")
-_VIDEO_NEEDS_TORCHCODEC = (
-    "librosa cannot decode video containers. "
-    "Install torchcodec>=0.3.0 (`pip install torchcodec`) to load audio from video files."
+_NEEDS_TORCHCODEC = "Install torchcodec>=0.3.0 (`pip install torchcodec`) to load audio from this source."
+
+
+TORCHCODEC_ONLY_FILETYPES = frozenset(
+    {
+        "3gp",
+        "aac",
+        "ac3",
+        "amr",
+        "avi",
+        "flv",
+        "m4a",
+        "m4v",
+        "mkv",
+        "mov",
+        "mp4",
+        "mpg",
+        "ogv",
+        "sox",
+        "ts",
+        "webm",
+        "wma",
+        "wmv",
+        "wv",
+    }
 )
 
 
-def _is_video_source(audio: str) -> bool:
-    """Whether `audio` points to a video container (which librosa cannot decode).
-
-    Detects both plain paths/URLs (by extension) and `data:video/...` base64 URIs (by media
-    type). Raw base64 without a media-type prefix cannot be classified here — see
-    :func:`_is_video_bytes`, which sniffs the decoded bytes instead.
-    """
+def _format_from_source(audio: str) -> "str | None":
+    """Best-effort format token from the source *string* — the file extension (paths and URLs) or
+    the media subtype (`data:` URIs) — without resolving or decoding it. Returns None when the
+    string carries no hint, e.g. a raw base64 payload."""
     if audio.startswith("data:"):
-        media_type = audio[len("data:") :].split(";", 1)[0].split(",", 1)[0]
-        return media_type.startswith("video/")
-    return audio.rsplit("?", 1)[0].lower().endswith(VIDEO_CONTAINER_EXTENSIONS)
+        media_type = audio[len("data:") :].split(",", 1)[0].split(";", 1)[0]
+        return media_type.rpartition("/")[2].removeprefix("x-") or None
+    path = urlparse(audio).path if audio.startswith(("http://", "https://")) else audio
+    return os.path.splitext(path)[1].lstrip(".").lower() or None
 
 
-def _is_video_bytes(data: bytes) -> bool:
-    """Whether `data` is a video container, sniffed from its leading magic bytes.
+def get_audio_filetype(data: bytes) -> str:
+    """Identify a file's container/codec from its magic bytes.
 
-    Catches raw base64 sources that carry no media-type hint for :func:`_is_video_source`.
-    Covers the containers in :data:`VIDEO_CONTAINER_EXTENSIONS`. Note ``RIFF....WAVE`` (audio)
-    is deliberately excluded — only ``RIFF....AVI `` matches.
+    A few extensions are byte-identical in their headers and collapse to a canonical type:
+    ``wavex`` -> ``wav`` and ``m4v``/``hevc.mp4`` -> ``mp4`` (all carry the ``isom`` ftyp brand).
+
+    Raises ValueError if the bytes match no supported filetype.
     """
-    if len(data) < 12:
-        return False
-    return (
-        data[4:8] in (b"ftyp", b"moov", b"mdat")  # ISO base media: mp4 / mov
-        or data[:4] == b"\x1a\x45\xdf\xa3"  # EBML: mkv / webm
-        or data[:3] == b"FLV"  # flv
-        or (data[:4] == b"RIFF" and data[8:12] == b"AVI ")  # avi (not wav)
-        or data[:4] == b"\x30\x26\xb2\x75"  # ASF: wmv
-    )
+    head = data[:64]
+
+    # Containers that host several filetypes -> sniff a bit deeper.
+    if head[4:8] == b"ftyp":  # ISO-BMFF: m4v & hevc share the 'isom' brand -> mp4
+        brand = head[8:12]
+        return (
+            "3gp" if brand[:3] == b"3gp" else "m4a" if brand[:3] == b"M4A" else "mov" if brand[:2] == b"qt" else "mp4"
+        )
+    if head[:4] == b"RIFF" and head[8:12] in (b"WAVE", b"AVI "):
+        return "wav" if head[8:12] == b"WAVE" else "avi"
+    if head[:4] == b"riff" and head[4:8] == bytes.fromhex("2e91cf11"):  # Wave64
+        return "w64"
+    if head[:4] == bytes.fromhex("1a45dfa3"):  # EBML: Matroska vs WebM
+        return "webm" if b"webm" in head else "mkv"
+    if head[:4] == b"OggS":  # OGG: Opus / Theora (ogv) / Vorbis (ogg)
+        page = data[:128]
+        return "opus" if b"OpusHead" in page else "ogv" if b"theora" in page else "ogg"
+    if head[:16] == bytes.fromhex("3026b2758e66cf11a6d900aa0062ce6c"):  # ASF
+        return "wmv" if bytes.fromhex("c0ef19bc4d5bcf11a8fd00805f5c442b") in data else "wma"
+    if head[:1] == b"\xff" and len(head) > 1 and head[1] & 0xE0 == 0xE0:  # MPEG/AAC sync
+        if head[1] & 0xF6 == 0xF0:  # ADTS layer bits 00 -> AAC
+            return "aac"
+        layer = head[1] >> 1 & 0x3  # MPEG audio layer field (II -> mp2, III -> mp3)
+        if layer in (0b10, 0b01):
+            return "mp2" if layer == 0b10 else "mp3"
+    if head[:1] == b"\x47" and len(data) > 188 and data[188] == 0x47:
+        return "ts"
+    if head[:4] == b"FORM" and head[8:12] in (b"AIFF", b"AIFC"):
+        return "aiff"
+
+    # Single fixed-signature formats, keyed by their leading bytes.
+    signatures = {
+        b"fLaC": "flac",
+        b"RF64": "rf64",
+        b"caff": "caf",
+        b".snd": "au",
+        b"#!AMR": "amr",
+        b"wvpk": "wv",
+        b".SoX": "sox",
+        b"XoS.": "sox",
+        b"Creative Voice File": "voc",
+        b"\x64\xa3\x01\x00": "sf",
+        b"\x00\x01\xa3\x64": "sf",
+        b"\x0b\x77": "ac3",
+        b"\x00\x00\x01\xba": "mpg",
+        b"FLV": "flv",
+        b"ID3": "mp3",
+    }
+    for sig, filetype in signatures.items():
+        if head.startswith(sig):
+            return filetype
+
+    raise ValueError("not supported filetype")
 
 
 def _resolve_audio_source(audio: str, timeout: float | None = None) -> "str | bytes":
@@ -127,7 +191,7 @@ def _resolve_audio_source(audio: str, timeout: float | None = None) -> "str | by
         )
 
 
-def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
+def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backend: str = "auto") -> np.ndarray:
     """
     Loads `audio` to an np.ndarray object.
 
@@ -141,88 +205,79 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np
             sampling rate the model you will be using further was trained with.
         timeout (`float`, *optional*):
             The timeout value in seconds for the URL request.
+        backend (`str`, *optional*, defaults to `"auto"`):
+            Decoding backend: `"auto"` uses torchcodec when available (>=0.3.0) and falls back to
+            librosa; `"torchcodec"` or `"librosa"` force that backend (and error if it is missing).
 
     Returns:
         `np.ndarray`: A numpy array representing the audio.
     """
-    if isinstance(audio, str):
-        # Try to load with `torchcodec` but do not enforce users to install it. If not found
-        # fallback to `librosa`. If using an audio-only model, most probably `torchcodec` won't be
-        # needed. Do not raise any errors if not installed or versions do not match
-        if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION:
-            audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate, timeout=timeout)
-        elif _is_video_source(audio):
-            source = "a base64-encoded video" if audio.startswith("data:") else f"'{audio.split('/')[-1]}'"
-            raise RuntimeError(f"The audio source appears to be a video file ({source}). {_VIDEO_NEEDS_TORCHCODEC}")
-        else:
-            audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)
-    elif not isinstance(audio, np.ndarray):
+    if isinstance(audio, np.ndarray):
+        return audio
+    if not isinstance(audio, str):
         raise TypeError(
-            "Incorrect format used for `audio`. Should be an url linking to an audio, a local path, or numpy array."
+            "Incorrect format used for `audio`. Should be a numpy array or a `str`: an `http(s)://` URL, "
+            "a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI)."
         )
-    return audio
+
+    # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.
+    if backend == "auto":
+        use_torchcodec = is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION
+    elif backend in ("torchcodec", "librosa"):
+        use_torchcodec = backend == "torchcodec"
+    else:
+        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', or 'librosa'.")
+
+    # 1. Identify the format from the source string (extension / `data:` media type), without fetching.
+    filetype = _format_from_source(audio)
+    # 2. With librosa as the only backend, fail fast and clearly on a format it cannot decode.
+    if not use_torchcodec and filetype in TORCHCODEC_ONLY_FILETYPES:
+        raise RuntimeError(
+            f"The audio source is a '{filetype}' file, which librosa cannot decode. {_NEEDS_TORCHCODEC}"
+        )
+
+    # 3. Resolve to local path or bytes; sniff format for raw base64 payloads before passing to librosa.
+    source = _resolve_audio_source(audio, timeout=timeout)
+    if not use_torchcodec and filetype is None and isinstance(source, bytes):
+        try:
+            filetype = get_audio_filetype(source)
+        except ValueError:
+            filetype = None
+        if filetype in TORCHCODEC_ONLY_FILETYPES:
+            raise RuntimeError(
+                f"The audio source is a '{filetype}' file, which librosa cannot decode. {_NEEDS_TORCHCODEC}"
+            )
+
+    # 4. Decode with the selected backend (`requires_backends` raises a clear error if it is missing).
+    if use_torchcodec:
+        requires_backends(load_audio, ["torchcodec"])
+        from torchcodec.decoders import AudioDecoder
+
+        # `num_channels=1` matches what most models expect and librosa's default.
+        return AudioDecoder(source, sample_rate=sampling_rate, num_channels=1).get_all_samples().data[0].numpy()
+
+    requires_backends(load_audio, ["librosa"])
+    return librosa.load(BytesIO(source) if isinstance(source, bytes) else source, sr=sampling_rate)[0]
 
 
 def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
-    """
-    Loads `audio` to an np.ndarray object using `torchcodec`.
-
-    Args:
-        audio (`str` or `np.ndarray`):
-            The audio to be loaded to the numpy array format.
-        sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate to be used when loading the audio. It should be same as the
-            sampling rate the model you will be using further was trained with.
-        timeout (`float`, *optional*):
-            The timeout value in seconds for the URL request.
-
-    Returns:
-        `np.ndarray`: A numpy array representing the audio.
-    """
-    # Lazy import so that issues in torchcodec compatibility don't crash the whole library
-    requires_backends(load_audio_torchcodec, ["torchcodec"])
-    from torchcodec.decoders import AudioDecoder
-
-    # Resolve to a file path or raw bytes (fetching URLs ourselves so we get retry logic;
-    # torchcodec does not surface ffmpeg network retries options). AudioDecoder accepts both.
-    audio = _resolve_audio_source(audio, timeout=timeout)
-
-    # Set `num_channels` to `1` which is what most models expects and the default in librosa
-    decoder = AudioDecoder(audio, sample_rate=sampling_rate, num_channels=1)
-    audio = decoder.get_all_samples().data[0].numpy()  # NOTE: feature extractors don't accept torch tensors
-    return audio
+    """Deprecated. Use [`load_audio`] instead (equivalent to `backend="torchcodec"`)."""
+    warnings.warn(
+        "`load_audio_torchcodec` is deprecated and will be removed in a future version. "
+        'Use `load_audio(..., backend="torchcodec")` instead.',
+        FutureWarning,
+    )
+    return load_audio(audio, sampling_rate=sampling_rate, timeout=timeout, backend="torchcodec")
 
 
 def load_audio_librosa(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
-    """
-    Loads `audio` to an np.ndarray object using `librosa`.
-
-    Args:
-        audio (`str` or `np.ndarray`):
-            The audio to be loaded to the numpy array format.
-        sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate to be used when loading the audio. It should be same as the
-            sampling rate the model you will be using further was trained with.
-        timeout (`float`, *optional*):
-            The timeout value in seconds for the URL request.
-
-    Returns:
-        `np.ndarray`: A numpy array representing the audio.
-    """
-    requires_backends(load_audio_librosa, ["librosa"])
-
-    # Resolve to a file path or raw bytes (e.g. URL like
-    # https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav).
-    # `librosa.load` reads a path directly but needs a file-like for in-memory bytes.
-    audio = _resolve_audio_source(audio, timeout=timeout)
-    if isinstance(audio, bytes):
-        # Raw base64 carries no media-type hint for the dispatcher's string check, so sniff the
-        # decoded bytes here to surface the helpful error instead of librosa's cryptic one.
-        if _is_video_bytes(audio):
-            raise RuntimeError(f"The decoded audio source appears to be a video container. {_VIDEO_NEEDS_TORCHCODEC}")
-        audio = BytesIO(audio)
-    audio = librosa.load(audio, sr=sampling_rate)[0]
-    return audio
+    """Deprecated. Use [`load_audio`] instead (equivalent to `backend="librosa"`)."""
+    warnings.warn(
+        "`load_audio_librosa` is deprecated and will be removed in a future version. "
+        'Use `load_audio(..., backend="librosa")` instead.',
+        FutureWarning,
+    )
+    return load_audio(audio, sampling_rate=sampling_rate, timeout=timeout, backend="librosa")
 
 
 def load_audio_as(
