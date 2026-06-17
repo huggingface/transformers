@@ -4305,6 +4305,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
+            if len(devices := list(device_map.values())) == 1 and devices[0] == "disk":
+                raise ValueError("Trying to load everything on `disk` which means the model doesn't fit in memory.")
 
         # Finalize model weight initialization
         load_config = LoadStateDictConfig(
