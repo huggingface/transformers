@@ -698,17 +698,20 @@ class AutoImageProcessor:
             existing_mapping = IMAGE_PROCESSOR_MAPPING[config_class]
             existing_mapping.update(image_processor_classes)
             image_processor_classes = existing_mapping
-
-        # Validate that all classes are proper image processor classes
+# Validate that all classes are proper image processor classes
         from ...image_processing_utils import BaseImageProcessor
+        from ...image_processing_utils_fast import BaseImageProcessorFast
 
         for backend_key, processor_class in image_processor_classes.items():
-            if processor_class is not None and not issubclass(processor_class, BaseImageProcessor):
-                raise ValueError(
-                    f"Image processor class for backend '{backend_key}' must inherit from `BaseImageProcessor`. "
-                    f"Got: {processor_class}"
-                )
+            if backend_key == "torchvision" or processor_class is fast_image_processor_class:
+                if not issubclass(processor_class, BaseImageProcessorFast):
+                    raise ValueError(
+                        "You passed a slow image processor in as the `fast_image_processor_class`."
+                    )
+            else:
+                if not issubclass(processor_class, BaseImageProcessor):
+                    raise ValueError(
+                        f"Image processor class {processor_class} must inherit from BaseImageProcessor."
+                    )
+
         IMAGE_PROCESSOR_MAPPING.register(config_class, image_processor_classes, exist_ok=exist_ok)
-
-
-__all__ = ["IMAGE_PROCESSOR_MAPPING", "AutoImageProcessor"]
