@@ -53,8 +53,8 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         n_window (`int`, *optional*, defaults to 50):
             Half the mel-frame chunk size used for padding. The log-mel time axis is right-padded to a
             multiple of ``2 * n_window``.
-        min_input_length (`int`, *optional*, defaults to 8000):
-            Minimum number of samples for each audio clip. Clips shorter than this are zero-padded to matching the
+        min_length (`int`, *optional*, defaults to 8000):
+            Minimum number of samples for each audio clip. Clips shorter than this are zero-padded, matching the
             original Qwen3-ASR library behaviour.
     """
 
@@ -71,7 +71,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         dither=0.0,
         return_attention_mask=False,
         n_window=50,
-        min_input_length=8000,
+        min_length=8000,
         **kwargs,
     ):
         super().__init__(
@@ -83,7 +83,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         )
         self.n_fft = n_fft
         self.hop_length = hop_length
-        self.min_input_length = min_input_length
+        self.min_length = min_length
         self.chunk_length = chunk_length
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
@@ -200,14 +200,14 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
 
-        # Zero-pad clips shorter than min_input_length before batching, matching the original Qwen3-ASR library.
-        # NOTE: original does not account for it in a padding/attention mask so neither do we
+        # Record original lengths before minimum-length padding for the attention mask
+        original_lengths = [s.shape[0] for s in raw_speech]
+
+        # Zero-pad clips shorter than min_length before batching, matching the original Qwen3-ASR library:
         # https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/utils.py#L322
-        if self.min_input_length > 0:
+        if self.min_length > 0:
             raw_speech = [
-                np.pad(s, ((0, self.min_input_length - s.shape[0]), (0, 0)))
-                if s.shape[0] < self.min_input_length
-                else s
+                np.pad(s, ((0, self.min_length - s.shape[0]), (0, 0))) if s.shape[0] < self.min_length else s
                 for s in raw_speech
             ]
 
@@ -221,6 +221,13 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=True,
         )
+
+        # Correct the attention mask so that min_length padding is marked as invalid (0).
+        if self.min_length > 0:
+            raw_mask = padded_inputs["attention_mask"]
+            for i, orig_len in enumerate(original_lengths):
+                raw_mask[i, orig_len:] = 0
+            padded_inputs["attention_mask"] = raw_mask
 
         input_features = padded_inputs["input_features"].transpose(2, 0, 1)
         input_features = self._torch_extract_fbank_features(input_features[0], device)
