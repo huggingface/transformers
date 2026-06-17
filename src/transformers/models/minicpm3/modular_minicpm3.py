@@ -1,4 +1,4 @@
-# Copyright 2025 The OpenBMB Team and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The OpenBMB Team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,17 +18,16 @@ from collections.abc import Callable
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
-from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -98,25 +97,17 @@ class MiniCPM3Config(LlamaConfig):
     model_type = "minicpm3"
     keys_to_ignore_at_inference = ["past_key_values"]
 
+    # Only fields whose defaults differ from `LlamaConfig` are redeclared here; the rest are inherited.
     vocab_size: int = 73448
     hidden_size: int = 2560
     intermediate_size: int = 6400
     num_hidden_layers: int = 62
     num_attention_heads: int = 40
     num_key_value_heads: int | None = 40
-    hidden_act: str = "silu"
     max_position_embeddings: int = 32768
     initializer_range: float = 0.1
     rms_norm_eps: float = 1e-5
-    use_cache: bool = True
-    pad_token_id: int | None = None
-    bos_token_id: int | None = 1
-    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = True
-    rope_parameters: RopeParameters | dict | None = None
-    attention_bias: bool = False
-    attention_dropout: int | float | None = 0.0
-    mlp_bias: bool = False
     kv_lora_rank: int = 256
     q_lora_rank: int | None = 768
     qk_nope_head_dim: int = 64
@@ -139,10 +130,10 @@ class MiniCPM3Config(LlamaConfig):
             self.dim_model_base = self.hidden_size
         super().__post_init__(**kwargs)
 
-    def validate_architecture(self):
-        # MLA decouples per-head dim from `hidden_size / num_attention_heads`,
-        # so the LlamaConfig divisibility check does not apply.
-        pass
+    @property
+    def logits_scaling(self) -> float:
+        # Hidden states are divided by this factor before the LM head (`1` when `dim_model_base == hidden_size`).
+        return self.hidden_size / self.dim_model_base
 
 
 class MiniCPM3RMSNorm(LlamaRMSNorm):
@@ -157,56 +148,13 @@ class MiniCPM3MLP(LlamaMLP):
     pass
 
 
-class MiniCPM3Attention(nn.Module):
+class MiniCPM3Attention(DeepseekV2Attention):
     """
-    Multi-head Latent Attention (MLA) with cos/sin rotary embeddings, matching the
-    original `openbmb/MiniCPM3-4B` implementation.
+    Multi-head Latent Attention (MLA), structurally identical to `DeepseekV2Attention`.
+    The only difference is the rotary convention: MiniCPM3 keeps the original cos/sin RoPE
+    (`apply_rotary_pos_emb`) instead of DeepSeek-V2's complex rotary, so we inherit the
+    module construction and override only `forward`.
     """
-
-    def __init__(self, config: MiniCPM3Config, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-
-        self.q_lora_rank = config.q_lora_rank
-        self.qk_rope_head_dim = config.qk_rope_head_dim
-        self.kv_lora_rank = config.kv_lora_rank
-        self.v_head_dim = config.v_head_dim
-        self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-
-        self.is_causal = True
-
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = MiniCPM3RMSNorm(config.q_lora_rank)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-
-        self.kv_a_proj_with_mqa = nn.Linear(
-            self.hidden_size,
-            config.kv_lora_rank + config.qk_rope_head_dim,
-            bias=config.attention_bias,
-        )
-        self.kv_a_layernorm = MiniCPM3RMSNorm(config.kv_lora_rank)
-        self.kv_b_proj = nn.Linear(
-            config.kv_lora_rank,
-            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
-            bias=False,
-        )
-
-        self.o_proj = nn.Linear(
-            self.num_heads * self.v_head_dim,
-            self.hidden_size,
-            bias=config.attention_bias,
-        )
-
-        self.scaling = self.qk_head_dim ** (-0.5)
 
     def forward(
         self,
@@ -275,8 +223,9 @@ class MiniCPM3DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: MiniCPM3Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = MiniCPM3Attention(config=config, layer_idx=layer_idx)
-        self.scale_depth = config.scale_depth
-        self.num_hidden_layers = config.num_hidden_layers
+        # MiniCPM3 multiplies each residual branch by `scale_depth / sqrt(num_hidden_layers)`
+        # (Llama adds the branch directly). Precompute the constant once instead of per forward.
+        self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers)
 
     def forward(
         self,
@@ -299,12 +248,12 @@ class MiniCPM3DecoderLayer(LlamaDecoderLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        hidden_states = residual + hidden_states * (self.scale_depth / math.sqrt(self.num_hidden_layers))
+        hidden_states = residual + hidden_states * self.residual_scale
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states * (self.scale_depth / math.sqrt(self.num_hidden_layers))
+        hidden_states = residual + hidden_states * self.residual_scale
         return hidden_states
 
 
@@ -331,6 +280,7 @@ class MiniCPM3Model(LlamaModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
+            # MiniCPM3 scales the input embeddings by `scale_emb` (not present in Llama).
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids) * self.config.scale_emb
 
         if use_cache and past_key_values is None:
@@ -413,8 +363,8 @@ class MiniCPM3ForCausalLM(LlamaForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        # MiniCPM3 logit scaling: divide hidden states before the LM head.
-        hidden_states = hidden_states / (self.config.hidden_size / self.config.dim_model_base)
+        # MiniCPM3 scales hidden states down before the LM head (not present in Llama).
+        hidden_states = hidden_states / self.config.logits_scaling
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 

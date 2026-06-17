@@ -1,4 +1,4 @@
-<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -37,10 +37,10 @@ MiniCPM3 combines several architectural ideas:
 ## Usage tips
 
 ```python
-from transformers import AutoTokenizer, MiniCPM3ForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("openbmb/MiniCPM3-4B")
-model = MiniCPM3ForCausalLM.from_pretrained("openbmb/MiniCPM3-4B", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("openbmb/MiniCPM3-4B", device_map="auto")
 
 inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=32, do_sample=False)

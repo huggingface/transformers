@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_minicpm3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The OpenBMB Team and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The OpenBMB Team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -83,6 +83,7 @@ class MiniCPM3Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
+    # Only fields whose defaults differ from `LlamaConfig` are redeclared here; the rest are inherited.
     vocab_size: int = 73448
     hidden_size: int = 2560
     intermediate_size: int = 6400
@@ -133,9 +134,16 @@ class MiniCPM3Config(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        # MLA decouples per-head dim from `hidden_size / num_attention_heads`,
-        # so the LlamaConfig divisibility check does not apply.
-        pass
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
+
+    @property
+    def logits_scaling(self) -> float:
+        # Hidden states are divided by this factor before the LM head (`1` when `dim_model_base == hidden_size`).
+        return self.hidden_size / self.dim_model_base
 
 
 __all__ = ["MiniCPM3Config"]

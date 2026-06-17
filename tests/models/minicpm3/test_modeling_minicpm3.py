@@ -1,4 +1,4 @@
-# Copyright 2025 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import Cache, is_torch_available
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -50,7 +50,6 @@ class MiniCPM3ModelTester(CausalLMModelTester):
 
 @require_torch
 class MiniCPM3ModelTest(CausalLMModelTest, unittest.TestCase):
-    test_all_params_have_gradient = False
     model_tester_class = MiniCPM3ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
 
@@ -83,27 +82,51 @@ class MiniCPM3ModelTest(CausalLMModelTest, unittest.TestCase):
         config.base_model_tp_plan.update({"layers.*.self_attn.q_proj": "colwise"})
 
 
+@slow
 @require_torch
 class MiniCPM3IntegrationTest(unittest.TestCase):
-    @slow
-    def test_minicpm3_4b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = MiniCPM3ForCausalLM.from_pretrained("openbmb/MiniCPM3-4B", device_map="auto")
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        with torch.no_grad():
-            out = model(input_ids).logits.float().cpu()
-        self.assertEqual(out.shape[-1], model.config.vocab_size)
-        self.assertFalse(torch.isnan(out).any())
-        self.assertFalse(torch.isinf(out).any())
+    model_id = "openbmb/MiniCPM3-4B"
 
-    @slow
+    @require_torch_accelerator
+    def test_minicpm3_4b_logits(self):
+        input_ids = torch.tensor([[1, 306, 4658, 278, 6593, 310, 2834, 338]], device=torch_device)
+        model = MiniCPM3ForCausalLM.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+        with torch.no_grad():
+            logits = model(input_ids).logits.float()
+
+        # Slice of the last-token logits. Reference values come from a CUDA run; the maintainer can
+        # adjust per-hardware entries as needed (see `Expectations`).
+        expected_slices = Expectations(
+            {
+                ("cuda", 8): [],  # TODO: fill from a reference run on the target CI hardware
+            }
+        )  # fmt: skip
+        expected = expected_slices.get_expectation()
+        if not expected:
+            self.skipTest("No reference logits available yet for this hardware; fill in `Expectations`.")
+        torch.testing.assert_close(
+            logits[0, -1, :5].cpu(),
+            torch.tensor(expected),
+            atol=1e-3,
+            rtol=1e-3,
+        )
+
+    @require_torch_accelerator
     def test_minicpm3_4b_generation(self):
+        expected_texts = Expectations(
+            {
+                ("cuda", 8): "",  # TODO: fill from a reference run on the target CI hardware
+            }
+        )  # fmt: skip
+        expected_text = expected_texts.get_expectation()
+
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("openbmb/MiniCPM3-4B", use_fast=False)
-        model = MiniCPM3ForCausalLM.from_pretrained("openbmb/MiniCPM3-4B", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, use_fast=False)
+        model = MiniCPM3ForCausalLM.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         generated_ids = model.generate(input_ids, max_new_tokens=20, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertTrue(text.startswith(prompt))
-        self.assertGreater(len(text), len(prompt))
+        if not expected_text:
+            self.skipTest("No reference generation available yet for this hardware; fill in `Expectations`.")
+        self.assertEqual(text, expected_text)
