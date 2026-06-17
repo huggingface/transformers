@@ -27,6 +27,10 @@ limitations under the License.
 
 # GLM-5, GLM-5.1, GLM-5.2
 
+## Overview
+
+**GLM-5**, **GLM-5.1** and **GLM-5.2** language model use this class. The implementation in transformers does not include an MTP layer.
+
 ### GLM-5.2
 
 GLM-5.2, our latest flagship model for long-horizon tasks. It marks a substantial leap in long-horizon task capability over its predecessor GLM-5.1 and, for the first time, delivers that capability on a **solid 1M-token context**. 
