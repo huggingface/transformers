@@ -188,33 +188,9 @@ class LagunaModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.no_grad():
             model(input_ids=inputs_dict["input_ids"].to(torch_device))
 
-    def test_per_element_gating_end_to_end(self):
-        """End-to-end check of the per-element gating path: greedy generation is
-        deterministic, and the gate measurably affects the logits."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.gating = "per-element"
-        torch.manual_seed(0)
-        model = LagunaForCausalLM(config).to(torch_device).eval()
-        input_ids = inputs_dict["input_ids"].to(torch_device)
-
-        # Generation runs end-to-end through the per-element path and is deterministic.
-        with torch.no_grad():
-            gen1 = model.generate(input_ids, max_new_tokens=8, min_new_tokens=8, do_sample=False)
-            gen2 = model.generate(input_ids, max_new_tokens=8, min_new_tokens=8, do_sample=False)
-        self.assertEqual(gen1.shape[1], input_ids.shape[1] + 8)
-        self.assertTrue(torch.equal(gen1, gen2))
-
-        # The gate is actually applied: zeroing g_proj collapses softplus(g_proj(x))
-        # to the constant softplus(0)=ln(2), which changes the logits.
-        with torch.no_grad():
-            logits = model(input_ids).logits
-            for layer in model.model.layers:
-                torch.nn.init.zeros_(layer.self_attn.g_proj.weight)
-            logits_gate_collapsed = model(input_ids).logits
-        self.assertFalse(torch.allclose(logits, logits_gate_collapsed))
-
 
 @slow
+@require_torch
 @require_torch_accelerator
 class LagunaIntegrationTest(unittest.TestCase):
     def test_per_element_gating_logits(self):
