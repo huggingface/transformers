@@ -814,13 +814,13 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                 self._model_path,
                 config=config,
                 dtype=torch.bfloat16,
-                device_map="auto",
+                device_map="cuda",
             )
         else:
             model = DiffusionGemmaForBlockDiffusion.from_pretrained(
                 self._model_path,
                 dtype=torch.bfloat16,
-                device_map="auto",
+                device_map="cuda",
             )
         return model
 
