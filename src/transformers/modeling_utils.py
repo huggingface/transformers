@@ -3825,7 +3825,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             if kernel_config is not None:
                 if not isinstance(kernel_config, KernelConfig):
-                    raise ValueError(f"Expeced `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}")
+                    raise ValueError(
+                        f"Expeced `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}"
+                    )
 
                 # Since kernel_config is a correct value, set it as an attribute of the model so it can be used.
                 self.kernel_config = kernel_config
@@ -3836,12 +3838,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # This will create a compatible mapping for the model with the kernels library
                 kernel_config.create_compatible_mapping(self)
 
-                self.kernelize(mode=mode)
-                self.use_kernels = True
-            # We use the default kernel mapping in .integrations.hub_kernels
-            else:
-                self.kernelize(mode=mode)
-                self.use_kernels = True
+            self.kernelize(mode=mode)
+            self.use_kernels = True
         else:
             self.use_kernels = False
 
