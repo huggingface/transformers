@@ -107,14 +107,16 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen2"]()
 
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         hop_length = self.acoustic_tokenizer_encoder_config.hop_length
         if self.acoustic_tokenizer_chunk_size % hop_length != 0:
             raise ValueError(
                 f"`acoustic_tokenizer_chunk_size` must be a multiple of hop length "
                 f"({hop_length}), got {self.acoustic_tokenizer_chunk_size}."
             )
-
-        super().__post_init__(**kwargs)
 
     @property
     def max_position_embeddings(self) -> int:
