@@ -11,6 +11,13 @@ specific language governing permissions and limitations under the License.
 -->
 *This model was published in HF papers on 2023-05-11 and contributed to Hugging Face Transformers on 2024-06-25.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # InstructBlipVideo
 
 

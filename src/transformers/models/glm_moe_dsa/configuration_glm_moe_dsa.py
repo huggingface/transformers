@@ -21,26 +21,30 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5")
 @strict
-class GlmMoeDsaConfig(PreTrainedConfig):
+class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
     mlp_layer_types (`list`, *optional*):
-        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to `3` dense layers and then every `moe_layer_freq`-th layer sparse.
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):
         Head dimension for the indexer projections (DSA).
-    index_n_heads (`int | None`, *optional*, defaults to 32):
+    index_n_heads (`int`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
+    first_k_dense_replace (`int`, *optional*, defaults to 3):
+        Number of leading layers that use a dense MLP; the rest use the MoE block.
     indexer_types (`list[str]`, *optional*):
-        Indexer mode for each layer (`"full"` or `"shared"`). Defaults to the pattern derived from `index_topk_freq` and `index_skip_topk_offset`.
+        Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
+        layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
+        `index_skip_topk_offset` (or `index_topk_pattern`).
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
@@ -84,7 +88,6 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     }
 
     vocab_size: int = 154880
-
     hidden_size: int = 6144
     intermediate_size: int = 12288
     moe_intermediate_size: int = 2048
@@ -112,23 +115,23 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 1
     tie_word_embeddings: bool = False
-    rope_parameters: RopeParameters | dict | None = None
+    rope_parameters: dict | None = None
     mlp_layer_types: list[str] | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 32
+    mlp_bias: bool = False
+    num_experts: int = 256
+    head_dim: int = 64
+    first_k_dense_replace: int = 3
+    layer_types: list[str] | None = None
+    # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
-        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-        if self.mlp_layer_types is None:
-            moe_layer_freq = kwargs.get("moe_layer_freq", 1)
-            self.mlp_layer_types = [
-                "sparse" if i >= 3 and i % moe_layer_freq == 0 else "dense" for i in range(self.num_hidden_layers)
-            ]
-
+        # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
         if self.indexer_types is None:
             pattern = kwargs.get("index_topk_pattern")
             if pattern is not None:
@@ -141,6 +144,21 @@ class GlmMoeDsaConfig(PreTrainedConfig):
                 self.indexer_types = [
                     "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
                 ]
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        # RoPE applies only to the rope slice, so point `head_dim` at it: the inherited (Llama) rotary
+        # embedding reads `config.head_dim` and then computes the right frequencies with no override needed.
+        self.head_dim = self.qk_rope_head_dim
+        # MLP layer types: the first `first_k_dense_replace` layers are dense, the rest are MoE.
+        if self.mlp_layer_types is None:
+            n_dense = min(self.first_k_dense_replace, self.num_hidden_layers)
+            self.mlp_layer_types = ["dense"] * n_dense + ["sparse"] * (self.num_hidden_layers - n_dense)
+        # Every layer is DSA — drives cache-class dispatch.
+        if self.layer_types is None:
+            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+        # Default to MoE from the second layer and on
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         super().__post_init__(**kwargs)
 
 
