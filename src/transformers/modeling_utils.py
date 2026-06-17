@@ -128,6 +128,7 @@ from .utils.import_utils import (
     KERNELS_MIN_VERSION,
     is_flash_attn_greater_or_equal,
     is_huggingface_hub_greater_or_equal,
+    is_rocm_platform,
     is_sagemaker_mp_enabled,
     is_torch_cuda_available,
     is_tracing,
@@ -4676,6 +4677,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
         from kernels import Device, Mode, kernelize
 
+        def resolve_kernel_device_type(torch_device_type: str) -> str:
+            """Map torch's device.type to the kernels library's device key (refines `"cuda"` → `"rocm"` on ROCm)."""
+            if torch_device_type == "cuda" and is_rocm_platform():
+                return "rocm"
+            return torch_device_type
+
         def attach_hidden_kernels(module):
             for name, fn in getattr(module, "_hidden_kernels", {}).items():
                 if name not in dict(module.named_children()):
@@ -4698,14 +4705,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.apply(attach_hidden_kernels)
 
             mode = (Mode.TRAINING if self.training else Mode.INFERENCE) if mode is None else mode
+            device = Device(type=resolve_kernel_device_type(self.device.type))
             if self.kernel_config is not None:
                 from kernels import use_kernel_mapping
 
                 inherit_mapping = not self.kernel_config.use_local_kernel
                 with use_kernel_mapping(self.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-                    kernelize(self, device=Device(type=self.device.type), mode=mode)
+                    kernelize(self, device=device, mode=mode)
             else:
-                kernelize(self, device=Device(type=self.device.type), mode=mode)
+                kernelize(self, device=device, mode=mode)
 
             self._use_kernels = True
 

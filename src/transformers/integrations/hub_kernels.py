@@ -206,11 +206,16 @@ if is_kernels_available():
                 ),
             },
             "rocm": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="ahadnagy/megablocks",
+                Mode.TRAINING: LayerRepository(
+                    repo_id="kernels-community/megablocks",
                     layer_name="MegaBlocksMoeMLP",
                     version=1,
-                )
+                ),
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/megablocks",
+                    layer_name="MegaBlocksMoeMLP",
+                    version=1,
+                ),
             },
             "xpu": {
                 Mode.INFERENCE: LayerRepository(
@@ -288,6 +293,11 @@ if is_kernels_available():
             "cuda": FuncRepository(
                 repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
             ),
+            "rocm": {
+                Mode.INFERENCE: FuncRepository(
+                    repo_id="kernels-community/aiter-rope", func_name="apply_rotary_transformers", version=1
+                )
+            },
         },
         "ForCausalLMLoss": {
             "cuda": {
