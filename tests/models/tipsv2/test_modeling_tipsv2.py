@@ -51,11 +51,9 @@ if is_torch_available():
 
     from transformers import (
         AutoModel,
-        Tipsv2ImageProcessor,
         Tipsv2Model,
         Tipsv2Processor,
         Tipsv2TextModel,
-        Tipsv2Tokenizer,
         Tipsv2VisionBackbone,
         Tipsv2VisionModel,
     )

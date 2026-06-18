@@ -18,7 +18,7 @@ from collections.abc import Callable
 import torch
 from huggingface_hub.dataclasses import strict
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
-from tokenizers.models import Unigram
+from tokenizers.models import BPE
 from torch import nn
 
 from ... import initialization as init
@@ -64,15 +64,16 @@ VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
 @requires(backends=("sentencepiece",))
 class Tipsv2Tokenizer(TokenizersBackend):
-    """Tipsv2 tokenizer backed by HuggingFace's *tokenizers* library, based on a Unigram (SentencePiece) model."""
+    """Tipsv2 tokenizer backed by HuggingFace's *tokenizers* library, based on a BPE (SentencePiece) model."""
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    model = Unigram
+    model = BPE
 
     def __init__(
         self,
-        vocab: list[tuple[str, float]] | None = None,
+        vocab: dict[str, int] | None = None,
+        merges: list[tuple[str, str]] | None = None,
         unk_token: str | None = "<unk>",
         pad_token: str | None = "<pad>",
         bos_token: str | None = None,
@@ -83,16 +84,24 @@ class Tipsv2Tokenizer(TokenizersBackend):
         _spm_precompiled_charsmap=None,
         **kwargs,
     ) -> None:
-        if vocab is not None:
-            self._vocab_scores = vocab
-        else:
-            self._vocab_scores = [
-                (str(pad_token), 0.0),
-                (str(unk_token), 0.0),
-            ]
-        unk_id = next(index for index, (token, _) in enumerate(self._vocab_scores) if token == str(unk_token))
+        if vocab is None:
+            vocab = {
+                str(pad_token): 0,
+                str(unk_token): 1,
+            }
+        self._vocab = vocab
+        self._merges = merges or []
 
-        self._tokenizer = Tokenizer(Unigram(self._vocab_scores, unk_id=unk_id, byte_fallback=False))
+        self._tokenizer = Tokenizer(
+            BPE(
+                vocab=self._vocab,
+                merges=self._merges,
+                unk_token=str(unk_token),
+                fuse_unk=True,
+                byte_fallback=False,
+                dropout=None,
+            )
+        )
 
         list_normalizers = []
         if do_lower_case:
