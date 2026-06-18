@@ -1231,7 +1231,17 @@ class NemotronAsrEncoder(ParakeetEncoder):
 
 @dataclass
 class NemotronAsrRNNTOutput(ParakeetRNNTOutput):
-    pass
+    r"""
+    encoder_past_key_values (`Cache`, *optional*):
+        Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
+        (cache-aware streaming). Pass it to the next chunk's forward.
+    padding_cache (`NemotronAsrEncoderCausalConvPaddingCache`, *optional*):
+        Updated unified streaming conv cache (subsampling Conv2d + conformer depthwise Conv1d), returned when
+        encoding audio with `use_cache=True`. Pass it to the next chunk's forward.
+    """
+
+    encoder_past_key_values: Cache | None = None
+    padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None
 
 
 @auto_docstring(
@@ -1321,6 +1331,8 @@ class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAs
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
+            encoder_past_key_values=encoder_outputs.past_key_values,
+            padding_cache=encoder_outputs.padding_cache,
         )
 
 

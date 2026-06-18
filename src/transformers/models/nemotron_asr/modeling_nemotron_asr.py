@@ -1046,22 +1046,21 @@ class NemotronAsrEncoder(NemotronAsrPreTrainedModel):
 
 @dataclass
 class NemotronAsrRNNTOutput(BaseModelOutputWithPooling):
-    """
-    Output of the NemotronAsr RNN-T forward pass.
-
-    Args:
-        loss (`torch.FloatTensor`, *optional*):
-            RNN-T loss, returned when `labels` are provided.
-        logits (`torch.FloatTensor`):
-            Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
-            or `(batch, 1, 1, vocab)` for single-step inference.
-        decoder_cache (`NemotronAsrRNNTDecoderCache`, *optional*):
-            Decoder LSTM cache containing hidden state, cell state, and last output.
+    r"""
+    encoder_past_key_values (`Cache`, *optional*):
+        Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
+        (cache-aware streaming). Pass it to the next chunk's forward.
+    padding_cache (`NemotronAsrEncoderCausalConvPaddingCache`, *optional*):
+        Updated unified streaming conv cache (subsampling Conv2d + conformer depthwise Conv1d), returned when
+        encoding audio with `use_cache=True`. Pass it to the next chunk's forward.
     """
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
     decoder_cache: NemotronAsrRNNTDecoderCache | None = None
+
+    encoder_past_key_values: Cache | None = None
+    padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None
 
 
 class NemotronAsrRNNTDecoder(nn.Module):
@@ -1246,6 +1245,8 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
+            encoder_past_key_values=encoder_outputs.past_key_values,
+            padding_cache=encoder_outputs.padding_cache,
         )
 
 
