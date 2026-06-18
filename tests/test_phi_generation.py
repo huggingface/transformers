@@ -1,11 +1,8 @@
 import unittest
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.generation.phi_utils import (
-    PhiRecursiveGenerator,
-    phi_temperature,
-    phi_top_p,
-    phi_top_k,
-)
+from transformers.generation.phi_utils import PhiRecursiveGenerator, phi_temperature, phi_top_k, phi_top_p
+
 
 class TestPhiGeneration(unittest.TestCase):
     def setUp(self):
@@ -22,12 +19,11 @@ class TestPhiGeneration(unittest.TestCase):
     def test_recursive_generation(self):
         generator = PhiRecursiveGenerator(self.model, self.tokenizer)
         output = generator.generate(
-            "The future of AI is",
-            max_iterations=2,
-            verbose=False
+            "The future of AI is", max_iterations=2, verbose=False
         )
         self.assertIsInstance(output, str)
         self.assertGreater(len(output), 10)
+
 
 if __name__ == "__main__":
     unittest.main()
