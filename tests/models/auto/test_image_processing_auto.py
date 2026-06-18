@@ -169,18 +169,14 @@ class AutoImageProcessorTest(unittest.TestCase):
             EnvironmentError,
             r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)",
         ):
-            _ = AutoImageProcessor.from_pretrained(
-                DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa"
-            )
+            _ = AutoImageProcessor.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
     def test_image_processor_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError,
             "Can't load image processor for 'hf-internal-testing/config-no-model'.",
         ):
-            _ = AutoImageProcessor.from_pretrained(
-                "hf-internal-testing/config-no-model"
-            )
+            _ = AutoImageProcessor.from_pretrained("hf-internal-testing/config-no-model")
 
     @require_vision
     @require_torchvision
@@ -202,9 +198,7 @@ class AutoImageProcessorTest(unittest.TestCase):
     def test_from_pretrained_dynamic_image_processor(self):
         # If remote code is not set, we will time out when asking whether to load the model.
         with self.assertRaises(ValueError):
-            image_processor = AutoImageProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_image_processor"
-            )
+            image_processor = AutoImageProcessor.from_pretrained("hf-internal-testing/test_dynamic_image_processor")
         # If remote code is disabled, we can't load this config.
         with self.assertRaises(ValueError):
             image_processor = AutoImageProcessor.from_pretrained(
@@ -226,19 +220,13 @@ class AutoImageProcessorTest(unittest.TestCase):
         # Test image processor can be reloaded.
         with tempfile.TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
-            reloaded_image_processor = AutoImageProcessor.from_pretrained(
-                tmp_dir, trust_remote_code=True
-            )
-            self.assertTrue(
-                os.path.exists(os.path.join(tmp_dir, "image_processor.py"))
-            )  # Assert we saved custom code
+            reloaded_image_processor = AutoImageProcessor.from_pretrained(tmp_dir, trust_remote_code=True)
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "image_processor.py")))  # Assert we saved custom code
             self.assertEqual(
                 reloaded_image_processor.auto_map["AutoImageProcessor"],
                 "image_processor.NewImageProcessor",
             )
-        self.assertEqual(
-            reloaded_image_processor.__class__.__name__, "NewImageProcessor"
-        )
+        self.assertEqual(reloaded_image_processor.__class__.__name__, "NewImageProcessor")
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_image_processor = AutoImageProcessor.from_pretrained(
@@ -290,9 +278,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             AutoConfig.register("custom", CustomConfig)
             AutoImageProcessor.register(CustomConfig, NewImageProcessor)
             # If remote code is not set, the default is to use local
-            image_processor = AutoImageProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_image_processor"
-            )
+            image_processor = AutoImageProcessor.from_pretrained("hf-internal-testing/test_dynamic_image_processor")
             self.assertEqual(image_processor.__class__.__name__, "NewImageProcessor")
             self.assertTrue(image_processor.is_local)
 
@@ -313,9 +299,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             self.assertTrue(image_processor.is_local)
 
             # If remote code is enabled but local code originated from transformers, we load the remote one.
-            NewImageProcessor.__module__ = (
-                "transformers.models.custom.configuration_custom"
-            )
+            NewImageProcessor.__module__ = "transformers.models.custom.configuration_custom"
             image_processor = AutoImageProcessor.from_pretrained(
                 "hf-internal-testing/test_dynamic_image_processor",
                 trust_remote_code=True,
@@ -338,9 +322,7 @@ class AutoImageProcessorTest(unittest.TestCase):
                 open(processor_tmpfile, "w"),
             )
 
-            image_processor = AutoImageProcessor.from_pretrained(
-                tmpdirname, backend="pil"
-            )
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
             self.assertIsInstance(image_processor, ViTImageProcessorPil)
 
     @require_torchvision
@@ -352,9 +334,7 @@ class AutoImageProcessorTest(unittest.TestCase):
                 open(processor_tmpfile, "w"),
             )
 
-            image_processor = AutoImageProcessor.from_pretrained(
-                tmpdirname, backend="torchvision"
-            )
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="torchvision")
             self.assertIsInstance(image_processor, ViTImageProcessor)
 
     @require_torchvision
@@ -389,9 +369,7 @@ class AutoImageProcessorTest(unittest.TestCase):
                 _LANCZOS_IMAGE_PROCESSORS,
             ):
                 image_processor = AutoImageProcessor.from_pretrained(tmpdirname)
-                self.assertEqual(
-                    type(image_processor).__name__, "FlavaImageProcessorPil"
-                )
+                self.assertEqual(type(image_processor).__name__, "FlavaImageProcessorPil")
 
     @require_torchvision
     def test_explicit_backend_overrides_lanczos_default(self):
@@ -404,9 +382,7 @@ class AutoImageProcessorTest(unittest.TestCase):
                 open(processor_tmpfile, "w"),
             )
 
-            image_processor = AutoImageProcessor.from_pretrained(
-                tmpdirname, backend="torchvision"
-            )
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="torchvision")
             self.assertEqual(type(image_processor).__name__, "FlavaImageProcessor")
 
     @require_torchvision
@@ -420,31 +396,23 @@ class AutoImageProcessorTest(unittest.TestCase):
                 open(processor_tmpfile, "w"),
             )
 
-            image_processor = AutoImageProcessor.from_pretrained(
-                tmpdirname, backend="torchvision"
-            )
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="torchvision")
             self.assertIsInstance(image_processor, ViTImageProcessor)
 
-            image_processor = AutoImageProcessor.from_pretrained(
-                tmpdirname, backend="pil"
-            )
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
             self.assertIsInstance(image_processor, ViTImageProcessorPil)
 
     @require_vision
     def test_register_with_image_processor_classes_dict(self):
         # New image_processor_classes={} dict API for register().
         try:
-            AutoImageProcessor.register(
-                CustomConfig, image_processor_classes={"pil": CustomImageProcessor}
-            )
+            AutoImageProcessor.register(CustomConfig, image_processor_classes={"pil": CustomImageProcessor})
             with tempfile.TemporaryDirectory() as tmp_dir:
                 json.dump(
                     {"image_processor_type": "CustomImageProcessor"},
                     open(Path(tmp_dir) / "preprocessor_config.json", "w"),
                 )
-                image_processor = AutoImageProcessor.from_pretrained(
-                    tmp_dir, backend="pil"
-                )
+                image_processor = AutoImageProcessor.from_pretrained(tmp_dir, backend="pil")
                 self.assertIsInstance(image_processor, CustomImageProcessor)
         finally:
             if CustomConfig in IMAGE_PROCESSOR_MAPPING._extra_content:
@@ -455,17 +423,13 @@ class AutoImageProcessorTest(unittest.TestCase):
         # slow_image_processor_class= and fast_image_processor_class= are deprecated but
         # must still work; they map to "pil" and "torchvision" backends respectively.
         try:
-            AutoImageProcessor.register(
-                CustomConfig, slow_image_processor_class=CustomImageProcessor
-            )
+            AutoImageProcessor.register(CustomConfig, slow_image_processor_class=CustomImageProcessor)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 json.dump(
                     {"image_processor_type": "CustomImageProcessor"},
                     open(Path(tmp_dir) / "preprocessor_config.json", "w"),
                 )
-                image_processor = AutoImageProcessor.from_pretrained(
-                    tmp_dir, backend="pil"
-                )
+                image_processor = AutoImageProcessor.from_pretrained(tmp_dir, backend="pil")
                 self.assertIsInstance(image_processor, CustomImageProcessor)
         finally:
             if CustomConfig in IMAGE_PROCESSOR_MAPPING._extra_content:
