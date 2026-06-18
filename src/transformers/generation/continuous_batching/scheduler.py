@@ -41,7 +41,7 @@ class Scheduler(ABC):
         if max_requests_per_batch < 1:
             raise ValueError(f"Got {max_requests_per_batch = } but expected a value >= 1")
         # This is to compute the read cache used by a new request being scheduled
-        self.read_cache_limit = None if self.cache.num_full_attention_groups else self.cache.config.sliding_window
+        self.read_cache_limit = None if self.cache.num_full_attention_groups else self.cache.max_sliding_window
         self.max_decode_fast_path_length = self.cache.max_blocks_per_request * self.cache.block_size
         # Initialize mutable states via reset()
         self.reset()
@@ -118,6 +118,12 @@ class Scheduler(ABC):
         return request_id in self._requests_to_cancel or (
             request_id not in self.active_requests and request_id not in self.waiting_requests
         )
+
+    def _can_store_mm_embeddings(self, state: RequestState) -> bool:
+        """Checks if there is enough space in the encoder cache to store the multimodal embeddings."""
+        if self.cache.encoder_cache is None:
+            raise ValueError(f"Request has multimodal data but there is no encoder cache: {state = }")
+        return self.cache.encoder_cache.can_store_mm_embeddings(state)
 
     def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
         """Allocate additional cache blocks for a request if the currently allocated blocks are insufficient to
@@ -236,6 +242,10 @@ class Scheduler(ABC):
                 )
                 break
 
+            # Check if there is enough space in the encoder cache (performed first because very cheap)
+            if state.multimodal_inputs and not self._can_store_mm_embeddings(state):
+                continue
+
             # Infer the tokens that will be present in the batch if token budget is enough
             request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
             # Account for token budget
@@ -268,6 +278,12 @@ class Scheduler(ABC):
             # If this point is reached, it means we can safely schedule the request
             self._schedule_request(state, request_tokens, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.tokens_to_process)  # it may change after scheduling
+
+            # If the request has multimodal data to process, we allocate space in the encoder cache
+            if state.multimodal_inputs:
+                if self.cache.encoder_cache is None:
+                    raise ValueError(f"Request has multimodal data but there is no encoder cache: {state = }")
+                self.cache.encoder_cache.allocate_blocks(state)
 
             # The decode fast path is only used if the request is a single token and its length is less than the max blocks per request
             decode_fast_path &= request_len == 1 and state.position_offset < self.max_decode_fast_path_length

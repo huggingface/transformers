@@ -21,7 +21,7 @@ from torch import nn
 from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
-from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
+from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs, PagedAttentionArgs
 from .requests import RequestStatus, logger
 from .utils import create_warmup_future_states, get_cuda_pools, mem_pool_ctx, pad_to_interval, pad_to_pow2
 
@@ -75,6 +75,13 @@ class ModelRunner:
                 self._forward_process_and_sample, **self.cb_config.decode_compile_config.to_dict()
             )
 
+    def compute_stream_ctx(self) -> torch.cuda.Stream | nullcontext:
+        """Returns a context manager that runs enclosed ops on the compute stream, or a no-op when none is set."""
+        compute_stream = self.inputs_and_outputs.compute_stream
+        if compute_stream is None:
+            return nullcontext()
+        return torch.cuda.stream(compute_stream)
+
     def maybe_pad_inputs(self, num_q_tokens: int, max_kv_read: int, use_decode_fast_path: bool) -> tuple[int, int]:
         """Pads the input sizes for the next batch if it is needed. Often it is, for max performance."""
         if not self.pad_inputs:
@@ -98,7 +105,43 @@ class ModelRunner:
             )
         return self._model_supports_logits_to_keep
 
-    def compute_batch(self, model: nn.Module, batch_data: dict) -> None:
+    def run_encoder(self, model: nn.Module, encoder_kwargs: list[dict]) -> None:
+        """Runs the encoder on the given set of kwargs and stores the new embeddings in the encoder cache."""
+        if self.cache.encoder_cache is None:
+            raise ValueError("Cannot run encoder because there is no encoder cache.")
+        with self.compute_stream_ctx():
+            for encoder_kw in encoder_kwargs:
+                encoder_kw["return_dict"] = True
+                request_id = encoder_kw.pop(self.cache.encoder_cache.REQUEST_ID_KEY)
+                encoding_fn = getattr(model, self.cache.encoder_cache.encoding_fn_name)
+                encoding_output = encoding_fn(**encoder_kw)
+                mm_embeddings = self.cache.encoder_cache.extract_mm_embeddings(encoding_output)
+                self.cache.encoder_cache.store_mm_embeddings(request_id, mm_embeddings)
+
+    def fill_inputs_embeds(self, model: nn.Module, batch_data: PagedAttentionArgs) -> None:
+        """Fill the inputs_embeds tensor inside the batch_data dictionary."""
+        # Run the embedding layer to get all text tokens embeddings
+        input_ids = batch_data["input_ids"]
+        inputs_embeds: torch.Tensor = batch_data["inputs_embeds"]  # shape [1, q_tokens, hidden_size]
+        embedding_module = model.get_input_embeddings()
+        inputs_embeds.copy_(embedding_module(input_ids))
+        # If there are no multimodal embeddings to incorporate, we can return early
+        mm_embeddings_read_index = batch_data.get("encoder_cache_read_index")  # shape [q_tokens] or None
+        if mm_embeddings_read_index is None:
+            return None
+        # Otherwise, retrieve the multimodal embeddings according to the index
+        mm_embeddings = self.cache.encoder_cache.cache[mm_embeddings_read_index]  # type: ignore
+        mm_embeddings = mm_embeddings.unsqueeze(0)  # shape [1, q_tokens, hidden_size]
+        mask = (mm_embeddings_read_index == -1).unsqueeze(-1)  # shape [1, q_tokens]
+        inputs_embeds.copy_(torch.where(mask, inputs_embeds, mm_embeddings))
+
+    def _pop_or_get_input_ids(self, batch_data: PagedAttentionArgs) -> torch.Tensor:
+        """Retrieves the input ids from the batch data, popping it if the inputs_embeds are present."""
+        if batch_data["inputs_embeds"] is not None:
+            return batch_data.pop("input_ids")
+        return batch_data["input_ids"]
+
+    def compute_batch(self, model: nn.Module, batch_data: PagedAttentionArgs) -> None:
         """Runs the forward pass, processes the logits and samples the next tokens. It also handles which version of
         the forward pass to use (varlen or decode), whether to use CUDA graphs (with the eventual capture of the graph)
         and torch compile."""
@@ -111,14 +154,19 @@ class ModelRunner:
         if self.supports_logits_to_keep(model):
             batch_data["logits_to_keep"] = batch_data["logits_indices"]
 
+        # TODO; BUG: carry over needs to happen here, before the embeddings are filled
+        if batch_data["inputs_embeds"] is not None:
+            with self.compute_stream_ctx():
+                self.fill_inputs_embeds(model, batch_data)
+        input_ids = self._pop_or_get_input_ids(batch_data)
+
         # Get the appropriate forward function (compiled or not, based on current path)
         forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)
 
         # If we are not using CUDA graphs, we perform the generation step and return
         if not use_cuda_graph:
-            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
-            with maybe_stream:
-                forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
+            with self.compute_stream_ctx():
+                forward_fn(model, input_ids, batch_data, carry_over_ids, prev_output_ids, output_ids)
 
         # Otherwise, we either create or replay the graph (CUDA is available in this path)
         else:
@@ -129,7 +177,7 @@ class ModelRunner:
                     graph.replay()
             # Otherwise, the graph does not exist, so we create it
             else:
-                args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
+                args = (model, input_ids, batch_data, carry_over_ids, prev_output_ids, output_ids)
                 self._capture_graph(forward_fn, compute_stream, *args)
 
     def _get_forward_fn(self, use_block_table: bool) -> tuple[Callable, bool]:
@@ -159,7 +207,8 @@ class ModelRunner:
     def _forward_process_and_sample(
         self,
         model: nn.Module,
-        batch_data: dict,
+        input_ids: torch.Tensor,  # separate from batch_data when there are input_embeds # TODO: can this be avoided?
+        batch_data: PagedAttentionArgs,
         carry_over_ids: torch.Tensor,
         prev_output_ids: torch.Tensor,
         output_ids: torch.Tensor,
@@ -167,7 +216,7 @@ class ModelRunner:
         """This function performs the forward pass, logits processing, and sampling. This is what is either captured
         and/or compiled."""
         # Perform carry-over (no-op for synchronous batching)
-        self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"], carry_over_ids, prev_output_ids)
+        self.inputs_and_outputs.carry_over_tokens(input_ids, carry_over_ids, prev_output_ids)
 
         # Run model forward pass
         logits = model(**batch_data).logits  # shape [1, seq_len OR num_logits, vocab_size]
@@ -185,6 +234,12 @@ class ModelRunner:
             dummy_dim, num_logits, vocab_size = logits.shape
             logits_2d = logits.view(dummy_dim * num_logits, vocab_size)
             sliced_input_ids_2d = batch_data["input_ids"][0, logits_indices]  # shape [num_logits]
+
+            # TODO: FIXME: rebase change, check if can be deleted
+            # dummy_dim, num_tokens, vocab_size = logits.shape
+            # logits_2d = logits.view(dummy_dim * num_tokens, vocab_size)
+            # input_ids_2d = input_ids.view(dummy_dim * num_tokens)
+
             # Process with 2D tensors
             logits_2d = self.logit_processor(sliced_input_ids_2d, logits_2d, batch_data["logits_processor_args"])
             # Reshape back to 3D

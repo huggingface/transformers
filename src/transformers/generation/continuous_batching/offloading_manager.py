@@ -175,6 +175,7 @@ class OffloadingManager:
         """Returns a context manager that runs enclosed ops on the compute stream, or a no-op when none is set."""
         return torch.cuda.stream(self._compute_stream) if self._compute_stream is not None else nullcontext()
 
+    # TODO: BUG: mm requests cannot be soft reset
     def offload_requests(self) -> int:
         """Evict enough active requests that, at the next batch, every remaining starved request can allocate the
         blocks it needs. Victims are taken from the starved requests reported by the scheduler, newest first, so the

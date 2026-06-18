@@ -22,8 +22,10 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .distributed import DistributedHelper
+from .encoder_cache import EncoderCache
 from .initialization import resolve_max_memory_percent
 from .requests import RequestState, RequestStatus, get_device_and_memory_breakdown, logger
+from .utils import find_head_dim, find_num_kv_heads
 
 
 def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
@@ -120,7 +122,8 @@ class PagedAttentionCache:
         self,
         config: PreTrainedConfig,
         continuous_batching_config: ContinuousBatchingConfig,
-        device: torch.device | str,
+        mm_modality: str | None,
+        device: torch.device | str,  # TODO: add PP support
         distributed_helper: DistributedHelper,
         tp_plan: dict[str, Any],
         dtype: torch.dtype = torch.float16,
@@ -131,38 +134,40 @@ class PagedAttentionCache:
         Args:
             config: Model configuration
             continuous_batching_config: Continuous batching configuration containing cache parameters
+            mm_modality: The modality of the multimodal inputs
             device: Device for the cache tensors
             distributed_helper: TP-aware helper. Used to dispatch attention heads and ensure coherent cache size
             tp_plan: Tensor parallelism plan
-            dtype: Data type of the cache
+            dtype: Data type of the cache (for now, same as the model)
         """
-        self.config = config
         self.dtype = dtype
         self.device = device
 
-        # Extract model dimensions
-        kv_heads = getattr(config, "num_key_value_heads", None)
-        self.num_key_value_heads: int = kv_heads if kv_heads is not None else config.num_attention_heads
-        head_dim = getattr(config, "head_dim", None)
-        self.head_dim: int = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
+        # For most attributes, the relevant values are inside the text model (LLM) config, not the main config
+        is_multimodal_model = mm_modality is not None
+        llm_config = config.text_config if is_multimodal_model and hasattr(config, "text_config") else config
 
-        # Extract cache dimensions. Default used to be 32, now it's 256 to be compatible with flash_with_kvcache.
+        # Extract model dimensions
+        self.num_key_value_heads = find_num_kv_heads(llm_config)
+        self.head_dim = find_head_dim(llm_config)
+        # Extract cache dimensions
         self.block_size = continuous_batching_config.block_size
         if self.block_size <= 0:
             raise ValueError(f"Block size must be positive, but got {self.block_size}")
 
         # Group layers depending on the attention mix
-        layer_groups, group_types = group_layers_by_attn_type(config)
+        layer_groups, group_types = group_layers_by_attn_type(llm_config)
         group_size = len(layer_groups[0])
         self.num_groups = len(layer_groups)
 
-        self.sliding_windows = {}
+        self.sliding_windows = {}  # TODO: can this attroubte be removed there is only one sliding window size so far
         self.layer_index_to_group_indices = {}
         for i, group in enumerate(layer_groups):
-            sliding_window = config.sliding_window if group_types[i] == "sliding_attention" else 1
+            sliding_window = llm_config.sliding_window if group_types[i] == "sliding_attention" else 1
             for j, layer in enumerate(group):
                 self.layer_index_to_group_indices[layer] = (i, j)
                 self.sliding_windows[layer] = sliding_window
+        self.max_sliding_window = max(self.sliding_windows.values())
 
         # Check if the KV heads are part of the TP plan. If they are not, the cache does not need plan for TP.
         # TODO: this is fragile. If your model fails to TP properly because of this, please open an issue.
@@ -185,7 +190,7 @@ class PagedAttentionCache:
         # Infer number of blocks and max batch tokens
         page_size = self.head_dim * self.num_key_value_heads
 
-        if is_flash_attention_requested(self.config):
+        if is_flash_attention_requested(config):
             num_attention_masks = 0  # only used to compute the default memory footprint args
         elif "sliding_attention" in group_types:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
@@ -194,23 +199,25 @@ class PagedAttentionCache:
             num_attention_masks = 1
 
         # Peak activations coefficients (for number of blocks and number of batch tokens)
-        q_bytes_per_token = config.num_attention_heads * self.head_dim
+        q_bytes_per_token = llm_config.num_attention_heads * self.head_dim
         lm_head_peak = (
             0,  # number of blocks does not affect the LM head peak activation
-            config.hidden_size + 2 * config.vocab_size,  # hidden states + logits
+            llm_config.hidden_size + 2 * llm_config.vocab_size,  # hidden states + logits
         )
         attention_peak = (
             2 * page_size,  # old K and V, read from cache (in the worst case scenario: whole cache is read)
-            config.hidden_size + q_bytes_per_token + 2 * page_size,  # hidden state + Q + new K and V
+            llm_config.hidden_size + q_bytes_per_token + 2 * page_size,  # hidden state + Q + new K and V
         )
 
         memory_handler = PagedAttentionMemoryHandler(
             continuous_batching_config=continuous_batching_config,
             page_size=page_size,
+            hidden_size=llm_config.hidden_size,
             num_groups=self.num_groups,
             group_size=group_size,
             activation_peaks=[lm_head_peak, attention_peak],
             num_attention_masks=num_attention_masks,
+            is_multimodal_model=is_multimodal_model,
         )
 
         # If somehow the max memory percent is not yet resolved, resolve it conservatively
@@ -276,7 +283,7 @@ class PagedAttentionCache:
                 self.num_full_attention_groups += 1
             elif group_type == "sliding_attention":
                 cm = SlidingAttentionCacheAllocator(
-                    i, self.block_size, config.sliding_window, self.sentinel_index, self.trash_index
+                    i, self.block_size, llm_config.sliding_window, self.sentinel_index, self.trash_index
                 )
                 self.num_sliding_attention_groups += 1
                 self.max_sliding_window_blocks_per_request = cm._max_blocks_per_request
@@ -291,6 +298,19 @@ class PagedAttentionCache:
 
         # For block table support, we lazy init the name of the block table key
         self._block_table_key = None
+
+        # If there is one, initialize the encoder cache
+        if is_multimodal_model:
+            self.encoder_cache = EncoderCache(
+                config=config,
+                modality=mm_modality,
+                max_batch_tokens=max_batch_tokens,
+                use_async_batching=continuous_batching_config.use_async_batching,
+                model_dtype=self.dtype,
+                device=self.device,
+            )
+        else:
+            self.encoder_cache = None
 
     def blocks_needed(self, num_requested_blocks: int, allocated_blocks: int) -> int:
         """Returns the number of physical blocks needed to allocate (num_requested_blocks) blocks to a request that
@@ -377,7 +397,7 @@ class PagedAttentionCache:
         if self.num_full_attention_groups > 0:
             seqlens_k["full_attention"] = past_length + query_length
         if self.num_sliding_attention_groups > 0:
-            seqlens_k["sliding_attention"] = query_length + min(past_length, self.config.sliding_window - 1)
+            seqlens_k["sliding_attention"] = query_length + min(past_length, self.max_sliding_window - 1)
         # NOTE: when we add more attention types / different sliding windows, we can go back to looping over CMs
         return seqlens_k
 
@@ -576,20 +596,24 @@ class PagedAttentionMemoryHandler:
         self,
         continuous_batching_config: ContinuousBatchingConfig,
         page_size: int,
+        hidden_size: int,
         num_groups: int,
         group_size: int,
         activation_peaks: list[tuple[int, int]],
         num_attention_masks: int,
+        is_multimodal_model: bool,
     ) -> None:
         """Initialize the memory handler. `activation_peaks` is a list of `(Δcn, Δcm)` pairs giving the activation memory
         contributions proportional to N (pages) and M (batch tokens) for each peak. Memory must satisfy the constraint
         at every peak, so we solve each polynomial independently and take the most restrictive result."""
         self.block_size = continuous_batching_config.block_size
         self.page_size = page_size
+        self.hidden_size = hidden_size
         self.num_groups = num_groups
         self.group_size = group_size
         self.activation_peaks = activation_peaks
         self.num_attention_masks = num_attention_masks
+        self.is_multimodal_model = is_multimodal_model
         self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request
         if self.max_blocks_per_request is None:
             self.max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
@@ -620,6 +644,7 @@ class PagedAttentionMemoryHandler:
         a = self._activation_dtype.itemsize  # bfloat16
         c = cache_dtype.itemsize
         k = self.io_multiplier               # 1 sync, 2 async (IO tensors only)
+        mm = self.is_multimodal_model         # 1 if multimodal model, 0 otherwise
         delta_n, delta_m = peak
 
         # -- N terms: cost per cache page --------------------------------------------------
@@ -631,12 +656,13 @@ class PagedAttentionMemoryHandler:
         # -- M terms: cost per batch token -------------------------------------------------
         coeff_m = (
             delta_m * a                                # activation peak: M-proportional part
-            + k * 7 * i                                # bulk_input: [7, M] int32, packed as 7 rows
+            + k * 8 * i                                # bulk_input: [7, M] int32, packed as 7 rows
             + k * self.num_output_rows * i             # output_ids: [num_output_rows, M] int32
             + k * self.num_groups                      # block_table: [bt_groups, M, max_blocks_per_req] int32
             * self.max_blocks_per_request * i          #   (zero when fast-decode is off)
             + k * self.num_groups * 8                  # write_index: [num_groups, M] int64
             + k * self.num_groups * 8                  # read_index: [num_groups, N + M] (M part only, int64)
+            + k * mm * self.hidden_size * a            # input_embeds: [M, hidden_size] * activation_dtype
         )
         # TODO: the above could be refined by introducing the max_requests_per_batch, but then there is a min() and this
         # is no longer a simple polynomial. Could be worth checking into.

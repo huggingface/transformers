@@ -74,6 +74,23 @@ def attn_mask_is_needed(config: PretrainedConfig) -> bool:
     return config._attn_implementation in ["paged|eager", "paged|sdpa"]
 
 
+def find_num_kv_heads(config: PretrainedConfig) -> int | None:
+    """Finds the number of key-value heads for the given config."""
+    for attr in ["num_key_value_heads", "num_attention_heads"]:
+        if hasattr(config, attr):
+            return getattr(config, attr)
+    raise ValueError(f"num_key_value_heads or num_attention_heads could not be found in the config:\n{config}")
+
+
+def find_head_dim(config: PretrainedConfig) -> int | None:
+    """Finds the head dimension for the given config."""
+    if hasattr(config, "head_dim"):
+        return config.head_dim
+    if hasattr(config, "hidden_size") and hasattr(config, "num_attention_heads"):
+        return config.hidden_size // config.num_attention_heads
+    raise ValueError(f"head_dim or (hidden_size and num_attention_heads) could not be found in the config:\n{config}")
+
+
 def pad_to_interval(size: int, interval_size: int, max_value: int) -> int:
     """Return the smallest multiple of (interval_size) >= (size), capped at (max_value)."""
     if interval_size <= 0:
@@ -179,6 +196,30 @@ def build_attention_mask(
             masked += torch.tril(minus_inf, diagonal=sliding_diagonal)
         # Replace in attention mask
         attention_mask[..., query_range, key_range] = masked
+
+
+def check_modality_support(input_modalities: str | list[str]) -> str | None:
+    """Check if CB supports the given input modalities and returns True if the model is multimodal."""
+    input_modalities = [input_modalities] if isinstance(input_modalities, str) else input_modalities
+
+    # We only support text and image or text and audio for now
+    supported_modalities = set(input_modalities).intersection({"text", "image", "audio"})
+    if len(supported_modalities) not in {1, 2} or "text" not in supported_modalities:
+        raise ValueError(f"This model supports {input_modalities = } but CB only supports text+image or text+audio.")
+
+    # Throw a warning if the model supports modalities that are not in CB's supported set
+    unsupported_modalities = set(input_modalities) - supported_modalities
+    if len(unsupported_modalities) > 0:
+        logger.warning(
+            f"This model supports {input_modalities = } but CB only supports text+image or text+audio. "
+            f"The following modalities will be ignored: {unsupported_modalities = }"
+        )
+
+    # Return the non-textual modality if there is one
+    if len(supported_modalities) == 2:
+        supported_modalities.remove("text")
+        return supported_modalities.pop()
+    return None
 
 
 def create_warmup_future_states(
