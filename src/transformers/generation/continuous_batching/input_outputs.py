@@ -54,6 +54,7 @@ class PagedAttentionArgs(TypedDict):
         read_index: List of tensors indicating which cache positions to read from, one per attention group.
         encoder_cache_read_index: Tensor indicating which positions in the encoder cache to read from.
         logits_indices: Tensor indicating which positions in the output should be used for next-token prediction.
+        logits_to_keep: Same as logits_indices, but only used for models that support logits_to_keep.
         cache: The [`PagedAttentionCache`] instance managing the KV cache.
         block_table: Block table for paged KV cache. If provided, uses `flash_attn_with_kvcache` for fused attention +
             cache update. More information in src/transformers/integrations/flash_paged.py
@@ -73,6 +74,7 @@ class PagedAttentionArgs(TypedDict):
     read_index: list[torch.Tensor]
     encoder_cache_read_index: torch.Tensor | None
     logits_indices: torch.Tensor
+    logits_to_keep: torch.Tensor | None
     cache: PagedAttentionCache
     block_table: torch.Tensor | None
     logits_processor_args: torch.Tensor
@@ -113,6 +115,7 @@ class ContinuousBatchingIOs:
         self.use_cuda_graph_varlen = continuous_batching_config.cuda_graph_booleans[0]
         self.sliding_window = 1 if getattr(self.config, "sliding_window", None) is None else self.config.sliding_window
         self.return_logprobs = continuous_batching_config.return_logprobs
+        self.use_logits_to_keep = hasattr(model, "_supports_logits_to_keep") and model._supports_logits_to_keep()
         # Setup input-related accumulators
         self.num_q_tokens = 0  # number of query tokens in the batch. Can be padded.
         self.max_kv_read = 0  # number of KV tokens read from cache (maxed across all groups). Can be padded.
@@ -527,6 +530,7 @@ class ContinuousBatchingIOs:
             cu_seq_lens_q=self.cumulative_seqlens_q[: num_sequences + 1],
             max_seqlen_q=self.max_seqlen_q,
             logits_indices=self.logits_indices[:num_sequences],
+            logits_to_keep=self.logits_indices[:num_sequences] if self.use_logits_to_keep else None,
             logits_processor_args=self._bulk_input_tensor[self.static_inputs :, :num_sequences],
             cu_seq_lens_k={},
             max_seqlen_k={},

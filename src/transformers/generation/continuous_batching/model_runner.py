@@ -150,10 +150,6 @@ class ModelRunner:
         # This is the stream on which the compute happens
         compute_stream = self.inputs_and_outputs.compute_stream
 
-        # If supported, the model slices hidden states at logits_indices before lm_head, instead of us slicing logits
-        if self.supports_logits_to_keep(model):
-            batch_data["logits_to_keep"] = batch_data["logits_indices"]
-
         # TODO; BUG: carry over needs to happen here, before the embeddings are filled
         if batch_data["inputs_embeds"] is not None:
             with self.compute_stream_ctx():
@@ -223,7 +219,7 @@ class ModelRunner:
 
         # If it has not been done by the model, extract only the logits that are used to predict new tokens
         logits_indices = batch_data["logits_indices"]  # shape [num_logits]
-        if "logits_to_keep" not in batch_data:
+        if batch_data["logits_to_keep"] is None:
             logits = logits[:, logits_indices, :]  # shape [1, num_logits, vocab_size]
         # Convert to fp32 to match generate
         logits = logits.float()  # shape [1, num_logits, vocab_size]
