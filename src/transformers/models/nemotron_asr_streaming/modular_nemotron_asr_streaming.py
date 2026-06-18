@@ -23,7 +23,6 @@ from torch import nn
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
