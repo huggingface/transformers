@@ -899,7 +899,6 @@ def create_causal_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
-    additional_kv_length: int = 0,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
@@ -931,9 +930,6 @@ def create_causal_mask(
             A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
-        additional_kv_length(`int`, *optional*, defaults to `0`):
-            An integer used to increment final kv-length. Can be used when prev cache contents are concatenated to key/values,
-            instead of being updating the cache.
     """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention.
     # It allows to use decoder-only models with bi-directional attention as well
@@ -956,8 +952,6 @@ def create_causal_mask(
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
     )
-    if kv_length is not None:
-        kv_length += additional_kv_length
     if early_exit:
         return attention_mask
 
@@ -1029,7 +1023,6 @@ def create_bidirectional_mask(
     past_key_values: Cache | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
-    additional_kv_length: int = 0,
     **kwargs,
 ) -> torch.Tensor | BlockMask | None:
     """
@@ -1056,9 +1049,6 @@ def create_bidirectional_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
-        additional_kv_length(`int`, *optional*, defaults to `0`):
-            An integer used to increment final kv-length. Can be used when prev cache contents are concatenated to key/values,
-            instead of being updating the cache.
     """
     # If we have an hybrid cache structure, here we want to create the mask for the full layers
     if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
@@ -1070,8 +1060,6 @@ def create_bidirectional_mask(
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
         config, inputs_embeds, attention_mask, past_key_values, None, layer_idx, encoder_hidden_states
     )
-    if kv_length is not None:
-        kv_length += additional_kv_length
     if early_exit:
         return attention_mask
 
@@ -1136,7 +1124,6 @@ def create_sliding_window_causal_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
-    additional_kv_length: int = 0,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
@@ -1169,9 +1156,6 @@ def create_sliding_window_causal_mask(
             A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
-        additional_kv_length(`int`, *optional*, defaults to `0`):
-            An integer used to increment final kv-length. Can be used when prev cache contents are concatenated to key/values,
-            instead of being updating the cache.
     """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention
     # It allows to use decoder-only models with bi-directional attention as well
@@ -1194,8 +1178,6 @@ def create_sliding_window_causal_mask(
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
     )
-    if kv_length is not None:
-        kv_length += additional_kv_length
     if early_exit:
         return attention_mask
 
@@ -1267,7 +1249,6 @@ def create_bidirectional_sliding_window_mask(
     past_key_values: Cache | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
-    additional_kv_length: int = 0,
     **kwargs,
 ) -> torch.Tensor | BlockMask | None:
     """
@@ -1294,9 +1275,6 @@ def create_bidirectional_sliding_window_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
-        additional_kv_length(`int`, *optional*, defaults to `0`):
-            An integer used to increment final kv-length. Can be used when prev cache contents are concatenated to key/values,
-            instead of being updating the cache.
     """
     # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
     if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
@@ -1308,8 +1286,6 @@ def create_bidirectional_sliding_window_mask(
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
         config, inputs_embeds, attention_mask, past_key_values, None, layer_idx, encoder_hidden_states
     )
-    if kv_length is not None:
-        kv_length += additional_kv_length
     if early_exit:
         return attention_mask
 
@@ -1365,7 +1341,6 @@ def create_chunked_causal_mask(
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
-    additional_kv_length: int = 0,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
@@ -1394,9 +1369,6 @@ def create_chunked_causal_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
-        additional_kv_length(`int`, *optional*, defaults to `0`):
-            An integer used to increment final kv-length. Can be used when prev cache contents are concatenated to key/values,
-            instead of being updating the cache.
     """
     # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
     if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
@@ -1407,8 +1379,6 @@ def create_chunked_causal_mask(
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
     )
-    if kv_length is not None:
-        kv_length += additional_kv_length
     if early_exit:
         return attention_mask
 
@@ -1502,7 +1472,6 @@ def create_masks_for_generate(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
-    additional_kv_length: int = 0,
     **kwargs,
 ):
     """
@@ -1532,9 +1501,6 @@ def create_masks_for_generate(
             A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
-        additional_kv_length(`int`, *optional*, defaults to `0`):
-            An integer used to increment final kv-length. Can be used when prev cache contents are concatenated to key/values,
-            instead of being updating the cache.
     """
     # The attribute reside in the text config for composite models
     effective_config = config.get_text_config()
@@ -1548,7 +1514,6 @@ def create_masks_for_generate(
         "or_mask_function": or_mask_function,
         "and_mask_function": and_mask_function,
         "block_sequence_ids": block_sequence_ids,
-        "additional_kv_length": additional_kv_length,
     }
 
     # If the attribute exist, we need several masks - unless every layer shares the same type, in which
