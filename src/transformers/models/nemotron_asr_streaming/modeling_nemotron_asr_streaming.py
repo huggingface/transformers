@@ -277,19 +277,19 @@ class NemotronAsrStreamingEncoderCausalConv2D(nn.Conv2d):
         )
         self.cache_key = cache_key
 
-    @cached_property
+    @property
     def left_pad(self):
         return self.kernel_size[0] - self.stride[0]
 
-    @cached_property
+    @property
     def left_pad_init(self):
         return self.kernel_size[0] - 1
 
-    @cached_property
+    @property
     def time_pad(self):
         return (self.kernel_size[0] - 1, self.stride[0] - 1)
 
-    @cached_property
+    @property
     def freq_pad(self):
         return (self.kernel_size[1] - 1, self.stride[1] - 1)
 
