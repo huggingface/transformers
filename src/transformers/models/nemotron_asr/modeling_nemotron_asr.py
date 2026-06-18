@@ -1198,8 +1198,9 @@ class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin)
         >>> from datasets import load_dataset, Audio
 
         >>> model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
-        >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = NemotronAsrForRNNT.from_pretrained(model_id)
+        >>> revision = "refs/pr/17"
+        >>> processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+        >>> model = NemotronAsrForRNNT.from_pretrained(model_id, revision=revision)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))

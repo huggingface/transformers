@@ -31,7 +31,11 @@ TODO
 ```python
 from transformers import pipeline
 
-pipe = pipeline("automatic-speech-recognition", model="nvidia/nemotron-speech-streaming-en-0.6b")
+pipe = pipeline(
+    "automatic-speech-recognition",
+    model="nvidia/nemotron-speech-streaming-en-0.6b",
+    revision="refs/pr/17",
+)
 out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 print(out)
 ```
@@ -44,8 +48,9 @@ from transformers import AutoModelForRNNT, AutoProcessor
 from transformers.audio_utils import load_audio
 
 model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForRNNT.from_pretrained(model_id, device_map="auto")
+revision = "refs/pr/17"
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, device_map="auto")
 
 audio = load_audio(
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
@@ -73,8 +78,9 @@ from transformers import AutoModelForRNNT, AutoProcessor, TextIteratorStreamer
 from transformers.audio_utils import load_audio
 
 model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForRNNT.from_pretrained(model_id, device_map="auto")
+revision = "refs/pr/17"
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, device_map="auto")
 
 processor.set_num_lookahead_tokens(6)
 print(f"Streaming latency: {processor.streaming_latency_ms} ms")
@@ -141,7 +147,7 @@ The latency is set by `num_lookahead_tokens`, the right attention context (looka
 ```python
 from transformers import AutoProcessor
 
-processor = AutoProcessor.from_pretrained("nvidia/nemotron-speech-streaming-en-0.6b")
+processor = AutoProcessor.from_pretrained("nvidia/nemotron-speech-streaming-en-0.6b", revision="refs/pr/17")
 
 # Each supported `num_lookahead_tokens` mapped to its streaming latency in milliseconds:
 print(processor.supported_streaming_latencies_ms)

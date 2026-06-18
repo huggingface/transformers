@@ -324,7 +324,9 @@ class NemotronAsrProcessor(ParakeetProcessor):
     @property
     def _encoder_frame_ms(self) -> float:
         """Duration in milliseconds of one subsampled encoder frame (`subsampling_factor * hop_length / sampling_rate`)."""
-        return self._subsampling_factor * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate * 1000
+        return (
+            self._subsampling_factor * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate * 1000
+        )
 
     @property
     def streaming_latency_ms(self) -> int:
@@ -1284,8 +1286,9 @@ class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAs
         >>> from datasets import load_dataset, Audio
 
         >>> model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
-        >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = NemotronAsrForRNNT.from_pretrained(model_id)
+        >>> revision = "refs/pr/17"
+        >>> processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+        >>> model = NemotronAsrForRNNT.from_pretrained(model_id, revision=revision)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
