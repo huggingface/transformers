@@ -241,6 +241,11 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertIsInstance(resized_image, np.ndarray)
         self.assertEqual(resized_image.shape, (4, 30, 40))
 
+        # check that resize keeps dtype
+        image = np.zeros((1, 128, 128), dtype=np.float32)
+        resized_image = resize(image, size=(64, 64))
+        self.assertEqual(image.dtype, resized_image.dtype)
+
     def test_normalize(self):
         image = np.random.randint(0, 256, (224, 224, 3)) / 255
 
