@@ -524,7 +524,9 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
     if not is_kernels_available():
         raise ValueError(
-            "Kernels are not available. To use kernels, please install kernels using `pip install -U kernels`"
+            "Kernels are not available. "
+            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
 
     def attach_hidden_kernels(module):
