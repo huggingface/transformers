@@ -420,7 +420,8 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
     @slow
     @require_sentencepiece
     def test_inference(self):
-        model = Tipsv2Model.from_pretrained("google/tipsv2-b14", device_map=torch_device).eval()
+        # TODO: switch to google repo before merge
+        model = Tipsv2Model.from_pretrained("guarin/tipsv2-b14", device_map=torch_device).eval()
 
         text_queries = ["two cats on a sofa", "a cat lying down", "a dog on a couch", "an empty room"]
         processor = self.default_processor
@@ -474,20 +475,3 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             outputs.text_model_output.pooler_output[0, :5], expected_text_pooler_output, rtol=1e-4, atol=1e-4
         )
-
-    # TODO: Remove before merge
-    @slow
-    def test_models_from_pretrained(self):
-        model_ids = [
-            "google/tipsv2-b14",
-            "google/tipsv2-l14",
-            "google/tipsv2-so400m14",
-            "google/tipsv2-g14",
-        ]
-        for model_id in model_ids:
-            with self.subTest(model_id=model_id):
-                config = AutoConfig.from_pretrained(model_id)
-                self.assertIsInstance(config, Tipsv2Config)
-
-                model = AutoModel.from_pretrained(model_id)
-                self.assertIsInstance(model, Tipsv2Model)
