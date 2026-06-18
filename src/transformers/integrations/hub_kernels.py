@@ -93,7 +93,7 @@ if is_kernels_available():
     _KERNEL_MAPPING_CACHE: "dict | None" = None
 
     def _build_kernel_mapping() -> dict:
-        kernel_mapping: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
+        _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
             "MultiScaleDeformableAttention": {
                 "cuda": LayerRepository(
                     repo_id="kernels-community/deformable-detr",
@@ -290,7 +290,7 @@ if is_kernels_available():
         }
 
         # Add function kernel mappings
-        function_kernel_mapping: dict = {
+        _FUNCTION_KERNEL_MAPPING = {
             "rotary_pos_emb": {
                 "xpu": {
                     Mode.INFERENCE: FuncRepository(
@@ -314,8 +314,9 @@ if is_kernels_available():
                 },
             },
         }
+        _KERNEL_MAPPING = _KERNEL_MAPPING | _FUNCTION_KERNEL_MAPPING
 
-        return kernel_mapping | function_kernel_mapping
+        return _KERNEL_MAPPING
 
     def get_kernel_mapping_transformers() -> dict:
         """Return the default transformers kernel mapping, building it lazily on first use."""
