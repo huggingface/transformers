@@ -2693,7 +2693,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     source_param = self.get_parameter(source_param_name)
                     target_param = self.get_parameter(target_param_name)
 
-                    # Skip check if both are disk offloaded
+                    # Skip check if both are disk offloaded. Tied tensors always
+                    # share the same offload device as per `infer_auto_device_map`
                     if source_param.device.type == "meta" and target_param.device.type == "meta":
                         continue
 
