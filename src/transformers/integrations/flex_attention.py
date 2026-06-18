@@ -225,8 +225,8 @@ def make_flex_block_causal_mask(
         mask_mod_maybe_combined = causal_mask_mod if attention_chunk_size is None else chunk_causal_mask_mod
 
     if offsets is not None:
-        q_offset = offsets[0].to(device)
-        kv_offset = offsets[1].to(device)
+        q_offset = int(offsets[0])
+        kv_offset = int(offsets[1])
 
         def mask_mod(batch_idx, head_idx, q_idx, kv_idx):
             offset_q = q_idx + q_offset
