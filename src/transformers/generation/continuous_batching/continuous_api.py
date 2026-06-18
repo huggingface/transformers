@@ -507,7 +507,10 @@ class ContinuousBatchProcessor:
         # device. Hence, to make the limit clear, this is left out of the model runner scope.
         batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=self.model_runner.pad_inputs)
 
-        # If there are multimodal inputs to embed, we do it here # TODO: cuda-graph, async support, compile
+        # If there are multimodal inputs to embed, we do it here
+        # TODO: add a bin of cuda graphs for the encoder
+        # TODO: add a compiled version of the encoder
+        # TODO: better integration of the encoder in async mode (side stream? profile and see)
         encoder_kwargs = self.inputs_and_outputs.encoder_kwargs
         if encoder_kwargs:
             self.model_runner.run_encoder(model, encoder_kwargs)
