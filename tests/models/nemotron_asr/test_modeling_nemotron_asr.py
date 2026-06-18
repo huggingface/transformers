@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch NemotronAsr model."""
 
 import json
-import tempfile
 import unittest
 from pathlib import Path
 from threading import Thread
@@ -23,7 +22,13 @@ from transformers import is_datasets_available, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import floats_tensor
+from ..parakeet.test_modeling_parakeet import (
+    ParakeetEncoderModelTest,
+    ParakeetEncoderModelTester,
+    ParakeetForRNNTModelTest,
+    ParakeetForRNNTModelTester,
+)
 
 
 if is_datasets_available():
@@ -34,7 +39,7 @@ if is_torch_available():
 
     from transformers import (
         AutoProcessor,
-        NemotronAsrConfig,
+        NemotronAsrRNNTConfig,
         NemotronAsrEncoder,
         NemotronAsrEncoderConfig,
         NemotronAsrForRNNT,
@@ -43,59 +48,9 @@ if is_torch_available():
     from transformers.audio_utils import load_audio
 
 
-class NemotronAsrEncoderModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=1024,
-        is_training=True,
-        hidden_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=256,
-        hidden_act="silu",
-        dropout=0.0,  # so gradient checkpointing doesn't fail
-        conv_kernel_size=9,
-        subsampling_factor=8,
-        subsampling_conv_channels=32,
-        attention_bias=True,
-        num_mel_bins=80,
-        scale_input=True,
-    ):
-        # testing suite parameters
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.num_mel_bins = num_mel_bins
-        self.is_training = is_training
-
-        # config parameters
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.dropout = dropout
-        self.conv_kernel_size = conv_kernel_size
-        self.subsampling_factor = subsampling_factor
-        self.subsampling_conv_channels = subsampling_conv_channels
-        self.attention_bias = attention_bias
-        self.num_mel_bins = num_mel_bins
-        self.scale_input = scale_input
-
-        # Calculate output sequence length after subsampling
-        self.output_seq_length = seq_length // subsampling_factor
-        self.encoder_seq_length = self.output_seq_length
-        self.key_length = self.output_seq_length
-
-    def prepare_config_and_inputs(self):
-        input_features = floats_tensor([self.batch_size, self.seq_length, self.num_mel_bins])
-        attention_mask = random_attention_mask([self.batch_size, self.seq_length])
-        config = self.get_config()
-
-        return config, input_features, attention_mask
-
+# NemotronAsr's modeling/config inherit from Parakeet (see `modular_nemotron_asr.py`), so the tests inherit
+# from the Parakeet testers/tests too and override only the NemotronAsr-specific classes and behaviours.
+class NemotronAsrEncoderModelTester(ParakeetEncoderModelTester):
     def get_config(self):
         return NemotronAsrEncoderConfig(
             hidden_size=self.hidden_size,
@@ -127,85 +82,26 @@ class NemotronAsrEncoderModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, config.hidden_size)
         )
 
-    def prepare_config_and_inputs_for_common(self):
-        config, input_features, attention_mask = self.prepare_config_and_inputs()
-        inputs_dict = {
-            "input_features": input_features,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
 
 @require_torch
-class NemotronAsrEncoderModelTest(ModelTesterMixin, unittest.TestCase):
+class NemotronAsrEncoderModelTest(ParakeetEncoderModelTest):
     all_model_classes = (NemotronAsrEncoder,) if is_torch_available() else ()
-
-    test_resize_embeddings = False
-
-    @unittest.skip(reason="No available flash-SDPA kernels for NemotronAsr test shapes on this setup")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
 
     def setUp(self):
         self.model_tester = NemotronAsrEncoderModelTester(self)
         self.config_tester = ConfigTester(self, config_class=NemotronAsrEncoderConfig, has_text_modality=False)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(reason="NemotronAsrEncoder does not use inputs_embeds")
-    def test_model_get_set_embeddings(self):
-        pass
-
-
-class NemotronAsrForRNNTModelTester:
-    def __init__(
-        self,
-        parent,
-        encoder_kwargs=None,
-        is_training=True,
-        vocab_size=128,
-        decoder_hidden_size=32,
-        joint_hidden_size=32,
-        num_decoder_layers=1,
-        hidden_act="relu",
-        max_symbols_per_step=5,
-        pad_token_id=2,
-    ):
-        if encoder_kwargs is None:
-            encoder_kwargs = {}
-
-        self.parent = parent
-        self.encoder_model_tester = NemotronAsrEncoderModelTester(parent, **encoder_kwargs)
-        self.is_training = is_training
-
-        self.batch_size = self.encoder_model_tester.batch_size
-        self.output_seq_length = self.encoder_model_tester.output_seq_length
-        self.num_hidden_layers = self.encoder_model_tester.num_hidden_layers
-        self.hidden_size = self.encoder_model_tester.hidden_size
-        self.seq_length = self.encoder_model_tester.output_seq_length
-        self.encoder_seq_length = self.encoder_model_tester.output_seq_length
-
-        self.vocab_size = vocab_size
-        self.decoder_hidden_size = decoder_hidden_size
+class NemotronAsrForRNNTModelTester(ParakeetForRNNTModelTester):
+    def __init__(self, parent, encoder_kwargs=None, vocab_size=128, joint_hidden_size=32, **kwargs):
+        super().__init__(parent, encoder_kwargs=encoder_kwargs, vocab_size=vocab_size, **kwargs)
+        # NemotronAsr uses its own encoder tester (Parakeet's `__init__` wired the Parakeet one). The two share
+        # identical settings, so the encoder-derived attributes set by `super().__init__` stay valid.
+        self.encoder_model_tester = NemotronAsrEncoderModelTester(parent, **(encoder_kwargs or {}))
         self.joint_hidden_size = joint_hidden_size
-        self.num_decoder_layers = num_decoder_layers
-        self.hidden_act = hidden_act
-        self.max_symbols_per_step = max_symbols_per_step
-        self.pad_token_id = pad_token_id
-        self.blank_token_id = vocab_size - 1
-
-    def prepare_config_and_inputs(self):
-        _, input_features, attention_mask = self.encoder_model_tester.prepare_config_and_inputs()
-        config = self.get_config()
-        return config, input_features, attention_mask
 
     def get_config(self):
-        return NemotronAsrConfig(
+        return NemotronAsrRNNTConfig(
             vocab_size=self.vocab_size,
             decoder_hidden_size=self.decoder_hidden_size,
             joint_hidden_size=self.joint_hidden_size,
@@ -248,19 +144,9 @@ class NemotronAsrForRNNTModelTester:
             (self.num_hidden_layers, self.batch_size, 3, self.hidden_size),
         )
 
-    def prepare_config_and_inputs_for_common(self):
-        config, input_features, attention_mask = self.prepare_config_and_inputs()
-        decoder_input_ids = ids_tensor([self.batch_size, 1], self.vocab_size)
-        inputs_dict = {
-            "input_features": input_features,
-            "attention_mask": attention_mask,
-            "decoder_input_ids": decoder_input_ids,
-        }
-        return config, inputs_dict
-
 
 @require_torch
-class NemotronAsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
+class NemotronAsrForRNNTModelTest(ParakeetForRNNTModelTest):
     all_model_classes = (NemotronAsrForRNNT,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -271,25 +157,9 @@ class NemotronAsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_attention_outputs = False
-    test_resize_embeddings = False
-    test_torch_exportable = False
-    _is_composite = True
-
-    @unittest.skip(reason="No available flash-SDPA kernels for NemotronAsr test shapes on this setup")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
     def setUp(self):
         self.model_tester = NemotronAsrForRNNTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NemotronAsrConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+        self.config_tester = ConfigTester(self, config_class=NemotronAsrRNNTConfig)
 
     def test_streaming_state_init(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -317,74 +187,11 @@ class NemotronAsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
         # argument) is what gets reported.
         self.assertFalse(consumed, "streaming `generate` consumed the stream before validating num_lookahead_tokens")
 
-    @unittest.skip(reason="NemotronAsrForRNNT does not use inputs_embeds")
-    def test_model_get_set_embeddings(self):
-        pass
 
-    @unittest.skip(
-        reason="NemotronAsrForRNNT is a transducer, not a standard encoder-decoder: no separate text config to set"
-    )
-    def test_attn_implementation_composite_models(self):
-        pass
-
-    @unittest.skip(
-        reason="NemotronAsrForRNNT is a transducer with an LSTM prediction network; "
-        "it does not expose encoder_hidden_states in the standard encoder-decoder sense"
-    )
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(
-        reason="NemotronAsrForRNNT is a transducer with an LSTM prediction network; "
-        "it does not expose encoder_hidden_states in the standard encoder-decoder sense"
-    )
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(
-        reason="NemotronAsrForRNNT has a custom generate() that is not fully compatible with GenerationTesterMixin"
-    )
-    def test_generation_tester_mixin_inheritance(self):
-        pass
-
-    @unittest.skip(reason="NemotronAsrForRNNT is a flat composite model without a separate base_model sub-module")
-    def test_model_base_model_prefix(self):
-        pass
-
-    @unittest.skip(reason="NemotronAsrForRNNT decoder is an LSTM prediction network without attention")
-    def test_flex_attention_with_grads(self):
-        pass
-
-    # Original function assumes vision+text model, so overwrite since NemotronAsr is audio+text
-    def test_sdpa_can_dispatch_composite_models(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
-
-        for model_class in self.all_model_classes:
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
-
-                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-                for name, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
-
-# Local conversion of the original NeMo `nvidia/nemotron-speech-streaming-en-0.6b` checkpoint. Replace with the
-# public Hub id once the converted weights are published.
-NEMOTRON_ASR_CHECKPOINT = "/raid/eustache/nemotron-speech-streaming-en-0.6b-hf"
+# HF-format conversion of the original NeMo `nvidia/nemotron-speech-streaming-en-0.6b` checkpoint, published as a
+# PR on the Hub until it is merged into the main revision.
+NEMOTRON_ASR_CHECKPOINT = "nvidia/nemotron-speech-streaming-en-0.6b"
+NEMOTRON_ASR_REVISION = "refs/pr/17"
 # Long, single-speaker sample (~16 min of Obama's farewell address), used to exercise chunked streaming.
 OBAMA_AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3"
 
@@ -414,8 +221,9 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cls.checkpoint_name = NEMOTRON_ASR_CHECKPOINT
+        cls.revision = NEMOTRON_ASR_REVISION
         cls.dtype = torch.float32
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -489,7 +297,9 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = NemotronAsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+        model = NemotronAsrForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+        )
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -506,7 +316,9 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = NemotronAsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+        model = NemotronAsrForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+        )
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -536,7 +348,9 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
             EXPECTED_TRANSCRIPTION = json.load(f)["transcription"]
 
         audio = load_audio(OBAMA_AUDIO_URL, sampling_rate=self.processor.feature_extractor.sampling_rate)
-        model = NemotronAsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+        model = NemotronAsrForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+        )
 
         # Select the streaming right attention context (lookahead, in subsampled encoder frames). This sizes
         # the mel chunks below (49 then 56 frames) and must be passed to `generate` so the forward matches.
