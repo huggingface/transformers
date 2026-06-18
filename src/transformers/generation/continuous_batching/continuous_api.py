@@ -222,11 +222,10 @@ class ContinuousBatchProcessor:
 
         # Setup inputs and outputs
         io_kwargs = {
+            "model": model,
             "cache": cache,
-            "config": self.config,
             "continuous_batching_config": continuous_batching_config,
             "device": self.model_device,
-            "model_dtype": self.model_dtype,
             "logit_processor": self.logit_processor,
         }
         self.use_async_batching = self.cb_config.use_async_batching

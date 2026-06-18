@@ -18,14 +18,20 @@ from typing import TypedDict
 
 import torch
 
-from transformers.configuration_utils import PretrainedConfig
 from transformers.generation.configuration_utils import ContinuousBatchingConfig
 
 from ...utils import get_available_devices
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState, logger
-from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask, pad_to_pow2
+from .utils import (
+    CudaGraphBuffer,
+    ProtoPretrainedModel,
+    aligned_divide,
+    attn_mask_is_needed,
+    build_attention_mask,
+    pad_to_pow2,
+)
 
 
 # TODO: perhaps this could benefit from a parent class + inheritance for different use cases
@@ -83,31 +89,29 @@ class ContinuousBatchingIOs:
 
     def __init__(
         self,
+        model: ProtoPretrainedModel,
         cache: PagedAttentionCache,
-        config: PretrainedConfig,
         continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device,
-        model_dtype: torch.dtype,
         logit_processor: ContinuousBatchingLogitsProcessorList,
         _use_inputs_embeds: bool | None = None,
     ) -> None:
         """Initialize the continuous batching I/O manager. Args:
+        - model: The model that will be used for the generation, NOT saved as an attribute, but used to infer others
         - cache: The [`PagedAttentionCache`] instance managing the KV cache. Meant to be unique.
-        - config: The model's pretrained configuration.
         - continuous_batching_config: The continuous batching configuration.
         - device: The device to allocate tensors on. If the device is CPU, then the memory is pinned.
-        - model_dtype: The data type for model computations.
         - logit_processor: The [`ContinuousBatchingLogitsProcessorList`] object used to process the logits.
         - _use_inputs_embeds: Whether to use an input embeddings tensor. If None, auto-inferred.
         """
         # Memoize attributes
         self.cache = cache
         self.device = device
-        self.config = config
-        self.model_dtype = model_dtype
+        self.config = model.config
+        self.model_dtype = model.dtype
         self.max_requests_per_batch = continuous_batching_config.max_requests_per_batch
         self.use_cuda_graph_varlen = continuous_batching_config.cuda_graph_booleans[0]
-        self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
+        self.sliding_window = 1 if getattr(self.config, "sliding_window", None) is None else self.config.sliding_window
         self.return_logprobs = continuous_batching_config.return_logprobs
         # Setup input-related accumulators
         self.num_q_tokens = 0  # number of query tokens in the batch. Can be padded.
@@ -609,29 +613,26 @@ class ContinuousBatchingIOs:
 class HostDeviceIOPair:
     def __init__(
         self,
+        model: ProtoPretrainedModel,
         cache: PagedAttentionCache,
-        config: PretrainedConfig,
         continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device,
-        model_dtype: torch.dtype,
         logit_processor: ContinuousBatchingLogitsProcessorList,
     ) -> None:
         # The host IO has automatic pinned memory because it is created on the CPU
         self.host_io = ContinuousBatchingIOs(
+            model=model,
             cache=cache,
-            config=config,
             continuous_batching_config=continuous_batching_config,
             device=torch.device("cpu"),
-            model_dtype=model_dtype,
             logit_processor=logit_processor,
             _use_inputs_embeds=False,  # never needed on the CPU side
         )
         self.device_io = ContinuousBatchingIOs(
+            model=model,
             cache=cache,
-            config=config,
             continuous_batching_config=continuous_batching_config,
             device=device,
-            model_dtype=model_dtype,
             logit_processor=logit_processor,
             _use_inputs_embeds=True,
         )
@@ -704,11 +705,10 @@ class ContinuousBatchingAsyncIOs:
 
     def __init__(
         self,
+        model: ProtoPretrainedModel,
         cache: PagedAttentionCache,
-        config: PretrainedConfig,
         continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device,
-        model_dtype: torch.dtype,
         logit_processor: ContinuousBatchingLogitsProcessorList,
     ) -> None:
         # Async batching needs streams to function, so check is CUDA is available
@@ -718,11 +718,10 @@ class ContinuousBatchingAsyncIOs:
         self.current_pair = 0
         self.io_pairs = [
             HostDeviceIOPair(
+                model=model,
                 cache=cache,
-                config=config,
                 continuous_batching_config=continuous_batching_config,
                 device=device,
-                model_dtype=model_dtype,
                 logit_processor=logit_processor,
             )
             for _ in range(2)
