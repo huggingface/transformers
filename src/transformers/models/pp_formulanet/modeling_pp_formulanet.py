@@ -1152,8 +1152,8 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
         return model_inputs
 
     # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
-    def get_encoder(self):
-        return self.model.get_encoder()
+    def get_encoder(self, modality: str | None = None):
+        return self.model.get_encoder(modality=modality)
 
 
 __all__ = [

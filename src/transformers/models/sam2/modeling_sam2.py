@@ -57,14 +57,6 @@ class Sam2VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
-        model at the output of each stage.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-        the self-attention heads.
     fpn_hidden_states (`tuple(torch.FloatTensor)`):
         Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
@@ -406,17 +398,16 @@ def window_partition(hidden_state, window_size):
     """
     batch_size, height, width, num_channels = hidden_state.shape
 
-    pad_height = (window_size - height % window_size) % window_size
-    pad_width = (window_size - width % window_size) % window_size
-
-    # Noop in case pad_width == 0 and pad_height == 0.
+    # `(-height) % window_size` is the smallest non-negative pad that makes height divisible
+    # by window_size, in one modulo instead of two; same for width.
+    pad_height = (-height) % window_size
+    pad_width = (-width) % window_size
     hidden_state = nn.functional.pad(hidden_state, (0, 0, 0, pad_width, 0, pad_height))
-
     padded_height, padded_width = height + pad_height, width + pad_width
 
-    hidden_state = hidden_state.view(
-        batch_size, padded_height // window_size, window_size, padded_width // window_size, window_size, num_channels
-    )
+    n_h = padded_height // window_size
+    n_w = padded_width // window_size
+    hidden_state = hidden_state.view(batch_size, n_h, window_size, n_w, window_size, num_channels)
     windows = hidden_state.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
     return windows, (padded_height, padded_width)
 
@@ -440,16 +431,14 @@ def window_unpartition(windows, window_size, pad_height_width, height_width):
     """
     padded_height, padded_width = pad_height_width
     height, width = height_width
-    batch_size = windows.shape[0] // (padded_height * padded_width // window_size // window_size)
-    hidden_state = windows.view(
-        batch_size, padded_height // window_size, padded_width // window_size, window_size, window_size, -1
-    )
+    n_h = padded_height // window_size
+    n_w = padded_width // window_size
+    batch_size = windows.shape[0] // (n_h * n_w)
+    hidden_state = windows.view(batch_size, n_h, n_w, window_size, window_size, -1)
     hidden_state = hidden_state.permute(0, 1, 3, 2, 4, 5).contiguous()
     hidden_state = hidden_state.view(batch_size, padded_height, padded_width, -1)
-
     # We always have height <= padded_height and width <= padded_width
-    hidden_state = hidden_state[:, :height, :width, :].contiguous()
-    return hidden_state
+    return hidden_state[:, :height, :width, :].contiguous()
 
 
 class Sam2MultiScaleBlock(GradientCheckpointingLayer):
@@ -529,9 +518,8 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
             # Shapes have changed due to Q pooling
             window_size = self.window_size // self.query_stride[0]
             H, W = residual.shape[1:3]
-
-            pad_h = (window_size - H % window_size) % window_size
-            pad_w = (window_size - W % window_size) % window_size
+            pad_h = (-H) % window_size
+            pad_w = (-W) % window_size
             pad_hw = (H + pad_h, W + pad_w)
 
         # Reverse window partition

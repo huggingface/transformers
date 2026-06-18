@@ -35,6 +35,9 @@ HUB_MODELS = {
     "convnext_small": "facebook/dinov3-convnext-small-pretrain-lvd1689m",
     "convnext_base": "facebook/dinov3-convnext-base-pretrain-lvd1689m",
     "convnext_large": "facebook/dinov3-convnext-large-pretrain-lvd1689m",
+    "eupe_convnext_tiny": "facebook/EUPE-ConvNeXt-T",
+    "eupe_convnext_small": "facebook/EUPE-ConvNeXt-S",
+    "eupe_convnext_base": "facebook/EUPE-ConvNeXt-B",
 }
 
 HUB_CHECKPOINTS = {
@@ -42,6 +45,9 @@ HUB_CHECKPOINTS = {
     "convnext_small": "dinov3_convnext_small_pretrain_lvd1689m-296db49d.pth",
     "convnext_base": "dinov3_convnext_base_pretrain_lvd1689m-801f2ba9.pth",
     "convnext_large": "dinov3_convnext_large_pretrain_lvd1689m-61fa432d.pth",
+    "eupe_convnext_tiny": "EUPE-ConvNeXt-T.pt",
+    "eupe_convnext_small": "EUPE-ConvNeXt-S.pt",
+    "eupe_convnext_base": "EUPE-ConvNeXt-B.pt",
 }
 
 # fmt: off
@@ -56,7 +62,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 
 
 def get_dinov3_config(model_name: str) -> DINOv3ConvNextConfig:
-    # size of the architecture
+    # size of the architecture; EUPE reuses the DINOv3 ConvNeXt sizes
+    model_name = model_name.removeprefix("eupe_")
     if model_name == "convnext_tiny":
         return DINOv3ConvNextConfig(
             depths=[3, 3, 9, 3],
@@ -135,6 +142,12 @@ def convert_and_test_dinov3_checkpoint(args):
         "convnext_base_patch": [3.039118, 0.778155, -1.961322, -1.607147, -2.411941],
         "convnext_large_cls": [-2.219094, -0.594451, -2.300294, -0.957415, -0.520473],
         "convnext_large_patch": [-1.477349, -0.217038, -3.128137, 0.418962, 0.334949],
+        "eupe_convnext_tiny_cls": [-0.774586, -0.886207, -1.021357, -1.924071, -0.552521],
+        "eupe_convnext_tiny_patch": [-1.276298, -2.385907, -2.410059, -2.540072, -1.06118],
+        "eupe_convnext_small_cls": [-1.071585, 0.919747, 0.864007, 2.477376, -1.615796],
+        "eupe_convnext_small_patch": [-1.390516, -0.702689, 1.256055, 2.924099, -1.118395],
+        "eupe_convnext_base_cls": [0.468243, -0.494569, 0.081585, 0.368614, 0.065243],
+        "eupe_convnext_base_patch": [-0.066074, -0.725178, -0.274306, 0.126162, -1.053306],
     }
     model_name = args.model_name
     config = get_dinov3_config(model_name)
@@ -150,14 +163,17 @@ def convert_and_test_dinov3_checkpoint(args):
     for key in original_keys:
         new_key = new_keys[key]
         weight_tensor = original_state_dict[key]
-        if key == "norms.3.weight" or key == "norms.3.bias":
+        if key.startswith("norms.") or key.startswith("projectors."):
             continue
+        if new_key.startswith("stages."):
+            new_key = f"model.{new_key}"
         converted_state_dict[new_key] = weight_tensor
     model.load_state_dict(converted_state_dict, strict=True)
     model = model.eval()
 
-    transform = get_transform()
-    image_processor = get_image_processor()
+    resize_size = 256 if model_name.startswith("eupe_") else 224
+    transform = get_transform(resize_size)
+    image_processor = get_image_processor(resize_size)
     image = prepare_img()
 
     # check preprocessing
@@ -216,7 +232,15 @@ if __name__ == "__main__":
         "--model-name",
         default="convnext_tiny",
         type=str,
-        choices=["convnext_tiny", "convnext_small", "convnext_base", "convnext_large"],
+        choices=[
+            "convnext_tiny",
+            "convnext_small",
+            "convnext_base",
+            "convnext_large",
+            "eupe_convnext_tiny",
+            "eupe_convnext_small",
+            "eupe_convnext_base",
+        ],
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(

@@ -451,6 +451,7 @@ class Gemma3nConfig(PreTrainedConfig):
     audio_token_id: int | None = 262_273
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool | None = True
+    use_cache: bool = True
 
     def __post_init__(self, **kwargs):
         if self.text_config is None:

@@ -298,19 +298,13 @@ class BigBirdBlockSparseAttention(nn.Module):
 
     @staticmethod
     def torch_bmm_nd(inp_1, inp_2, ndim=None):
-        """Fast nd matrix multiplication"""
-        # faster replacement of torch.einsum ("bhqk,bhkd->bhqd")
-        return torch.bmm(inp_1.reshape((-1,) + inp_1.shape[-2:]), inp_2.reshape((-1,) + inp_2.shape[-2:])).view(
-            inp_1.shape[: ndim - 2] + (inp_1.shape[ndim - 2], inp_2.shape[ndim - 1])
-        )
+        """nd matrix multiplication — `torch.matmul` handles arbitrary batch dims natively."""
+        return torch.matmul(inp_1, inp_2)
 
     @staticmethod
     def torch_bmm_nd_transpose(inp_1, inp_2, ndim=None):
-        """Fast nd matrix multiplication with transpose"""
-        # faster replacement of torch.einsum (bhqd,bhkd->bhqk)
-        return torch.bmm(
-            inp_1.reshape((-1,) + inp_1.shape[-2:]), inp_2.reshape((-1,) + inp_2.shape[-2:]).transpose(1, 2)
-        ).view(inp_1.shape[: ndim - 2] + (inp_1.shape[ndim - 2], inp_2.shape[ndim - 2]))
+        """nd matrix multiplication with transpose — single `matmul` instead of reshape/bmm/view."""
+        return torch.matmul(inp_1, inp_2.transpose(-1, -2))
 
     def bigbird_block_sparse_attention(
         self,
@@ -390,8 +384,7 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         rand_attn = np.stack(rand_attn, axis=0)
         rand_attn = torch.tensor(rand_attn, device=query_layer.device, dtype=torch.long)
-        rand_attn.unsqueeze_(0)
-        rand_attn = torch.cat([rand_attn for _ in range(batch_size)], dim=0)
+        rand_attn = rand_attn.unsqueeze(0).expand(batch_size, *rand_attn.shape).contiguous()
 
         rand_mask = self._create_rand_mask_from_inputs(
             from_blocked_mask, to_blocked_mask, rand_attn, n_heads, n_rand_blocks, bsz, from_seq_len, from_block_size
@@ -638,135 +631,103 @@ class BigBirdBlockSparseAttention(nn.Module):
         context_layer = context_layer.view((bsz, n_heads, from_seq_len, -1)) * from_mask
         context_layer = torch.transpose(context_layer, 1, 2)
 
-        # this is just for visualizing; forward pass doesn't depend on following code
-        # TODO(PVP): need to verify if below code is correct
+        # Reassemble the full (bsz, n_heads, from_seq_len, to_seq_len) attention-probability
+        # matrix from the per-block weights. Block-sparse stores values only for the
+        # global / sliding / random positions that were actually attended to; everything else
+        # stays zero. The original implementation scatter-assigned into a zeros tensor through
+        # four nested per-batch / per-head / per-q-block Python loops; the equivalent below uses
+        # bulk slice-assigns plus four `scatter_` calls with broadcast indices so there's no
+        # host-side per-element work.
         attention_probs = torch.zeros(
             bsz, n_heads, from_seq_len, to_seq_len, dtype=context_layer.dtype, device=context_layer.device
         )
+        num_q_blocks = from_seq_len // from_block_size
+        num_k_blocks = to_seq_len // to_block_size
+        num_middle = num_q_blocks - 4
 
-        # 1st query block
-        # corresponding to `first_context_layer`
-        attention_probs[:, :, :from_block_size, :] = first_attn_weights  # all keys global
-
-        # 2nd query block
-        # corresponding to `second_context_layer`
+        # Global rows that are independent of `rand_attn` — direct slice assigns.
+        attention_probs[:, :, :from_block_size, :] = first_attn_weights  # q[0] attends to all keys
         attention_probs[:, :, from_block_size : 2 * from_block_size, : 3 * to_block_size] = second_attn_weights[
             :, :, :, : 3 * to_block_size
-        ]  # 1st three key blocks (global + sliding)
+        ]  # q[1] sliding (k[0:3])
         attention_probs[:, :, from_block_size : 2 * from_block_size, -to_block_size:] = second_attn_weights[
             :, :, :, 3 * to_block_size : 4 * to_block_size
-        ]  # last key block (global)
-        # random keys
-        for p1, i1, w1 in zip(range(bsz), rand_attn, second_attn_weights):
-            # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
-            for p2, i2, w2 in zip(range(n_heads), i1, w1):
-                # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
-                attn_probs_view = attention_probs.view(
-                    bsz,
-                    n_heads,
-                    from_seq_len // from_block_size,
-                    from_block_size,
-                    to_seq_len // to_block_size,
-                    to_block_size,
-                )
-                right_slice = w2[:, 4 * to_block_size :]
-                attn_probs_view[p1, p2, 1, :, i2[0]] = right_slice.view(from_block_size, n_rand_blocks, to_block_size)
-
-        # Middle query blocks
-        # corresponding to `context_layer`
-        # sliding keys
-        for q_idx in range(from_seq_len // from_block_size - 4):
-            attn_probs_view = attention_probs.view(
-                bsz,
-                n_heads,
-                from_seq_len // from_block_size,
-                from_block_size,
-                to_seq_len // to_block_size,
-                to_block_size,
-            )[:, :, 2:-2, :, 1:-1, :]
-            right_slice = attn_weights[:, :, q_idx, :, to_block_size : 4 * to_block_size]
-            attn_probs_view[:, :, q_idx, :, q_idx : q_idx + 3, :] = right_slice.view(
-                bsz, n_heads, from_block_size, 3, to_block_size
-            )  # inner_band_product
-        # global keys (corresponding to 1st key block)
+        ]  # q[1] global (k[-1])
         attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = attn_weights[
             :, :, :, :, :to_block_size
-        ].view(bsz, n_heads, -1, to_block_size)  # first_band_product
-        # global keys (corresponding to last key block)
+        ].view(bsz, n_heads, -1, to_block_size)  # q[2:-2] global (k[0])
         attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, -to_block_size:] = attn_weights[
             :, :, :, :, -to_block_size:
-        ].view(bsz, n_heads, -1, to_block_size)  # last_band_product
-        # random keys
-        for p1, i1, w1 in zip(range(bsz), rand_attn, attn_weights):
-            # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
-            for p2, i2, w2 in zip(range(n_heads), i1, w1):
-                # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
-                for q_idx in range(1, len(i2) - 1):
-                    attn_probs_view = attention_probs.view(
-                        bsz,
-                        n_heads,
-                        from_seq_len // from_block_size,
-                        from_block_size,
-                        to_seq_len // to_block_size,
-                        to_block_size,
-                    )
-                    right_slice = w2[q_idx - 1, :, 4 * to_block_size : -to_block_size]
-                    attn_probs_view[p1, p2, q_idx + 1, :, i2[q_idx]] = right_slice.view(
-                        from_block_size, n_rand_blocks, to_block_size
-                    )
-
-        # Second-last query block
-        # corresponding to `second_last_context_layer`
+        ].view(bsz, n_heads, -1, to_block_size)  # q[2:-2] global (k[-1])
         attention_probs[:, :, -2 * from_block_size : -from_block_size, :to_block_size] = second_last_attn_weights[
             :, :, :, :to_block_size
-        ]  # 1st key block (global)
+        ]  # q[-2] global (k[0])
         attention_probs[:, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :] = (
             second_last_attn_weights[:, :, :, to_block_size : 4 * to_block_size]
-        )  # last three blocks (global + sliding)
-        # random keys
-        for p1, i1, w1 in zip(range(bsz), rand_attn, second_last_attn_weights):
-            # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
-            for p2, i2, w2 in zip(range(n_heads), i1, w1):
-                # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
-                attn_probs_view = attention_probs.view(
-                    bsz,
-                    n_heads,
-                    from_seq_len // from_block_size,
-                    from_block_size,
-                    to_seq_len // to_block_size,
-                    to_block_size,
-                )
-                right_slice = w2[:, 4 * to_block_size :]
-                attn_probs_view[p1, p2, -2, :, i2[-1]] = right_slice.view(
-                    from_block_size, n_rand_blocks, to_block_size
-                )
+        )  # q[-2] sliding (k[-3:])
+        attention_probs[:, :, -from_block_size:, :] = last_attn_weights  # q[-1] attends to all keys
 
-        # last query block
-        # corresponding to `last_context_layer`
-        attention_probs[:, :, -from_block_size:, :] = last_attn_weights  # all keys global
+        view = attention_probs.view(bsz, n_heads, num_q_blocks, from_block_size, num_k_blocks, to_block_size)
+
+        # q[1] random keys — scatter `n_rand_blocks` blocks along the k-block axis using
+        # `rand_attn[:, :, 0]` as the per-(batch, head) target k-block indices.
+        q1_rand_vals = second_attn_weights[:, :, :, 4 * to_block_size :].view(
+            bsz, n_heads, from_block_size, n_rand_blocks, to_block_size
+        )
+        q1_rand_idx = rand_attn[:, :, 0, :, None].expand(-1, -1, -1, to_block_size)
+        q1_rand_idx = q1_rand_idx[:, :, None].expand(-1, -1, from_block_size, -1, -1)
+        view[:, :, 1].scatter_(3, q1_rand_idx, q1_rand_vals)
+
+        # q[2:-2] sliding keys — diagonal scatter: middle q-block `i` attends to k-blocks
+        # `i, i+1, i+2` in the `k[1:-1]` window (k-axis indices `i+1, i+2, i+3` in full view).
+        sliding_vals = attn_weights[:, :, :, :, to_block_size : 4 * to_block_size].view(
+            bsz, n_heads, num_middle, from_block_size, 3, to_block_size
+        )
+        q_grid = torch.arange(num_middle, device=attention_probs.device)
+        k_diag = q_grid[:, None] + torch.arange(3, device=attention_probs.device)[None, :]
+        k_diag = k_diag[None, None, :, None, :, None].expand(
+            bsz, n_heads, num_middle, from_block_size, 3, to_block_size
+        )
+        view[:, :, 2:-2, :, 1:-1, :].scatter_(4, k_diag, sliding_vals)
+
+        # q[2:-2] random keys — for each middle q-block `i`, scatter `n_rand_blocks` blocks at
+        # `rand_attn[:, :, i + 1]` along the k-block axis.
+        mid_rand_vals = attn_weights[:, :, :, :, 4 * to_block_size : -to_block_size].view(
+            bsz, n_heads, num_middle, from_block_size, n_rand_blocks, to_block_size
+        )
+        mid_rand_idx = (
+            rand_attn[:, :, 1:-1, :, None, None]
+            .expand(bsz, n_heads, num_middle, n_rand_blocks, from_block_size, to_block_size)
+            .transpose(3, 4)
+        )
+        view[:, :, 2:-2].scatter_(4, mid_rand_idx, mid_rand_vals)
+
+        # q[-2] random keys — same pattern as q[1], using `rand_attn[:, :, -1]`.
+        qm2_rand_vals = second_last_attn_weights[:, :, :, 4 * to_block_size :].view(
+            bsz, n_heads, from_block_size, n_rand_blocks, to_block_size
+        )
+        qm2_rand_idx = rand_attn[:, :, -1, :, None].expand(-1, -1, -1, to_block_size)
+        qm2_rand_idx = qm2_rand_idx[:, :, None].expand(-1, -1, from_block_size, -1, -1)
+        view[:, :, -2].scatter_(3, qm2_rand_idx, qm2_rand_vals)
 
         return context_layer, attention_probs
 
     @staticmethod
     def torch_gather_b2(params, indices):
+        """Gather block rows from `params` along dim 2 using per-(batch, head) `indices`.
+
+        `params`: `(bsz, n_heads, num_blocks, block_size, head_dim)`.
+        `indices`: `(bsz, n_heads, num_windows, n_rand_blocks)` — random block ids per window.
+        Returns `(bsz, n_heads, num_windows * n_rand_blocks, block_size, head_dim)`.
+        """
         if params.shape[:2] != indices.shape[:2]:
             raise ValueError(
                 "Make sure that the first two dimensions of params and indices are identical,                 but"
                 f" they are params: {params.shape[:2]} vs. indices: {indices.shape[:2]}"
             )
-        num_indices_to_gather = indices.shape[-2] * indices.shape[-1]
-        num_indices_to_pick_from = params.shape[2]
-
-        shift = torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device)
-        indices_shift = torch.div(shift, num_indices_to_gather, rounding_mode="floor") * num_indices_to_pick_from
-
-        flattened_indices = indices.view(-1) + indices_shift
-        flattened_params = params.reshape(-1, params.shape[-2], params.shape[-1])
-
-        out_flattened = flattened_params.index_select(0, flattened_indices)
-
-        out = out_flattened.reshape(params.shape[:2] + (num_indices_to_gather,) + params.shape[3:])
-        return out
+        flat_indices = indices.reshape(*indices.shape[:2], -1)
+        gather_idx = flat_indices[..., None, None].expand(-1, -1, -1, params.shape[3], params.shape[4])
+        return torch.gather(params, 2, gather_idx)
 
     @staticmethod
     def _create_rand_mask_from_inputs(
@@ -800,7 +761,11 @@ class BigBirdBlockSparseAttention(nn.Module):
             from_block_size, num_rand_blocks*to_block_size].
         """
         num_windows = from_seq_length // from_block_size - 2
-        rand_mask = torch.stack([p1[i1.flatten()] for p1, i1 in zip(to_blocked_mask, rand_attn)])
+        # Vectorised replacement of `torch.stack([p1[i1.flatten()] for p1, i1 in zip(to_blocked_mask, rand_attn)])`.
+        # Flatten the random-block indices to `(batch_size, n_heads * num_windows * num_rand_blocks)` and gather
+        # the corresponding rows from `to_blocked_mask` (`(batch_size, num_to_blocks, from_block_size)`) along dim 1.
+        flat_indices = rand_attn.reshape(batch_size, -1)
+        rand_mask = torch.gather(to_blocked_mask, 1, flat_indices.unsqueeze(-1).expand(-1, -1, from_block_size))
         rand_mask = rand_mask.view(batch_size, num_attention_heads, num_windows, num_rand_blocks * from_block_size)
         rand_mask = torch.einsum("blq,bhlk->bhlqk", from_blocked_mask[:, 1:-1], rand_mask)
         return rand_mask
