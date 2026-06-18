@@ -1323,29 +1323,15 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
-        # Shared Dinov2WithRegisters vision renames, used both for the DPT `backbone` sub-module
-        # (scoped) and, via `mapping["Tipsv2VisionModel"]` below, for the standalone vision model
-        # (unscoped). Two requirements shape the source patterns:
-        #   1) The standalone vision model is unscoped and runs `test_reverse_loading_mapping`, which
-        #      reverts the model keys and checks that every source pattern still matches one of them.
-        #      The `^vision_encoder\.` strip re-adds that prefix on the save path, so a `^`-anchored
-        #      leaf pattern (e.g. `^cls_token$`) could never match the reverted `vision_encoder.cls_token`.
-        #   2) When collected as the scoped `vision_model` sub-module of `Tipsv2Model`, the root `tipsv2`
-        #      mapping has already produced the model-form keys, so these patterns must be no-ops on them.
-        # We therefore drop the leading `^` (so the prefix is tolerated) and, for the leaves whose
-        # checkpoint name is a suffix of the model-form key (`embeddings.cls_token`, ..., `layernorm.`),
-        # add a negative lookbehind so they do not re-match the already-renamed key (same idiom as
-        # `t5gemma2_encoder`). Patterns whose checkpoint name differs from the model-form name
-        # (`patch_embed.proj`, `blocks.N`, `pos_embed`, `attn.*`, `ls1/ls2`) are safe unanchored as-is.
         "Tipsv2VisionBackbone": [
             WeightRenaming(r"^vision_encoder\.", ""),
-            WeightRenaming(r"patch_embed\.proj\.", "embeddings.patch_embeddings.projection."),
-            WeightRenaming(r"(?<!embeddings\.)cls_token$", "embeddings.cls_token"),
-            WeightRenaming(r"(?<!embeddings\.)mask_token$", "embeddings.mask_token"),
-            WeightRenaming(r"(?<!embeddings\.)register_tokens$", "embeddings.register_tokens"),
-            WeightRenaming(r"pos_embed$", "embeddings.position_embeddings"),
-            WeightRenaming(r"(?<!layer)norm\.", "layernorm."),
-            WeightRenaming(r"blocks\.(\d+)\.", r"encoder.layer.\1."),
+            WeightRenaming(r"^patch_embed\.proj\.", "embeddings.patch_embeddings.projection."),
+            WeightRenaming(r"^cls_token$", "embeddings.cls_token"),
+            WeightRenaming(r"^mask_token$", "embeddings.mask_token"),
+            WeightRenaming(r"^register_tokens$", "embeddings.register_tokens"),
+            WeightRenaming(r"^pos_embed$", "embeddings.position_embeddings"),
+            WeightRenaming(r"^norm\.", "layernorm."),
+            WeightRenaming(r"^blocks\.(\d+)\.", r"encoder.layer.\1."),
             WeightRenaming(r"\.attn\.proj\.", ".attention.output.dense."),
             WeightRenaming(r"\.ls1\.gamma", ".layer_scale1.lambda1"),
             WeightRenaming(r"\.ls2\.gamma", ".layer_scale2.lambda1"),
@@ -1432,10 +1418,52 @@ def _build_checkpoint_conversion_mapping():
         ]
     )
     # The standalone vision model has the same Dinov2WithRegisters structure as the backbone, so it
-    # reuses the backbone's vision renames (strip the `vision_encoder.` prefix; the text weights are
-    # dropped via `_keys_to_ignore_on_load_unexpected`). Those patterns are intentionally unanchored
-    # so they remain reversible when used unscoped here — see the `Tipsv2VisionBackbone` comment.
-    mapping["Tipsv2VisionModel"] = mapping["Tipsv2VisionBackbone"].copy()
+    # reuses the same renames: strip the `vision_encoder.` prefix (the text weights are dropped via
+    # `_keys_to_ignore_on_load_unexpected`). Unlike the backbone, this mapping is *not* scoped to a
+    # sub-model, which forces two requirements on the source patterns that the backbone's `^`-anchored
+    # patterns cannot satisfy at once:
+    #   1) `test_reverse_loading_mapping` reverts the model keys and checks that every source pattern
+    #      still matches one of them. The `^vision_encoder\.` strip re-adds that prefix on the save
+    #      path, so a `^`-anchored leaf pattern (e.g. `^cls_token$`) could never match the reverted
+    #      `vision_encoder.cls_token` key.
+    #   2) When collected as the scoped `vision_model` submodule of `Tipsv2Model`, the root `tipsv2`
+    #      mapping has already produced the model-form keys, so these patterns must be no-ops on them.
+    # We therefore drop the leading `^` (so the prefix is tolerated) and, for the leaves whose
+    # checkpoint name is a suffix of the model-form key (`embeddings.cls_token`, ..., `layernorm.`),
+    # add a negative lookbehind so they do not re-match the already-renamed key (same idiom as
+    # `t5gemma2_encoder`). Patterns whose checkpoint name differs from the model-form name
+    # (`patch_embed.proj`, `blocks.N`, `pos_embed`, `attn.*`, `ls1/ls2`) are safe unanchored as-is.
+    mapping["Tipsv2VisionModel"] = [
+        WeightRenaming(r"^vision_encoder\.", ""),
+        WeightRenaming(r"patch_embed\.proj\.", "embeddings.patch_embeddings.projection."),
+        WeightRenaming(r"(?<!embeddings\.)cls_token$", "embeddings.cls_token"),
+        WeightRenaming(r"(?<!embeddings\.)mask_token$", "embeddings.mask_token"),
+        WeightRenaming(r"(?<!embeddings\.)register_tokens$", "embeddings.register_tokens"),
+        WeightRenaming(r"pos_embed$", "embeddings.position_embeddings"),
+        WeightRenaming(r"(?<!layer)norm\.", "layernorm."),
+        WeightRenaming(r"blocks\.(\d+)\.", r"encoder.layer.\1."),
+        WeightRenaming(r"\.attn\.proj\.", ".attention.output.dense."),
+        WeightRenaming(r"\.ls1\.gamma", ".layer_scale1.lambda1"),
+        WeightRenaming(r"\.ls2\.gamma", ".layer_scale2.lambda1"),
+        WeightConverter(
+            source_patterns=r"\.attn\.qkv\.weight",
+            target_patterns=[
+                ".attention.attention.query.weight",
+                ".attention.attention.key.weight",
+                ".attention.attention.value.weight",
+            ],
+            operations=[Chunk(dim=0)],
+        ),
+        WeightConverter(
+            source_patterns=r"\.attn\.qkv\.bias",
+            target_patterns=[
+                ".attention.attention.query.bias",
+                ".attention.attention.key.bias",
+                ".attention.attention.value.bias",
+            ],
+            operations=[Chunk(dim=0)],
+        ),
+    ]
 
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()
