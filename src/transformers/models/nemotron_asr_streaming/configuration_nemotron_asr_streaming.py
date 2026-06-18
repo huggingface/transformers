@@ -142,7 +142,6 @@ class NemotronAsrStreamingConfig(PreTrainedConfig):
 
     model_type = "nemotron_asr_streaming"
     sub_configs = {"encoder_config": NemotronAsrStreamingEncoderConfig}
-
     vocab_size: int = 1025
     decoder_hidden_size: int = 640
     num_decoder_layers: int = 2
@@ -154,8 +153,6 @@ class NemotronAsrStreamingConfig(PreTrainedConfig):
     is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
-        # The decoder starts on the blank token at frame 0 (NeMo's blank_as_pad convention).
-        kwargs.setdefault("decoder_start_token_id", self.blank_token_id)
         if isinstance(self.encoder_config, dict):
             self.encoder_config = NemotronAsrStreamingEncoderConfig(**self.encoder_config)
         elif self.encoder_config is None:

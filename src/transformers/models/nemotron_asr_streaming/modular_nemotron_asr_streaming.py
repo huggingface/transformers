@@ -117,15 +117,8 @@ class NemotronAsrStreamingEncoderConfig(ParakeetEncoderConfig):
     ```
     """
 
-    model_type = "nemotron_asr_streaming_encoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
-
     sliding_window: int = 71
     default_num_lookahead_tokens: int = 13
-
-    def __post_init__(self, **kwargs):
-        self.num_key_value_heads = self.num_attention_heads
-        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 @auto_docstring(checkpoint="nvidia/nemotron-speech-streaming-en-0.6b")
@@ -167,21 +160,9 @@ class NemotronAsrStreamingConfig(ParakeetRNNTConfig):
     """
 
     model_type = "nemotron_asr_streaming"
-    sub_configs = {"encoder_config": NemotronAsrStreamingEncoderConfig}
-
     vocab_size: int = 1025
     pad_token_id: int = 0
     blank_token_id: int = 1024
-
-    def __post_init__(self, **kwargs):
-        # The decoder starts on the blank token at frame 0 (NeMo's blank_as_pad convention).
-        kwargs.setdefault("decoder_start_token_id", self.blank_token_id)
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = NemotronAsrStreamingEncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = NemotronAsrStreamingEncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
-        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class NemotronAsrStreamingProcessorKwargs(ProcessingKwargs, total=False):
