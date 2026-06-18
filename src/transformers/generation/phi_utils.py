@@ -65,8 +65,6 @@ class PhiRecursiveGenerator:
         inputs = self.tokenizer(input_text, return_tensors="pt")
 
         temp = kwargs.get("temperature", 0.7)
-        top_p = kwargs.get("top_p", 0.9)
-        top_k = kwargs.get("top_k", 40)
 
         best_output = None
         best_score = -float("inf")

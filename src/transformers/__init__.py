@@ -55,9 +55,6 @@ from . import (
     utils,
 )
 
-# DECLARATION: AddedToken is already available via tokenization_utils_base
-# No need to import it here — it will be imported by the submodules that need it
-
 # DECLARATION: Expose PhiRecursiveGenerator
 from .generation.phi_utils import (
     PhiRecursiveGenerator,
