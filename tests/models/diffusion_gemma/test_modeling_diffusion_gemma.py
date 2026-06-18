@@ -953,7 +953,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
             list(model_out.logits.shape), [1, model.config.canvas_length, model.config.text_config.vocab_size]
         )
         torch.testing.assert_close(
-            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectations())
+            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectation())
         )
 
     @tooslow
@@ -1037,9 +1037,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(
             list(model_out.logits.shape), [2, model.config.canvas_length, model.config.text_config.vocab_size]
         )
-        torch.testing.assert_close(
-            model_out.logits[:, :5, :12].cpu(), torch.tensor(expected_logits.get_expectations())
-        )
+        torch.testing.assert_close(model_out.logits[:, :5, :12].cpu(), torch.tensor(expected_logits.get_expectation()))
 
     @tooslow
     def test_diffusion_gemma_generate_with_image_batched(self):
@@ -1147,7 +1145,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         set_seed(42)
         gen_out = model.generate(**model_inputs, max_new_tokens=256)
         generated_tokens = gen_out.sequences[:, -256:]
-        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectations())
+        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectation())
 
     @tooslow
     def test_diffusion_gemma_generate_with_image_batched_long(self):
@@ -1264,7 +1262,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # sanity check: we went beyond the sliding window length
         self.assertTrue(gen_out.sequences.shape[1] > model.config.text_config.sliding_window)
         generated_tokens = gen_out.sequences[:, -256:]
-        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectations())
+        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectation())
 
     # The tests below use a botched model, using the first six layers, to respect memory constraints of HF's CI.
     # Six layers = minimum number of layers to have both sliding window attention and full attention.
@@ -1323,7 +1321,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
             list(model_out.logits.shape), [1, model.config.canvas_length, model.config.text_config.vocab_size]
         )
         torch.testing.assert_close(
-            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectations())
+            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectation())
         )
 
     @slow
@@ -1393,7 +1391,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
             list(model_out.logits.shape), [1, model.config.canvas_length, model.config.text_config.vocab_size]
         )
         torch.testing.assert_close(
-            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectations())
+            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectation())
         )
 
     @slow
@@ -1462,9 +1460,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(
             list(model_out.logits.shape), [2, model.config.canvas_length, model.config.text_config.vocab_size]
         )
-        torch.testing.assert_close(
-            model_out.logits[:, :5, :12].cpu(), torch.tensor(expected_logits.get_expectations())
-        )
+        torch.testing.assert_close(model_out.logits[:, :5, :12].cpu(), torch.tensor(expected_logits.get_expectation()))
 
     @slow
     def test_minified_diffusion_gemma_generate_with_image_batched(self):

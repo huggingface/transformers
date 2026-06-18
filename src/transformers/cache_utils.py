@@ -298,6 +298,11 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens.
         """
+        if self.get_seq_length() >= self.sliding_window:
+            raise ValueError(
+                "Cannot `crop` a `DynamicSlidingWindowLayer` after it has seen more tokens than its"
+                "sliding window (otherwise some states are lost)"
+            )
         super().crop(max_length)
         self.cumulative_length = self.keys.shape[-2]
 
