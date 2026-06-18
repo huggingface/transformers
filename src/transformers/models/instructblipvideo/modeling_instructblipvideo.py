@@ -514,7 +514,8 @@ class InstructBlipVideoQFormerMultiHeadAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        # NOTE: KV has a different bsz than Q so we take the broadcasted shapes instead of the input shape
+        attn_output = attn_output.reshape(*attn_output.shape[:2], -1).contiguous()
         return attn_output, attn_weights
 
 

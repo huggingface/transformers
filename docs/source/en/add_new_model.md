@@ -308,27 +308,29 @@ from transformers import BrandNewLlama, BrandNewLlamaConfig
 model = BrandNewLlama(BrandNewLlamaConfig())
 ```
 
-Random initialization occurs in the `_init_weights` method of `BrandNewLlamaPreTrainedModel`. All leaf modules are initialized depending on the configuration's variables.
+Random initialization occurs in the `_init_weights` method of `BrandNewLlamaPreTrainedModel`. All leaf modules are initialized depending on the configuration's variables. Use the helpers from the `transformers.initialization` module to set the values, rather than calling in-place operations directly on a weight or its `.data`.
 
 ```py
+from transformers import initialization as init
+
 def _init_weights(self, module):
     """Initialize the weights"""
     if isinstance(module, nn.Linear):
-        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+        init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.zero_()
+            init.zeros_(module.bias)
     elif isinstance(module, nn.Embedding):
-        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+        init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         if module.padding_idx is not None:
-            module.weight.data[module.padding_idx].zero_()
+            init.zeros_(module.weight[module.padding_idx])
     elif isinstance(module, nn.LayerNorm):
-        module.bias.zero_()
-        module.weight.fill_(1.0)
+        init.zeros_(module.bias)
+        init.ones_(module.weight)
 ```
 
-The initialization scheme can look different if you need to adapt it to your model. For example, [`Wav2Vec2ForPreTraining`] initializes [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) in its last two linear layers.
+Always initialize weights through the `transformers.initialization` helpers. In-place operations such as `module.bias.zero_()` or anything that touches `module.weight.data` bypass `_is_hf_initialized` that flags which parameters are already loaded. [`~PreTrainedModel.from_pretrained`] runs `_init_weights` after loading the checkpoint, so in-place operations silently overwrite the loaded weights with random values. This is enforced for Transformers models by the [TRF012](./modeling_rules#trf012) rule.
 
-The `_is_hf_initialized` flag makes sure the submodule is only initialized once. Setting `module.project_q` and `module.project_hid` to `True` ensures the custom initialization is not overridden later. The `_init_weights` function won't be applied to these modules.
+The initialization scheme can look different if you need to adapt it to your model. A submodule with its own `reset_parameters` method can call it directly. For example, [`Wav2Vec2ForPreTraining`] initializes [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) in its last two linear layers. The call is safe because [`~PreTrainedModel.from_pretrained`] patches the underlying `torch.nn.init` functions to respect the `_is_hf_initialized` flag while it runs `_init_weights`, so loaded weights aren't overwritten.
 
 ```py
 def _init_weights(self, module):
@@ -336,12 +338,6 @@ def _init_weights(self, module):
     if isinstance(module, Wav2Vec2ForPreTraining):
         module.project_hid.reset_parameters()
         module.project_q.reset_parameters()
-        module.project_hid._is_hf_initialized = True
-        module.project_q._is_hf_initialized = True
-    elif isinstance(module, nn.Linear):
-        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-        if module.bias is not None:
-            module.bias.zero_()
 ```
 
 ### Convert checkpoints to Transformers
