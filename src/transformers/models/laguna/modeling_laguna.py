@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -337,7 +337,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class LagunaAttention(nn.Module):
     """Afmoe-style SWA/GQA attention with Laguna-specific gating and per-layer head count."""
 
@@ -368,7 +367,9 @@ class LagunaAttention(nn.Module):
 
         self.q_norm = LagunaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = LagunaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        self.gate_per_head = config.gating is True or config.gating == "per-head"
+        g_proj_dim = self.num_heads if self.gate_per_head else self.num_heads * self.head_dim
+        self.g_proj = nn.Linear(config.hidden_size, g_proj_dim, bias=False)
 
     def forward(
         self,
@@ -413,7 +414,12 @@ class LagunaAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
 
         gate = F.softplus(self.g_proj(hidden_states).float()).to(attn_output.dtype)
-        attn_output = (attn_output.view(*input_shape, -1, self.head_dim) * gate.unsqueeze(-1)).view(*input_shape, -1)
+        if self.gate_per_head:
+            attn_output = (attn_output.view(*input_shape, -1, self.head_dim) * gate.unsqueeze(-1)).view(
+                *input_shape, -1
+            )
+        else:
+            attn_output = attn_output * gate
 
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights

@@ -43,6 +43,10 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {"num_query_tokens": 1}
 
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.image_token.content
+
     @unittest.skip("BLIP2 doesn't support mixed inputs, all samples have to have an image associated!")
     def test_processor_text_has_no_visual(self):
         pass

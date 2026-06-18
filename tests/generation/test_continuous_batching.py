@@ -44,7 +44,7 @@ from transformers.generation.continuous_batching.continuous_api import OutputRou
 from transformers.generation.continuous_batching.distributed import DistributedHelper
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
-from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
+from transformers.generation.continuous_batching.requests import GenerationOutput, RequestState, RequestStatus
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
@@ -130,7 +130,7 @@ def with_flush_memory(func):
         generation_config = kwargs.get("generation_config")
         if isinstance(cb_config, ContinuousBatchingConfig):
             flush_compile = (
-                cb_config.use_default_compile_configs
+                cb_config.default_compile_level > 0
                 or cb_config.varlen_compile_config is not None
                 or cb_config.decode_compile_config is not None
             )
@@ -209,6 +209,54 @@ def regular_generate(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    def test_generation_outputs_are_snapshots(self):
+        state = RequestState(
+            request_id="r", initial_tokens=[10, 11], max_new_tokens=3, streaming=True, record_timestamps=True
+        )
+        state._status = RequestStatus.DECODING
+
+        self.assertFalse(state.update_and_check_completion(101, -1.01))
+        first_output = state.to_generation_output()
+        self.assertEqual(first_output.generated_tokens, [101])
+        self.assertEqual(first_output.logprobs, [-1.01])
+        self.assertEqual(len(first_output.timestamps), 1)
+
+        self.assertFalse(state.update_and_check_completion(102, -1.02))
+        second_output = state.to_generation_output()
+
+        self.assertEqual(first_output.generated_tokens, [101])
+        self.assertEqual(first_output.logprobs, [-1.01])
+        self.assertEqual(len(first_output.timestamps), 1)
+        self.assertEqual(second_output.generated_tokens, [101, 102])
+        self.assertEqual(second_output.logprobs, [-1.01, -1.02])
+        self.assertEqual(len(second_output.timestamps), 2)
+
+    def test_streaming_output_after_soft_reset_does_not_shorten_generation(self):
+        state = RequestState(request_id="r", initial_tokens=[10, 11], max_new_tokens=5, streaming=True)
+        state._status = RequestStatus.DECODING
+        for token_id in [101, 102]:
+            self.assertFalse(state.update_and_check_completion(token_id, None))
+
+        reset_state = state.create_equivalent_initial_request()
+        reset_state._status = RequestStatus.DECODING
+        reset_state.streaming = True
+
+        accepted_tokens = []
+        streamed_tokens = []
+        for token_id in [103, 104, 105, 106]:
+            previous_tokens = reset_state.generated_tokens[:]
+            is_finished = reset_state.update_and_check_completion(token_id, None)
+            if reset_state.generated_tokens != previous_tokens:
+                accepted_tokens.append(token_id)
+            streamed_tokens.append(reset_state.to_generation_output().generated_tokens)
+            if is_finished:
+                break
+
+        self.assertEqual(accepted_tokens, [103, 104, 105])
+        self.assertEqual(streamed_tokens, [[101, 102, 103], [101, 102, 103, 104], [101, 102, 103, 104, 105]])
+        self.assertEqual(reset_state.generated_tokens, [103, 104, 105])
+        self.assertEqual(reset_state.initial_tokens, [10, 11, 101, 102])
+
     @parameterized.expand(
         [
             (None, None, "0"),
@@ -368,7 +416,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             continuous_batching_config=ContinuousBatchingConfig(block_size=16, num_blocks=8, max_batch_tokens=8),
             device=torch_device,
             tp_plan={},
-            distributed_helper=DistributedHelper(device_mesh=None),
+            distributed_helper=DistributedHelper(device_mesh=None, cpu_group_timeout=300),
         )
 
         # Overload cache parameters to match test scenario
@@ -495,7 +543,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     def test_distributed_helper_no_dist(self) -> None:
         """Test that DistributedHelper falls back to a single-rank, TP-driver setup when distributed is not on."""
-        helper = DistributedHelper(device_mesh=None)
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300)
         self.assertFalse(helper.dist_on)
         self.assertEqual(helper.global_rank, 0)
         self.assertEqual(helper.world_size, 1)
@@ -511,7 +559,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         tensor = torch.tensor([1.0, 2.0])
         self.assertTrue(torch.equal(helper.tp_broadcast_from_rank_0(tensor), tensor))
         obj = {"some_request": "payload"}
-        self.assertIs(helper.tp_broadcast_object(obj), obj)
+        self.assertIs(helper.tp_broadcast_object_from_rank_0(obj), obj)
 
         # All-reduce-min should be a no-op without a TP group
         reduce_tensor = torch.tensor([7, 3], dtype=torch.int64)
@@ -520,7 +568,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     def test_distributed_helper_set_tp_seed_no_dist(self) -> None:
         """Test that set_tp_seed sets a torch seed without distributed initialized, both with and without a user seed."""
-        helper = DistributedHelper(device_mesh=None)
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300)
 
         # Explicit seed: torch RNG state must be reproducible across calls
         helper.set_tp_seed(seed=42, model_device=torch.device("cpu"))
@@ -594,7 +642,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # If the config turns on compile, change the generation config to use the default mode instead of
         # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
-        if continuous_batching_config.use_default_compile_configs:
+        if continuous_batching_config.default_compile_level > 0:
             fullgraph = not is_flash_attention_requested(requested_attention_implementation=attn_implementation)
             compile_config = CompileConfig(mode="default", fullgraph=fullgraph, dynamic=True)
             continuous_batching_config.varlen_compile_config = compile_config
@@ -629,6 +677,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Prepare non-continuous batching inputs and model
         inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
         num_input_tokens = inputs.input_ids.shape[1]
+
+        # Flush compile cache if CB used compile
+        if continuous_batching_config.default_compile_level > 0:
+            flush_memory(flush_compile=True)
 
         # Generation without continuous batching (reload model to avoid any state contamination)
         _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype)
@@ -693,7 +745,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         continuous_batching_config = ContinuousBatchingConfig(
             allow_block_sharing=allow_block_sharing,
             use_cuda_graph=use_cuda_graph,
-            use_default_compile_configs=False,
+            default_compile_level=0,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -711,7 +763,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=use_cuda_graph,
-            use_default_compile_configs=True,
+            default_compile_level=1,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -733,7 +785,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @slow
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=use_cuda_graph, use_default_compile_configs=use_compile
+            use_cuda_graph=use_cuda_graph, default_compile_level=1 if use_compile else 0
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -763,7 +815,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_cuda_graph=False,
             allow_block_sharing=False,
             use_async_batching=False,
-            use_default_compile_configs=False,
+            default_compile_level=0,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -774,7 +826,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, use_default_compile_configs=True
+            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, default_compile_level=1
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
@@ -852,10 +904,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, num_blocks=4, block_size=32
         )
 
-        # Patch offload_one_request to verify it's called at least once
-        original_offload = OffloadingManager.offload_one_request
+        # Patch offload_requests to verify it's called at least once
+        original_offload = OffloadingManager.offload_requests
         with patch.object(
-            OffloadingManager, "offload_one_request", autospec=True, side_effect=original_offload
+            OffloadingManager, "offload_requests", autospec=True, side_effect=original_offload
         ) as mock_offload:
             self._test_continuous_batching_parity(
                 model_id=model_id,
@@ -1128,7 +1180,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 allow_block_sharing=True,
                 use_cuda_graph=use_cuda_graph,
                 use_async_batching=True,
-                use_default_compile_configs=use_compile,
+                default_compile_level=1 if use_compile else 0,
             ),
             attn_implementation=attn_implementation,
         )
@@ -1178,6 +1230,36 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             text_fa2 = tokenizer.decode(out_fa2.generated_tokens, skip_special_tokens=True)
             text_fa3 = tokenizer.decode(out_fa3.generated_tokens, skip_special_tokens=True)
             self.assertEqual(text_fa2, text_fa3, f"Mismatch:\nFA2: {text_fa2}\nFA3: {text_fa3}")
+
+    @slow
+    @require_kernels
+    def test_decode_fast_path_wide_batch_parity(self) -> None:
+        """Decode-fast-path output must match varlen when more requests decode concurrently than
+        `max_blocks_per_request` (regression test for the `pad_to_pow2` cap truncating the decode batch)."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        tokenizer, model = get_tokenizer_and_model(
+            model_id, "paged|kernels-community/flash-attn3", torch_device, torch.bfloat16
+        )
+        # 12 requests but only 4 blocks per request: the decode batch is wider than max_blocks_per_request
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES * 4, tokenizer, for_continuous_batching=True)
+        gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
+        # CUDA graphs enable input padding, which is where the truncation happened
+        cb_config = ContinuousBatchingConfig(block_size=256, num_blocks=64, use_cuda_graph=True)
+
+        cb_config.max_blocks_per_request = 0  # varlen reference
+        outputs_varlen = model.generate_batch(
+            inputs=input_ids, generation_config=gen_config, continuous_batching_config=cb_config
+        )
+        cb_config.max_blocks_per_request = 4  # decode fast path, narrower than the batch
+        outputs_fast = model.generate_batch(
+            inputs=input_ids, generation_config=gen_config, continuous_batching_config=cb_config
+        )
+
+        self.assertEqual(len(outputs_varlen), len(outputs_fast))
+        for (_, out_varlen), (_, out_fast) in zip(outputs_varlen.items(), outputs_fast.items()):
+            text_varlen = tokenizer.decode(out_varlen.generated_tokens, skip_special_tokens=True)
+            text_fast = tokenizer.decode(out_fast.generated_tokens, skip_special_tokens=True)
+            self.assertEqual(text_varlen, text_fast, f"Mismatch:\nvarlen: {text_varlen}\nfast: {text_fast}")
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
@@ -1307,6 +1389,42 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 num_repeat_prompts=4,
             )
             self.assertTrue(mock_offload.called, "_offload_to_cpu was not called despite few blocks being available.")
+
+    @require_torch_accelerator
+    def test_cpu_offloading_parity_async(self) -> None:
+        """Same as test_cpu_offloading_parity but with async batching, where offloading can evict requests that are
+        in flight in the previous batch, exercising the rollback-on-restore path."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=True,
+            allow_block_sharing=True,
+            use_async_batching=True,
+            num_blocks=4,
+            block_size=32,
+            cpu_offload_space=1.0,
+        )
+
+        # Spy on _offload_to_cpu to check it ran and that at least one victim was in flight (rollback path)
+        original_offload = OffloadingManager._offload_to_cpu
+        in_flight_victim_seen = False
+
+        def spy_offload(manager, victims):
+            nonlocal in_flight_victim_seen
+            in_flight_victim_seen |= any(
+                state.position_offset == len(state.initial_tokens) + len(state.generated_tokens) for state in victims
+            )
+            return original_offload(manager, victims)
+
+        with patch.object(OffloadingManager, "_offload_to_cpu", autospec=True, side_effect=spy_offload) as mock:
+            self._test_continuous_batching_parity(
+                model_id=model_id,
+                continuous_batching_config=continuous_batching_config,
+                attn_implementation="sdpa",
+                max_new_tokens=30,
+                num_repeat_prompts=4,
+            )
+            self.assertTrue(mock.called, "_offload_to_cpu was not called despite few blocks being available.")
+            self.assertTrue(in_flight_victim_seen, "No in-flight victim was offloaded: rollback path not exercised.")
 
     @require_torch_accelerator
     def test_cpu_offloading_disabled_when_zero(self) -> None:
@@ -1472,9 +1590,9 @@ def _tp_continuous_batching_worker(
     ).eval()
 
     # Direct broadcast tests: only rank 0's value should propagate to every TP rank
-    helper = DistributedHelper(device_mesh=model._device_mesh)
+    helper = DistributedHelper(device_mesh=model._device_mesh, cpu_group_timeout=300)
 
-    received_obj = helper.tp_broadcast_object({"src_rank": rank})
+    received_obj = helper.tp_broadcast_object_from_rank_0({"src_rank": rank})
     assert received_obj == {"src_rank": 0}, f"tp_broadcast_object: rank {rank} got {received_obj}"
 
     sent_tensor = torch.tensor([float(rank)], device=model.device)
@@ -1538,7 +1656,7 @@ def _tp_cancellation_worker(
     use_cuda_graph: bool = False,
     use_async_batching: bool = False,
 ) -> None:
-    """Loads `model_id` with `tp_plan="auto"`, submits a long-running streaming request, and cancels it mid-flight.
+    """Loads `model_id` with `DistributedConfig(tp_size=...)`, submits a long-running streaming request, and cancels it mid-flight.
     The cancellation goes through the cancel-queue + `tp_broadcast_object` path: if the broadcast were broken, the
     non-driver rank's scheduler would not learn about the cancellation and the test would hang or crash on the next
     TP forward pass. Rank 0 owns the assertions."""
@@ -1601,12 +1719,12 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     def tp_size(self) -> int:
         return min(torch.cuda.device_count(), 2)
 
-    def _run_cb_worker(self, **worker_kwargs) -> None:
+    def _run_cb_worker(self, max_new_tokens: int = 20, **worker_kwargs) -> None:
         """Spawn `_tp_continuous_batching_worker` on `tp_size` NCCL processes with sensible defaults."""
         defaults = {
             "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             "attn_implementation": "sdpa",
-            "max_new_tokens": 20,
+            "max_new_tokens": max_new_tokens,
             "do_sample": False,
             "seed": 42,
             "use_cuda_graph": False,
@@ -1615,9 +1733,14 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         defaults.update(worker_kwargs)
         _init_distributed(tp=self.tp_size, backend="nccl")(_tp_continuous_batching_worker)(**defaults)
 
+    def test_continuous_batching_tp_fast(self) -> None:
+        """Test that continuous batching with `DistributedConfig(tp_size=...)` produces non-empty, reproducible greedy outputs and
+        that all TP ranks agree on the generated tokens."""
+        self._run_cb_worker(max_new_tokens=4)
+
     @slow
     def test_continuous_batching_tp_greedy(self) -> None:
-        """Test that continuous batching with `tp_plan="auto"` produces non-empty, reproducible greedy outputs and
+        """Test that continuous batching with `DistributedConfig(tp_size=...)` produces non-empty, reproducible greedy outputs and
         that all TP ranks agree on the generated tokens."""
         self._run_cb_worker()
 

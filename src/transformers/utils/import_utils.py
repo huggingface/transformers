@@ -72,6 +72,9 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # Note that this branch will almost never be run, so we do not import packages for nothing here
             package = importlib.import_module(pkg_name)
             package_version = getattr(package, "__version__", "N/A")
+            # No version + no __file__ means a namespace package (PEP 420) shadowing on sys.path, not a real install.
+            if package_version == "N/A" and getattr(package, "__file__", None) is None:
+                package_exists = False
         logger.debug(f"Detected {pkg_name} version: {package_version}")
 
     if return_version:
@@ -135,9 +138,11 @@ XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.15.0"
+COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.10.2"
+KERNELS_MIN_VERSION = "0.15.2"
+KERNELS_MAX_VERSION = "0.16.0"
 
 
 @lru_cache
@@ -677,9 +682,14 @@ def is_kenlm_available() -> bool:
 
 
 @lru_cache
-def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION) -> bool:
+def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION, MAX_VERSION: str = KERNELS_MAX_VERSION) -> bool:
     is_available, kernels_version = _is_package_available("kernels", return_version=True)
-    return is_available and version.parse(kernels_version) >= version.parse(MIN_VERSION)
+    viable_version = False
+    if kernels_version != "N/A":
+        viable_version = version.parse(kernels_version) >= version.parse(MIN_VERSION) and version.parse(
+            kernels_version
+        ) < version.parse(MAX_VERSION)
+    return is_available and viable_version
 
 
 @lru_cache
@@ -735,6 +745,14 @@ def is_torchvision_available() -> bool:
 @lru_cache
 def is_torchvision_v2_available() -> bool:
     return is_torchvision_available()
+
+
+@lru_cache
+def is_torchvision_greater_or_equal(library_version: str) -> bool:
+    if not is_torchvision_available():
+        return False
+    _, torchvision_version = _is_package_available("torchvision", return_version=True)
+    return version.parse(torchvision_version) >= version.parse(library_version)
 
 
 @lru_cache
@@ -1167,8 +1185,9 @@ def is_qutlass_available():
 
 
 @lru_cache
-def is_compressed_tensors_available() -> bool:
-    return _is_package_available("compressed_tensors")[0]
+def is_compressed_tensors_available(min_version: str = COMPRESSED_TENSORS_MIN_VERSION) -> bool:
+    is_available, compressed_tensors_version = _is_package_available("compressed_tensors", return_version=True)
+    return is_available and version.parse(compressed_tensors_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -2626,6 +2645,8 @@ BASE_FILE_REQUIREMENTS = {
     ),
     lambda name, content: "image_processing_" in name: ("vision",),
     lambda name, content: "video_processing_" in name: ("vision", "torch", "torchvision"),
+    # Some models have specific generation and it always depends on torch (guard if importable via main module)
+    lambda name, content: "generation_" in name: ("torch",),
 }
 
 

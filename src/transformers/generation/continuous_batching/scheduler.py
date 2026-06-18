@@ -26,9 +26,20 @@ class Scheduler(ABC):
     schedulers implement different strategies for prioritizing and batching requests.
     """
 
-    def __init__(self, cache: PagedAttentionCache):
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float, max_requests_per_batch: int):
+        """Initializes the scheduler. The safety margin is the percentage of free blocks under which we stop
+        scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks,
+        or equivalently when more than 90% of blocks are already allocated, we stop scheduling new prefill requests.
+        Setting safety_margin to 0.0 means no safety margin is applied."""
         self.cache = cache
+        self.safety_margin = safety_margin
+        self.max_requests_per_batch = max_requests_per_batch
         self._cancellation_lock = threading.Lock()
+        # Check args
+        if safety_margin < 0 or safety_margin > 1:
+            raise ValueError(f"Got {safety_margin = } but expected a value in [0, 1]")
+        if max_requests_per_batch < 1:
+            raise ValueError(f"Got {max_requests_per_batch = } but expected a value >= 1")
         # This is to compute the read cache used by a new request being scheduled
         self.read_cache_limit = None if self.cache.num_full_attention_groups else self.cache.config.sliding_window
         self.max_decode_fast_path_length = self.cache.max_blocks_per_request * self.cache.block_size
@@ -43,6 +54,9 @@ class Scheduler(ABC):
         self._requests_to_cancel: set[str] = set()
         self._requests_to_fork: list[RequestState] = []
         self.block_new_requests = False
+        # Active requests that failed block allocation in the last scheduled batch, with their physical block demand.
+        # The offloading manager uses this to size bulk evictions.
+        self.starved_requests: list[tuple[RequestState, int]] = []
 
     def add_waiting_request(self, state: RequestState):
         """Adds a request to the waiting list."""
@@ -70,14 +84,6 @@ class Scheduler(ABC):
         """
         self.cache.free_blocks(request_id)
         self.active_requests.pop(request_id, None)
-
-    def pop_request_to_evict(self) -> tuple[str, RequestState]:
-        """Remove and return an active request chosen as the eviction victim for cache-pressure offload or soft reset.
-        Picks the newest active request when `block_new_requests` is set, else the oldest."""
-        if self.block_new_requests:
-            return self.active_requests.popitem()
-        request_id = next(iter(self.active_requests))
-        return request_id, self.active_requests.pop(request_id)
 
     def get_active_request_static_outputs(self, request_id: str) -> list[int]:
         """Gets generated tokens for an active request."""
@@ -127,6 +133,11 @@ class Scheduler(ABC):
             blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
             allocated = self.cache.allocate_blocks(blocks_needed, state.request_id, state.allocated_blocks)
             if allocated is None:
+                # Starved active requests are tracked so the offloading manager can size bulk evictions. Waiting
+                # requests are not: they hold no cache and can simply keep waiting.
+                if state.request_id in self.active_requests:
+                    physical_blocks = self.cache.blocks_needed(blocks_needed, state.allocated_blocks)
+                    self.starved_requests.append((state, physical_blocks))
                 return False
             state.allocated_blocks += allocated
         return True
@@ -200,7 +211,6 @@ class Scheduler(ABC):
         token_budget: int,
         cache_budget: int,
         request_ids_to_remove_from_waiting: set[str],
-        safety_margin: float = 0.0,
     ) -> tuple[list[FutureRequestState], bool, bool, int, int]:
         """Schedules candidate requests for the current batch.
 
@@ -210,9 +220,11 @@ class Scheduler(ABC):
         """
         scheduled_requests = []
         one_allocation_failed = False
+        self.starved_requests = []
         decode_fast_path = self.cache.max_blocks_per_request > 0  # best way to check if decode fast path availability
-        safety_margins = safety_margin * self.cache.num_blocks
+        safety_margins = self.safety_margin * self.cache.num_blocks
         original_token_budget, original_cache_budget = token_budget, cache_budget
+        request_budget = self.max_requests_per_batch
 
         for state in candidates:
             num_free_blocks = self.cache.get_num_free_blocks()
@@ -263,6 +275,7 @@ class Scheduler(ABC):
             # Update the token and cache budgets
             token_budget -= request_len
             cache_budget -= read_cache_needed
+            request_budget -= 1
 
             # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
             if self.cache.allow_block_sharing:
@@ -283,7 +296,7 @@ class Scheduler(ABC):
                 request_ids_to_remove_from_waiting.add(req_id)
 
             # Early exit of the loop if we have no budget left
-            if token_budget == 0 or (cache_budget <= 0 and not decode_fast_path):
+            if token_budget == 0 or (cache_budget <= 0 and not decode_fast_path) or request_budget <= 0:
                 break
 
         num_q_tokens = original_token_budget - token_budget
@@ -317,16 +330,13 @@ class Scheduler(ABC):
 # TODO: further common-ize the two classes
 class FIFOScheduler(Scheduler):
     """This scheduler processes requests in the order they arrive, meaning decoding requests has priority over
-    prefilling requests. Additionally, it includes a safety margin mechanism to prevent cache exhaustion. By default,
-    when 80% of the cache is full, new requests will not be scheduled to prioritize decoding active requests."""
+    prefilling requests."""
 
-    def __init__(self, cache: PagedAttentionCache, safety_margin: float = 0.2):
-        """Initializes the FIFO scheduler. The safety margin is the percentage of free blocks under which we stop
-        scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks,
-        or equivalently when more than 90% of blocks are already allocated, we stop scheduling new prefill requests.
-        """
-        super().__init__(cache)
-        self.safety_margin = safety_margin
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float | None, max_requests_per_batch: int):
+        """Initializes the FIFO scheduler, with a default safety margin of 0.15 (ie. 15% of free blocks)."""
+        if safety_margin is None:
+            safety_margin = 0.15
+        super().__init__(cache, safety_margin, max_requests_per_batch)
 
     def schedule_batch(
         self, token_budget: int, cache_budget: int
@@ -352,7 +362,6 @@ class FIFOScheduler(Scheduler):
                 token_budget,
                 cache_budget,
                 request_ids_to_remove_from_waiting,
-                safety_margin=self.safety_margin,
             )
         )
 
@@ -372,6 +381,12 @@ class PrefillFirstScheduler(Scheduler):
     """Scheduler that prioritizes split prefill requests over decoding requests. This scheduler ensures that split
     prefill requests (which are continuations of partially processed prompts) are completed before processing new
     decoding requests."""
+
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float | None, max_requests_per_batch: int):
+        """Initializes the prefill first scheduler, with a default safety margin of 0.0 (no safety margin)."""
+        if safety_margin is None:
+            safety_margin = 0.0
+        super().__init__(cache, safety_margin, max_requests_per_batch)
 
     def schedule_batch(
         self, token_budget: int, cache_budget: int
@@ -398,7 +413,6 @@ class PrefillFirstScheduler(Scheduler):
                 token_budget,
                 cache_budget,
                 request_ids_to_remove_from_waiting,
-                safety_margin=0.0,
             )
         )
 

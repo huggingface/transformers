@@ -168,14 +168,14 @@ class ModelManager:
 
         import torch
 
-        from ...integrations.hub_kernels import _kernels_available
+        from ...utils.import_utils import is_kernels_available
 
         is_mps_device = (
             isinstance(device, str)
             and device.startswith("mps")
             or (device == "auto" and torch.backends.mps.is_available() and not torch.cuda.is_available())
         )
-        if is_mps_device and _kernels_available:
+        if is_mps_device and is_kernels_available():
             logger.warning_once(
                 "MPS detected and `kernels` is installed: defaulting attention to "
                 "`kernels-community/metal-flash-sdpa@223ca3350d7ba32ecf19341ff2cbb8c43fa47d62. "
@@ -256,9 +256,11 @@ class ModelManager:
             "dtype": self.dtype,
             "device_map": self.device,
             "trust_remote_code": self.trust_remote_code,
-            "quantization_config": self.get_quantization_config(),
             "tqdm_class": tqdm_class,
         }
+        quantization_config = self.get_quantization_config()
+        if quantization_config is not None:
+            model_kwargs["quantization_config"] = quantization_config
 
         if progress_callback is not None:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
