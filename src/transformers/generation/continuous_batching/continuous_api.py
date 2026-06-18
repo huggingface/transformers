@@ -61,6 +61,7 @@ The maximum number of cached graphs is controlled by max_cached_graphs (default 
 All defaults are stored in ContinuousBatchingConfig.resolve_sentinel_values().
 """
 
+
 class OutputRouter:
     """Dedicated object for routing generation outputs to the right destination.
 
