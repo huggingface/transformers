@@ -523,11 +523,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
     if not is_kernels_available():
-        raise ValueError(
-            "Kernels are not available. "
-            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
-        )
+        raise ImportError(_MISSING_KERNELS_MESSAGE)
 
     def attach_hidden_kernels(module):
         for name, fn in getattr(module, "_hidden_kernels", {}).items():
