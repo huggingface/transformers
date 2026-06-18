@@ -61,7 +61,7 @@ class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Gemma4UnifiedImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
-            "padding": True,
+            "padding": False,
             "return_mm_token_type_ids": True,
         },
         "images_kwargs": {
