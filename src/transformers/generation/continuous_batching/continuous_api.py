@@ -26,7 +26,6 @@ from torch import nn
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
 from ...utils.logging import logging
 from .cache import PagedAttentionCache
@@ -174,8 +173,8 @@ class ContinuousBatchProcessor:
 
     def __init__(
         self,
+        model: ProtoPretrainedModel,
         cache: PagedAttentionCache,
-        config: PretrainedConfig,
         generation_config: GenerationConfig,
         continuous_batching_config: ContinuousBatchingConfig,
         logit_processor: ContinuousBatchingLogitsProcessorList,
@@ -183,16 +182,14 @@ class ContinuousBatchProcessor:
         cancel_queue: queue.Queue | None,
         output_router: OutputRouter,
         background_thread_status: BackgroundThreadStatus,
-        model_device: torch.device,
-        model_dtype: torch.dtype,
         scheduler: Scheduler,
         distributed_helper: DistributedHelper,
     ) -> None:
         """Initialize the continuous batch processor.
 
         Args:
+            model: The model that will be used for the generation, NOT saved as an attribute, but used to infer others
             cache: A [`PagedAttentionCache`] object
-            config: The model configuration
             generation_config: The generation configuration
             continuous_batching_config: The continuous batching configuration
             logit_processor: The [`ContinuousBatchingLogitsProcessorList`] object used to process the logits.
@@ -200,38 +197,36 @@ class ContinuousBatchProcessor:
             cancel_queue: Queue for cancellation request_ids. Is None if this process is not a TP driver.
             output_router: An [`OutputRouter`] object that routes outputs to handlers or the output queue.
             background_thread_status: A [`BackgroundThreadStatus`] object to track the background thread status.
-            model_device: Device for model inputs/outputs
-            model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
             distributed_helper: The [`DistributedHelper`] to use
         """
         self.cache = cache
-        self.config = config
+        self.config = model.config
         self.cb_config = continuous_batching_config
         self.logit_processor = logit_processor
         self.input_queue = input_queue
         self.cancel_queue = cancel_queue
         self.output_router = output_router
         self.background_thread_status = background_thread_status
-        self.model_device = model_device
-        self.model_dtype = model_dtype
+        self.model_device = model.device
+        self.model_dtype = model.dtype
         self.scheduler = scheduler
         self.distributed_helper = distributed_helper
 
         # Get an integer seed for the TP group. Also work for no TP.
-        self.distributed_helper.set_tp_seed(continuous_batching_config.seed, model_device)
+        self.distributed_helper.set_tp_seed(continuous_batching_config.seed, self.model_device)
 
         # Retrieve the size of the sliding window if there is one
-        self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
+        self.sliding_window = 1 if getattr(self.config, "sliding_window", None) is None else self.config.sliding_window
         self.max_batch_tokens = cache.max_batch_tokens
 
         # Setup inputs and outputs
         io_kwargs = {
             "cache": cache,
-            "config": config,
+            "config": self.config,
             "continuous_batching_config": continuous_batching_config,
-            "device": model_device,
-            "model_dtype": model_dtype,
+            "device": self.model_device,
+            "model_dtype": self.model_dtype,
             "logit_processor": self.logit_processor,
         }
         self.use_async_batching = self.cb_config.use_async_batching
@@ -1003,8 +998,8 @@ class ContinuousBatchingManager:
 
         # Create the batch processor
         batch_processor = ContinuousBatchProcessor(
+            model=self.model,
             cache=paged_attention_cache,
-            config=self.model.config,
             generation_config=self.generation_config,
             continuous_batching_config=self.continuous_batching_config,
             logit_processor=self.logit_processor,
@@ -1012,8 +1007,6 @@ class ContinuousBatchingManager:
             cancel_queue=self.cancel_queue if self.is_tp_driver else None,
             output_router=self.output_router,
             background_thread_status=self.background_thread_status,
-            model_device=self.model.device,
-            model_dtype=self.model.dtype,
             scheduler=scheduler,
             distributed_helper=self.distributed_helper,
         )
