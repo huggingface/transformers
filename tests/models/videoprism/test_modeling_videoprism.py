@@ -33,6 +33,7 @@ from transformers.utils import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.utils.import_utils import is_torchvision_greater_or_equal
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -777,10 +778,17 @@ class VideoPrismForVideoClassificationTest(VideoPrismModelTest, unittest.TestCas
         pass
 
 
-def prepare_tennis_frames():
-    tennis_video = url_to_local_path(TENNIS_VIDEO_URL)
+def prepare_tennis_frames(resample=None, tennis_video=None):
+    if tennis_video is None:
+        tennis_video = url_to_local_path(TENNIS_VIDEO_URL)
+    if resample is None:
+        # Hub configs use resample=1 (Lanczos); torchvision < 0.27 falls back to BICUBIC in TorchvisionBackend.resize.
+        if is_torchvision_greater_or_equal("0.27"):
+            resample = PILImageResampling.LANCZOS
+        else:
+            resample = PILImageResampling.BICUBIC
     video_processor = LlavaOnevisionVideoProcessor(
-        resample=PILImageResampling.LANCZOS,
+        resample=resample,
         size={"height": INTEGRATION_FRAME_SIZE, "width": INTEGRATION_FRAME_SIZE},
         do_normalize=False,
     )
@@ -797,6 +805,99 @@ def prepare_texts():
     text_queries = [INTEGRATION_TEXT_PROMPT_TEMPLATE.format(t) for t in text_queries]
     tokenizer = VideoPrismTokenizer.from_pretrained(VIDEO_PRISM_LVT_CHECKPOINT)
     return tokenizer, text_queries
+
+
+def get_vision_integration_expectations():
+    # torchvision >= 0.27 supports native Lanczos; older versions fall back to BICUBIC in TorchvisionBackend.resize.
+    if is_torchvision_greater_or_equal("0.27"):
+        return Expectations(
+            {
+                (None, None): [
+                    [0.4207212030887604, 0.3732508718967438, -0.2386348992586136],
+                    [0.30371561646461487, 0.29156938195228577, 0.17279548943042755],
+                    [0.15283700823783875, 0.10430823266506195, 0.009455384686589241],
+                ],
+                ("cuda", 8): [
+                    [0.4224899113178253, 0.3737114667892456, -0.23895283043384552],
+                    [0.3024149239063263, 0.2884739339351654, 0.1720140427350998],
+                    [0.15487264096736908, 0.10452699661254883, 0.010388733819127083],
+                ],
+            }
+        )
+    bicubic_cpu = [
+        [0.4354458153247833, 0.40730902552604675, -0.29193782806396484],
+        [0.21557554602622986, 0.24541932344436646, 0.2506216764450073],
+        [0.1628289669752121, 0.11620243638753891, 0.008987130597233772],
+    ]
+    bicubic_cuda = [
+        [0.43593931198120117, 0.4065835475921631, -0.2931322455406189],
+        [0.21495293080806732, 0.24310487508773804, 0.25315529108047485],
+        [0.16352611780166626, 0.11609930545091629, 0.009905272163450718],
+    ]
+    return Expectations({(None, None): bicubic_cpu, ("cuda", 8): bicubic_cuda})
+
+
+def get_video_integration_expectations():
+    if is_torchvision_greater_or_equal("0.27"):
+        return Expectations(
+            {
+                (None, None): [
+                    0.00044830681872554123,
+                    -0.01594417914748192,
+                    0.025617999956011772,
+                    0.028001835569739342,
+                    0.02511543780565262,
+                    0.03522724285721779,
+                    -0.018459202721714973,
+                    0.012107008136808872,
+                    -0.01778203248977661,
+                ],
+                ("cuda", 8): [
+                    0.0004483825759962201,
+                    -0.015944069251418114,
+                    0.025618184357881546,
+                    0.028001854196190834,
+                    0.02511543780565262,
+                    0.035227347165346146,
+                    -0.018459301441907883,
+                    0.012106997892260551,
+                    -0.017782120034098625,
+                ],
+            }
+        )
+    bicubic_cpu = [
+        -0.002214705338701606,
+        -0.015442193485796452,
+        0.026582593098282814,
+        0.024988047778606415,
+        0.023289235308766365,
+        0.03686181455850601,
+        -0.016300003975629807,
+        0.010566281154751778,
+        -0.01618618704378605,
+    ]
+    return Expectations({(None, None): bicubic_cpu, ("cuda", 8): bicubic_cpu})
+
+
+def get_text_integration_expectations():
+    return Expectations(
+        {
+            (None, None): [
+                [-0.008009851910173893, 0.009317192249000072, 0.015544881112873554],
+                [0.0224610585719347, 9.546205546939746e-05, -0.010741854086518288],
+                [-0.02257801778614521, 0.0013390968088060617, -0.015561778098344803],
+                [0.01059110276401043, 0.018359504640102386, -0.015389746055006981],
+                [-0.003638867288827896, 0.0036980074364691973, 0.007990811951458454],
+            ],
+            ("cuda", 8): [
+                [-0.008009872399270535, 0.009317183867096901, 0.015544887632131577],
+                [0.022461066022515297, 9.54606948653236e-05, -0.01074184663593769],
+                [-0.022578025236725807, 0.0013391131069511175, -0.0155617855489254],
+                [0.010591122321784496, 0.018359530717134476, -0.01538977213203907],
+                [-0.00363887008279562, 0.0036980111617594957, 0.00799081102013588],
+            ],
+        }
+    )
 
 
 @require_vision
@@ -821,20 +922,7 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
             outputs[1].cpu().tolist(),
             "Outputs of the batches are not identical for identical input batches",
         )
-        expectations = Expectations(
-            {
-                (None, None): [
-                    [0.4207212030887604, 0.3732508718967438, -0.2386348992586136],
-                    [0.30371561646461487, 0.29156938195228577, 0.17279548943042755],
-                    [0.15283700823783875, 0.10430823266506195, 0.009455384686589241],
-                ],
-                ("cuda", 8): [
-                    [0.4207229018211365, 0.3732527792453766, -0.2386314570903778],
-                    [0.30371537804603577, 0.29157617688179016, 0.17279021441936493],
-                    [0.15284396708011627, 0.10430900007486343, 0.009451447986066341],
-                ],
-            }
-        )
+        expectations = get_vision_integration_expectations()
         expected_values = torch.tensor(expectations.get_expectation(), device=torch_device)
         output_slice = outputs[0, :3, :3]
         torch.testing.assert_close(output_slice, expected_values, rtol=2e-4, atol=2e-4)
@@ -860,50 +948,8 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
             torch.Size((tokens.input_ids.shape[0], input_vids.shape[0])),
         )
 
-        video_expectation = Expectations(
-            {
-                (None, None): [
-                    0.00044830681872554123,
-                    -0.01594417914748192,
-                    0.025617999956011772,
-                    0.028001835569739342,
-                    0.02511543780565262,
-                    0.03522724285721779,
-                    -0.018459202721714973,
-                    0.012107008136808872,
-                    -0.01778203248977661,
-                ],
-                ("cuda", 8): [
-                    0.0004483825759962201,
-                    -0.015944069251418114,
-                    0.025618184357881546,
-                    0.028001854196190834,
-                    0.02511543594300747,
-                    0.035227347165346146,
-                    -0.018459301441907883,
-                    0.012106997892260551,
-                    -0.017782120034098625,
-                ],
-            }
-        )
-        text_expectation = Expectations(
-            {
-                (None, None): [
-                    [-0.008009868673980236, 0.009317189455032349, 0.015544884838163853],
-                    [0.022461067885160446, 9.54712595557794e-05, -0.01074187271296978],
-                    [-0.022578040137887, 0.001339073060080409, -0.015561817213892937],
-                    [0.010591105557978153, 0.018359515815973282, -0.015389746055006981],
-                    [-0.003638886846601963, 0.0036980013828724623, 0.007990806363523006],
-                ],
-                ("cuda", 8): [
-                    [-0.00800985936075449, 0.009317193180322647, 0.015544882975518703],
-                    [0.022461047396063805, 9.546728688292205e-05, -0.010741823352873325],
-                    [-0.022578010335564613, 0.0013390942476689816, -0.015561779029667377],
-                    [0.01059112511575222, 0.018359506502747536, -0.015389740467071533],
-                    [-0.0036388880107551813, 0.003698008367791772, 0.007990810088813305],
-                ],
-            }
-        )
+        video_expectation = get_video_integration_expectations()
+        text_expectation = get_text_integration_expectations()
 
         video_expected_values = torch.tensor(video_expectation.get_expectation(), device=torch_device)
         text_expected_values = torch.tensor(text_expectation.get_expectation(), device=torch_device)

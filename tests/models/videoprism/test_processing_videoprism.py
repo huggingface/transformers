@@ -19,6 +19,7 @@ import torch
 from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
+from transformers.utils.import_utils import is_torchvision_greater_or_equal
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
@@ -31,13 +32,27 @@ NUM_FRAMES = 16
 FRAME_SIZE = 288
 VIDEO_PRISM_LVT_CHECKPOINT = "MHRDYN7/videoprism-lvt-base-f16r288"
 
-EXPECTED_TENNIS_PIXEL_SLICE = torch.tensor(
+# torchvision >= 0.27 supports native Lanczos; older versions fall back to BICUBIC in TorchvisionBackend.resize.
+EXPECTED_TENNIS_PIXEL_SLICE_LANCZOS = torch.tensor(
     [
         [0.0470588281750679, 0.03921568766236305, 0.32156863808631897],
         [0.04313725605607033, 0.05098039656877518, 0.32549020648002625],
         [0.06666667014360428, 0.0470588281750679, 0.3019607961177826],
     ]
 )
+EXPECTED_TENNIS_PIXEL_SLICE_BICUBIC = torch.tensor(
+    [
+        [0.05882353335618973, 0.0470588281750679, 0.3137255012989044],
+        [0.05098039656877518, 0.05882353335618973, 0.3137255012989044],
+        [0.06666667014360428, 0.062745101749897, 0.3019607961177826],
+    ]
+)
+
+
+def expected_tennis_pixel_slice():
+    if is_torchvision_greater_or_equal("0.27"):
+        return EXPECTED_TENNIS_PIXEL_SLICE_LANCZOS
+    return EXPECTED_TENNIS_PIXEL_SLICE_BICUBIC
 
 
 @require_vision
@@ -86,7 +101,7 @@ class VideoPrismProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         torch.testing.assert_close(
             pixel_values_videos[0, 0, 0, 144:147, 144:147],
-            EXPECTED_TENNIS_PIXEL_SLICE,
+            expected_tennis_pixel_slice(),
             rtol=1e-4,
             atol=1e-4,
         )
