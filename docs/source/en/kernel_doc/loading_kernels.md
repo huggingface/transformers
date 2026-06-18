@@ -171,6 +171,31 @@ kernel_config = KernelConfig(
 )
 ```
 
+## Module fusion
+
+Fuse adjacent modules into a single kernel by passing a tuple of `(class_name, path_pattern)` pairs as the key in [`KernelConfig`]. All patterns must share the same parent module. `*` matches any single path segment.
+
+```python
+from transformers import AutoModelForCausalLM, KernelConfig
+
+kernel_config = KernelConfig(
+    {
+        (
+            ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+            ("MLP",     "model.layers.*.mlp"),
+        ): "owner/fused-rmsnorm-mlp:RMSNormMLP",
+    }
+)
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    use_kernels=True,
+    kernel_config=kernel_config,
+    device_map="cuda",
+)
+```
+
+Fusion requires the kernel repo to provide a companion `KernelNameLayout` class alongside the `KernelName` class. See the [Writing kernels](./writing_kernels) guide for how to implement one.
+
 ## Local kernels
 
 Load kernels from local file paths with `use_local_kernel=True` in [`KernelConfig`]. This loads from a local filesystem path instead of a Hub repository.
