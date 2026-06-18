@@ -16,13 +16,15 @@ import math
 from collections.abc import Callable
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
@@ -61,12 +63,12 @@ class MiniCPM3Config(LlamaConfig):
         Dimension of the RoPE part of each query/key head.
     v_head_dim (`int`, *optional*):
         Dimension of each value head. If `None`, defaults to `hidden_size // num_attention_heads`.
-    scale_emb (`int` or `float`, *optional*, defaults to 1.0):
+    scale_emb (`int` or `float`, *optional*, defaults to 12):
         Multiplier applied to input embeddings.
-    scale_depth (`int` or `float`, *optional*):
+    scale_depth (`int` or `float`, *optional*, defaults to 1.4):
         Multiplier for residual connections; the effective scaling is `scale_depth / sqrt(num_hidden_layers)`.
         If `None`, defaults to `sqrt(num_hidden_layers)` (no-op scaling).
-    dim_model_base (`int`, *optional*):
+    dim_model_base (`int`, *optional*, defaults to 256):
         Base model dimension used to scale logits before the language model head. If `None`,
         defaults to `hidden_size` (no-op scaling).
 
@@ -95,9 +97,9 @@ class MiniCPM3Config(LlamaConfig):
     }
 
     model_type = "minicpm3"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     # Only fields whose defaults differ from `LlamaConfig` are redeclared here; the rest are inherited.
+    # Defaults match the `openbmb/MiniCPM3-4B` checkpoint.
     vocab_size: int = 73448
     hidden_size: int = 2560
     intermediate_size: int = 6400
@@ -113,15 +115,15 @@ class MiniCPM3Config(LlamaConfig):
     qk_nope_head_dim: int = 64
     qk_rope_head_dim: int = 32
     v_head_dim: int | None = None
-    scale_emb: int | float = 1.0
-    scale_depth: int | float | None = None
-    dim_model_base: int | None = None
+    scale_emb: int | float = 12
+    scale_depth: int | float | None = 1.4
+    dim_model_base: int | None = 256
 
     def __post_init__(self, **kwargs):
         # In MLA the per-head dim used by RoPE is the rotary part, not `hidden_size / num_attention_heads`.
         self.head_dim = self.qk_rope_head_dim
-        # Match the original MiniCPM3 defaults: unset values map to no-op scalings so a randomly
-        # initialised tiny model still trains sensibly.
+        # When explicitly set to `None`, these collapse to no-op scalings (e.g. for a randomly
+        # initialised tiny model); the class defaults otherwise match `openbmb/MiniCPM3-4B`.
         if self.v_head_dim is None:
             self.v_head_dim = self.hidden_size // self.num_attention_heads
         if self.scale_depth is None:
@@ -134,6 +136,21 @@ class MiniCPM3Config(LlamaConfig):
     def logits_scaling(self) -> float:
         # Hidden states are divided by this factor before the LM head (`1` when `dim_model_base == hidden_size`).
         return self.hidden_size / self.dim_model_base
+
+
+class MiniCPM3ScaledWordEmbedding(nn.Embedding):
+    """
+    Overrides `nn.Embedding`'s forward to multiply the embeddings by a fixed scale. Applying the
+    scaling inside the embedding keeps the `input_ids` and `inputs_embeds` paths consistent.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.scalar_embed_scale = embed_scale
+        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
 class MiniCPM3RMSNorm(LlamaRMSNorm):
@@ -184,6 +201,8 @@ class MiniCPM3Attention(DeepseekV2Attention):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
+        # Same MLA forward as DeepSeek-V2/V3, except MiniCPM3 keeps the standard (non-interleaved)
+        # cos/sin rotary (`apply_rotary_pos_emb`) instead of DeepSeek's complex/interleaved variant.
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
         k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
@@ -222,7 +241,6 @@ class MiniCPM3Attention(DeepseekV2Attention):
 class MiniCPM3DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: MiniCPM3Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.self_attn = MiniCPM3Attention(config=config, layer_idx=layer_idx)
         # MiniCPM3 multiplies each residual branch by `scale_depth / sqrt(num_hidden_layers)`
         # (Llama adds the branch directly). Precompute the constant once instead of per forward.
         self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers)
@@ -258,11 +276,22 @@ class MiniCPM3DecoderLayer(LlamaDecoderLayer):
 
 
 class MiniCPM3PreTrainedModel(LlamaPreTrainedModel):
-    pass
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, MiniCPM3ScaledWordEmbedding):
+            init.constant_(module.embed_scale, module.scalar_embed_scale)
 
 
 @auto_docstring
 class MiniCPM3Model(LlamaModel):
+    def __init__(self, config: MiniCPM3Config):
+        super().__init__(config)
+        # MiniCPM3 scales the input embeddings by `scale_emb` (not present in Llama).
+        self.embed_tokens = MiniCPM3ScaledWordEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=config.scale_emb
+        )
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -280,8 +309,7 @@ class MiniCPM3Model(LlamaModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            # MiniCPM3 scales the input embeddings by `scale_emb` (not present in Llama).
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids) * self.config.scale_emb
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)

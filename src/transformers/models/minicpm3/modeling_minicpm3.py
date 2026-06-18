@@ -23,9 +23,10 @@ from collections.abc import Callable
 from typing import Optional
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -40,6 +41,21 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_minicpm3 import MiniCPM3Config
+
+
+class MiniCPM3ScaledWordEmbedding(nn.Embedding):
+    """
+    Overrides `nn.Embedding`'s forward to multiply the embeddings by a fixed scale. Applying the
+    scaling inside the embedding keeps the `input_ids` and `inputs_embeds` paths consistent.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.scalar_embed_scale = embed_scale
+        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -297,6 +313,8 @@ class MiniCPM3Attention(nn.Module):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
+        # Same MLA forward as DeepSeek-V2/V3, except MiniCPM3 keeps the standard (non-interleaved)
+        # cos/sin rotary (`apply_rotary_pos_emb`) instead of DeepSeek's complex/interleaved variant.
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
         k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
@@ -336,6 +354,7 @@ class MiniCPM3DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MiniCPM3Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = MiniCPM3Attention(config=config, layer_idx=layer_idx)
 
         self.mlp = MiniCPM3MLP(config)
@@ -393,6 +412,12 @@ class MiniCPM3PreTrainedModel(PreTrainedModel):
         "attentions": MiniCPM3Attention,
     }
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, MiniCPM3ScaledWordEmbedding):
+            init.constant_(module.embed_scale, module.scalar_embed_scale)
+
 
 @auto_docstring
 class MiniCPM3Model(MiniCPM3PreTrainedModel):
@@ -400,8 +425,10 @@ class MiniCPM3Model(MiniCPM3PreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        # MiniCPM3 scales the input embeddings by `scale_emb` (not present in Llama).
+        self.embed_tokens = MiniCPM3ScaledWordEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=config.scale_emb
+        )
         self.layers = nn.ModuleList(
             [MiniCPM3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -429,8 +456,7 @@ class MiniCPM3Model(MiniCPM3PreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            # MiniCPM3 scales the input embeddings by `scale_emb` (not present in Llama).
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids) * self.config.scale_emb
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)

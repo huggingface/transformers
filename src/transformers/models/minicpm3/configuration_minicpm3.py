@@ -42,12 +42,12 @@ class MiniCPM3Config(PreTrainedConfig):
         Dimension of the RoPE part of each query/key head.
     v_head_dim (`int`, *optional*):
         Dimension of each value head. If `None`, defaults to `hidden_size // num_attention_heads`.
-    scale_emb (`int` or `float`, *optional*, defaults to 1.0):
+    scale_emb (`int` or `float`, *optional*, defaults to 12):
         Multiplier applied to input embeddings.
-    scale_depth (`int` or `float`, *optional*):
+    scale_depth (`int` or `float`, *optional*, defaults to 1.4):
         Multiplier for residual connections; the effective scaling is `scale_depth / sqrt(num_hidden_layers)`.
         If `None`, defaults to `sqrt(num_hidden_layers)` (no-op scaling).
-    dim_model_base (`int`, *optional*):
+    dim_model_base (`int`, *optional*, defaults to 256):
         Base model dimension used to scale logits before the language model head. If `None`,
         defaults to `hidden_size` (no-op scaling).
 
@@ -84,6 +84,7 @@ class MiniCPM3Config(PreTrainedConfig):
     }
 
     # Only fields whose defaults differ from `LlamaConfig` are redeclared here; the rest are inherited.
+    # Defaults match the `openbmb/MiniCPM3-4B` checkpoint.
     vocab_size: int = 73448
     hidden_size: int = 2560
     intermediate_size: int = 6400
@@ -110,15 +111,15 @@ class MiniCPM3Config(PreTrainedConfig):
     qk_nope_head_dim: int = 64
     qk_rope_head_dim: int = 32
     v_head_dim: int | None = None
-    scale_emb: int | float = 1.0
-    scale_depth: int | float | None = None
-    dim_model_base: int | None = None
+    scale_emb: int | float = 12
+    scale_depth: int | float | None = 1.4
+    dim_model_base: int | None = 256
 
     def __post_init__(self, **kwargs):
         # In MLA the per-head dim used by RoPE is the rotary part, not `hidden_size / num_attention_heads`.
         self.head_dim = self.qk_rope_head_dim
-        # Match the original MiniCPM3 defaults: unset values map to no-op scalings so a randomly
-        # initialised tiny model still trains sensibly.
+        # When explicitly set to `None`, these collapse to no-op scalings (e.g. for a randomly
+        # initialised tiny model); the class defaults otherwise match `openbmb/MiniCPM3-4B`.
         if self.v_head_dim is None:
             self.v_head_dim = self.hidden_size // self.num_attention_heads
         if self.scale_depth is None:

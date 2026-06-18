@@ -94,16 +94,14 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             logits = model(input_ids).logits.float()
 
-        # Slice of the last-token logits. Reference values come from a CUDA run; the maintainer can
-        # adjust per-hardware entries as needed (see `Expectations`).
+        # Slice of the last-token logits. Reference values come from an A100 (bf16) run; the
+        # maintainer can adjust per-hardware entries as needed (see `Expectations`).
         expected_slices = Expectations(
             {
-                ("cuda", 8): [],  # TODO: fill from a reference run on the target CI hardware
+                ("cuda", 8): [0.765625, 3.640625, -0.189453125, -0.8359375, -0.8359375],
             }
         )  # fmt: skip
         expected = expected_slices.get_expectation()
-        if not expected:
-            self.skipTest("No reference logits available yet for this hardware; fill in `Expectations`.")
         torch.testing.assert_close(
             logits[0, -1, :5].cpu(),
             torch.tensor(expected),
@@ -115,7 +113,7 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
     def test_minicpm3_4b_generation(self):
         expected_texts = Expectations(
             {
-                ("cuda", 8): "",  # TODO: fill from a reference run on the target CI hardware
+                ("cuda", 8): "My favourite condiment is \n[A]. ketchup \n[B]. mustard \n[C",
             }
         )  # fmt: skip
         expected_text = expected_texts.get_expectation()
@@ -127,6 +125,4 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
 
         generated_ids = model.generate(input_ids, max_new_tokens=20, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        if not expected_text:
-            self.skipTest("No reference generation available yet for this hardware; fill in `Expectations`.")
         self.assertEqual(text, expected_text)
