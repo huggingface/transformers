@@ -507,12 +507,17 @@ class AriaImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of patches per image.
         """
+        import math
+
         split_image = images_kwargs.get("split_image", self.split_image)
         max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
+        split_resolutions = images_kwargs.get("split_resolutions", self.split_resolutions)
 
-        resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
+        resized_height, resized_width = select_best_resolution((height, width), split_resolutions)
         num_patches = (
-            1 if not split_image else -(-resized_height // max_image_size) * -(-resized_width // max_image_size)
+            1
+            if not split_image
+            else math.ceil(resized_height / max_image_size) * math.ceil(resized_width / max_image_size)
         )
         return num_patches
 
