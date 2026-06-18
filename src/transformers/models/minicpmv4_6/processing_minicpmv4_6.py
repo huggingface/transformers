@@ -19,18 +19,7 @@ from ...utils import auto_docstring, logging
 
 logger = logging.get_logger(__name__)
 
-
-class MiniCPMV4_6ImagesKwargs(ImagesKwargs, total=False):
-    use_image_id: bool
-
-
-class MiniCPMV4_6VideosKwargs(VideosKwargs, total=False):
-    use_image_id: bool
-
-
 class MiniCPMV4_6ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: MiniCPMV4_6ImagesKwargs
-    videos_kwargs: MiniCPMV4_6VideosKwargs
     _defaults = {
         "common_kwargs": {
             "return_tensors": "pt",
