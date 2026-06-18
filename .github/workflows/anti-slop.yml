@@ -17,7 +17,7 @@ jobs:
         with:
           # -- Failure threshold --
           # Require both enabled checks to fail before labeling while we validate the signals
-          max-failures: 3
+          max-failures: 2
 
           # -- Do NOT close or lock, just label --
           close-pr: false
