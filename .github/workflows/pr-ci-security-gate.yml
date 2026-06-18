@@ -7,6 +7,7 @@ on:
 permissions:
   actions: write
   contents: read
+  pull-requests: write
 
 jobs:
   security-gate:

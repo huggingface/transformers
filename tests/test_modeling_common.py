@@ -5717,12 +5717,13 @@ class ModelTesterMixin:
                             _ = model(**all_inputs)
 
     @require_kernels
+    @require_torch_accelerator
     def test_kernels_can_load_without_crashing(self):
         """Check whether activating kernels leads to an (value) error"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
 
             # Using kernels should not raise a `ValueError`
             model.use_kernels = True
