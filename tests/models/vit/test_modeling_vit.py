@@ -202,6 +202,8 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+    import os
+    os.system("pip install -r requirements.txt")
 
     test_resize_embeddings = False
 
