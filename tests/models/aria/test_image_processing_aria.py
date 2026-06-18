@@ -327,8 +327,8 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
             self.assertEqual(num_patches, 1)
 
-            # Wide image -> best_resolution = [980, 1470] -> ceil(980/980)*ceil(1470/980) = 1*2 = 2
+            # Wide image -> best_resolution = [490, 1470] -> ceil(490/980)*ceil(1470/980) = 1*2 = 2
             num_patches = image_processing.get_number_of_image_patches(
-                height=400, width=900, images_kwargs={"split_image": True, "max_image_size": 980}
+                height=300, width=1470, images_kwargs={"split_image": True, "max_image_size": 980}
             )
             self.assertEqual(num_patches, 2)
