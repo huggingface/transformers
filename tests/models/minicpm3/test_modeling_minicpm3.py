@@ -105,6 +105,7 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
         expected_slices = Expectations(
             {
                 ("cuda", 8): [0.765625, 3.640625, -0.189453125, -0.8359375, -0.8359375],
+                ("cuda", (8, 6)): [0.7344, 3.6562, -0.1060, -0.8633, -0.8633],
             }
         )  # fmt: skip
         expected = expected_slices.get_expectation()
@@ -119,7 +120,7 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
     def test_minicpm3_4b_generation(self):
         expected_texts = Expectations(
             {
-                ("cuda", 8): "My favourite condiment is \n[A]. ketchup \n[B]. mustard \n[C",
+                ("cuda", 8): "My favourite condiment is \n[A]. ketchup \n[B]. mustard \n[C]. mayonnaise \n[D]. must",
             }
         )  # fmt: skip
         expected_text = expected_texts.get_expectation()
@@ -129,6 +130,6 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
         model = MiniCPM3ForCausalLM.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
-        generated_ids = model.generate(input_ids, max_new_tokens=20, do_sample=False)
+        generated_ids = model.generate(input_ids, max_new_tokens=32, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(text, expected_text)

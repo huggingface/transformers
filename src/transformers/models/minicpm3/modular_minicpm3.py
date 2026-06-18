@@ -16,20 +16,18 @@ import math
 from collections.abc import Callable
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask
+from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import is_flash_attention_requested
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
+from ..gemma3.modeling_gemma3 import Gemma3TextScaledWordEmbedding
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -138,19 +136,8 @@ class MiniCPM3Config(LlamaConfig):
         return self.hidden_size / self.dim_model_base
 
 
-class MiniCPM3ScaledWordEmbedding(nn.Embedding):
-    """
-    Overrides `nn.Embedding`'s forward to multiply the embeddings by a fixed scale. Applying the
-    scaling inside the embedding keeps the `input_ids` and `inputs_embeds` paths consistent.
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
-        super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.scalar_embed_scale = embed_scale
-        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
-
-    def forward(self, input_ids: torch.Tensor):
-        return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
+class MiniCPM3ScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
+    pass
 
 
 class MiniCPM3RMSNorm(LlamaRMSNorm):
@@ -290,61 +277,6 @@ class MiniCPM3Model(LlamaModel):
         # MiniCPM3 scales the input embeddings by `scale_emb` (not present in Llama).
         self.embed_tokens = MiniCPM3ScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=config.scale_emb
-        )
-
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
-
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-
-        hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
-
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask,
-                position_embeddings=position_embeddings,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
         )
 
 

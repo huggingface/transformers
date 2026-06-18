@@ -23,8 +23,8 @@ from collections.abc import Callable
 from typing import Optional
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -45,8 +45,7 @@ from .configuration_minicpm3 import MiniCPM3Config
 
 class MiniCPM3ScaledWordEmbedding(nn.Embedding):
     """
-    Overrides `nn.Embedding`'s forward to multiply the embeddings by a fixed scale. Applying the
-    scaling inside the embedding keeps the `input_ids` and `inputs_embeds` paths consistent.
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
