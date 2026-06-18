@@ -51,7 +51,6 @@ from transformers import pipeline
 pipe = pipeline(task="depth-estimation", model="google/tipsv2-dpt-b14", device_map="auto")
 out = pipe("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 out["depth"]  # PIL Image normalized to [min, max] of predicted_depth
-print(out["predicted_depth"].shape)  # (height, width)
 ```
 
 ```python
@@ -172,11 +171,7 @@ segmentation_map = results[0]  # (height, width) tensor with class ids
 ## Notes
 
 - [`Tipsv2DptModel`] runs a single shared backbone forward pass and produces three outputs simultaneously: `predicted_depth`, `normals`, and `segmentation_logits`. Use it when you need all three tasks for the same image.
-- [`Tipsv2DptForDepthEstimation`], [`Tipsv2DptForNormalEstimation`], and [`Tipsv2DptForSemanticSegmentation`] are single-task variants that discard the other heads. Use them for fine-tuning or inference on a single task.
-- Call [`~Tipsv2DptImageProcessor.post_process_depth_estimation`], [`~Tipsv2DptImageProcessor.post_process_normal_estimation`], or [`~Tipsv2DptImageProcessor.post_process_semantic_segmentation`] to resize outputs back to the original image resolution. Pass `target_sizes=[(image.height, image.width)]` (height, width) for a single image.
-- `post_process_normal_estimation` applies L2 normalization along the channel dimension, yielding unit surface normals in `[-1, 1]` per channel (XYZ convention).
-- `predicted_depth` from [`Tipsv2DptModel`] and [`Tipsv2DptForDepthEstimation`] is already in metric scale (meters) — no further rescaling is needed.
-
+- [`Tipsv2DptForDepthEstimation`], [`Tipsv2DptForNormalEstimation`], and [`Tipsv2DptForSemanticSegmentation`] are single-task variants that discard the other heads. Use them in a pipeline or for inference on a single task.
 
 ## Tipsv2DptConfig
 
