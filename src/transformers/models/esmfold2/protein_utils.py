@@ -352,8 +352,7 @@ PROTEIN_REF_POS: dict[str, dict[str, tuple[float, float, float]]] = {
     },
 }
 
-# Protonated nitrogens at physiological pH (matches CHARGED_ATOMS in the
-# opensource constants for the protein subset).
+# Protonated nitrogens at physiological pH.
 PROTEIN_CHARGED_ATOMS: dict[tuple[str, str], int] = {
     ("LYS", "NZ"): 1,
     ("ARG", "NH2"): 1,
@@ -400,7 +399,7 @@ def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
         token_atom_starts.append(atom_cursor)
         for name in atom_names:
             charge = PROTEIN_CHARGED_ATOMS.get((res_3, name), 0)
-            element = name[0]  # protein heavy atoms are all single-letter C/N/O/S
+            element = name[0]
             ref_pos = PROTEIN_REF_POS[res_3][name]
             atom_records.append((t_idx, name, element, charge, ref_pos))
             atom_cursor += 1
