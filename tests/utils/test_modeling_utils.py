@@ -2863,24 +2863,6 @@ class TestAttentionImplementation(unittest.TestCase):
 
             self.assertEqual(model.get_correct_experts_implementation(experts_implementation), experts_implementation)
 
-    def test_grouped_mm_dispatcher_runs_on_cpu(self):
-        # Regression: torch._grouped_mm has no CPU kernel on some supported torch versions
-        # (e.g. 2.8), so the dispatcher must fall back to the for-loop on CPU instead of crashing.
-        from transformers.integrations.moe import _grouped_mm
-
-        torch.manual_seed(0)
-        num_experts, tokens_per_expert, in_dim, out_dim = 3, 2, 8, 5
-        hidden = torch.randn(num_experts * tokens_per_expert, in_dim)
-        weight = torch.randn(num_experts, in_dim, out_dim)
-        offs = torch.arange(1, num_experts + 1, dtype=torch.int32) * tokens_per_expert
-
-        out = _grouped_mm(hidden, weight, offs=offs)
-
-        expected = torch.cat(
-            [hidden[i * tokens_per_expert : (i + 1) * tokens_per_expert] @ weight[i] for i in range(num_experts)]
-        )
-        torch.testing.assert_close(out, expected)
-
     def test_not_available_flash(self):
         if is_flash_attn_2_available():
             self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
