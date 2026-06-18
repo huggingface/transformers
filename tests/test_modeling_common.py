@@ -4269,11 +4269,6 @@ class ModelTesterMixin:
                 # disable classifier cast for nllb-moe
                 if hasattr(module, "_cast_classifier"):
                     module._cast_classifier = lambda *args, **kwargs: None
-                # disable mamba mask update for ssms
-                if hasattr(module, "_update_mamba_mask"):
-                    module._update_mamba_mask = lambda attention_mask, *args, **kwargs: attention_mask
-                if hasattr(module, "_update_linear_attn_mask"):
-                    module._update_linear_attn_mask = lambda attention_mask, *args, **kwargs: attention_mask
 
             return model, inputs_dict
 
