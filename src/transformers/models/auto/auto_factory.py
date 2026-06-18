@@ -237,7 +237,9 @@ class _BaseAutoModelClass:
             return model_class._from_config(config, **kwargs)
         elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
-            if model_class.config_class == config.sub_configs.get("text_config", None):
+            text_config_class = config.sub_configs.get("text_config", None)
+            # getattr avoids AttributeError, as registered remote-code model classes may lack config_class
+            if text_config_class is not None and getattr(model_class, "config_class", None) == text_config_class:
                 # TODO: Validate that copying the parent quantization config to the text sub-config preserves
                 # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
                 parent_config = config
@@ -344,11 +346,13 @@ class _BaseAutoModelClass:
                 **kwargs,
             )
 
-            # if torch_dtype=auto was passed here, ensure to pass it on
-            if kwargs_orig.get("torch_dtype", None) == "auto":
-                kwargs["torch_dtype"] = "auto"
-            if kwargs_orig.get("dtype", None) == "auto":
-                kwargs["dtype"] = "auto"
+            # A concrete dtype is absorbed into the config above and then dropped at the composite
+            # `get_text_config()` swap, so re-inject the user's value as an explicit kwarg to force the model's
+            # `from_pretrained` to honor it over the config's saved dtype (#46459).
+            if kwargs_orig.get("torch_dtype", None) is not None:
+                kwargs["torch_dtype"] = kwargs_orig["torch_dtype"]
+            if kwargs_orig.get("dtype", None) is not None:
+                kwargs["dtype"] = kwargs_orig["dtype"]
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
@@ -391,7 +395,9 @@ class _BaseAutoModelClass:
             )
         elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
-            if model_class.config_class == config.sub_configs.get("text_config", None):
+            text_config_class = config.sub_configs.get("text_config", None)
+            # getattr avoids AttributeError, as registered remote-code model classes may lack config_class
+            if text_config_class is not None and getattr(model_class, "config_class", None) == text_config_class:
                 # TODO: Validate that copying the parent quantization config to the text sub-config preserves
                 # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
                 parent_config = config
