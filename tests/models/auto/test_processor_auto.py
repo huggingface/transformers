@@ -269,7 +269,9 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         # The tokenizer files are actually at the repo root, so the fallback path must kick in.
         with tempfile.TemporaryDirectory() as tmp_dir:
             old_home = os.environ.get("HF_HOME")
+            old_cache = os.environ.get("HF_HUB_CACHE")
             os.environ["HF_HOME"] = tmp_dir
+            os.environ["HF_HUB_CACHE"] = os.path.join(tmp_dir, "hub")
             try:
                 processor = AutoProcessor.from_pretrained("physical-intelligence/fast", trust_remote_code=True)
             finally:
@@ -277,6 +279,10 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                     os.environ["HF_HOME"] = old_home
                 else:
                     del os.environ["HF_HOME"]
+                if old_cache is not None:
+                    os.environ["HF_HUB_CACHE"] = old_cache
+                else:
+                    os.environ.pop("HF_HUB_CACHE", None)
         self.assertIsNotNone(processor)
         self.assertTrue(hasattr(processor, "bpe_tokenizer"))
 
