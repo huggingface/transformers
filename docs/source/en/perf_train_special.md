@@ -26,6 +26,8 @@ This requires macOS 12.3 or later and PyTorch built with MPS support.
 
 MPS requires the entire model to fit in unified memory, so `device_map="auto"` can't offload layers to the CPU like CUDA. In this case, try using a smaller model.
 
+Since safetensors `0.8.0`, models can be loaded directly to MPS with `device_map="mps"` or `"auto"` using zero-copy loading. Weights are mapped into Metal buffers without an intermediate copy, which roughly halves the memory footprint during loading and makes it about 5-6x faster. This requires PyTorch 2.9 or later; older versions fall back to the standard load path.
+
 [`Trainer`] detects MPS automatically with `torch.backends.mps.is_available` and sets the device to `mps` without any configuration changes.
 
 ## Mixed precision
