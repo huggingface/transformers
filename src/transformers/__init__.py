@@ -135,7 +135,6 @@ _import_structure = {
         "is_trackio_available",
         "is_wandb_available",
     ],
-    "integrations.hub_kernels": ["kernelize"],
     "loss": [],
     "pipelines": [
         "AnyToAnyPipeline",
@@ -361,6 +360,7 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
+    _import_structure["integrations.hub_kernels"] = ["kernelize"]
     _import_structure["model_debugging_utils"] = [
         "model_addition_debugger_context",
     ]
