@@ -286,7 +286,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
     Inference runs in float32 to track the NeMo reference as closely as possible.
 
     - Offline single/batched `generate` uses the model's default attention context `[56, 3]` (the first
-      entry of `att_context_size`, the 320 ms setting), conditioned on `target_lang="en-US"`.
+      entry of `att_context_size`, the 320 ms setting), conditioned on `language="en-US"`.
     - Streaming feeds mel-frame chunks through a cache-aware `generate` at `num_lookahead_tokens=6`
       (att_context `[56, 6]`, the 560 ms setting), the transcript consumed via a `TextIteratorStreamer`.
     """
@@ -326,7 +326,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
             NEMOTRON_3_5_ASR_CHECKPOINT, dtype=torch.float32, device_map="auto"
         ).eval()
 
-        inputs = self.processor(samples, sampling_rate=16000, target_lang=expected["target_lang"])
+        inputs = self.processor(samples, sampling_rate=16000, language=expected["language"])
         num_lookahead_tokens = inputs.pop("num_lookahead_tokens")
         inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, num_lookahead_tokens=num_lookahead_tokens, return_dict_in_generate=True)
@@ -341,7 +341,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
             NEMOTRON_3_5_ASR_CHECKPOINT, dtype=torch.float32, device_map="auto"
         ).eval()
 
-        inputs = self.processor(samples, sampling_rate=16000, target_lang=expected["target_lang"])
+        inputs = self.processor(samples, sampling_rate=16000, language=expected["language"])
         num_lookahead_tokens = inputs.pop("num_lookahead_tokens")
         inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, num_lookahead_tokens=num_lookahead_tokens, return_dict_in_generate=True)
@@ -364,7 +364,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
         ).eval()
 
         audio = load_audio(OBAMA_AUDIO_URL, sampling_rate=self.processor.feature_extractor.sampling_rate)
-        inputs = self.processor(audio, sampling_rate=16000, target_lang=expected["target_lang"])
+        inputs = self.processor(audio, sampling_rate=16000, language=expected["language"])
         inputs.to(model.device, dtype=model.dtype)
         prompt_ids = inputs["prompt_ids"]
 
@@ -398,15 +398,16 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
         self.assertEqual(streamed_text, expected["transcription"])
 
     def test_transcription_auto_language_tag(self):
-        # In `auto` mode the model emits the detected language tag; `strip_lang_tags` controls its removal.
+        # In `auto` mode the model emits the detected language tag (a special token): `skip_special_tokens`
+        # controls whether it is kept (language labeling) or stripped (clean transcript).
         model = Nemotron3_5AsrForRNNT.from_pretrained(
             NEMOTRON_3_5_ASR_CHECKPOINT, dtype=torch.float32, device_map="auto"
         ).eval()
-        inputs = self.processor(self._load_datasamples(1), sampling_rate=16000, target_lang="auto")
+        inputs = self.processor(self._load_datasamples(1), sampling_rate=16000, language="auto")
         num_lookahead_tokens = inputs.pop("num_lookahead_tokens")
         inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, num_lookahead_tokens=num_lookahead_tokens)
-        kept = self.processor.batch_decode(output.sequences, skip_special_tokens=True, strip_lang_tags=False)[0]
-        stripped = self.processor.batch_decode(output.sequences, skip_special_tokens=True, strip_lang_tags=True)[0]
+        kept = self.processor.batch_decode(output.sequences, skip_special_tokens=False)[0]
+        stripped = self.processor.batch_decode(output.sequences, skip_special_tokens=True)[0]
         self.assertIn("<en-US>", kept)
         self.assertNotIn("<en-US>", stripped)

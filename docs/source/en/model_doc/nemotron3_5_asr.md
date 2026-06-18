@@ -26,10 +26,10 @@ It reuses the entire cache-aware streaming [Fast Conformer](https://huggingface.
 
 The target language is turned into a one-hot vector, broadcast across the encoder time axis, concatenated with the
 encoder output, and fused back to the encoder hidden size by a small MLP (`prompt_kernel`) before the joint network.
-Pass the language through the processor's `target_lang` argument (a locale such as `"en-US"`/`"de-DE"`, a bare code such
-as `"de"`, or `"auto"` for automatic language detection). In `auto` mode the model appends an `<xx-XX>` language tag
-after the transcript's terminal punctuation; the processor's `decode`/`batch_decode` strip it by default
-(`strip_lang_tags=True`).
+Pass the language through the processor's `language` argument (Whisper-style; a locale such as `"en-US"`/`"de-DE"`, a
+bare code such as `"de"`, or `"auto"` for automatic language detection). In `auto` mode the model appends an `<xx-XX>` language tag
+after the transcript's terminal punctuation. The tag is a special token, so `decode`/`batch_decode` with the default
+`skip_special_tokens=True` strip it (clean transcript); pass `skip_special_tokens=False` to keep it for language labeling.
 
 ## Usage
 
@@ -45,14 +45,14 @@ ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="v
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 
 # Condition on a known language ...
-inputs = processor(ds[0]["audio"]["array"], sampling_rate=16000, target_lang="en-US")
+inputs = processor(ds[0]["audio"]["array"], sampling_rate=16000, language="en-US")
 generated = model.generate(**inputs)
 print(processor.batch_decode(generated.sequences, skip_special_tokens=True))
 
 # ... or let the model detect it and keep the emitted language tag.
-inputs = processor(ds[0]["audio"]["array"], sampling_rate=16000, target_lang="auto")
+inputs = processor(ds[0]["audio"]["array"], sampling_rate=16000, language="auto")
 generated = model.generate(**inputs)
-print(processor.batch_decode(generated.sequences, skip_special_tokens=True, strip_lang_tags=False))
+print(processor.batch_decode(generated.sequences, skip_special_tokens=False))
 ```
 
 ## Nemotron3_5AsrConfig

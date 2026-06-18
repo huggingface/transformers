@@ -447,7 +447,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
         self.decoder = Nemotron3_5AsrRNNTDecoder(config)
         self.joint = Nemotron3_5AsrRNNTJointNetwork(config)
         self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
-        # Language-ID prompt fusion: [encoder_output ; one_hot(target_lang)] -> MLP -> encoder hidden size.
+        # Language-ID prompt fusion: [encoder_output ; one_hot(language)] -> MLP -> encoder hidden size.
         self.prompt_kernel = nn.Sequential(
             nn.Linear(config.encoder_config.hidden_size + config.num_prompts, config.prompt_intermediate_size),
             nn.ReLU(),
@@ -478,7 +478,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
         if prompt_ids is None:
             logger.warning_once(
                 "`prompt_ids` was not provided for language-ID prompt conditioning; defaulting to prompt "
-                "index 0. Pass `target_lang` to the processor (which produces `prompt_ids`), or pass "
+                "index 0. Pass `language` to the processor (which produces `prompt_ids`), or pass "
                 "`prompt_ids` directly to the model / `generate`, to condition on a specific language."
             )
             prompt_ids = torch.zeros(hidden_states.shape[0], dtype=torch.long, device=hidden_states.device)
@@ -519,7 +519,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
             Defaults to `config.encoder_config.default_num_lookahead_tokens`.
         prompt_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Language-prompt indices for language-ID conditioning. Produced by the processor from
-            `target_lang`. Turned into the broadcast one-hot consumed by `prompt_kernel`.
+            `language`. Turned into the broadcast one-hot consumed by `prompt_kernel`.
 
         Example:
 
@@ -534,7 +534,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 
-        >>> inputs = processor(ds[0]["audio"]["array"], target_lang="en-US")
+        >>> inputs = processor(ds[0]["audio"]["array"], language="en-US")
         >>> outputs = model(**inputs)
         ```
         """

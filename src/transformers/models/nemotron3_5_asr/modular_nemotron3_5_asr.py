@@ -26,7 +26,6 @@ from dataclasses import dataclass
 
 import torch
 from huggingface_hub.dataclasses import strict
-from tokenizers.decoders import DecodeStream
 from torch import nn
 
 from ...audio_utils import AudioInput, make_list_of_audio
@@ -308,24 +307,22 @@ class Nemotron3_5AsrProcessor(NemotronAsrProcessor):
             default_num_lookahead_tokens=default_num_lookahead_tokens,
         )
 
-    def _resolve_prompt_ids(self, target_lang: "str | list[str] | None", batch_size: int) -> torch.LongTensor:
-        if target_lang is None:
+    def _resolve_prompt_ids(self, language: "str | list[str] | None", batch_size: int) -> torch.LongTensor:
+        if language is None:
             logger.warning_once(
-                "`target_lang` was not provided. Falling back to automatic language detection "
-                "(`target_lang='auto'`). Pass `target_lang` explicitly (e.g. 'en-US', 'de-DE') to "
+                "`language` was not provided. Falling back to automatic language detection "
+                "(`language='auto'`). Pass `language` explicitly (e.g. 'en-US', 'de-DE') to "
                 "condition the model on a known language, which is more accurate and stable."
             )
-            target_lang = "auto"
-        if isinstance(target_lang, str):
-            target_lang = [target_lang] * batch_size
-        if len(target_lang) != batch_size:
-            raise ValueError(f"Received {len(target_lang)} `target_lang` entries for {batch_size} audio input(s).")
+            language = "auto"
+        if isinstance(language, str):
+            language = [language] * batch_size
+        if len(language) != batch_size:
+            raise ValueError(f"Received {len(language)} `language` entries for {batch_size} audio input(s).")
         prompt_ids = []
-        for lang in target_lang:
+        for lang in language:
             if lang not in self.prompt_dictionary:
-                raise ValueError(
-                    f"Unknown `target_lang={lang!r}`. Supported values: {sorted(self.prompt_dictionary)}."
-                )
+                raise ValueError(f"Unknown `language={lang!r}`. Supported values: {sorted(self.prompt_dictionary)}.")
             prompt_ids.append(self.prompt_dictionary[lang])
         return torch.tensor(prompt_ids, dtype=torch.long)
 
@@ -338,7 +335,7 @@ class Nemotron3_5AsrProcessor(NemotronAsrProcessor):
         streaming_latency_ms: int | None = None,
         is_streaming: bool = False,
         is_first_audio_chunk: bool | None = True,
-        target_lang: "str | list[str] | None" = None,
+        language: "str | list[str] | None" = None,
         **kwargs: Unpack[Nemotron3_5AsrProcessorKwargs],
     ):
         r"""
@@ -356,11 +353,12 @@ class Nemotron3_5AsrProcessor(NemotronAsrProcessor):
             Whether the current audio is the first chunk of a streaming session. Controls `center` in the
             feature extractor so per-chunk STFT reproduces a single full-utterance pass. Must be `True`
             when `is_streaming=False`.
-        target_lang (`str` or `list[str]`, *optional*):
-            Target language(s) for prompt conditioning. Either a single language string applied to the
-            whole batch, or one string per audio. Accepts locales (`"en-US"`, `"de-DE"`, ...), bare
-            codes (`"de"`), or `"auto"` for automatic language detection. Resolved via
-            `prompt_dictionary` into the `prompt_ids` model input. Defaults to `"auto"` with a warning.
+        language (`str` or `list[str]`, *optional*):
+            Target language(s) for prompt conditioning (Whisper-style `language` argument). Either a
+            single language string applied to the whole batch, or one string per audio. Accepts locales
+            (`"en-US"`, `"de-DE"`, ...), bare codes (`"de"`), or `"auto"` for automatic language
+            detection. Resolved via `prompt_dictionary` into the `prompt_ids` model input. Defaults to
+            `"auto"` with a warning.
 
         Returns:
             [`BatchFeature`]: the [`NemotronAsrProcessor`] outputs, augmented with:
@@ -402,7 +400,7 @@ class Nemotron3_5AsrProcessor(NemotronAsrProcessor):
         # requested streaming latency; pass it to the model/encoder forward or `generate`.
         inputs["num_lookahead_tokens"] = self._resolve_num_lookahead_tokens(streaming_latency_ms)
         # The language-prompt indices used for language-ID prompt conditioning.
-        inputs["prompt_ids"] = self._resolve_prompt_ids(target_lang, len(audio))
+        inputs["prompt_ids"] = self._resolve_prompt_ids(language, len(audio))
 
         if text is None:
             return inputs
@@ -415,76 +413,6 @@ class Nemotron3_5AsrProcessor(NemotronAsrProcessor):
         decoder_encodings = self.tokenizer(decoder_text, **output_kwargs["text_kwargs"])
         inputs["decoder_input_ids"] = decoder_encodings["input_ids"]
         return inputs
-
-    @property
-    def lang_tag_token_ids(self) -> set:
-        """Vocabulary ids of the `<xx-XX>` language-tag tokens emitted in automatic-detection mode."""
-        if getattr(self, "_lang_tag_token_ids", None) is None:
-            import re
-
-            pattern = re.compile(r"^<[a-z]{2,3}-[A-Za-z]{2}>$")
-            self._lang_tag_token_ids = {
-                idx for token, idx in self.tokenizer.get_vocab().items() if pattern.match(token)
-            }
-        return self._lang_tag_token_ids
-
-    def _strip_lang_tag_ids(self, token_ids):
-        tag_ids = self.lang_tag_token_ids
-        if hasattr(token_ids, "tolist"):
-            token_ids = token_ids.tolist()
-        return [token_id for token_id in token_ids if int(token_id) not in tag_ids]
-
-    def batch_decode(self, sequences, *args, strip_lang_tags: bool = True, **kwargs):
-        """
-        Decode a batch of RNN-T token-id sequences to text. `strip_lang_tags` (default `True`) removes the
-        `<xx-XX>` language-tag tokens that the model emits in automatic-detection mode.
-        """
-        if strip_lang_tags:
-            sequences = [self._strip_lang_tag_ids(sequence) for sequence in sequences]
-        kwargs.setdefault("group_tokens", self._decoder_type == "ctc")
-        return self.tokenizer.batch_decode(sequences, *args, **kwargs)
-
-    def decode(self, token_ids, *args, strip_lang_tags: bool = True, durations=None, **kwargs):
-        """
-        Decode a single RNN-T token-id sequence to text and post-process timestamps (if `durations` are
-        provided) as in the NeMo library. `strip_lang_tags` (default `True`) removes the `<xx-XX>`
-        language-tag tokens emitted in automatic-detection mode; it is skipped when `durations` are
-        provided (to keep token/timestamp alignment).
-        """
-        if strip_lang_tags and durations is None:
-            token_ids = self._strip_lang_tag_ids(token_ids)
-        kwargs.setdefault("group_tokens", self._decoder_type == "ctc")
-        decoded = self.tokenizer.decode(token_ids, *args, **kwargs)
-
-        if durations is not None:
-            # Derive per-step frame indices from cumulative sum of durations.
-            timestamps = durations.cumsum(dim=-1) - durations
-            output_kwargs = self._merge_kwargs(
-                Nemotron3_5AsrProcessorKwargs,
-                tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            )
-            frame_rate = (
-                self.feature_extractor.hop_length
-                / self.feature_extractor.sampling_rate
-                * output_kwargs["audio_kwargs"]["subsampling_factor"]
-            )
-            skip_ids = {self.tokenizer.pad_token_id, self.blank_token_id}
-            proc_timestamps = []
-            for batch_ids, batch_timestamps, batch_durations in zip(token_ids, timestamps, durations):
-                stream = DecodeStream(skip_special_tokens=True)
-                timestamp_dict = []
-                for i, token_id in enumerate(batch_ids):
-                    if int(token_id) in skip_ids:
-                        continue
-                    chunk = stream.step(self.tokenizer._tokenizer, int(token_id))
-                    if chunk is not None:
-                        # TDT sizes a token by its predicted duration; RNN-T tokens each span a single frame.
-                        token_span = int(batch_durations[i]) if self._decoder_type == "tdt" else 1
-                        start = int(batch_timestamps[i])
-                        timestamp_dict.append({"token": chunk, "start": start, "end": start + token_span})
-                proc_timestamps.append(self._refine_timestamps(timestamp_dict, frame_rate))
-            return decoded, proc_timestamps
-        return decoded
 
     @property
     def model_input_names(self):
@@ -523,7 +451,7 @@ class Nemotron3_5AsrRNNTOutput(NemotronAsrRNNTOutput):
 class Nemotron3_5AsrForRNNT(NemotronAsrForRNNT, Nemotron3_5AsrGenerationMixin):
     def __init__(self, config: Nemotron3_5AsrConfig):
         super().__init__(config)
-        # Language-ID prompt fusion: [encoder_output ; one_hot(target_lang)] -> MLP -> encoder hidden size.
+        # Language-ID prompt fusion: [encoder_output ; one_hot(language)] -> MLP -> encoder hidden size.
         self.prompt_kernel = nn.Sequential(
             nn.Linear(config.encoder_config.hidden_size + config.num_prompts, config.prompt_intermediate_size),
             nn.ReLU(),
@@ -553,7 +481,7 @@ class Nemotron3_5AsrForRNNT(NemotronAsrForRNNT, Nemotron3_5AsrGenerationMixin):
         if prompt_ids is None:
             logger.warning_once(
                 "`prompt_ids` was not provided for language-ID prompt conditioning; defaulting to prompt "
-                "index 0. Pass `target_lang` to the processor (which produces `prompt_ids`), or pass "
+                "index 0. Pass `language` to the processor (which produces `prompt_ids`), or pass "
                 "`prompt_ids` directly to the model / `generate`, to condition on a specific language."
             )
             prompt_ids = torch.zeros(hidden_states.shape[0], dtype=torch.long, device=hidden_states.device)
@@ -594,7 +522,7 @@ class Nemotron3_5AsrForRNNT(NemotronAsrForRNNT, Nemotron3_5AsrGenerationMixin):
             Defaults to `config.encoder_config.default_num_lookahead_tokens`.
         prompt_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Language-prompt indices for language-ID conditioning. Produced by the processor from
-            `target_lang`. Turned into the broadcast one-hot consumed by `prompt_kernel`.
+            `language`. Turned into the broadcast one-hot consumed by `prompt_kernel`.
 
         Example:
 
@@ -609,7 +537,7 @@ class Nemotron3_5AsrForRNNT(NemotronAsrForRNNT, Nemotron3_5AsrGenerationMixin):
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 
-        >>> inputs = processor(ds[0]["audio"]["array"], target_lang="en-US")
+        >>> inputs = processor(ds[0]["audio"]["array"], language="en-US")
         >>> outputs = model(**inputs)
         ```
         """

@@ -195,6 +195,15 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
             "unk_token": AddedToken("<unk>", normalized=False, special=True),
         }
     )
+    # The multilingual model emits a language tag (e.g. `<en-US>`) in automatic-detection mode. These tags
+    # are regular BPE vocab tokens in the NeMo checkpoint; mark them as special tokens (keeping their ids)
+    # so `batch_decode(..., skip_special_tokens=True)` strips them, Whisper-style.
+    language_tag_pattern = re.compile(r"^<[a-z]{2,3}-[A-Za-z]{2}>$")
+    language_tags = sorted(t for t in tokenizer_converted_fast.get_vocab() if language_tag_pattern.match(t))
+    tokenizer_converted_fast.add_special_tokens(
+        {"additional_special_tokens": [AddedToken(t, normalized=False, special=True) for t in language_tags]}
+    )
+    print(f"Marked {len(language_tags)} language-tag tokens as special: {language_tags}")
 
     # Nemotron3_5AsrFeatureExtractor (like NemotronAsrFeatureExtractor) has no normalization step at all,
     # so NeMo's `preprocessor.normalize` is dropped rather than translated.
