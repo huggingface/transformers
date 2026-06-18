@@ -22,7 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
     GenericForTokenClassification,
@@ -528,14 +528,21 @@ class Qwen3_5TextModel(Qwen3NextModel):
         else:
             text_position_ids = None
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=text_position_ids,
-        )
-        linear_attn_mask = self._update_linear_attn_mask(attention_mask, past_key_values)
+        # Under a compileable cache, `generate()` precomputes per-pattern masks (4D for attention layers,
+        # padded-stable 2D for linear-attention layers) and hands them in as a dict; otherwise here.
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": text_position_ids,
+        }
+        if isinstance(causal_mask_mapping := attention_mask, dict):
+            causal_mask = causal_mask_mapping.get("full_attention")
+            linear_attn_mask = causal_mask_mapping.get("linear_attention")
+        else:
+            causal_mask = create_causal_mask(**mask_kwargs)
+            linear_attn_mask = create_recurrent_padding_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)

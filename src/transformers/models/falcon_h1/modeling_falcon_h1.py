@@ -36,7 +36,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...integrations.hub_kernels import lazy_load_kernel
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -352,10 +352,19 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
-    # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+    # NOTE: attention mask is a 2D boolean tensor; ``hidden_states`` is (batch, seq, channels) on the
+    # multi-token path. On the cached single-token path it is collapsed to (batch, channels) and the
+    # current token is always real, so masking is a no-op there.
+    if (
+        attention_mask is not None
+        and hidden_states.dim() == 3
+        and attention_mask.shape[1] > 1
+        and attention_mask.shape[0] > 1
+    ):
         dtype = hidden_states.dtype
-        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+        # Under a compileable cache the mask is padded to ``max_cache_len`` for shape stability;
+        # slice it back to the local sequence length here.
+        hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
 
     return hidden_states
 
@@ -631,7 +640,7 @@ class FalconH1Mixer(nn.Module):
                 if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                     dtype = hidden_states.dtype
-                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+                    hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
                 # This is a hack to make sure multi-GPU inference works with HF accelerate
                 # see: https://github.com/Dao-AILab/flash-attention/issues/523 for more details
                 with torch.cuda.device(hidden_states.device):
@@ -869,7 +878,7 @@ class FalconH1Mixer(nn.Module):
         dtype = hidden_states.dtype
         if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-            hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+            hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
 
         return self.torch_forward(hidden_states, cache_params, attention_mask)
 
@@ -1042,6 +1051,9 @@ class FalconH1PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _is_stateful = True
+    # Each layer is hybrid (attention + mamba) but only registers as one `layer_type` ("hybrid"),
+    # so the cache builds attention-only layers and `has_previous_state()` can't find a mamba slot.
+    # Needs a separate hybrid cache class with both K/V and SSM state per layer.
 
     _can_record_outputs = {
         "hidden_states": FalconH1DecoderLayer,
@@ -1059,6 +1071,22 @@ class FalconH1PreTrainedModel(PreTrainedModel):
             mup_vector = compute_mup_vector(module.config)
             for layer in module.layers:
                 init.copy_(layer.mamba.mup_vector, mup_vector)
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        # Every FalconH1 decoder layer is hybrid (attention + mamba in the same block), so the layer-type
+        # dispatch table can't enumerate sub-patterns. We return both masks the layer needs as a dict.
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        return {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "mamba": create_recurrent_padding_mask(**mask_kwargs),
+        }
 
 
 @auto_docstring
@@ -1119,14 +1147,21 @@ class FalconH1Model(FalconH1PreTrainedModel):
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
+        # Under a compileable cache, `generate()` precomputes per-pattern masks (4D for attention layers,
+        # padded-stable 2D for mamba layers) and hands them in as a dict; otherwise we build them here.
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        if isinstance(causal_mask_mapping := attention_mask, dict):
+            causal_mask = causal_mask_mapping.get("full_attention")
+            mamba_mask = causal_mask_mapping.get("mamba")
+        else:
+            causal_mask = create_causal_mask(**mask_kwargs)
+            mamba_mask = create_recurrent_padding_mask(**mask_kwargs)
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers:
@@ -1148,12 +1183,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _update_mamba_mask(self, attention_mask, past_key_values):
-        """No-op the mask on cached forwards — earlier tokens are already in the SSM state."""
-        if past_key_values is not None and past_key_values.has_previous_state():
-            return None
-        return attention_mask
 
 
 @auto_docstring

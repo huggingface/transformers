@@ -39,7 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import DynamicCache, NemotronHForCausalLM, NemotronHModel
+    from transformers import DynamicCache, NemotronHForCausalLM, NemotronHModel, StaticCache
 
 
 class NemotronHModelTester:
@@ -365,7 +365,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # Raise a useful error, asking to explicitly override the method
-        if not isinstance(past_key_values, DynamicCache):
+        if not isinstance(past_key_values, (DynamicCache, StaticCache)):
             raise ValueError("The cache does not use the correct Cache")
 
         # Use the correct config

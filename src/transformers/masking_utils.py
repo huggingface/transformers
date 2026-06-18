@@ -1452,6 +1452,30 @@ def create_chunked_causal_mask(
     return causal_mask
 
 
+def create_recurrent_padding_mask(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    past_key_values: Cache | None = None,
+    **kwargs,
+) -> torch.Tensor | None:
+    """Return the 2D padding mask for mamba / linear-attention layers, or ``None`` if not needed.
+
+    Returns ``None`` when the input mask is missing, is already a custom 4D attention mask (no 2D
+    padding signal), or when the recurrent state already covers past tokens (cached forwards).
+    Otherwise pads the mask to ``past_key_values.max_cache_len`` under a compileable cache so its
+    shape is constant across decode steps — the consumer slices back to its local sequence length.
+    """
+    if attention_mask is None or attention_mask.ndim != 2:
+        return None
+    if past_key_values is not None and past_key_values.has_previous_state():
+        return None
+    if past_key_values is None or not past_key_values.is_compileable:
+        return attention_mask
+    pad_amount = past_key_values.max_cache_len - attention_mask.shape[-1]
+    return F.pad(attention_mask, (0, pad_amount)) if pad_amount > 0 else attention_mask
+
+
 LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "full_attention": create_causal_mask,
     "sliding_attention": create_sliding_window_causal_mask,
@@ -1460,6 +1484,12 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "heavily_compressed_attention": create_sliding_window_causal_mask,
     "minimax_m3_sparse": create_causal_mask,
     "deepseek_sparse_attention": create_causal_mask,
+    # Alias used by hybrid mamba/attention models (jamba, bamba, falcon_h1, granitemoehybrid, nemotron_h).
+    "attention": create_causal_mask,
+    # Non-attention layers — they consume the raw 2D padding mask. We pad it to a stable length
+    # so its shape is constant under a compileable cache; the consumer slices back to the local seq.
+    "mamba": create_recurrent_padding_mask,
+    "linear_attention": create_recurrent_padding_mask,
 }
 
 

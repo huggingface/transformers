@@ -116,6 +116,16 @@ def is_moe_model(config):
     return getattr(config, "_experts_implementation", None) is not None
 
 
+def is_hybrid_mamba_model(config):
+    """Models that mix attention layers with mamba / linear-attention layers. Their chunked-SSM
+    accumulation makes static-cache vs dynamic-cache outputs drift more than pure-attention models."""
+    text_config = config.get_text_config() if hasattr(config, "get_text_config") else config
+    layer_types = getattr(text_config, "layer_types", None) or getattr(text_config, "layers_block_type", None)
+    if not layer_types:
+        return False
+    return any(lt in {"mamba", "linear_attention"} for lt in layer_types)
+
+
 class GenerationTesterMixin:
     input_name = "input_ids"
     model_tester = None
@@ -1488,7 +1498,9 @@ class GenerationTesterMixin:
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                if is_moe_model(config):
+                if is_moe_model(config) or is_hybrid_mamba_model(config):
+                    # MoE routing and mamba2 chunked-SSM accumulate FP noise; static vs dynamic cache
+                    # also drives different matmul shapes which select different CUDA kernels.
                     atol = rtol = 1e-3
                 else:
                     atol = rtol = 1e-5

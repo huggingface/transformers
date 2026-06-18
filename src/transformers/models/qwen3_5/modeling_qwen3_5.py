@@ -32,7 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
     GenericForSequenceClassification,
@@ -206,10 +206,19 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
-    # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+    # NOTE: attention mask is a 2D boolean tensor; ``hidden_states`` is (batch, seq, channels) on the
+    # multi-token path. On the cached single-token path it is collapsed to (batch, channels) and the
+    # current token is always real, so masking is a no-op there.
+    if (
+        attention_mask is not None
+        and hidden_states.dim() == 3
+        and attention_mask.shape[1] > 1
+        and attention_mask.shape[0] > 1
+    ):
         dtype = hidden_states.dtype
-        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+        # Under a compileable cache the mask is padded to ``max_cache_len`` for shape stability;
+        # slice it back to the local sequence length here.
+        hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
 
     return hidden_states
 
@@ -823,6 +832,7 @@ class Qwen3_5PreTrainedModel(PreTrainedModel):
         "attentions": Qwen3_5Attention,
     }
     _is_stateful = True
+    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1185,14 +1195,21 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
         else:
             text_position_ids = None
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=text_position_ids,
-        )
-        linear_attn_mask = self._update_linear_attn_mask(attention_mask, past_key_values)
+        # Under a compileable cache, `generate()` precomputes per-pattern masks (4D for attention layers,
+        # padded-stable 2D for linear-attention layers) and hands them in as a dict; otherwise here.
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": text_position_ids,
+        }
+        if isinstance(causal_mask_mapping := attention_mask, dict):
+            causal_mask = causal_mask_mapping.get("full_attention")
+            linear_attn_mask = causal_mask_mapping.get("linear_attention")
+        else:
+            causal_mask = create_causal_mask(**mask_kwargs)
+            linear_attn_mask = create_recurrent_padding_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -1216,15 +1233,6 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _update_linear_attn_mask(self, attention_mask, past_key_values):
-        """No-op the mask on cached forwards — earlier tokens are already in the recurrent state.
-
-        Left-padding is used for the linear attention mask.
-        """
-        if past_key_values is not None and past_key_values.has_previous_state():
-            return None
-        return attention_mask
 
 
 @auto_docstring

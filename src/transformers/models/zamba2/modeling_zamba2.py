@@ -574,7 +574,7 @@ class Zamba2MambaMixer(nn.Module):
             if attention_mask is not None and not torch.all(attention_mask == 1):
                 # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                 dtype = hidden_states.dtype
-                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+                hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
             # 1. Gated MLP's linear projection
             projected_states = self.in_proj(hidden_states)
             A = -torch.exp(self.A_log.float())  # (num_heads) or (intermediate_size, state_size)
@@ -639,7 +639,7 @@ class Zamba2MambaMixer(nn.Module):
                 if attention_mask is not None and not torch.all(attention_mask == 1):
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                     dtype = hidden_states.dtype
-                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+                    hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
                 scan_output, ssm_state = mamba_chunk_scan_combined(
                     hidden_states.view(batch_size, seq_len, -1, self.head_dim),
                     time_step,
@@ -676,7 +676,7 @@ class Zamba2MambaMixer(nn.Module):
         else:
             if attention_mask is not None:
                 # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                input_states = (input_states * attention_mask[:, :, None]).to(dtype)
+                input_states = (input_states * attention_mask[:, : input_states.shape[1], None]).to(dtype)
             projected_states = self.in_proj(input_states)
         d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size - 2 * self.n_groups * self.ssm_state_size- self.num_heads) // 2
         _, _, gate, hidden_states, dt = projected_states.split(
@@ -705,7 +705,7 @@ class Zamba2MambaMixer(nn.Module):
             if attention_mask is not None:
                 dtype = hidden_states.dtype
                 # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+                hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
 
         hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
         A = -torch.exp(self.A_log.float())                            # [num_heads]
