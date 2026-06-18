@@ -1310,6 +1310,29 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         """
         Creates the bidirectional attention mask for the decoder model.
 
+        The query length in final mask is always equal to `canvas_length`.
+        The key/value length is computed as:
+        - `cache.max_length + canvas_length` for StaticCache
+        - `min(cache.seq_length, sliding_window_length) + canvas_length` for DynamicCache
+
+        All non-padding positions attend bidirectionally. For static cache, unused cache slots
+        are right-padded and masked out. Padding tokens are also masked out.
+
+        Example (with static cache):
+            canvas_length = 4; past_seq_length = 3; cache.max_length = 5;
+            Keys:   [A A A C C C C . .]
+            Attention:
+
+                    A A A . . C C C C
+                C   1 1 1 0 0 1 1 1 1
+                C   1 1 1 0 0 1 1 1 1
+                C   1 1 1 0 0 1 1 1 1
+                C   1 1 1 0 0 1 1 1 1
+
+            A = cached KV
+            C = canvas token
+            . = right-padded static cache slot
+
         Args:
             config (`DiffusionGemmaConfig`):
                 The config used by the model.
@@ -1354,7 +1377,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             # `StaticSlidingLayer` concatenates new key with cache when cache is full instead
             # of rolling back. Thus the final length is `window+query-1`, not fixed-length
             # `sliding_window`. Adding another `query_length` will result on mask shape mismatch
-            # see - cache_utils.py::L592-595 for more details
+            # see: https://github.com/huggingface/transformers/blob/e6f08cf2c4d9f07b59573948407cdc4a2815de7d/src/transformers/cache_utils.py#L536-L539
             if layer_pattern == "sliding_attention" and past_key_values.is_compileable:
                 layer_idx = past_key_values.is_sliding.index(True)
                 sliding_layer = past_key_values.layers[layer_idx]
