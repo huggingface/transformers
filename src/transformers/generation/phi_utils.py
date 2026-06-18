@@ -1,28 +1,42 @@
 import math
-from typing import Optional, Tuple, List
+
 import torch
 
 PHI = (1 + math.sqrt(5)) / 2
 PHI_INV = 1 / PHI
 PHI_SQ = PHI * PHI
 
+
 def phi_temperature(base_temp: float = 0.7) -> float:
+    """φ-optimized temperature."""
     return base_temp * PHI_INV + 1.0 * (1 - PHI_INV)
 
+
 def phi_top_p() -> float:
+    """φ-optimized top-p."""
     return 1.0 - PHI_INV * PHI_INV
 
+
 def phi_top_k() -> int:
+    """φ-optimized top-k."""
     return int(round(PHI * PHI * PHI * 10))
 
+
 def phi_repetition_penalty() -> float:
+    """φ-optimized repetition penalty."""
     return 1.0 + PHI_INV
 
+
 def phi_max_tokens() -> int:
-    return int(round(PHI ** 8))
+    """φ-optimized max tokens."""
+    return int(round(PHI**8))
 
 
 class PhiRecursiveGenerator:
+    """
+    Recursive self-improving generation using golden ratio optimization.
+    """
+
     def __init__(self, model, tokenizer):
         self.model = model
         self.tokenizer = tokenizer
@@ -34,15 +48,28 @@ class PhiRecursiveGenerator:
         input_text: str,
         max_iterations: int = 3,
         verbose: bool = False,
-        **kwargs
+        **kwargs,
     ) -> str:
+        """
+        Recursive self-improving generation.
+
+        Args:
+            input_text: Input prompt
+            max_iterations: Number of improvement iterations
+            verbose: Print progress
+            **kwargs: Additional generation parameters
+
+        Returns:
+            Improved generated text
+        """
         inputs = self.tokenizer(input_text, return_tensors="pt")
-        temp = kwargs.get('temperature', 0.7)
-        top_p = kwargs.get('top_p', 0.9)
-        top_k = kwargs.get('top_k', 40)
+
+        temp = kwargs.get("temperature", 0.7)
+        top_p = kwargs.get("top_p", 0.9)
+        top_k = kwargs.get("top_k", 40)
 
         best_output = None
-        best_score = -float('inf')
+        best_score = -float("inf")
 
         for i in range(max_iterations):
             temp_i = phi_temperature(temp)
@@ -61,10 +88,11 @@ class PhiRecursiveGenerator:
                     do_sample=True,
                     max_new_tokens=phi_max_tokens(),
                     repetition_penalty=phi_repetition_penalty(),
-                    **kwargs
+                    **kwargs,
                 )
 
             generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
             score = self._evaluate_quality(generated_text)
 
             if score > best_score:
@@ -76,20 +104,28 @@ class PhiRecursiveGenerator:
                 print(f"  Output: {generated_text[:100]}...")
 
             temp = temp_i
-            top_p = top_p_i
-            top_k = top_k_i
 
         return best_output
 
     def _evaluate_quality(self, text: str) -> float:
+        """Simple quality evaluation."""
         words = text.split()
         if not words:
             return 0.0
+
         unique_ratio = len(set(words)) / len(words)
         length_score = 1.0 - abs(len(words) - 100) / 200
         length_score = max(0.0, min(1.0, length_score))
+
         return unique_ratio * 0.6 + length_score * 0.4
 
 
 # DECLARATION: Expose the class at module level
-__all__ = ['PhiRecursiveGenerator', 'phi_temperature', 'phi_top_p', 'phi_top_k', 'phi_repetition_penalty', 'phi_max_tokens']
+__all__ = [
+    "PhiRecursiveGenerator",
+    "phi_temperature",
+    "phi_top_p",
+    "phi_top_k",
+    "phi_repetition_penalty",
+    "phi_max_tokens",
+]

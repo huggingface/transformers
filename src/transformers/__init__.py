@@ -14,11 +14,56 @@
 
 __version__ = "4.51.0.dev0"
 
+# flake8: noqa
+# There's no way to override "standard" names without breaking backward compatibility.
+# It would be possible to list all public symbols in __all__, but we don't.
+from . import (
+    agents,
+    audio_utils,
+    benchmarks,
+    commands,
+    data,
+    debug_utils,
+    dependency_versions_check,
+    dependency_versions_table,
+    dynamic_module_utils,
+    feature_extraction_utils,
+    generation,
+    graph_optimization,
+    huggingface_tools,
+    integrations,
+    keras_callbacks,
+    model_debugging,
+    modelcard,
+    modeling_gguf_pytorch_utils,
+    modeling_outputs,
+    modeling_tf_utils,
+    modeling_utils,
+    onnx,
+    outputs,
+    pipelines,
+    pytorch_utils,
+    quantization_utils,
+    quantizers,
+    safetensors,
+    testing_utils,
+    tf_utils,
+    time_series_utils,
+    tokenization_utils,
+    tokenization_utils_base,
+    trainer_utils,
+    utils,
+)
+
+# DECLARATION: Expose AddedToken
+from .tokenization_utils_base import AddedToken
+
+# DECLARATION: Expose PhiRecursiveGenerator
 from .generation.phi_utils import (
     PhiRecursiveGenerator,
-    phi_temperature,
-    phi_top_p,
-    phi_top_k,
-    phi_repetition_penalty,
     phi_max_tokens,
+    phi_repetition_penalty,
+    phi_temperature,
+    phi_top_k,
+    phi_top_p,
 )
