@@ -81,6 +81,12 @@ class MiniCPM3ModelTest(CausalLMModelTest, unittest.TestCase):
         super().test_tp_plan_matches_params()
         config.base_model_tp_plan.update({"layers.*.self_attn.q_proj": "colwise"})
 
+    @unittest.skip(
+        reason="MiniCPM3 uses MLA so the query/key and value head dims differ, which flash can't dispatch on"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 @slow
 @require_torch
