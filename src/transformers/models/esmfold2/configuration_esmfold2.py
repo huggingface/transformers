@@ -88,12 +88,8 @@ class AtomAttentionConfig(PreTrainedConfig):
 
 @strict
 class FoldingTrunkConfig(PreTrainedConfig):
-    """Config for a pairwise folding trunk stack.
-
-    The trunk's ``ESMFold2PairUpdateBlock`` is attention-free (triangle
-    multiplication + transition), so only ``num_hidden_layers`` is read; the
-    pair dim comes from the parent's ``d_pair``.
-    """
+    """Config for a pairwise folding trunk stack (only ``num_hidden_layers`` is read;
+    pair dim comes from the parent's ``d_pair``)."""
 
     attribute_map = {
         "n_layers": "num_hidden_layers",

@@ -46,12 +46,8 @@ if is_flash_attn_2_available():
 class ESMFold2LayerNorm(nn.LayerNorm):
     """LayerNorm that always computes in fp32, with its weight stored at the model dtype.
 
-    ESMFold2 runs in the loaded dtype (bf16 for inference) but its LayerNorms must match
-    the reference's fp32 norm *compute* (the fork upcasts via autocast). Keeping the weight
-    at the model dtype means ``from_pretrained(dtype=bf16)`` rounds it to bf16 exactly like
-    the reference's bf16-trained norm weights, while this ``forward`` upcasts to fp32 for
-    the computation and casts the result back — so no post-load weight fix-up is needed
-    (an fp32 load keeps full-precision weights and an fp32 compute, both no-ops here).
+    A bf16 load rounds the weight to bf16, but the norm itself still computes in fp32
+    (upcast here, cast back); an fp32 load is a no-op.
     """
 
     def forward(self, x: Tensor) -> Tensor:
@@ -103,8 +99,8 @@ class ESMFold2AdaptiveLayerNorm(nn.Module):
     def forward(self, a: Tensor, s: Tensor) -> Tensor:
         a_norm = F.layer_norm(a.float(), (self.d_model,), None, None, self.eps)
         s_norm = F.layer_norm(s.float(), (self.d_cond,), self.s_scale.float(), None, self.eps).to(s.dtype)
-        # gate/shift in bf16 (matches the reference's autocast); a_norm is fp32 so the
-        # affine promotes to fp32, then downcast for the next op.
+        # gate/shift in bf16; a_norm is fp32 so the affine promotes to fp32, then
+        # downcast for the next op.
         gate = torch.sigmoid(self.s_gate(s_norm))
         shift = self.s_shift(s_norm)
         return (gate * a_norm + shift).to(a.dtype)
@@ -128,8 +124,8 @@ class ESMFold2FourierEmbedding(nn.Module):
         self.register_buffer("b", torch.randn(c))
 
     def forward(self, t_hat: Tensor) -> Tensor:
-        # w/b are kept fp32 (ESMFold2Model._keep_in_fp32_modules_strict), so the random
-        # frequencies/phases — and the cos embedding — are computed at full precision.
+        # w/b are kept fp32 (see ESMFold2Model._keep_in_fp32_modules_strict) so the cos
+        # embedding is full precision.
         t = torch.as_tensor(t_hat, device=self.w.device, dtype=self.w.dtype).reshape(-1)
         return torch.cos(2.0 * torch.pi * (t[:, None] * self.w[None, :] + self.b[None, :]))
 
@@ -1390,8 +1386,7 @@ class ESMFold2DiffusionStructureHead(nn.Module):
                 inference_cache=inference_cache,
             )
 
-            # Reverse diffusion alignment (Kabsch). _weighted_rigid_align upcasts
-            # to fp32 internally for the SVD/det.
+            # Reverse diffusion alignment (Kabsch).
             x_noisy = self._weighted_rigid_align(x_noisy.float(), x_denoised.float(), atom_mask, atom_mask)
             x_noisy = x_noisy.to(dtype=x_denoised.dtype)
 
@@ -1636,11 +1631,6 @@ class ESMFold2LanguageModelShim(nn.Module):
 
 _EPS = 1e-5
 
-# Default for the triangle / OPM / pair-transition L² ops. Caps peak memory
-# so L≈2k folds on an 80 GB GPU (~76 GB peak at chunk=128 for L=1438;
-# chunk=64 leaves headroom for the largest foldbench targets). Override via
-# ``model.set_chunk_size(...)``; pass None to disable chunking (faster for
-# short L but OOM-prone past ~600).
 _DEFAULT_CHUNK_SIZE = 64
 
 
@@ -1651,14 +1641,9 @@ _DEFAULT_CHUNK_SIZE = 64
 class ESMFold2TriangleMultiplicativeBlock(nn.Module):
     """Triangle multiplicative update block with gated signal routing.
 
-    The O(N^3) triangular contraction below is the trunk's dominant cost. Loading
-    with ``ESMFold2Model.from_pretrained(..., device_map="cuda", use_kernels=True)``
-    (CUDA + inference) swaps the whole block forward for a fused Triton kernel from
-    the Hub (see the ``hub_kernels`` mapping); the pure-PyTorch ``forward`` here stays
-    as the reference/fallback. The kernel reads this module's parameters
-    (``norm_start``/``norm_mix``/``proj_bundle``/``proj_emit``/``proj_gate``) and
-    matches ``forward``'s ``(pair_grid, visibility)`` signature, returning the
-    residual-free delta.
+    The O(N^3) contraction is the trunk's dominant cost; ``use_kernels=True`` (CUDA +
+    inference) swaps this whole forward for a fused Triton Hub kernel matching the
+    ``(pair_grid, visibility)`` signature and returning the residual-free delta.
     """
 
     _FLOW_TO_EINSUM = {"outgoing": "bikd,bjkd->bijd", "incoming": "bkid,bkjd->bijd"}
@@ -1679,9 +1664,7 @@ class ESMFold2TriangleMultiplicativeBlock(nn.Module):
         self.proj_emit = nn.Linear(self.latent_channels, self.input_channels, bias=False)
         self.proj_gate = nn.Linear(self.input_channels, self.input_channels, bias=False)
 
-        # Default chunked for memory on long sequences; tests override with
-        # ``set_chunk_size(None)`` for the unchunked path under bit-exact bf16
-        # parity checks.
+        # Default chunked for memory on long sequences (set_chunk_size(None) disables).
         self._chunk_size: int | None = _DEFAULT_CHUNK_SIZE
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
@@ -1710,12 +1693,8 @@ class ESMFold2TriangleMultiplicativeBlock(nn.Module):
         normalized_grid = self.norm_start(pair_grid)
         bundled = self.proj_bundle(normalized_grid)
         signal, gate_logits = bundled.split(2 * self.latent_channels, dim=-1)
-        # Gates and the O(N^3) contraction run in the activation dtype (bf16). This
-        # matches the reference: under its autocast the einsum is downcast to bf16,
-        # and the fused Triton kernel likewise contracts in bf16 — the dtype the
-        # checkpoint was trained with. Keeping these in fp32 was a (marginal)
-        # precision *up* that diverges from training and is slower on the trunk's
-        # dominant op. ``norm_start``/``norm_mix`` stay fp32. A no-op in fp32.
+        # Gates and the O(N^3) contraction run in the activation dtype (bf16, the
+        # training dtype); ``norm_start``/``norm_mix`` stay fp32.
         routed = signal * torch.sigmoid(gate_logits)
         routed = routed * visibility.unsqueeze(-1)
 
@@ -1756,7 +1735,7 @@ class ESMFold2Transition(nn.Module):
         super().__init__()
         self.norm = ESMFold2LayerNorm(d_model)
         self.ffn = ESMFold2SwiGLUMLP(d_model, expansion_ratio=expansion_ratio, bias=False)
-        # Default chunked; set_chunk_size(None) disables for bit-exact parity tests.
+        # Default chunked; set_chunk_size(None) disables.
         self._chunk_size: int | None = _DEFAULT_CHUNK_SIZE
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
@@ -1788,7 +1767,7 @@ class ESMFold2PairUpdateBlock(nn.Module):
         self.pair_transition.set_chunk_size(chunk_size)
 
     def forward(self, pair: Tensor, pair_attention_mask: Tensor | None = None) -> Tensor:
-        # HF model is inference-only, so the trained row-shared dropout (r=0) is a no-op.
+        # Inference-only: trained row-shared dropout omitted.
         pair = pair + self.tri_mul_out(pair, mask=pair_attention_mask)
         pair = pair + self.tri_mul_in(pair, mask=pair_attention_mask)
         pair = self.pair_transition(pair)
@@ -2272,11 +2251,9 @@ class ESMFold2PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        # The base initializer handles Linear/Embedding/LayerNorm; below we (re)apply the
-        # few non-default inits the architecture needs (adaLN-Zero gates, identity/recurrent
-        # parcae params, zeroed projections). These live here, not in submodule __init__s,
-        # so they survive `post_init()` and are not wastefully run before weight loading.
-        # The `init.*` helpers are load-flag aware (they no-op on already-loaded weights).
+        # Re-apply the few non-default inits (adaLN-Zero gates, parcae identity/recurrence,
+        # zeroed projections). Kept here (not in submodule __init__s) so they survive
+        # post_init(); the load-flag-aware init.* helpers no-op on loaded weights.
         super()._init_weights(module)
         if isinstance(module, ESMFold2Model):
             init.eye_(module.parcae_readout.weight)
@@ -2463,12 +2440,9 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         self.language_model = ESMFold2LanguageModelShim(
             d_z=d_pair, d_model=config.esmc_config.d_model, num_layers=config.esmc_config.n_layers
         )
-        # The ESMC backbone is a bundled submodule: built here with random weights
-        # (instant, no I/O), then populated by the parent's from_pretrained like any
-        # other composite sub-model (its weights live under ``esmc.*`` in the ESMFold2
-        # checkpoint). It is frozen in effect — ``forward`` detaches its hidden states
-        # before they enter the trunk, so no gradient ever reaches it — and the bf16
-        # autocast in ``_compute_lm_hidden_states`` reproduces the LM precision regime.
+        # ESMC backbone built here with random weights (no I/O), then populated by
+        # from_pretrained from the checkpoint's ``esmc.*`` weights. Frozen in effect:
+        # forward detaches its hidden states before they enter the trunk.
         self.esmc = AutoModel.from_config(config.esmc_config)
 
         pf = config.folding_trunk
@@ -2517,12 +2491,8 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         mol_type: Tensor,
         tok_mask: Tensor,
     ) -> Tensor:
-        # Run the frozen ESMC backbone exactly as the reference does: plain weights
-        # under a bf16 autocast (the fork's ``_lm_precision_context``). For a bf16
-        # backbone this puts norms/softmax in fp32 and matmuls/rotary in bf16,
-        # reproducing the checkpoint's training regime bit-for-bit; disabled (a
-        # no-op) for an fp32 backbone. This autocast is scoped to the backbone only
-        # — the trunk stays dtype-honest.
+        # bf16 autocast scoped to the ESMC backbone (norms/softmax fp32, matmuls/rotary
+        # bf16); a no-op for an fp32 backbone, and the trunk stays dtype-honest.
         use_amp = next(self.esmc.parameters()).dtype == torch.bfloat16
         with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=use_amp):
             return compute_lm_hidden_states(
@@ -2558,10 +2528,9 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         b_mat: Tensor,
         total_steps: int,
     ) -> Tensor:
-        # Helper method (not inline) so per-iter locals free on return —
-        # otherwise leaks ~2 GB L²×c_z into distogram/sample scope.
-        # training=True forces dropout under eval(), matching the per-loop
-        # dropout strategy used at train time.
+        # Helper method (not inline) so per-iter L²×c_z locals free on return (else
+        # ~2 GB leaks into distogram/sample scope). training=True forces the per-loop
+        # dropout under eval().
         lm_cfg = self.config.lm_encoder
         _per_loop_lm_dropout = (
             lm_z is not None
@@ -2737,7 +2706,6 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
                 "msa_attention_mask": msa_attn,
             }
 
-        # Method call (not inline loop) frees per-iter L²×c_z locals.
         z = self._run_one_loop(
             z=z,
             z_init=z_init,

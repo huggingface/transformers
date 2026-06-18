@@ -47,17 +47,13 @@ from .configuration_esmc import ESMCConfig
 class ESMCRotaryEmbedding(nn.Module):
     """Rotary position embeddings (RoPE), returning ``(cos, sin)``.
 
-    Identical to :class:`~transformers.models.esm.modeling_esm.EsmRotaryEmbedding`
-    (``inv_freq = 1 / theta^(arange(0, dim, 2) / dim)`` with ``dim = d_model // n_heads``,
-    ``cos`` / ``sin`` built in fp32), with two ESMC-specific tweaks:
+    Two ESMC-specific tweaks over the base implementation:
 
     * ``inv_freq`` is a **non-persistent** buffer (recomputed from the config, never
       stored in the checkpoint).
     * ``_apply`` is overridden so ``inv_freq`` stays fp32 even when the module is cast
-      to bf16/fp16 (e.g. when ESMFold2 loads its bundled ESMC backbone in bf16).
-      ``nn.Module._apply`` would otherwise round the rotary frequencies to bf16, which
-      drifts the RoPE angles and is the dominant source of bf16 fork-vs-port divergence
-      in the ESMFold2 backbone.
+      to bf16/fp16 (e.g. when ESMFold2 loads its bundled ESMC backbone in bf16), so the
+      rotary frequencies aren't rounded.
     """
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
@@ -141,14 +137,9 @@ def _swiglu_hidden_dim(expansion_ratio: float, d_model: int) -> int:
 
 
 class ESMCMLP(nn.Module):
-    """SwiGLU feed-forward network, reusing :class:`ModernBertMLP`'s gated forward.
-
-    ``ModernBertMLP`` computes ``Wo(act(input) * gate)`` with ``input, gate =
-    Wi(x).chunk(2, dim=-1)`` — exactly ESMC's SwiGLU once ``act`` is SiLU. ESMC was
-    trained with ``bias=False`` and no MLP dropout, and rounds the hidden dim to a
-    multiple of 256. The pre-MLP LayerNorm lives in :class:`ESMCLayer` (``mlp_norm``);
-    the published checkpoint's ``ffn.fc1_weight`` / ``ffn.fc2_weight`` map onto
-    ``mlp.Wi`` / ``mlp.Wo`` via ``conversion_mapping.py``.
+    """SwiGLU feed-forward network reusing :class:`ModernBertMLP`'s gated forward
+    (``Wo(SiLU(input) * gate)``). Bias-free, no dropout; hidden dim rounded to a
+    multiple of 256.
     """
 
     def __init__(self, d_model: int, expansion_ratio: float = 8 / 3) -> None:
