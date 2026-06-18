@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import queue
+from abc import abstractmethod
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -19,11 +20,29 @@ from math import ceil, log2
 from typing import Any
 
 import torch
+from torch import nn
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import is_torch_greater_or_equal
 
+from ...generation.configuration_utils import GenerationConfig
+from ..logits_process import LogitsProcessorList
 from .requests import FutureRequestState, RequestState, RequestStatus, logger
+
+
+# We cannot use `PreTrainedModel` for circular import reasons, so this helps keep track of the basic types
+class ProtoPretrainedModel(nn.Module):
+    config: PretrainedConfig
+    dtype: torch.dtype
+    device: torch.device
+
+    @abstractmethod
+    def set_attn_implementation(self, attn_implementation: str) -> None:
+        pass
+
+    @abstractmethod
+    def _get_logits_processor(self, generation_config: GenerationConfig) -> LogitsProcessorList:
+        pass
 
 
 class CudaGraphBuffer:

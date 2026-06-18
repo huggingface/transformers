@@ -16,7 +16,6 @@ import asyncio
 import gc
 import queue
 import threading
-from abc import abstractmethod
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, nullcontext
 from time import perf_counter
@@ -30,7 +29,6 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
 from ...utils.logging import logging
-from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
@@ -40,7 +38,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import WorkloadHints, check_modality_support, drain_queue
+from .utils import ProtoPretrainedModel, WorkloadHints, check_modality_support, drain_queue
 
 
 """
@@ -63,22 +61,6 @@ memory and time to create, we use an LRU cache with a fixed size to limit memory
 The maximum number of cached graphs is controlled by max_cached_graphs (default 32), which uses LRU eviction.
 All defaults are stored in ContinuousBatchingConfig.resolve_sentinel_values().
 """
-
-
-# We cannot use `PreTrainedModel` for circular import reasons, so this helps keep track of the basic types
-class ProtoPretrainedModel(nn.Module):
-    config: PretrainedConfig
-    dtype: torch.dtype
-    device: torch.device
-
-    @abstractmethod
-    def set_attn_implementation(self, attn_implementation: str) -> None:
-        pass
-
-    @abstractmethod
-    def _get_logits_processor(self, generation_config: GenerationConfig) -> LogitsProcessorList:
-        pass
-
 
 class OutputRouter:
     """Dedicated object for routing generation outputs to the right destination.
