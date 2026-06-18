@@ -32,12 +32,12 @@ def rnnt_loss(
     reduction: str = "mean_volume",
 ) -> torch.Tensor:
     """
-    Compute standard RNN-T (RNN Transducer) loss (https://arxiv.org/abs/1211.3711).
+    Compute standard RNN-T (RNN Transducer) loss (https://huggingface.co/papers/1211.3711).
 
     Thin wrapper around [`torchaudio.functional.rnnt_loss`]. torchaudio is queried with `reduction="none"` to get
     the per-sample negative log-likelihoods, and the requested reduction is applied here. The reduction names and
     formulas mirror NeMo's `RNNTLoss` (the reference implementation used to train/finetune Parakeet), so that loss
-    magnitudes and gradient scaling match when finetuning a Parakeet checkpoint:
+    magnitudes and gradient scaling match when finetuning other RNNT models like Parakeet:
 
     - `"mean_volume"`: sum of per-sample losses divided by the sum of target lengths (per-token average over the
       whole batch). This is what `nvidia/parakeet-rnnt-0.6b` is trained with (`rnnt_reduction: mean_volume`).
@@ -60,9 +60,7 @@ def rnnt_loss(
     """
 
     if not is_torchaudio_available():
-        raise ImportError(
-            "Computing the Parakeet RNN-T loss requires torchaudio. Install it with `pip install torchaudio`."
-        )
+        raise ImportError("Computing the RNN-T loss requires torchaudio. Install it with `pip install torchaudio`.")
 
     valid_reductions = ("mean_volume", "mean_batch", "mean", "sum", "none")
     if reduction not in valid_reductions:
