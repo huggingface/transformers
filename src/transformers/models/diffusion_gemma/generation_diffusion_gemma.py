@@ -227,6 +227,7 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
             "t_max": 0.8,
             "stability_threshold": 1,
             "confidence_threshold": 0.005,
+            "return_dict_in_generate": False,
         }
 
     # Overriding GenerationMixin-related functions that are not relevant to DiffusionGemma.
@@ -633,11 +634,8 @@ class DiffusionGemmaGenerationMixin:
         # 0. Input preparation
         # 0.a. Prepare the generation config, respecting the kwarg-based parameterization from the original AR
         # `generate`
-        if "return_dict_in_generate" in kwargs:
-            return_dict_in_generate = kwargs["return_dict_in_generate"]
-        else:
-            return_dict_in_generate = getattr(generation_config, "return_dict_in_generate", False)
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+        return_dict_in_generate = getattr(generation_config, "return_dict_in_generate", False)
 
         # 0.b. Set generation or output control variables. As in AR generation, `max_new_tokens` takes precedence
         # over `max_length` (we check against the default value, 256).
