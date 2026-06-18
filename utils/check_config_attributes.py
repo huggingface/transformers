@@ -42,9 +42,6 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
-    # `att_context_style` selects the attention-masking convention; it is validated in the config and
-    # consumed by the streaming tooling rather than directly in the modeling forward.
-    "NemotronAsrEncoderConfig": ["att_context_style"],
     "Gemma4UnifiedAudioConfig": ["audio_embed_dim"],  # Used as meta data for other attributes/properties
     "Gemma4UnifiedVisionConfig": [
         "patch_size",

@@ -347,6 +347,14 @@ def convert_rnnt_config(nemo_config, encoder_config):
     activation = jointnet.get("activation", "relu")
     max_symbols_per_step = nemo_config.get("decoding", {}).get("greedy", {}).get("max_symbols", 10)
 
+    # The HF joint projects encoder/decoder outputs to `decoder_hidden_size`, so it can only represent
+    # checkpoints where NeMo's `joint_hidden` equals `pred_hidden`. All known checkpoints satisfy this.
+    if joint_hidden_size != decoder_hidden_size:
+        raise ValueError(
+            f"NemotronAsrStreaming requires joint_hidden == pred_hidden (got joint_hidden={joint_hidden_size} "
+            f"and pred_hidden={decoder_hidden_size}). Please open an issue if you have such a checkpoint."
+        )
+
     print(
         f"RNN-T config: vocab_size={vocab_size} (including blank token), "
         f"decoder_hidden={decoder_hidden_size}, joint_hidden={joint_hidden_size}, "
@@ -356,7 +364,6 @@ def convert_rnnt_config(nemo_config, encoder_config):
     return NemotronAsrStreamingConfig(
         vocab_size=vocab_size,
         decoder_hidden_size=decoder_hidden_size,
-        joint_hidden_size=joint_hidden_size,
         num_decoder_layers=num_decoder_layers,
         hidden_act=activation,
         max_symbols_per_step=max_symbols_per_step,

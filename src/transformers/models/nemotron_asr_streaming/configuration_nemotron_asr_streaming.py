@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -110,19 +111,15 @@ class NemotronAsrStreamingConfig(PreTrainedConfig):
     frame pointer advances by exactly one frame on each blank emission.
 
     decoder_hidden_size (`int`, *optional*, defaults to 640):
-        Hidden size of the LSTM prediction network (NeMo's `pred_hidden`).
-    joint_hidden_size (`int`, *optional*, defaults to 640):
-        Hidden size of the joint network's encoder/decoder projections (NeMo's `joint_hidden`).
-        Encoder and decoder outputs are projected to this size before being summed and activated.
+        Hidden size of the LSTM prediction network (NeMo's `pred_hidden`). The joint network projects both
+        encoder and decoder outputs to this size (NeMo's `joint_hidden`, which all known checkpoints set equal
+        to `pred_hidden`).
     num_decoder_layers (`int`, *optional*, defaults to 2):
         Number of LSTM layers in the prediction network.
     hidden_act (`str`, *optional*, defaults to `"relu"`):
         Activation in the joint network.
     max_symbols_per_step (`int`, *optional*, defaults to 10):
         Maximum number of non-blank symbols emitted per encoder time step during greedy decoding.
-    durations (`list[int]`, *optional*, defaults to `()`):
-        Pinned to the empty tuple for RNN-T: no token durations are predicted, so the joint head outputs
-        only `vocab_size` logits.
     encoder_config (`Union[dict, NemotronAsrStreamingEncoderConfig]`, *optional*):
         The config object or dictionary of the encoder.
     blank_token_id (`int`, *optional*, defaults to 1024):
@@ -155,17 +152,8 @@ class NemotronAsrStreamingConfig(PreTrainedConfig):
     pad_token_id: int = 0
     blank_token_id: int = 1024
     is_encoder_decoder: bool = True
-    joint_hidden_size: int = 640
-    durations: list[int] | tuple[int, ...] = ()
 
     def __post_init__(self, **kwargs):
-        if self.decoder_hidden_size != self.joint_hidden_size:
-            raise ValueError(
-                "NemotronAsrStreamingConfig currently requires decoder_hidden_size == joint_hidden_size "
-                f"(got {self.decoder_hidden_size} and {self.joint_hidden_size}). All known NeMo "
-                "RNNT checkpoints satisfy this; if you have a checkpoint where they differ, please "
-                "open an issue."
-            )
         # The decoder starts on the blank token at frame 0 (NeMo's blank_as_pad convention).
         kwargs.setdefault("decoder_start_token_id", self.blank_token_id)
         if isinstance(self.encoder_config, dict):
