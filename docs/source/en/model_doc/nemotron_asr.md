@@ -118,7 +118,7 @@ def input_features_generator():
         start_idx = mel_frame_idx * hop_length - n_fft // 2
 
 
-streamer = TextIteratorStreamer(processor.tokenizer, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+streamer = TextIteratorStreamer(processor.tokenizer, skip_special_tokens=True)
 generate_kwargs = {
     **first_chunk_inputs,
     "input_features": input_features_generator(),
