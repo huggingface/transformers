@@ -267,7 +267,16 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         # physical-intelligence/fast declares a `bpe_tokenizer` attribute (not `tokenizer`),
         # so _load_tokenizer_from_pretrained tries to load from a `bpe_tokenizer` subfolder.
         # The tokenizer files are actually at the repo root, so the fallback path must kick in.
-        processor = AutoProcessor.from_pretrained("physical-intelligence/fast", trust_remote_code=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            old_home = os.environ.get("HF_HOME")
+            os.environ["HF_HOME"] = tmp_dir
+            try:
+                processor = AutoProcessor.from_pretrained("physical-intelligence/fast", trust_remote_code=True)
+            finally:
+                if old_home is not None:
+                    os.environ["HF_HOME"] = old_home
+                else:
+                    del os.environ["HF_HOME"]
         self.assertIsNotNone(processor)
         self.assertTrue(hasattr(processor, "bpe_tokenizer"))
 
