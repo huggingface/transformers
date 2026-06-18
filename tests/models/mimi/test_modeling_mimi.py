@@ -22,8 +22,9 @@ import pytest
 from datasets import Audio, load_dataset
 from pytest import mark
 
+from tests.utils.test_audio_utils import normalize_waveform
 from transformers import AutoFeatureExtractor, MimiConfig, set_seed
-from transformers.audio_utils import load_audio, normalize_waveform
+from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     is_flaky,
     is_torch_available,

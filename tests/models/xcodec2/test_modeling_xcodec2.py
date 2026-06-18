@@ -22,8 +22,8 @@ from datasets import Audio, load_dataset
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor
+from tests.utils.test_audio_utils import compute_rmse
 from transformers import AutoFeatureExtractor, Xcodec2Config, Xcodec2Model
-from transformers.audio_utils import compute_rmse
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,

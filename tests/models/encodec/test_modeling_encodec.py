@@ -22,8 +22,8 @@ import numpy as np
 from datasets import Audio, load_dataset
 from parameterized import parameterized
 
+from tests.utils.test_audio_utils import compute_rmse
 from transformers import AutoProcessor, EncodecConfig
-from transformers.audio_utils import compute_rmse
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
