@@ -73,6 +73,14 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
 - For Qwen3.5-35B-A3B, the text config uses `hidden_size=2048` across 40 layers, 256 experts with 8 routed + 1 shared per token, and `moe_intermediate_size=512` — very different shapes from the dense Qwen3.5 checkpoints, so weights are not interchangeable.
 - Native context is 262,144 tokens. To reach the advertised ~1M context, enable YaRN rope scaling via the config's `rope_scaling` field — plain loading gives you the native window only.
 - As with Qwen3.5, linear-attention layers depend on optional `causal_conv1d` (from [Dao-AILab](https://github.com/Dao-AILab/causal-conv1d)). Without it, the model silently falls back to slower and more memory hungry PyTorch ops.
+- On NVIDIA GB10 (compute capability 12.1 / SM121) `causal_conv1d` and `fla` have no SM121 build, so the Gated DeltaNet path always uses the slow PyTorch reference. Passing `use_kernels=True` to [`~PreTrainedModel.from_pretrained`] swaps it for the same compute-capability-gated Hub kernel as the dense variant ([`Atlas-Inference/gdn`](https://huggingface.co/Atlas-Inference/gdn), shared because `Qwen3_5MoeGatedDeltaNet` has the same core as `Qwen3_5GatedDeltaNet`); every other GPU keeps the existing path. The kernel is numerically faithful to the fallback (identical greedy output) and speeds up prefill. Measured on `Qwen/Qwen3.6-35B-A3B` (bf16, GB10/SM121, 1024-token prompt, greedy decode of 256 tokens):
+
+  | `use_kernels` | TTFT (prefill) | Decode |
+  | --- | --- | --- |
+  | `False` (PyTorch fallback) | 0.73 s | 16.3 tok/s |
+  | `True` ([`Atlas-Inference/gdn`](https://huggingface.co/Atlas-Inference/gdn)) | 0.53 s (1.38x faster) | 16.7 tok/s |
+
+  Decode is roughly flat because the single-token DeltaNet recurrence is memory-bandwidth-bound; the win is on the chunked-prefill core and grows with prompt length. Loading the mapped kernel currently needs `trust_remote_code=True` until `Atlas-Inference` is added to the trusted-kernels allowlist.
 
 ## Qwen3_5MoeConfig
 

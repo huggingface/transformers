@@ -71,6 +71,14 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
 ## Usage tips and notes
 
 - Layers are hybrid: [`Qwen3_5TextConfig`]'s `layer_types` is a per-layer list of `"linear_attention"` or `"full_attention"` that encodes the 3:1 Gated DeltaNet / Gated Attention stack. The DeltaNet path (`Qwen3NextGatedDeltaNet`) needs the optional `causal_conv1d` (from [Dao-AILab](https://github.com/Dao-AILab/causal-conv1d)) and `fla` packages for its fast kernels — without them, the model silently falls back to slower and more memory hungry PyTorch ops.
+- On NVIDIA GB10 (compute capability 12.1 / SM121) neither `causal_conv1d` nor `fla` ship an SM121 build, so the DeltaNet path always falls back to the slow PyTorch reference. Passing `use_kernels=True` to [`~PreTrainedModel.from_pretrained`] swaps the Gated DeltaNet conv1d and delta-rule cores for a compute-capability-gated Hub kernel ([`Atlas-Inference/gdn`](https://huggingface.co/Atlas-Inference/gdn)); every other GPU keeps the existing path. The kernel is numerically faithful to the fallback (identical greedy output) and speeds up prefill. Measured on `Qwen/Qwen3.6-27B` (bf16, GB10/SM121, 1024-token prompt, greedy decode of 256 tokens):
+
+  | `use_kernels` | TTFT (prefill) | Decode |
+  | --- | --- | --- |
+  | `False` (PyTorch fallback) | 1.66 s | 4.11 tok/s |
+  | `True` ([`Atlas-Inference/gdn`](https://huggingface.co/Atlas-Inference/gdn)) | 1.11 s (1.49x faster) | 4.14 tok/s |
+
+  Decode is unchanged because the single-token DeltaNet recurrence is memory-bandwidth-bound; the win is on the chunked-prefill core and grows with prompt length. Loading the mapped kernel currently needs `trust_remote_code=True` until `Atlas-Inference` is added to the trusted-kernels allowlist.
 - Multimodal RoPE splits the head dimension into three components (temporal, height, width) via `mrope_section` on the text config. If you replace the rotary module, preserve this split or position encodings for image and video tokens will be misaligned.
 - Use [`Qwen3_5ForCausalLM`] for text-only generation with [`Qwen3_5TextConfig`]; use [`Qwen3_5ForConditionalGeneration`] with the full [`Qwen3_5Config`] and a processor ([`~AutoProcessor.from_pretrained`]) to feed interleaved image/video + text via [`~ProcessorMixin.apply_chat_template`].
 

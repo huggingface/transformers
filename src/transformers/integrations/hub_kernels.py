@@ -49,6 +49,7 @@ _MISSING_KERNELS_MESSAGE = (
 
 if is_kernels_available():
     from kernels import (
+        CUDAProperties,
         Device,
         FuncRepository,
         LayerRepository,
@@ -102,6 +103,19 @@ if is_kernels_available():
         #        version=1,
         #    )
         # },
+        # GB10/SM121 GDN fast path (no fla/causal_conv1d build there); dense and MoE share it.
+        "Qwen3_5GatedDeltaNet": {
+            Device(
+                type="cuda",
+                properties=CUDAProperties(min_capability=121, max_capability=121),
+            ): LayerRepository(
+                repo_id="Atlas-Inference/gdn",
+                layer_name="Qwen3_5GatedDeltaNet",
+                revision="v0",
+                # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+                trust_remote_code=True,
+            ),
+        },
         "SwiGLUMLP": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
