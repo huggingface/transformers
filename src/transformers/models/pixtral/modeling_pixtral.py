@@ -20,14 +20,14 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import is_flash_attention_requested, maybe_autocast
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_pixtral import PixtralVisionConfig
 
 
@@ -218,8 +218,7 @@ class PixtralAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        output_attentions: bool | None = False,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -254,8 +253,6 @@ class PixtralAttention(nn.Module):
         attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
         return attn_output, attn_weights
 
 
@@ -310,27 +307,22 @@ class PixtralAttentionLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        output_attentions: bool | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
                 Input to the layer of shape `(batch, seq_len, embed_dim)`.
             attention_mask (`torch.FloatTensor`):
                 Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
 
         hidden_states = self.attention_norm(hidden_states)
-        hidden_states, attn_weights = self.attention(
+        hidden_states, _ = self.attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -340,11 +332,7 @@ class PixtralAttentionLayer(GradientCheckpointingLayer):
         hidden_states = self.feed_forward(hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-        return outputs
+        return hidden_states
 
 
 class PixtralTransformer(nn.Module):
@@ -361,10 +349,7 @@ class PixtralTransformer(nn.Module):
         inputs_embeds,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
         Args:
@@ -377,49 +362,17 @@ class PixtralTransformer(nn.Module):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
                 position_embeddings=position_embeddings,
-                output_attentions=output_attentions,
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -434,6 +387,10 @@ class PixtralPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = ["PixtralAttentionLayer"]
+    _can_record_outputs = {
+        "hidden_states": PixtralAttentionLayer,
+        "attentions": PixtralAttention,
+    }
 
 
 def generate_block_attention_mask(patch_embeds_list, tensor):
@@ -476,17 +433,14 @@ class PixtralVisionModel(PixtralPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_conv
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        output_attentions: bool | None = None,
-        return_dict: bool | None = None,
-        *args,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         if image_sizes is None:
             batch_size, _, height, width = pixel_values.shape
@@ -524,9 +478,6 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             patch_embeds,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
-            return_dict=True,
             **kwargs,
         )
 

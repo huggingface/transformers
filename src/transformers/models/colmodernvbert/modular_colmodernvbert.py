@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import torch
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -36,25 +36,10 @@ from ..idefics3.processing_idefics3 import Idefics3Processor, Idefics3ProcessorK
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="ModernVBERT/colmodernvbert-merged")
+@strict
 class ColModernVBertConfig(ColQwen2Config):
     r"""
-    Configuration class to store the configuration of a [`ColModernVBertForRetrieval`]. It is used to instantiate an instance
-    of `ColModernVBertForRetrieval` according to the specified arguments, defining the model architecture following the methodology
-    from the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
-
-    Instantiating a configuration with the defaults will yield a similar configuration to the vision encoder used by the pre-trained
-    ColModernVBert model, e.g. [ModernVBERT/colmodernvbert-merged](https://huggingface.co/ModernVBERT/colmodernvbert-merged).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vlm_config (`PreTrainedConfig`, *optional*):
-            Configuration of the VLM backbone model.
-        embedding_dim (`int`, *optional*, defaults to 128):
-            Dimension of the multi-vector embeddings produced by the model.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
     ```python
@@ -66,39 +51,25 @@ class ColModernVBertConfig(ColQwen2Config):
     """
 
     model_type = "colmodernvbert"
-    sub_configs: dict[str, Any] = {"vlm_config": PreTrainedConfig}
+    sub_configs = {"vlm_config": PreTrainedConfig}
 
-    def __init__(
-        self,
-        vlm_config=None,
-        embedding_dim: int = 128,
-        initializer_range: float = 0.02,
-        **kwargs,
-    ):
-        if vlm_config is None:
-            vlm_config = CONFIG_MAPPING["modernvbert"]()
+    vlm_config: dict | PreTrainedConfig | None = None
+    embedding_dim: int = 128
+    initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if self.vlm_config is None:
+            self.vlm_config = CONFIG_MAPPING["modernvbert"]()
             logger.info(
                 "`vlm_config` is `None`. Initializing `vlm_config` with the `ModernVBertConfig` with default values."
             )
-        elif isinstance(vlm_config, dict):
-            vlm_config = deepcopy(vlm_config)
-            if "model_type" not in vlm_config:
-                raise KeyError(
-                    "The `model_type` key is missing in the `vlm_config` dictionary. Please provide the model type."
-                )
-            vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
-        elif not isinstance(vlm_config, PreTrainedConfig):
-            raise TypeError(
-                f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
-            )
+        elif isinstance(self.vlm_config, dict):
+            self.vlm_config = CONFIG_MAPPING[self.vlm_config["model_type"]](**self.vlm_config)
 
-        if not hasattr(vlm_config, "vocab_size"):
-            vlm_config.vocab_size = vlm_config.get_text_config().vocab_size
+        if not hasattr(self.vlm_config, "vocab_size"):
+            self.vlm_config.vocab_size = self.vlm_config.get_text_config().vocab_size
 
-        self.vlm_config = vlm_config
-        self.embedding_dim = embedding_dim
-        self.initializer_range = initializer_range
-        PreTrainedConfig.__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
@@ -118,21 +89,6 @@ class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
 @requires(backends=("torch",))
 @auto_docstring
 class ColModernVBertProcessor(Idefics3Processor):
-    r"""
-    Constructs a ColModernVBert processor which wraps a ModernVBertProcessor and special methods to process images and queries, as
-    well as to compute the late-interaction retrieval score.
-
-    [`ColModernVBertProcessor`] offers all the functionalities of [`ModernVBertProcessor`]. See the [`~ModernVBertProcessor.__call__`]
-    for more information.
-
-    Args:
-            image_processor ([`Idefics3ImageProcessor`]): An instance of [`Idefics3ImageProcessor`]. The image processor is a required input.
-            tokenizer (`PreTrainedTokenizerFast`, *optional*): An instance of [`PreTrainedTokenizerFast`]. This should correspond with the model's text model. The tokenizer is a required input.
-            image_seq_len (`int`, *optional*, defaults to 64): The length of the image sequence i.e. the number of <image> tokens per image in the input.
-            visual_prompt_prefix (`Optional`, *optional*): A prefix to be prepended to visual prompts.
-            query_prefix (`Optional`, *optional*): A prefix to be prepended to query prompts.
-    """
-
     def __init__(
         self,
         image_processor,
@@ -360,12 +316,12 @@ class ColModernVBertPreTrainedModel(ColPaliPreTrainedModel):
     config: ColModernVBertConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for ColModernVBert embeddings output.
     """
 )
+@dataclass
 class ColModernVBertForRetrievalOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -403,8 +359,6 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
     """
 )
 class ColModernVBertForRetrieval(ColPaliForRetrieval):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: ColModernVBertConfig):
         super().__init__(config)
         self.vlm = AutoModel.from_config(config.vlm_config)

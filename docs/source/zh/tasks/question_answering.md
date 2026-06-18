@@ -247,22 +247,7 @@ pip install transformers datasets evaluate
 >>> context = "BLOOM has 176 billion parameters and can generate text in 46 languages natural languages and 13 programming languages."
 ```
 
-使用微调后的模型进行推断最简单的方式是在 [`pipeline`] 中使用它。用您的模型实例化一个问答 `pipeline`，并将文本传递给它：
-
-```py
->>> from transformers import pipeline
-
->>> question_answerer = pipeline("question-answering", model="my_awesome_qa_model")
->>> question_answerer(question=question, context=context)
-{'score': 0.2058267742395401,
- 'start': 10,
- 'end': 95,
- 'answer': '176 billion parameters and can generate text in 46 languages natural languages and 13'}
-```
-
-如果您愿意，也可以手动复现 `pipeline` 的结果：
-
-对文本进行分词并返回 PyTorch 张量：
+使用微调后的模型进行推断最简单的方式是直接使用 tokenizer 和 model。对文本进行分词并返回 PyTorch 张量：
 
 ```py
 >>> from transformers import AutoTokenizer

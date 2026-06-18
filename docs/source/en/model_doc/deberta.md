@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2020-06-05 and contributed to Hugging Face Transformers on 2020-11-16.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # DeBERTa
 
@@ -39,9 +34,9 @@ The example below demonstrates how to classify text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 classifier = pipeline(
     task="text-classification",
@@ -58,9 +53,11 @@ classifier({
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 model_name = "microsoft/deberta-base-mnli"
 tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-base-mnli")
@@ -78,14 +75,6 @@ with torch.no_grad():
 
 labels = ["contradiction", "neutral", "entailment"]
 print(f"The predicted relation is: {labels[predicted_class]}")
-
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "Some people are playing a sport."}' | transformers run --task text-classification --model microsoft/deberta-base-mnli --device 0
 ```
 
 </hfoption>

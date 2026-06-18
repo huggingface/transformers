@@ -42,8 +42,8 @@ from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Emu3VQVAEModelOutput(BaseModelOutputWithPooling):
     r"""
     image_tokens (`torch.LongTensor` of shape `(batch_size, config.vocab_size`):
@@ -879,7 +879,9 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel):
 
 
 class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
-    def __init__(self, config: Emu3Config):
+    config: Emu3TextConfig
+
+    def __init__(self, config: Emu3TextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [Emu3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -916,8 +918,6 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
 
 
 class Emu3Model(Emu3PreTrainedModel):
-    _checkpoint_conversion_mapping = {"text_model.model": "text_model"}
-
     def __init__(self, config):
         super().__init__(config)
         self.text_model = Emu3TextModel._from_config(config.text_config)
@@ -1016,9 +1016,9 @@ class Emu3Model(Emu3PreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -1075,11 +1075,6 @@ class Emu3Model(Emu3PreTrainedModel):
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     output_modalities = ("image", "text")
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
-    _checkpoint_conversion_mapping = {
-        "^text_model.model": "model.text_model",
-        "^vqmodel": "model.vqmodel",
-        "^text_model.lm_head": "lm_head",
-    }
 
     def __init__(self, config):
         super().__init__(config)

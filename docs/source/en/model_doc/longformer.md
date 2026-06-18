@@ -11,13 +11,8 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
-*This model was released on 2020-04-10 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2020-04-10 and contributed to Hugging Face Transformers on 2020-11-16.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # Longformer
 
@@ -34,13 +29,12 @@ The example below demonstrates how to fill the `<mask>` token with [`Pipeline`],
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="allenai/longformer-base-4096",
-    dtype=torch.float16,
     device=0
 )
 pipeline("""San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee.
@@ -52,11 +46,11 @@ Tarell Brown and Donald Strickland will compete to replace Spencer with the 49er
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
+
 tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
-model = AutoModelForMaskedLM.from_pretrained("allenai/longformer-base-4096")
+model = AutoModelForMaskedLM.from_pretrained("allenai/longformer-base-4096", device_map="auto")
 
 text = (
 """
@@ -66,20 +60,13 @@ Tarell Brown and Donald Strickland will compete to replace Spencer with the 49er
 """
 )
 
-input_ids = tokenizer([text], return_tensors="pt")["input_ids"]
+input_ids = tokenizer([text], return_tensors="pt").to(model.device)["input_ids"]
 logits = model(input_ids).logits
 
 masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
 probs = logits[0, masked_index].softmax(dim=0)
 values, predictions = probs.topk(5)
 tokenizer.decode(predictions).split()
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee." | transformers run --task fill-mask --model allenai/longformer-base-4096 --device 0
 ```
 
 </hfoption>
@@ -92,8 +79,8 @@ echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of t
 - [`LongformerForMaskedLM`] is trained like [`RobertaForMaskedLM`] and should be used as shown below.
 
   ```py
-    input_ids = tokenizer.encode("This is a sentence from [MASK] training data", return_tensors="pt")
-    mlm_labels = tokenizer.encode("This is a sentence from the training data", return_tensors="pt")
+    input_ids = tokenizer.encode("This is a sentence from [MASK] training data", return_tensors="pt").to(model.device)
+    mlm_labels = tokenizer.encode("This is a sentence from the training data", return_tensors="pt").to(model.device)
     loss = model(input_ids, labels=input_ids, masked_lm_labels=mlm_labels)[0]
     ```
 

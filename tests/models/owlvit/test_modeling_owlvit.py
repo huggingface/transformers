@@ -19,6 +19,7 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
 
 from transformers import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 from transformers.testing_utils import (
@@ -33,6 +34,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -145,7 +147,7 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = OwlViTVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=OwlViTVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=OwlViTVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -298,7 +300,7 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = OwlViTTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OwlViTTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=OwlViTTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -409,6 +411,8 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    additional_model_inputs = ["pixel_values"]
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = OwlViTModelTester(self)
@@ -532,6 +536,8 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
 
+    additional_model_inputs = ["pixel_values", "attention_mask"]
+
     def setUp(self):
         self.model_tester = OwlViTForObjectDetectionTester(self)
 
@@ -542,6 +548,10 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(self, *args):
+        self.skipTest("OwlViTObjectDetectionOutput has no top-level hidden_states; SDPA tested in sub-models")
 
     @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
     def test_inputs_embeds(self):

@@ -11,17 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import math
+from dataclasses import dataclass
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...configuration_utils import PreTrainedConfig
+from ...generation import GenerationMixin
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    ModelOutput,
+)
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ..audioflamingo3.modeling_audioflamingo3 import AudioFlamingo3ForConditionalGeneration
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
@@ -32,33 +39,20 @@ from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import
 logger = logging.get_logger(__name__)
 
 
-class VibeVoiceAsrConfig(PretrainedConfig):
+@auto_docstring(checkpoint="microsoft/VibeVoice-ASR-HF")
+@strict
+class VibeVoiceAsrConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VibeVoiceAsrForConditionalGeneration`]. It is used
-    to instantiate a VibeVoice ASR model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of Microsoft's VibeVoice
-    ASR architecture.
-
-    e.g. [microsoft/VibeVoice-ASR](https://huggingface.co/microsoft/VibeVoice-ASR)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        acoustic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
-            The config object or dictionary of the acoustic tokenizer. This tokenizer extracts acoustic features from audio.
-        semantic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
-            The config object or dictionary of the semantic tokenizer. This tokenizer extracts semantic features from audio.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
-            The config object or dictionary of the text backbone (language model).
-        audio_token_id (`int`, *optional*, defaults to 151648):
-            The audio token index to encode the audio prompt.
-        audio_bos_token_id (`int`, *optional*, defaults to 151646):
-            The audio begin-of-sequence token index.
-        audio_eos_token_id (`int`, *optional*, defaults to 151647):
-            The audio end-of-sequence token index.
-        acoustic_tokenizer_chunk_size (`int`, *optional*, defaults to 1440000):
-            The chunk size (in number of samples) to use when tokenizer audio inputs. Default corresponds to 60 seconds at 24kHz.
+    acoustic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
+        The config object or dictionary of the acoustic tokenizer. This tokenizer extracts acoustic features from audio.
+    semantic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
+        The config object or dictionary of the semantic tokenizer. This tokenizer extracts semantic features from audio.
+    audio_bos_token_id (`int`, *optional*, defaults to 151646):
+        The audio begin-of-sequence token index.
+    audio_eos_token_id (`int`, *optional*, defaults to 151647):
+        The audio end-of-sequence token index.
+    acoustic_tokenizer_chunk_size (`int`, *optional*, defaults to 1440000):
+        The chunk size (in number of samples) to use when tokenizer audio inputs. Default corresponds to 60 seconds at 24kHz.
 
     Example:
 
@@ -89,52 +83,57 @@ class VibeVoiceAsrConfig(PretrainedConfig):
         "text_config": AutoConfig,
     }
 
-    def __init__(
-        self,
-        acoustic_tokenizer_encoder_config=None,
-        semantic_tokenizer_encoder_config=None,
-        text_config=None,
-        audio_token_id=151648,
-        audio_bos_token_id=151646,
-        audio_eos_token_id=151647,
-        acoustic_tokenizer_chunk_size=1440000,
-        **kwargs,
-    ):
-        if isinstance(acoustic_tokenizer_encoder_config, dict):
-            acoustic_tokenizer_encoder_config["model_type"] = acoustic_tokenizer_encoder_config.get(
+    acoustic_tokenizer_encoder_config: dict | PreTrainedConfig | None = None
+    semantic_tokenizer_encoder_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    audio_token_id: int = 151648
+    audio_bos_token_id: int = 151646
+    audio_eos_token_id: int = 151647
+    acoustic_tokenizer_chunk_size: int = 1440000
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.acoustic_tokenizer_encoder_config, dict):
+            self.acoustic_tokenizer_encoder_config["model_type"] = self.acoustic_tokenizer_encoder_config.get(
                 "model_type", "vibevoice_acoustic_tokenizer_encoder"
             )
-            acoustic_tokenizer_encoder_config = CONFIG_MAPPING[acoustic_tokenizer_encoder_config["model_type"]](
-                **acoustic_tokenizer_encoder_config
-            )
-        elif acoustic_tokenizer_encoder_config is None:
-            acoustic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"]()
-        self.acoustic_tokenizer_encoder_config = acoustic_tokenizer_encoder_config
+            self.acoustic_tokenizer_encoder_config = CONFIG_MAPPING[
+                self.acoustic_tokenizer_encoder_config["model_type"]
+            ](**self.acoustic_tokenizer_encoder_config)
+        elif self.acoustic_tokenizer_encoder_config is None:
+            self.acoustic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"]()
 
-        if isinstance(semantic_tokenizer_encoder_config, dict):
-            semantic_tokenizer_encoder_config["model_type"] = semantic_tokenizer_encoder_config.get(
+        if isinstance(self.semantic_tokenizer_encoder_config, dict):
+            self.semantic_tokenizer_encoder_config["model_type"] = self.semantic_tokenizer_encoder_config.get(
                 "model_type", "vibevoice_acoustic_tokenizer_encoder"
             )
-            semantic_tokenizer_encoder_config = CONFIG_MAPPING[semantic_tokenizer_encoder_config["model_type"]](
-                **semantic_tokenizer_encoder_config
+            self.semantic_tokenizer_encoder_config = CONFIG_MAPPING[
+                self.semantic_tokenizer_encoder_config["model_type"]
+            ](**self.semantic_tokenizer_encoder_config)
+        elif self.semantic_tokenizer_encoder_config is None:
+            self.semantic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](
+                hidden_size=128
             )
-        elif semantic_tokenizer_encoder_config is None:
-            semantic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](hidden_size=128)
-        self.semantic_tokenizer_encoder_config = semantic_tokenizer_encoder_config
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"]()
-        self.text_config = text_config
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen2"]()
 
-        self.audio_token_id = audio_token_id
-        self.audio_bos_token_id = audio_bos_token_id
-        self.audio_eos_token_id = audio_eos_token_id
-        self.acoustic_tokenizer_chunk_size = acoustic_tokenizer_chunk_size
+        super().__post_init__(**kwargs)
 
-        super().__init__(**kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        hop_length = self.acoustic_tokenizer_encoder_config.hop_length
+        if self.acoustic_tokenizer_chunk_size % hop_length != 0:
+            raise ValueError(
+                f"`acoustic_tokenizer_chunk_size` must be a multiple of hop length "
+                f"({hop_length}), got {self.acoustic_tokenizer_chunk_size}."
+            )
+
+    @property
+    def max_position_embeddings(self) -> int:
+        return math.ceil(self.acoustic_tokenizer_chunk_size / self.acoustic_tokenizer_encoder_config.hop_length)
 
 
 class VibeVoiceAsrRMSNorm(Qwen2RMSNorm):
@@ -178,23 +177,77 @@ class VibeVoiceAsrPreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     _no_split_modules = None
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_attention_backend = True
 
 
 @auto_docstring(
     custom_intro="""
-    The VibeVoice ASR model with pre-trained acoustic tokenizers and a language model.
+    Base class for VibeVoice ASR outputs, with hidden states and attentions.
     """
 )
-class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+@dataclass
+class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio hidden states.
+    """
+
+    audio_hidden_states: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for VibeVoice ASR causal language model outputs.
+    """
+)
+@dataclass
+class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores.
+    past_key_values (`Cache`, *optional*):
+        Cache instance.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio hidden states.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    audio_hidden_states: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    The VibeVoice ASR model (acoustic tokenizer + semantic tokenizer + multi-modal projector + language model),
+    without a language modeling head.
+    """
+)
+class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     def __init__(self, config: VibeVoiceAsrConfig):
         super().__init__(config)
         self.acoustic_tokenizer_encoder = AutoModel.from_config(config.acoustic_tokenizer_encoder_config)
         self.semantic_tokenizer_encoder = AutoModel.from_config(config.semantic_tokenizer_encoder_config)
-        del self.audio_tower
+        self.multi_modal_projector = VibeVoiceAsrMultiModalProjector(config)
+        self.language_model = AutoModel.from_config(config.text_config)
+        self.post_init()
 
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
     def get_audio_features(
@@ -206,14 +259,12 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
     ):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, num_samples)`):
-            Input audio tensor. Audio should be sampled at 24kHz.
+            Input audio tensor sampled at 24kHz.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
         acoustic_tokenizer_chunk_size (`int`, *optional*):
-            Size of audio chunks to process at once through the tokenizers. Defaults to `config.acoustic_tokenizer_chunk_size`,
-            but can be modified to fit the available memory.
+            Size of audio chunks to process at once through the tokenizers.
         """
-
         if acoustic_tokenizer_chunk_size is None:
             acoustic_tokenizer_chunk_size = self.config.acoustic_tokenizer_chunk_size
         else:
@@ -258,7 +309,6 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
 
         combined_features = self.multi_modal_projector(acoustic_latents, semantic_latents)
         if padding_mask is not None:
-            # Adjust padding mask according to tokenizer compression
             num_audio_tokens = torch.ceil(
                 padding_mask.sum(dim=-1) / self.config.acoustic_tokenizer_encoder_config.hop_length
             ).to(torch.int64)
@@ -269,6 +319,7 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
 
         return BaseModelOutputWithPooling(last_hidden_state=acoustic_latents, pooler_output=combined_features)
 
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -281,13 +332,81 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
         padding_mask: torch.BoolTensor | None = None,
         acoustic_tokenizer_chunk_size: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> tuple | VibeVoiceAsrModelOutputWithPast:
         r"""
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
         acoustic_tokenizer_chunk_size (`int`, *optional*):
-            Size of audio chunks processed by the acoustic and semantic tokenizers. Defaults to
-            `config.acoustic_tokenizer_chunk_size`, but can be modified to fit the available memory.
+            Size of audio chunks processed by the acoustic and semantic tokenizers.
+        """
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        audio_embeds = None
+        if input_values is not None and input_ids is not None:
+            audio_embeds = self.get_audio_features(
+                input_values=input_values,
+                padding_mask=padding_mask,
+                acoustic_tokenizer_chunk_size=acoustic_tokenizer_chunk_size,
+            ).pooler_output
+
+            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            )
+
+        outputs = self.language_model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            **kwargs,
+        )
+
+        return VibeVoiceAsrModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            audio_hidden_states=audio_embeds,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The VibeVoice ASR model with pre-trained acoustic tokenizers and a language model.
+    """
+)
+class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, GenerationMixin):
+    def __init__(self, config: VibeVoiceAsrConfig):
+        super().__init__(config)
+        self.model = VibeVoiceAsrModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.post_init()
+
+    def get_audio_features(self, *args, **kwargs):
+        return self.model.get_audio_features(*args, **kwargs)
+
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        input_values: torch.FloatTensor | None = None,
+        padding_mask: torch.BoolTensor | None = None,
+        acoustic_tokenizer_chunk_size: int | None = None,
+        labels: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | VibeVoiceAsrCausalLMOutputWithPast:
+        r"""
+        padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing operations on padding feature indices.
+        acoustic_tokenizer_chunk_size (`int`, *optional*):
+            Size of audio chunks processed by the acoustic and semantic tokenizers.
 
         Example:
 
@@ -297,33 +416,35 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
         >>> model_id = "microsoft/VibeVoice-ASR-HF"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, dtype="auto", device_map="auto")
-
-        >>> inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
-        >>> inputs = inputs.to(model.device, dtype=model.dtype)
-        >>> outputs = model.generate(**inputs)
-
-        >>> decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
-        >>> print(decoded_outputs)
         ```"""
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            input_values=input_values,
+            padding_mask=padding_mask,
+            acoustic_tokenizer_chunk_size=acoustic_tokenizer_chunk_size,
+            **kwargs,
+        )
 
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
-        if input_values is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(
-                input_values=input_values,
-                padding_mask=padding_mask,
-                acoustic_tokenizer_chunk_size=acoustic_tokenizer_chunk_size,
-            ).pooler_output
-
-            # Replace text-audio token placeholders with audio embeddings
-            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return self.language_model(
-            inputs_embeds=inputs_embeds, attention_mask=attention_mask, past_key_values=past_key_values, **kwargs
+        return VibeVoiceAsrCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            audio_hidden_states=outputs.audio_hidden_states,
         )
 
     def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
@@ -347,5 +468,6 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
 __all__ = [
     "VibeVoiceAsrConfig",
     "VibeVoiceAsrForConditionalGeneration",
+    "VibeVoiceAsrModel",
     "VibeVoiceAsrPreTrainedModel",
 ]

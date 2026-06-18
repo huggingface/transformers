@@ -569,7 +569,10 @@ class MusicgenMelodyTester:
             audio_channels=self.audio_channels,
         )
         config = MusicgenMelodyConfig(
-            text_encoder_config, audio_encoder_config, decoder_config, chroma_length=self.chroma_length
+            text_encoder=text_encoder_config,
+            audio_encoder=audio_encoder_config,
+            decoder=decoder_config,
+            chroma_length=self.chroma_length,
         )
         return config
 

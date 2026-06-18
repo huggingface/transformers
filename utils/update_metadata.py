@@ -38,8 +38,22 @@ import pandas as pd
 from datasets import Dataset
 from huggingface_hub import hf_hub_download, upload_folder
 
+from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
 from transformers.utils import direct_transformers_import
 
+
+CHECKER_CONFIG = {
+    "name": "update_metadata",
+    "label": "Model metadata",
+    # Approximate: imports the transformers module and inspects pipeline/auto mappings
+    # at runtime. Does not iterate over files matching these globs directly.
+    "cache_globs": ["src/transformers/models/**/*.py", "docs/**/*.md"],
+    "check_args": ["--check-only"],
+    # No safe local "fix" mode: running without `--check-only` pushes to the
+    # `huggingface/transformers-metadata` Hub dataset (requires an auth token).
+    # `fix_args=None` makes `make fix-repo` skip this checker, like other check-only ones.
+    "fix_args": None,
+}
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/update_metadata.py
@@ -213,16 +227,19 @@ def update_pipeline_and_auto_class_table(table: dict[str, tuple[str, str]]) -> d
     for pipeline_tag, model_mapping, cls in PIPELINE_TAGS_AND_AUTO_MODELS:
         if not hasattr(module, model_mapping):
             continue
-        # First extract all model_names
-        model_names = []
-        for name in getattr(module, model_mapping).values():
-            if isinstance(name, str):
-                model_names.append(name)
-            else:
-                model_names.extend(list(name))
 
-        # Add pipeline tag and auto model class for those models
-        table.update(dict.fromkeys(model_names, (pipeline_tag, cls)))
+        # Iterate over all model_names for given mapping
+        for names in getattr(module, model_mapping).values():
+            if isinstance(names, str):
+                names = [names]
+
+            for name in names:
+                # For multimodal LLMs, keep the fine-grained pipeline tag but use a generic `AutoClass`
+                if name in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values():
+                    cls = "AutoModelForMultimodalLM"
+
+                # Add pipeline tag and auto model class for those models
+                table[name] = (pipeline_tag, cls)
 
     return table
 

@@ -789,3 +789,65 @@ class TrainerLRTest(TestCasePlus):
                     bad_epochs = 0
                 if not just_decreased:
                     self.assertEqual(logs[i + 1]["learning_rate"], log["learning_rate"])
+
+    def test_greedy_lr_args(self):
+        # test passed arguments for a custom GreedyLR scheduler
+        from transformers.optimization import GreedyLR
+
+        train_dataset = RegressionDataset(length=64)
+        eval_dataset = RegressionDataset(length=64)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                tmp_dir,
+                eval_strategy="epoch",
+                metric_for_best_model="eval_loss",
+            )
+            model = RegressionModel()
+            optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
+            lr_scheduler = GreedyLR(optimizer, factor=0.8, patience=5, cooldown=2)
+            trainer = Trainer(
+                model,
+                args,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+                optimizers=(optimizer, lr_scheduler),
+            )
+            trainer.train()
+
+            self.assertIsInstance(trainer.lr_scheduler, GreedyLR)
+            self.assertEqual(trainer.lr_scheduler.factor, 0.8)
+            self.assertEqual(trainer.lr_scheduler.patience, 5)
+            self.assertEqual(trainer.lr_scheduler.cooldown, 2)
+
+    def test_greedy_lr(self):
+        # test the GreedyLR scheduler
+        from transformers.optimization import GreedyLR
+
+        class TrainerWithLRLogs(Trainer):
+            def log(self, logs):
+                if hasattr(self.lr_scheduler, "_last_lr"):
+                    logs["learning_rate"] = self.lr_scheduler._last_lr[0]
+                super().log(logs)
+
+        train_dataset = RegressionDataset(length=64)
+        eval_dataset = RegressionDataset(length=64)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                tmp_dir,
+                lr_scheduler_type="greedy",
+                lr_scheduler_kwargs={"patience": 1, "factor": 0.5},
+                eval_strategy="epoch",
+                metric_for_best_model="eval_loss",
+                num_train_epochs=10,
+                learning_rate=0.2,
+            )
+            model = RegressionModel()
+            trainer = TrainerWithLRLogs(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+            trainer.train()
+
+            self.assertIsInstance(trainer.lr_scheduler, GreedyLR)
+            # Verify LR was adjusted at least once during training
+            logs = trainer.state.log_history[1:]
+            lr_values = [log["learning_rate"] for log in logs if "learning_rate" in log]
+            self.assertTrue(len(set(lr_values)) > 1, "GreedyLR should have adjusted the LR at least once")

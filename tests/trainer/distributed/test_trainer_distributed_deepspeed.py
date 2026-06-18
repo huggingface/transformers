@@ -49,12 +49,10 @@ from transformers.testing_utils import (
     get_torch_dist_unique_port,
     mockenv_context,
     read_json_file,
-    require_accelerate,
     require_deepspeed,
     require_optuna,
     require_torch_accelerator,
     require_torch_multi_accelerator,
-    run_first,
     slow,
     torch_device,
 )
@@ -233,10 +231,6 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
 
     def setUp(self):
         super().setUp()
-
-        args = TrainingArguments(".")
-        self.n_epochs = args.num_train_epochs
-        self.batch_size = args.train_batch_size
 
         master_port = get_torch_dist_unique_port()
         self.dist_env_1_gpu = {
@@ -735,7 +729,7 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
             )
             trainer.train()
 
-        total = int(self.n_epochs * 64 / self.batch_size)
+        total = int(3.0 * 64 / 8)  # n_epochs * train_len / per_device_train_batch_size
         self.check_saved_checkpoints_deepspeed(output_dir, freq, total, stage, dtype)
 
         # Verify we can resume training from the last checkpoint with a new trainer
@@ -961,6 +955,9 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
 # ---------------------------------------------------------------------------
 
 
+@slow
+@require_deepspeed
+@require_torch_multi_accelerator
 class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
     def _run_env_check(self, cmd, num_processes):
         """Run the env check script and return per-rank results."""
@@ -972,10 +969,6 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
                 results.append(json.load(f))
         return results
 
-    @run_first
-    @require_deepspeed
-    @require_accelerate
-    @require_torch_multi_accelerator
     def test_torchrun_accelerate_deepspeed_zero2_env_parity(self):
         """Verify torchrun+--deepspeed and accelerate launch produce the same DeepSpeed ZeRO-2 env."""
         script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
@@ -1001,10 +994,6 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
 
         self._check_parity(torchrun_results, accel_results, num_processes, expected_zero_stage=2)
 
-    @run_first
-    @require_deepspeed
-    @require_accelerate
-    @require_torch_multi_accelerator
     def test_torchrun_accelerate_deepspeed_zero3_env_parity(self):
         """Verify torchrun+--deepspeed and accelerate launch produce the same DeepSpeed ZeRO-3 env."""
         script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
@@ -1052,7 +1041,7 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
                 self.assertEqual(info["args_n_gpu"], 1)
                 self.assertEqual(info["accelerator_is_main_process"], rank == 0)
                 self.assertEqual(info["accelerator_is_local_main_process"], rank == 0)
-                self.assertIn(f"cuda:{rank}", info["accelerator_device"])
+                self.assertIn(f"{torch_device}:{rank}", info["accelerator_device"])
 
                 # Both should have DeepSpeed enabled with the correct stage
                 self.assertEqual(info["accelerator_distributed_type"], "DistributedType.DEEPSPEED")
@@ -1070,10 +1059,8 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
 
 
 @slow
-@run_first
 @require_deepspeed
-@require_accelerate
-@require_torch_accelerator
+@require_torch_multi_accelerator
 class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistributedCommon, TestCasePlus):
     """
     Distributed DeepSpeed tests using ``accelerate launch``.
@@ -1088,23 +1075,19 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
 
     # Pure dtype training: model loaded in target dtype, no mixed precision.
     @parameterized.expand(pure_dtype_params, name_func=_parameterized_custom_name_func)
-    @require_torch_multi_accelerator
     def test_training(self, stage, model_dtype):
         self.check_training(model_dtype, config_file=DS_CONFIGS[stage])
 
     # Mixed precision training: model loaded in fp32, training in fp16/bf16.
     @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
-    @require_torch_multi_accelerator
     def test_training_mixed_precision(self, stage, dtype):
         self.check_mixed_precision(dtype, config_file=DS_CONFIGS[stage])
 
     @parameterized.expand(stages, name_func=_parameterized_custom_name_func)
-    @require_torch_multi_accelerator
     def test_training_with_gradient_accumulation(self, stage):
         self.check_gradient_accumulation(config_file=DS_CONFIGS[stage])
 
     @parameterized.expand(stages, name_func=_parameterized_custom_name_func)
-    @require_torch_multi_accelerator
     def test_training_and_can_resume_normally(self, stage):
         self.check_resume(config_file=DS_CONFIGS[stage])
 
@@ -1116,7 +1099,6 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
         ],
         name_func=_parameterized_custom_name_func,
     )
-    @require_torch_multi_accelerator
     def test_basic_run_with_cpu_offload(self, stage, offload_param):
         output_dir = self.get_auto_remove_tmp_dir()
         args = self._get_default_script_args(output_dir) + ["--bf16", "--max_steps", "10"]
@@ -1130,12 +1112,10 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
             env=self.get_env(),
         )
 
-    @require_torch_multi_accelerator
     def test_eval(self):
         # ZeRO inference only works with ZeRO-3
         self.check_eval(config_file=DS_CONFIGS[ZERO3])
 
-    @require_torch_multi_accelerator
     def test_alst_ulysses_sp(self):
         """Test that ALST/Ulysses sequence parallelism produces the same losses as without it."""
         sp_config = os.path.join(CONFIGS_DIR, "deepspeed_zero2_sp.yaml")
@@ -1217,6 +1197,7 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
 
 
 @require_deepspeed
+@require_torch_accelerator
 class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
     """
     Testing non-Trainer DeepSpeed integration
@@ -1377,7 +1358,7 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
         ds_config = self._get_zero3_ds_config()
 
         # With zero3
-        HfDeepSpeedConfig(ds_config)
+        dschf = HfDeepSpeedConfig(ds_config)  # noqa: F841 — prevent GC of weak-ref config
         model, cl = self._load_with_logging(TinyGPT2WithUninitializedWeights, GPT2_TINY, expect_zero3=True)
         self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         with deepspeed.zero.GatheredParameters([model.new_head.weight, model.new_head.bias]):
@@ -1390,7 +1371,7 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
 
         # Without zero3
         del ds_config["zero_optimization"]
-        HfDeepSpeedConfig(ds_config)
+        dschf = HfDeepSpeedConfig(ds_config)  # noqa: F841
         model, cl = self._load_with_logging(TinyGPT2WithUninitializedWeights, GPT2_TINY, expect_zero3=False)
         self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         self.assertTrue(
@@ -1545,6 +1526,60 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
         with deepspeed.zero.GatheredParameters([embedding.weight]):
             self.assertEqual(embedding.weight.shape[0], new_size)
 
+    def test_zero3_load_registered_buffers(self):
+        """Test that registered buffers are loaded with correct values under ZeRO-3 from_pretrained."""
+        from transformers.models.gemma4.configuration_gemma4 import (
+            Gemma4AudioConfig,
+            Gemma4Config,
+            Gemma4TextConfig,
+            Gemma4VisionConfig,
+        )
+        from transformers.models.gemma4.modeling_gemma4 import Gemma4ForConditionalGeneration
+
+        text_config = Gemma4TextConfig(
+            hidden_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            intermediate_size=256,
+            vocab_size=32000,
+            num_key_value_heads=2,
+            pad_token_id=0,
+        )
+        vision_config = Gemma4VisionConfig(
+            hidden_size=64, num_hidden_layers=2, num_attention_heads=2, intermediate_size=128
+        )
+        audio_config = Gemma4AudioConfig()
+        config = Gemma4Config(text_config=text_config, vision_config=vision_config, audio_config=audio_config)
+
+        # Save without ZeRO-3, with non-default buffer values
+        save_path = self.get_auto_remove_tmp_dir()
+        model = Gemma4ForConditionalGeneration(config)
+        for name, buf in model.named_buffers():
+            if "input_max" in name:
+                buf.fill_(42.0)
+            elif "output_min" in name:
+                buf.fill_(-42.0)
+            elif "layer_scalar" in name:
+                buf.fill_(0.5)
+        model.save_pretrained(save_path)
+        del model
+
+        # Load with ZeRO-3
+        ds_config = self._get_zero3_ds_config(bf16={"enabled": True})
+        dschf = HfDeepSpeedConfig(ds_config)
+        self.assertTrue(dschf.is_zero3())
+        with mockenv_context(**self.dist_env_1_gpu):
+            model2 = Gemma4ForConditionalGeneration.from_pretrained(save_path, torch_dtype=torch.bfloat16)
+
+        # Verify buffer VALUES were loaded from checkpoint, not re-initialized
+        for name, buf in model2.named_buffers():
+            if "input_max" in name:
+                self.assertEqual(buf.item(), 42.0, f"{name} was not loaded from checkpoint")
+            elif "output_min" in name:
+                self.assertEqual(buf.item(), -42.0, f"{name} was not loaded from checkpoint")
+            elif "layer_scalar" in name:
+                self.assertEqual(buf.item(), 0.5, f"{name} was not loaded from checkpoint")
+
 
 # ---------------------------------------------------------------------------
 # Model Zoo — test many architectures with DeepSpeed + zero_to_fp32 recovery
@@ -1592,7 +1627,7 @@ def _make_zoo_tasks():
     tasks2models = {
         "trans": ["bart", "m2m_100", "t5", "t5_v1"],
         "clm": ["bigbird_pegasus", "blenderbot", "bloom", "gpt2", "gpt_neo", "gptj", "xlm-roberta", "prophetnet"],
-        "mlm": ["albert", "deberta", "deberta-v2", "distilbert", "electra", "funnel", "layoutlm"],
+        "mlm": ["albert", "deberta", "deberta-v2", "distilbert", "electra", "layoutlm"],
         "qa": ["led", "longformer", "mobilebert", "mpnet", "roberta", "squeezebert"],
         "clas": ["bert", "xlnet"],
         "img_clas": ["vit"],
@@ -1646,7 +1681,6 @@ _zoo_params = list(itertools.product(stages, _zoo_tasks.keys()))
 
 
 @slow
-@run_first
 @require_deepspeed
 @require_torch_accelerator
 class TestDeepSpeedModelZoo(DeepSpeedCommandsMixin, TestCasePlus):

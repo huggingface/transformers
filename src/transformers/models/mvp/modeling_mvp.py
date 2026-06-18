@@ -127,7 +127,7 @@ class MvpAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         attn_prompt: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -165,10 +165,7 @@ class MvpAttention(nn.Module):
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -338,7 +335,7 @@ class MvpDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = True,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
@@ -367,7 +364,6 @@ class MvpDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             attn_prompt=self_attn_prompt,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -567,7 +563,7 @@ class MvpEncoder(MvpPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
@@ -698,7 +694,6 @@ class MvpDecoder(MvpPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -756,7 +751,7 @@ class MvpDecoder(MvpPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
@@ -789,16 +784,11 @@ class MvpDecoder(MvpPreTrainedModel):
             )
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
 
         attention_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -849,7 +839,6 @@ class MvpDecoder(MvpPreTrainedModel):
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
             )
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -929,7 +918,6 @@ class MvpModel(MvpPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqModelOutput:
         r"""
@@ -974,7 +962,7 @@ class MvpModel(MvpPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1005,7 +993,6 @@ class MvpModel(MvpPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1078,7 +1065,6 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqLMOutput:
         r"""
@@ -1136,7 +1122,7 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
         >>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             if use_cache:
@@ -1160,7 +1146,6 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
 
@@ -1282,7 +1267,7 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
         >>> predicted_class_id = logits.argmax()
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         if labels is not None:
             use_cache = False
 
@@ -1449,7 +1434,7 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
         >>> predict_answer = tokenizer.decode(predict_answer_tokens)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         if start_positions is not None and end_positions is not None:
             use_cache = False
 
@@ -1566,7 +1551,6 @@ class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | CausalLMOutputWithCrossAttentions:
@@ -1596,7 +1580,7 @@ class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model.decoder(

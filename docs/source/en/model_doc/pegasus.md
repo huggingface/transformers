@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-12-18 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-12-18 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -35,36 +34,17 @@ You can find all the original Pegasus checkpoints under the [Google](https://hug
 The example below demonstrates how to summarize text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```py
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(
-    task="summarization",
-    model="google/pegasus-xsum",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("""Plants are remarkable organisms that produce their own food using a method called photosynthesis.
-This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
-Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems.""")
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "google/pegasus-xsum"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/pegasus-xsum",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -79,31 +59,22 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants are remarkable organisms that produce their own food using a method called photosynthesis. This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth. Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems." | transformers run --task summarization --model google/pegasus-xsum --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
-```py
-import torch
-from transformers import BitsAndBytesConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+```python
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_quant_type="nf4"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/pegasus-xsum",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

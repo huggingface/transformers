@@ -13,10 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-06-01 and added to Hugging Face Transformers on 2022-05-02.*
+*This model was published in HF papers on 2021-06-01 and contributed to Hugging Face Transformers on 2022-05-02.*
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -41,14 +40,13 @@ The example below demonstrates how to detect objects with [`Pipeline`] or the [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 detector = pipeline(
     task="object-detection",
     model="hustvl/yolos-base",
-    dtype=torch.float16,
     device=0
 )
 detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
@@ -57,17 +55,16 @@ detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.pn
 </hfoption>
 <hfoption id="Automodel">
 
-```py
+```python
+import requests
 import torch
 from PIL import Image
-import requests
-from transformers import AutoImageProcessor, AutoModelForObjectDetection
-from accelerate import Accelerator
 
-device = Accelerator().device
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 processor = AutoImageProcessor.from_pretrained("hustvl/yolos-base")
-model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", dtype=torch.float16, attn_implementation="sdpa").to(device)
+model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", attn_implementation="sdpa", device_map="auto")
 
 url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
@@ -114,9 +111,9 @@ for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
 [[autodoc]] YolosImageProcessor
     - preprocess
 
-## YolosImageProcessorFast
+## YolosImageProcessorPil
 
-[[autodoc]] YolosImageProcessorFast
+[[autodoc]] YolosImageProcessorPil
     - preprocess
     - pad
     - post_process_object_detection

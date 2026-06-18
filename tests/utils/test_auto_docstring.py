@@ -26,10 +26,11 @@ import unittest
 from pathlib import Path
 
 import torch
+from huggingface_hub.dataclasses import strict
 
 from transformers.configuration_utils import PretrainedConfig
+from transformers.image_processing_backends import TorchvisionBackend
 from transformers.image_processing_utils import BatchFeature
-from transformers.image_processing_utils_fast import BaseImageProcessorFast
 from transformers.image_utils import ImageInput
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
@@ -355,7 +356,7 @@ class DummyImageProcessorKwargs(ImagesKwargs, total=False):
     Constructs a fast DummyForTest image processor.
     """
 )
-class DummyForTestImageProcessorFast(BaseImageProcessorFast):
+class DummyForTestImageProcessorFast(TorchvisionBackend):
     model_input_names = ["pixel_values"]
     valid_kwargs = DummyImageProcessorKwargs
 
@@ -385,6 +386,21 @@ class DummyForTestImageProcessorFast(BaseImageProcessorFast):
         pass
 
 
+@strict
+@auto_docstring(custom_intro="A minimal configuration for testing that config docstrings only show own args.")
+class DummyStrictConfig(PretrainedConfig):
+    r"""
+    extra_param (`str`, *optional*, defaults to `"test"`):
+        A custom parameter unique to this config, not inherited from PreTrainedConfig.
+    """
+
+    model_type = "dummy_strict_for_docstring_test"
+
+    hidden_size: int = 256
+    num_layers: int = 6
+    extra_param: str = "test"
+
+
 @require_torch
 class TestFullDocstringGeneration(unittest.TestCase):
     """
@@ -393,6 +409,22 @@ class TestFullDocstringGeneration(unittest.TestCase):
     Tests validate complete docstrings with single assertEqual assertions to ensure structure,
     formatting, standard args, custom params, and TypedDict unrolling work correctly.
     """
+
+    def test_strict_config_docstring_only_documents_own_args(self):
+        """Test that config docstrings only document own class annotations, not inherited PreTrainedConfig args."""
+        self.maxDiff = None
+        actual_docstring = DummyStrictConfig.__doc__
+        expected_docstring = """A minimal configuration for testing that config docstrings only show own args.
+
+Args:
+    hidden_size (`int`, *optional*, defaults to `256`):
+        Dimension of the hidden representations.
+    num_layers (`int`, *optional*, defaults to `6`):
+        Number of hidden layers in the Transformer decoder.
+    extra_param (`str`, *optional*, defaults to `"test"`):
+        A custom parameter unique to this config, not inherited from PreTrainedConfig.
+"""
+        self.assertEqual(actual_docstring, expected_docstring)
 
     def test_dummy_model_complete_docstring(self):
         self.maxDiff = None
@@ -576,7 +608,7 @@ Parameters:
 
     def test_dummy_image_processor_complete_docstring(self):
         self.maxDiff = None
-        """Test complete class and preprocess docstrings for BaseImageProcessorFast with custom ImagesKwargs and custom_intro."""
+        """Test complete class and preprocess docstrings for DummyForTestImageProcessorFast with custom ImagesKwargs and custom_intro."""
 
         actual_preprocess_docstring = DummyForTestImageProcessorFast.preprocess.__doc__
 

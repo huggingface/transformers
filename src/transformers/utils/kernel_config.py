@@ -12,11 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import PushToHubMixin, is_torch_available
-
-
-if is_torch_available():
-    import torch
+from ..utils import PushToHubMixin
 
 
 def infer_device(model):
@@ -48,17 +44,24 @@ def infer_device(model):
     dev_type = param.device.type
     if dev_type == "cuda":
         # Refine based on actual platform
-        if torch.version.hip is not None:
-            return "rocm"
+        from ..utils import is_torch_available
+
+        if is_torch_available():
+            import torch
+
+            if getattr(torch, "version").hip is not None:
+                return "rocm"
 
     return dev_type
 
 
-def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
+def add_to_mapping(
+    layer_name, device, repo_name, mode, compatible_mapping, version=1, revision=None, trust_remote_code=False
+):
     from kernels import LayerRepository
 
-    if device not in ["cuda", "rocm", "xpu", "npu", "neuron"]:
-        raise ValueError(f"Only cuda, rocm, xpu, npu and neuron devices supported, got: {device}")
+    if device not in ["cuda", "rocm", "xpu", "npu", "neuron", "tpu"]:
+        raise ValueError(f"Only cuda, rocm, xpu, npu, neuron and tpu devices supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
     repo_id = repo_name.split(":")[0]
     compatible_mapping[layer_name] = {
@@ -66,6 +69,9 @@ def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
             mode: LayerRepository(
                 repo_id=repo_id,
                 layer_name=repo_layer_name,
+                version=version,
+                revision=revision,
+                trust_remote_code=trust_remote_code,
             )
         }
     }
@@ -76,8 +82,8 @@ def add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping
 
     from kernels import LocalLayerRepository
 
-    if device not in ["cuda", "rocm", "xpu", "npu", "neuron"]:
-        raise ValueError(f"Only cuda, rocm, xpu, npu and neuron devices supported, got: {device}")
+    if device not in ["cuda", "rocm", "xpu", "npu", "neuron", "tpu"]:
+        raise ValueError(f"Only cuda, rocm, xpu, npu, neuron and tpu devices supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
     repo_path = repo_name.split(":")[0]
     repo_package_name = repo_path.split("/")[-1]
@@ -102,7 +108,9 @@ class KernelConfig(PushToHubMixin):
         self.registered_layer_names = {}
         self.use_local_kernel = use_local_kernel
 
-    def update_kernel(self, repo_id, registered_name, layer_name, device, mode, revision=None):
+    def update_kernel(
+        self, repo_id, registered_name, layer_name, device, mode, revision=None, version=1, trust_remote_code=False
+    ):
         from kernels import LayerRepository
 
         self.kernel_mapping[registered_name] = {
@@ -111,6 +119,8 @@ class KernelConfig(PushToHubMixin):
                     repo_id=repo_id,
                     layer_name=layer_name,
                     revision=revision,
+                    version=version,
+                    trust_remote_code=trust_remote_code,
                 )
             }
         }
@@ -124,10 +134,14 @@ class KernelConfig(PushToHubMixin):
         """
         Validates the kernel_mapping to ensure that:
         1. Each layer_name in the mapping is registered in the model (i.e., the model contains a module with a matching kernel_layer_name).
-        2. Each kernel value is either a string of the form 'org/repo:layer_name' or a dict mapping device types ("cuda", "rocm", "xpu", "npu") to such strings.
+        2. Each kernel value is
+            - either a string of the form 'org/repo:layer_name' or a tuple with the same as string and a dict of {"revision"/"version/trust_remote_code": ...},
+            - or a dict mapping device types ("cuda", "rocm", "xpu", "npu") to such values as above.
         3. Each device key in a dict is one of "cuda", "rocm", "xpu", or "npu".
-        4. Each repo_name is a valid repository and layer name in the format 'org/repo:layer_name' (i.e., a string containing both a slash and a colon).
-        5. If a local path is detected, it should be in the format '/abs/path:layer_name'. The absolute path must include the `package_name`, like "/home/user/layer_norm".
+        5. Each trust remote code key must be a bool.
+        6. Each revision or version key must exist mutually exclusive if it has been passed explicitly.
+        7. Each repo_name is a valid repository and layer name in the format 'org/repo:layer_name' (i.e., a string containing both a slash and a colon).
+        8. If a local path is detected, it should be in the format '/abs/path:layer_name'. The absolute path must include the `package_name`, like "/home/user/layer_norm".
 
         Args:
             model: The model instance whose modules are checked for registered kernel_layer_name attributes.
@@ -154,6 +168,12 @@ class KernelConfig(PushToHubMixin):
             },
             ...
         }
+        You can also pass metadata along to inform about specific kernel information
+        {
+            "RMSNorm":
+                ("kernels-community/layer_norm:LlamaRMSNorm", {"version": 1, "trust_remote_code": True}),
+            ...
+        },
         For single device form local
         {
             "RMSNorm":
@@ -185,16 +205,40 @@ class KernelConfig(PushToHubMixin):
                     f"Layer {layer_name} is not registered in the model, please register it first using use_kernel_forward_from_hub"
                 )
 
-            if isinstance(kernel, str):
-                if "/" not in kernel or ":" not in kernel:
-                    raise ValueError(
-                        f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs/path:layer_name'), got: {kernel}"
-                    )
+            skip_device_check = False
+            if isinstance(kernel, (str, tuple)):
+                kernel = {None: kernel}
+                skip_device_check = True
 
-            elif isinstance(kernel, dict):
-                for device, repo_name in kernel.items():
-                    if device not in ["cuda", "rocm", "xpu", "npu", "neuron"]:
-                        raise ValueError(f"Only cuda, rocm, xpu, npu and neuron devices supported, got: {device}")
+            if isinstance(kernel, dict):
+                for device, repo in kernel.items():
+                    repo_name = repo
+                    if not skip_device_check and device not in ["cuda", "rocm", "xpu", "npu", "neuron", "tpu"]:
+                        raise ValueError(f"Only cuda, rocm, xpu, npu, neuron and tpu devices supported, got: {device}")
+
+                    # Check case where metadata (revision/version/trust_remote_code) is explicitly passed
+                    if isinstance(repo, tuple):
+                        repo_name, metadata = repo
+
+                        if not isinstance(metadata, dict):
+                            raise ValueError(
+                                "The passed metadata as second entry in a tuple needs to be a dict but found: "
+                                f"{type(metadata) = } for {metadata}."
+                            )
+
+                        if (trust_remote_code := metadata.get("trust_remote_code", None)) is not None:
+                            if not isinstance(trust_remote_code, bool):
+                                raise ValueError(
+                                    f"Expected a bool value for `trust_remote_code` but got {trust_remote_code}"
+                                )
+
+                        if (revision := metadata.get("revision", None)) is None and (
+                            version := metadata.get("version", None)
+                        ) is None:
+                            raise ValueError(
+                                "Expected valid combination for version/revision (mutually exclusive but one of them) "
+                                f"to be passed when passed as tuple, but got {revision= } and {version= }"
+                            )
 
                     if not isinstance(repo_name, str) or "/" not in repo_name or ":" not in repo_name:
                         raise ValueError(
@@ -208,7 +252,7 @@ class KernelConfig(PushToHubMixin):
         Transforms a simple kernel_mapping of the form:
             {
                 "RMSNorm":
-                    "kernels-community/layer_norm:LlamaRMSNorm",
+                    ("kernels-community/layer_norm:LlamaRMSNorm", {"version": 1, "trust_remote_code": True}),
                 ...
             },
 
@@ -228,6 +272,8 @@ class KernelConfig(PushToHubMixin):
                         Mode.INFERENCE: LayerRepository(
                             repo_id="kernels-community/layer_norm",
                             layer_name="LlamaRMSNorm",
+                            version=1,
+                            trust_remote_code=True,
                         )
                     }
                 }
@@ -262,19 +308,38 @@ class KernelConfig(PushToHubMixin):
             if compile:
                 mode = mode | Mode.TORCH_COMPILE
 
-            if isinstance(kernel, str):
-                repo_name = kernel
-                if not self.use_local_kernel:
-                    add_to_mapping(layer_name, current_device, repo_name, mode, compatible_mapping)
+            if isinstance(kernel, (str, tuple)):
+                kernel = {current_device: kernel}
+
+            for device, repo in kernel.items():
+                if device != current_device:
+                    continue
+
+                if self.use_local_kernel:
+                    add_to_mapping_local(layer_name, device, repo, mode, compatible_mapping)
+                    continue
+
+                # Infer metadata (revision/version/trust_remote_code)
+                if isinstance(repo, tuple):
+                    repo_name, metadata = repo
+                    revision = metadata.get("revision", None)
+                    version = metadata.get("version", None)
+                    trust_remote_code = metadata.get("trust_remote_code", False)
                 else:
-                    add_to_mapping_local(layer_name, current_device, repo_name, mode, compatible_mapping)
-            elif isinstance(kernel, dict):
-                for device, repo_name in kernel.items():
-                    if device != current_device:
-                        continue
-                    if not self.use_local_kernel:
-                        add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping)
-                    else:
-                        add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping)
+                    repo_name = repo
+                    revision = None
+                    version = 1
+                    trust_remote_code = False
+
+                add_to_mapping(
+                    layer_name,
+                    device=device,
+                    repo_name=repo_name,
+                    mode=mode,
+                    compatible_mapping=compatible_mapping,
+                    version=version,
+                    revision=revision,
+                    trust_remote_code=trust_remote_code,
+                )
 
         self.kernel_mapping = compatible_mapping

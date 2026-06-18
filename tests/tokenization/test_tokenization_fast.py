@@ -217,6 +217,65 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
             tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=True)
             self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
 
+    def test_bpe_tokenizer_skips_clean_up_tokenization_spaces(self):
+        """BPE tokenizers should not apply clean_up_tokenization even when the flag is True.
+
+        clean_up_tokenization strips spaces before punctuation (e.g. " ." -> "."),
+        which was designed for WordPiece tokenizers. For BPE tokenizers, spaces are
+        encoded as part of tokens and the cleanup is destructive.
+        """
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.bytelevel_bpe_model_name)
+        tokenizer.clean_up_tokenization_spaces = True
+
+        # Text with space before punctuation — cleanup would strip it if applied.
+        # Leading space accounts for ByteLevel BPE's add_prefix_space behavior.
+        text = " Hello world ."
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        decoded = tokenizer.decode(ids, clean_up_tokenization_spaces=True)
+
+        # The space before "." must be preserved — BPE guard skips the cleanup
+        self.assertEqual(decoded, text)
+
+    def test_bpe_override_forces_cleanup(self):
+        """The escape hatch flag forces cleanup even for BPE tokenizers."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.bytelevel_bpe_model_name)
+        tokenizer.clean_up_tokenization_spaces = True
+        tokenizer.clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output = True
+
+        text = " Hello world ."
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        decoded = tokenizer.decode(ids, clean_up_tokenization_spaces=True)
+
+        # With the override, cleanup IS applied — spaces before punctuation are stripped
+        self.assertEqual(decoded, " Hello world.")
+
+    def test_bpe_override_irrelevant_when_cleanup_false(self):
+        """Override flag has no effect when clean_up_tokenization_spaces is False."""
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.bytelevel_bpe_model_name)
+        tokenizer.clean_up_tokenization_spaces = False
+        tokenizer.clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output = True
+
+        # Leading space accounts for ByteLevel BPE's add_prefix_space behavior
+        text = " Hello world ."
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        decoded = tokenizer.decode(ids)
+
+        # cleanup=False takes precedence — text is preserved, override is irrelevant
+        self.assertEqual(decoded, text)
+
+    def test_non_bpe_tokenizer_still_cleans_up(self):
+        """Non-BPE tokenizers should still apply cleanup normally."""
+        # model_paths[0] is a WordLevel tokenizer (non-BPE)
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.model_paths[0])
+        tokenizer.clean_up_tokenization_spaces = True
+
+        text = "hello world ."
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        decoded = tokenizer.decode(ids, clean_up_tokenization_spaces=True)
+
+        # Non-BPE: cleanup IS applied — space before "." is stripped
+        self.assertNotIn(" .", decoded)
+
 
 @require_tokenizers
 class TokenizerVersioningTest(unittest.TestCase):
@@ -287,3 +346,47 @@ class ReduceMutableBorrowTests(unittest.TestCase):
 
     def fetch(self, tokenizer, text):
         return tokenizer.encode(text, truncation="longest_first", padding="longest")
+
+
+@require_tokenizers
+class PatchMistralRegexHubCallTests(unittest.TestCase):
+    """
+    Regression tests for https://github.com/huggingface/transformers/issues/44749 /
+    https://github.com/huggingface/transformers/issues/43502
+
+    `_patch_mistral_regex` used to unconditionally call `huggingface_hub.model_info`
+    for any tokenizer with vocab > 100k (e.g. Qwen3), causing a large slowdown
+    and breaking offline / local-path loading.
+    """
+
+    def _dummy_backend_tokenizer(self):
+        tok = Tokenizer(WordLevel({"[UNK]": 0, "a": 1}, unk_token="[UNK]"))
+        tok.pre_tokenizer = pre_tokenizers.Whitespace()
+        return tok
+
+    def test_local_files_only_skips_model_info(self):
+        from unittest.mock import patch
+
+        tok = self._dummy_backend_tokenizer()
+        with patch(
+            "huggingface_hub.model_info",
+            side_effect=AssertionError("model_info must not be called when local_files_only=True"),
+        ):
+            result = PreTrainedTokenizerFast._patch_mistral_regex(
+                tok,
+                "some/non-mistral-repo-id",
+                local_files_only=True,
+            )
+        self.assertIsNotNone(result)
+
+    def test_hub_error_does_not_break_init(self):
+        from unittest.mock import patch
+
+        tok = self._dummy_backend_tokenizer()
+        with patch("huggingface_hub.model_info", side_effect=RuntimeError("hub down")):
+            # Must not raise — a Hub failure should be swallowed for non-Mistral models.
+            result = PreTrainedTokenizerFast._patch_mistral_regex(
+                tok,
+                "not-a-real/hub-id",
+            )
+        self.assertIsNotNone(result)

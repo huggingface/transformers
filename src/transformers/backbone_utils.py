@@ -15,11 +15,11 @@
 """Collection of utils to be used by backbones and their components."""
 
 import enum
+import functools
 import inspect
 
-from huggingface_hub import repo_exists
-
-from .utils import logging
+from .utils import hf_api, logging
+from .utils.output_capturing import maybe_install_capturing_hooks
 
 
 logger = logging.get_logger(__name__)
@@ -155,6 +155,29 @@ class BackboneConfigMixin:
         return output
 
 
+def filter_output_hidden_states(forward_function):
+    """
+    Wrapper for backbone forwards. Backbones always compute `hidden_states` to build their feature maps, so
+    this forces `output_hidden_states=True` on the wrapped forward and then removes `hidden_states` from the
+    returned object unless the caller explicitly requested them.
+
+    NOTE: We assume a `can_return_tuple` decorator to be applied before so that we always expect a dict like
+          object to remove the hidden states.
+    """
+
+    @functools.wraps(forward_function)
+    def wrapper(self, *args, **kwargs):
+        output_hidden_states = kwargs.get("output_hidden_states", getattr(self.config, "output_hidden_states", False))
+        kwargs["output_hidden_states"] = True
+        output = forward_function(self, *args, **kwargs)
+        if not output_hidden_states:
+            filtered_output_data = {k: v for k, v in output.items() if k != "hidden_states"}
+            output = type(output)(**filtered_output_data)
+        return output
+
+    return wrapper
+
+
 class BackboneMixin:
     backbone_type: BackboneType | None = None
 
@@ -180,6 +203,18 @@ class BackboneMixin:
             self._init_transformers_backbone()
         else:
             raise ValueError(f"backbone_type {self.backbone_type} not supported.")
+
+    def post_init(self):
+        """
+        Override `post_init` to always install capturing hooks, as backbone will ALWAYS capture outputs. We need to do
+        it in `post_init`, as modules need to be already instantiated.
+        It avoids some mixups with `torch.compile`, as the first hook installation will need/create a graph break,
+        which can clash with external user call such as `model = torch.compile(model...)`.
+        """
+        # NOTE: Since this class is ALWAYS used as a Mixin with another PreTrainedModel class, this `super` call
+        # will call the PreTrained's `post_init`
+        super().post_init()
+        maybe_install_capturing_hooks(self)
 
     def _init_timm_backbone(self, backbone) -> None:
         """
@@ -299,7 +334,7 @@ def consolidate_backbone_kwargs_to_config(
     ):
         backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **timm_default_kwargs)
     elif backbone is not None and backbone_config is None:
-        if repo_exists(backbone):
+        if hf_api().repo_exists(backbone):
             config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
             config_dict.update(backbone_kwargs)

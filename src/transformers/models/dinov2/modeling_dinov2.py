@@ -21,7 +21,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -178,7 +178,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Dinov2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2
 class Dinov2SelfAttention(nn.Module):
     def __init__(self, config: Dinov2Config):
         super().__init__()
@@ -200,7 +200,11 @@ class Dinov2SelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -221,6 +225,7 @@ class Dinov2SelfAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -229,7 +234,7 @@ class Dinov2SelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Dinov2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2
 class Dinov2SelfOutput(nn.Module):
     """
     The residual connection is defined in Dinov2Layer instead of here (as is the case with other models), due to the
@@ -247,15 +252,19 @@ class Dinov2SelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2
 class Dinov2Attention(nn.Module):
     def __init__(self, config: Dinov2Config):
         super().__init__()
         self.attention = Dinov2SelfAttention(config)
         self.output = Dinov2SelfOutput(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -267,37 +276,6 @@ class Dinov2LayerScale(nn.Module):
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         return hidden_state * self.lambda1
-
-
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath
-class Dinov2DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
 
 
 class Dinov2MLP(nn.Module):
@@ -334,6 +312,31 @@ class Dinov2SwiGLUFFN(nn.Module):
         x1, x2 = hidden_state.chunk(2, dim=-1)
         hidden = nn.functional.silu(x1) * x2
         return self.weights_out(hidden)
+
+
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->Dinov2DropPath
+class Dinov2DropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
 
 
 class Dinov2Layer(GradientCheckpointingLayer):
@@ -377,26 +380,6 @@ class Dinov2Layer(GradientCheckpointingLayer):
         return layer_output
 
 
-class Dinov2Encoder(nn.Module):
-    def __init__(self, config: Dinov2Config):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([Dinov2Layer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(self, hidden_states: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
-        all_hidden_states = [hidden_states] if output_hidden_states else None
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states)
-            if all_hidden_states:
-                all_hidden_states.append(hidden_states)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
-        )
-
-
 @auto_docstring
 class Dinov2PreTrainedModel(PreTrainedModel):
     config: Dinov2Config
@@ -410,6 +393,7 @@ class Dinov2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
+        "hidden_states": Dinov2Layer,
         "attentions": Dinov2SelfAttention,
     }
 
@@ -432,6 +416,21 @@ class Dinov2PreTrainedModel(PreTrainedModel):
             init.constant_(module.lambda1, self.config.layerscale_value)
 
 
+class Dinov2Encoder(Dinov2PreTrainedModel):
+    def __init__(self, config: Dinov2Config):
+        super().__init__(config)
+        self.layer = nn.ModuleList([Dinov2Layer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring
 class Dinov2Model(Dinov2PreTrainedModel):
     def __init__(self, config: Dinov2Config):
@@ -449,30 +448,25 @@ class Dinov2Model(Dinov2PreTrainedModel):
     def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
         bool_masked_pos: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
         """
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
-        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=output_hidden_states)
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
         pooled_output = sequence_output[:, 0, :]
@@ -481,6 +475,7 @@ class Dinov2Model(Dinov2PreTrainedModel):
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -561,11 +556,13 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
     def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
-        self, pixel_values: torch.Tensor, output_hidden_states: bool | None = None, **kwargs
+        self,
+        pixel_values: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -593,11 +590,10 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
 
         embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=True)
+        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         hidden_states = output.hidden_states
 
         feature_maps = []
@@ -617,7 +613,8 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states if output_hidden_states else None,
+            hidden_states=hidden_states,
+            attentions=output.attentions,
         )
 
 

@@ -16,16 +16,18 @@ import itertools
 from collections.abc import Callable
 
 import torch
+from huggingface_hub.dataclasses import strict
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 from torch import nn
 
+from ...audio_utils import AudioInput, make_list_of_audio
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
@@ -33,11 +35,14 @@ from ..parakeet.configuration_parakeet import ParakeetCTCConfig, ParakeetEncoder
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoderBlock,
     ParakeetEncoderConvolutionModule,
+    ParakeetEncoderModelOutput,
     ParakeetForCTC,
     ParakeetPreTrainedModel,
 )
-from ..parakeet.processing_parakeet import ParakeetProcessor
 from ..t5.tokenization_t5 import T5Tokenizer
+
+
+logger = logging.get_logger(__name__)
 
 
 class LasrTokenizer(T5Tokenizer, TokenizersBackend):
@@ -143,200 +148,164 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
         )
 
 
-class LasrProcessor(ParakeetProcessor):
-    pass
+class LasrProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "audio_kwargs": {
+            "sampling_rate": 16000,
+            "padding": "longest",
+            "return_attention_mask": True,
+        },
+        "text_kwargs": {
+            "padding": True,
+            "padding_side": "right",
+            "add_special_tokens": False,
+        },
+        "common_kwargs": {"return_tensors": "pt"},
+    }
 
 
+@auto_docstring
+class LasrProcessor(ProcessorMixin):
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
+
+    @auto_docstring
+    def __call__(
+        self,
+        audio: AudioInput,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        sampling_rate: int | None = None,
+        **kwargs: Unpack[LasrProcessorKwargs],
+    ):
+        r"""
+        sampling_rate (`int`, *optional*):
+            The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
+            extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
+            sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
+            issued and the default sampling rate will be assumed.
+        """
+        audio = make_list_of_audio(audio)
+
+        output_kwargs = self._merge_kwargs(
+            LasrProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        if sampling_rate is None:
+            logger.warning_once(
+                f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
+            )
+        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
+            raise ValueError(
+                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
+            )
+
+        if audio is not None:
+            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+        if text is not None:
+            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+        if text is None:
+            return inputs
+        else:
+            inputs["labels"] = encodings["input_ids"]
+            return inputs
+
+    @property
+    def model_input_names(self):
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+        return feature_extractor_input_names + ["labels"]
+
+
+@auto_docstring(checkpoint="google/medasr")
+@strict
 class LasrEncoderConfig(ParakeetEncoderConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LasrEncoder`]. It is used to instantiate a
-    `LasrEncoder` model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-            hidden_size (`int`, *optional*, defaults to 512):
-                Dimension of the layers and the hidden states.
-            num_hidden_layers (`int`, *optional*, defaults to 17):
-                Number of hidden layers in the Transformer encoder.
-            num_attention_heads (`int`, *optional*, defaults to 8):
-                Number of attention heads for each attention layer in the Transformer encoder.
-            intermediate_size (`int`, *optional*, defaults to 2048):
-                Dimension of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-                The non-linear activation function (function or string) in the encoder and pooler.
-            attention_bias (`bool`, *optional*, defaults to `False`):
-                Whether to use bias in the attention layers.
-            convolution_bias (`bool`, *optional*, defaults to `False`):
-                Whether to use bias in convolutions of the conformer's convolution module.
-            conv_kernel_size (`int`, *optional*, defaults to 32):
-                The kernel size of the convolution layers in the Conformer block.
-            subsampling_conv_channels (`int`, *optional*, defaults to 256):
-                The number of channels in the subsampling convolution layers.
-            subsampling_conv_kernel_size (`int`, *optional*, defaults to 5):
-                The kernel size of the subsampling convolution layers.
-            subsampling_conv_stride (`int`, *optional*, defaults to 2):
-                The stride of the subsampling convolution layers.
-            num_mel_bins (`int`, *optional*, defaults to 128):
-                Number of mel features.
-            dropout (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for all fully connected layers in the embeddings, encoder, and pooler.
-            dropout_positions (`float`, *optional*, defaults to 0.0):
-                The dropout ratio for the positions in the input sequence.
-            layerdrop (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for the layers in the encoder.
-            activation_dropout (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for activations inside the fully connected layer.
-            attention_dropout (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for the attention layers.
-            max_position_embeddings (`int`, *optional*, defaults to 10000):
-                The maximum sequence length that this model might ever be used with.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-                The epsilon used by the layer normalization layers.
-            feed_forward_residual_weights (`tuple[float, float]`, *optional*, defaults to `[1.5, 0.5]`):
-                The residual weights for the feed forward layers.
-            conv_residual_weights (`tuple[float, float]`, *optional*, defaults to `[2.0, 1.0]`):
-                The residual weights for the convolution layers.
-            batch_norm_momentum (`float`, *optional*, defaults to 0.01):
-                The momentum for the batch normalization layers.
-            rope_parameters (`RopeParameters`, *optional*):
-                Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-                a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-                with longer `max_position_embeddings`.
+    convolution_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in convolutions of the conformer's convolution module.
+    conv_kernel_size (`int`, *optional*, defaults to 32):
+        The kernel size of the convolution layers in the Conformer block.
+    subsampling_conv_channels (`int`, *optional*, defaults to 256):
+        The number of channels in the subsampling convolution layers.
+    subsampling_conv_kernel_size (`int`, *optional*, defaults to 5):
+        The kernel size of the subsampling convolution layers.
+    subsampling_conv_stride (`int`, *optional*, defaults to 2):
+        The stride of the subsampling convolution layers.
+    dropout_positions (`float`, *optional*, defaults to 0.0):
+        The dropout ratio for the positions in the input sequence.
+    feed_forward_residual_weights (`tuple[float, float]`, *optional*, defaults to `[1.5, 0.5]`):
+        The residual weights for the feed forward layers.
+    conv_residual_weights (`tuple[float, float]`, *optional*, defaults to `[2.0, 1.0]`):
+        The residual weights for the convolution layers.
+    batch_norm_momentum (`float`, *optional*, defaults to 0.01):
+        The momentum for the batch normalization layers
 
     Example:
-        ```python
-        >>> from transformers import LasrEncoderModel, LasrEncoderConfig
+    ```python
+    >>> from transformers import LasrEncoderModel, LasrEncoderConfig
 
-        >>> # Initializing a `LasrEncoder` configuration
-        >>> configuration = LasrEncoderConfig()
+    >>> # Initializing a `LasrEncoder` configuration
+    >>> configuration = LasrEncoderConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = LasrEncoderModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = LasrEncoderModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
 
     This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
 
-    def __init__(
-        self,
-        hidden_size=512,
-        num_hidden_layers=17,
-        num_attention_heads=8,
-        intermediate_size=2048,
-        hidden_act="silu",
-        attention_bias=False,
-        convolution_bias=False,
-        conv_kernel_size=32,
-        subsampling_conv_channels=256,
-        subsampling_conv_kernel_size=5,
-        subsampling_conv_stride=2,
-        num_mel_bins=128,
-        dropout=0.1,
-        dropout_positions=0.0,
-        layerdrop=0.1,
-        activation_dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=10000,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        feed_forward_residual_weights=[1.5, 0.5],
-        conv_residual_weights=[2.0, 1.0],
-        batch_norm_momentum=0.01,
-        rope_parameters=None,
-        **kwargs,
-    ):
-        self.rope_parameters = rope_parameters
-        self.layer_norm_eps = layer_norm_eps
-        self.feed_forward_residual_weights = feed_forward_residual_weights
-        self.conv_residual_weights = conv_residual_weights
-        self.batch_norm_momentum = batch_norm_momentum
+    hidden_size: int = 512
+    num_hidden_layers: int = 17
+    intermediate_size: int = 2048
+    attention_bias: bool = False
+    convolution_bias: bool = False
+    conv_kernel_size: int = 32
+    subsampling_conv_kernel_size: int = 5
+    num_mel_bins: int = 128
+    max_position_embeddings: int = 10000
+    layer_norm_eps: float = 1e-6
+    feed_forward_residual_weights: list[float] | tuple[float, ...] = (1.5, 0.5)
+    conv_residual_weights: list[float] | tuple[float, ...] = (2.0, 1.0)
+    batch_norm_momentum: float = 0.01
+    rope_parameters: dict | None = None
 
-        super().__init__(
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            attention_bias=attention_bias,
-            convolution_bias=convolution_bias,
-            conv_kernel_size=conv_kernel_size,
-            subsampling_conv_channels=subsampling_conv_channels,
-            num_mel_bins=num_mel_bins,
-            subsampling_conv_kernel_size=subsampling_conv_kernel_size,
-            subsampling_conv_stride=subsampling_conv_stride,
-            dropout=dropout,
-            dropout_positions=dropout_positions,
-            layerdrop=layerdrop,
-            activation_dropout=activation_dropout,
-            attention_dropout=attention_dropout,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            **kwargs,
-        )
-
-        del self.subsampling_factor
-        del self.scale_input
+    subsampling_factor = AttributeError()
+    scale_input = AttributeError()
 
 
+@auto_docstring(checkpoint="google/medasr")
+@strict
 class LasrCTCConfig(ParakeetCTCConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LasrForCTC`]. It is used to instantiate a
-    Lasr CTC model according to the specified arguments, defining the model architecture.
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-    Args:
-            vocab_size (`int`, *optional*, defaults to 512):
-                Vocabulary size of the model.
-            ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
-                Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-                instance of [`LasrForCTC`].
-            ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
-                Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-                occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-                of [`LasrForCTC`].
-            encoder_config (`Union[dict, LasrEncoderConfig]`, *optional*):
-                The config object or dictionary of the encoder.
-            pad_token_id (`int`, *optional*, defaults to 0):
-                Padding token id. Also used as blank token id.
+    ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+        Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+        instance of [`LasrForCTC`].
+    ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
+        Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+        occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+        of [`LasrForCTC`].
+
     Example:
-        ```python
-        >>> from transformers import LasrForCTC, LasrCTCConfig
-        >>> # Initializing a Lasr configuration
-        >>> configuration = LasrCTCConfig()
-        >>> # Initializing a model from the configuration
-        >>> model = LasrForCTC(configuration)
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
+    ```python
+    >>> from transformers import LasrForCTC, LasrCTCConfig
+    >>> # Initializing a Lasr configuration
+    >>> configuration = LasrCTCConfig()
+    >>> # Initializing a model from the configuration
+    >>> model = LasrForCTC(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
 
-    def __init__(
-        self,
-        vocab_size=512,
-        ctc_loss_reduction="mean",
-        ctc_zero_infinity=True,
-        encoder_config: dict | LasrEncoderConfig = None,
-        pad_token_id=0,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            ctc_loss_reduction=ctc_loss_reduction,
-            ctc_zero_infinity=ctc_zero_infinity,
-            encoder_config=encoder_config,
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+    vocab_size: int = 512
+    pad_token_id: int = 0
 
     @property
     def inputs_to_logits_ratio(self):
@@ -491,6 +460,10 @@ class LasrPreTrainedModel(ParakeetPreTrainedModel):
         return input_lengths
 
 
+class LasrEncoderModelOutput(ParakeetEncoderModelOutput):
+    pass
+
+
 @auto_docstring(
     custom_intro="""
     The LasrEncoder model, based on the Conformer architecture](https://arxiv.org/abs/2005.08100).
@@ -525,16 +498,20 @@ class LasrEncoder(LasrPreTrainedModel):
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        output_attention_mask: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> LasrEncoderModelOutput:
         r"""
+        output_attention_mask (`bool`, *optional*):
+            Whether to return the output attention mask.
+
         Example:
 
         ```python
         >>> from transformers import AutoProcessor, LasrEncoder
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> encoder = ParakeetEncoder.from_pretrained(model_id)
 
@@ -557,8 +534,10 @@ class LasrEncoder(LasrPreTrainedModel):
         cos = nn.functional.dropout(cos, p=self.dropout_positions, training=self.training)
         sin = nn.functional.dropout(sin, p=self.dropout_positions, training=self.training)
 
+        output_mask = None
         if attention_mask is not None:
-            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            output_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            attention_mask = output_mask
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -584,7 +563,10 @@ class LasrEncoder(LasrPreTrainedModel):
 
         hidden_states = self.out_norm(hidden_states)
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return LasrEncoderModelOutput(
+            last_hidden_state=hidden_states,
+            attention_mask=output_mask.int() if output_attention_mask and output_mask is not None else None,
+        )
 
 
 class LasrForCTC(ParakeetForCTC):
@@ -596,7 +578,7 @@ class LasrForCTC(ParakeetForCTC):
         >>> from transformers import AutoProcessor, LasrForCTC
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = LasrForCTC.from_pretrained(model_id)
 

@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from collections.abc import Callable
 from typing import Optional
 
@@ -201,7 +200,7 @@ class SolarOpenMoE(nn.Module):
             .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
             .reshape(-1, self.n_routed_experts)
         )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
+        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
         topk_weights = router_logits.gather(1, topk_indices)
         if self.norm_topk_prob:

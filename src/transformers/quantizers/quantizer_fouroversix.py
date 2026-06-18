@@ -7,6 +7,7 @@ from .quantizers_utils import get_module_from_name
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import FourOverSixConfig
 
 from ..utils import (
     is_torch_available,
@@ -23,6 +24,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "FourOverSixConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)

@@ -19,7 +19,7 @@ from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
 )
-from ..sam2.image_processing_sam2_fast import Sam2ImageProcessorFast
+from ..sam2.image_processing_sam2 import Sam2ImageProcessor
 
 
 def _scale_boxes(boxes, target_sizes):
@@ -50,7 +50,7 @@ def _scale_boxes(boxes, target_sizes):
     return boxes
 
 
-class Sam3ImageProcessorFast(Sam2ImageProcessorFast):
+class Sam3ImageProcessor(Sam2ImageProcessor):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 1008, "width": 1008}
@@ -249,4 +249,4 @@ class Sam3ImageProcessorFast(Sam2ImageProcessorFast):
         return results
 
 
-__all__ = ["Sam3ImageProcessorFast"]
+__all__ = ["Sam3ImageProcessor"]

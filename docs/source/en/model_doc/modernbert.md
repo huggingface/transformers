@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2024-12-19.*
+*This model was published in HF papers on 2024-12-18 and contributed to Hugging Face Transformers on 2024-12-19.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
     <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
   </div>
@@ -37,14 +36,13 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="answerdotai/ModernBERT-base",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
@@ -53,16 +51,17 @@ pipeline("Plants create [MASK] through a process known as photosynthesis.")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "answerdotai/ModernBERT-base",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "answerdotai/ModernBERT-base",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -80,13 +79,6 @@ print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model answerdotai/ModernBERT-base --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## Padding-free inference and training
@@ -98,7 +90,9 @@ ModernBERT supports padding-free inference and training. For example, you can le
 
 ```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer, DataCollatorWithFlattening
+
 
 model_id = "answerdotai/ModernBERT-base"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -107,7 +101,7 @@ collator = DataCollatorWithFlattening(return_flash_attn_kwargs=True)
 
 def prepare_text_for_padding_free(texts):
     # base tokenization with padding and subsequent flattening
-    inputs_dict = tokenizer(texts, return_tensors="pt", padding=True).to("cuda")
+    inputs_dict = tokenizer(texts, return_tensors="pt", padding=True).to(model.device)
     flattened_features = collator(
         [
             {"input_ids": i[a.bool()].tolist()}
@@ -117,7 +111,7 @@ def prepare_text_for_padding_free(texts):
 
     for k, v in flattened_features.items():
         if isinstance(v, torch.Tensor):
-            flattened_features[k] = v.to("cuda")
+            flattened_features[k] = v.to(model.device)
 
     return flattened_features
 
@@ -126,7 +120,7 @@ inputs = prepare_text_for_padding_free(
     ["The capital of France is [MASK].", "ModernBERT is a [MASK] model."]
 )
 model = AutoModelForMaskedLM.from_pretrained(
-    model_id, attn_implementation="flash_attention_2", dtype=torch.bfloat16, device_map="cuda"
+    model_id, attn_implementation="flash_attention_2", device_map="cuda"
 )
 
 # Optional: use torch.compile for faster inference

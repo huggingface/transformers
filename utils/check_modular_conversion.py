@@ -16,6 +16,15 @@ from rich.console import Console
 from rich.syntax import Syntax
 
 
+CHECKER_CONFIG = {
+    "name": "modular_conversion",
+    "label": "Modular file conversions",
+    # Globs the modular sources; also reads generated modeling_*.py at runtime for diffing.
+    "cache_globs": ["src/transformers/models/**/modular_*.py", "src/transformers/models/**/modeling_*.py"],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
+}
+
 logging.basicConfig()
 logging.getLogger().setLevel(logging.ERROR)
 console = Console()
@@ -97,6 +106,23 @@ def compare_files(modular_file_path, show_diff=True):
     return diff
 
 
+# Changes to any of these files can alter the generated output for every modular model,
+# so touching them must force a full re-check (see `converter_changed_in_diff`).
+CONVERTER_FILES = {
+    "utils/modular_model_converter.py",
+    "utils/create_dependency_mapping.py",
+}
+
+
+def _get_modified_files():
+    fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
+    return (
+        subprocess.check_output(f"git diff --diff-filter=d --name-only {fork_point_sha}".split())
+        .decode("utf-8")
+        .split()
+    )
+
+
 def get_models_in_diff():
     """
     Finds all models that have been modified in the diff.
@@ -104,12 +130,7 @@ def get_models_in_diff():
     Returns:
         A set containing the names of the models that have been modified (e.g. {'llama', 'whisper'}).
     """
-    fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
-    modified_files = (
-        subprocess.check_output(f"git diff --diff-filter=d --name-only {fork_point_sha}".split())
-        .decode("utf-8")
-        .split()
-    )
+    modified_files = _get_modified_files()
 
     # Matches both modelling files and tests
     relevant_modified_files = [x for x in modified_files if "/models/" in x and x.endswith(".py")]
@@ -118,6 +139,11 @@ def get_models_in_diff():
         model_name = file_path.split("/")[-2]
         model_names.add(model_name)
     return model_names
+
+
+def converter_changed_in_diff():
+    """Whether the diff touches a file that can change conversion output for every model."""
+    return any(f in CONVERTER_FILES for f in _get_modified_files())
 
 
 def guaranteed_no_diff(modular_file_path, dependencies, models_in_diff):
@@ -178,6 +204,12 @@ if __name__ == "__main__":
             "[bold red]You are developing on the main branch. We cannot identify the list of changed files and will have to check all files. This may take a while.[/bold red]"
         )
         models_in_diff = {file_path.split("/")[-2] for file_path in args.files}
+    elif converter_changed_in_diff():
+        # The converter (or its dependency-mapping helper) is in the diff: its output can shift
+        # for any model, so restrict-by-diff would miss regressions. Force a full check.
+        console.print("[bold yellow]Converter change detected in diff; checking all modular files.[/bold yellow]")
+        args.check_all = True
+        models_in_diff = {file_path.split("/")[-2] for file_path in args.files}
     else:
         models_in_diff = get_models_in_diff()
         if not models_in_diff and not args.check_all:
@@ -194,6 +226,9 @@ if __name__ == "__main__":
     #  - ... and so on
     # files (models) within the same list are *independent* of each other;
     # we start applying modular conversion to each list in parallel, starting from the first list
+
+    pool = None
+    pool_size = 0
     try:
         for dependency_level_files in ordered_files:
             # Filter files guaranteed no diff
@@ -205,28 +240,34 @@ if __name__ == "__main__":
             if not files_to_check:
                 continue
 
-            # Process files with diff
-            num_workers = min(args.num_workers, len(files_to_check))
-            with multiprocessing.Pool(num_workers) as p:
-                try:
-                    is_changed_flags = p.map(
-                        partial(compare_files, show_diff=not args.fix_and_overwrite),
-                        files_to_check,
-                    )
-                except Exception as e:
-                    console.print(
-                        f"[bold red]Failed to convert one or more files in batch: {files_to_check}[/bold red]"
-                    )
-                    console.print(f"[bold red]Error: {e}[/bold red]")
-                    # Try to process files individually to identify which one failed
-                    is_changed_flags = []
-                    for file_path in files_to_check:
-                        try:
-                            result = compare_files(file_path, show_diff=not args.fix_and_overwrite)
-                            is_changed_flags.append(result)
-                        except Exception as individual_error:
-                            console.print(f"[bold red]Failed to convert {file_path}: {individual_error}[/bold red]")
-                            is_changed_flags.append(0)  # Mark as no change to continue processing
+            required_pool_size = min(args.num_workers, len(files_to_check))
+            if pool is None or required_pool_size > pool_size * 4:
+                # Only create a new pool if we don't have one yet or the current one
+                # is too small. Creating new pools is expensive due to the imports in
+                # the workers.
+                if pool is not None:
+                    pool.terminate()
+                    pool.join()
+                pool_size = required_pool_size
+                pool = multiprocessing.Pool(processes=pool_size)
+
+            try:
+                is_changed_flags = pool.map(
+                    partial(compare_files, show_diff=not args.fix_and_overwrite),
+                    files_to_check,
+                )
+            except Exception as e:
+                console.print(f"[bold red]Failed to convert one or more files in batch: {files_to_check}[/bold red]")
+                console.print(f"[bold red]Error: {e}[/bold red]")
+                # Try to process files individually to identify which one failed
+                is_changed_flags = []
+                for file_path in files_to_check:
+                    try:
+                        result = compare_files(file_path, show_diff=not args.fix_and_overwrite)
+                        is_changed_flags.append(result)
+                    except Exception as individual_error:
+                        console.print(f"[bold red]Failed to convert {file_path}: {individual_error}[/bold red]")
+                        is_changed_flags.append(0)  # Mark as no change to continue processing
 
             # Collect changed files and their original paths
             for is_changed, file_path in zip(is_changed_flags, files_to_check):
@@ -238,6 +279,9 @@ if __name__ == "__main__":
                     models_in_diff.add(file_path.split("/")[-2])
 
     finally:
+        if pool is not None:
+            pool.terminate()
+            pool.join()
         # Restore overwritten files by modular (if needed)
         backup_files = glob.glob("**/*" + BACKUP_EXT, recursive=True)
         for backup_file_path in backup_files:

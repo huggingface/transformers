@@ -22,6 +22,7 @@ from .quantizers_utils import get_module_from_name
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import HqqConfig
 
 
 if is_torch_available():
@@ -49,6 +50,7 @@ class HqqHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "HqqConfig"
 
     def __init__(self, quantization_config, **kwargs):
         if not is_hqq_available():
@@ -250,8 +252,8 @@ class HqqHfQuantizer(HfQuantizer):
         model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.is_hqq_quantized = True
-        model.is_hqq_serializable = self.is_serializable()
+        setattr(model, "is_hqq_quantized", True)
+        setattr(model, "is_hqq_serializable", self.is_serializable())
         return model
 
     def is_serializable(self):

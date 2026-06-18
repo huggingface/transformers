@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-03-27 and added to Hugging Face Transformers on 2024-01-08.*
+*This model was published in HF papers on 2023-03-27 and contributed to Hugging Face Transformers on 2024-01-08.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-            <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+                <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
             <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -39,27 +38,29 @@ The example below demonstrates how to generate similarity scores between texts a
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 
-pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip-base-patch16-224", device=0, dtype=torch.bfloat16)
+pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip-base-patch16-224", device=0)
 pipeline(image, candidate_labels=candidate_labels)
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("google/siglip-base-patch16-224", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+from transformers import AutoModel, AutoProcessor
+
+
+model = AutoModel.from_pretrained("google/siglip-base-patch16-224", device_map="auto", attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -83,11 +84,13 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModel, BitsAndBytesConfig
+
+from transformers import AutoModel, AutoProcessor, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
 model = AutoModel.from_pretrained("google/siglip-base-patch16-224", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
@@ -122,8 +125,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
     model = SiglipModel.from_pretrained(
         "google/siglip-so400m-patch14-384",
         attn_implementation="flash_attention_2",
-        dtype=torch.float16,
-        device_map=device,
+        device_map="auto",
     )
     ```
 
@@ -152,9 +154,9 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 [[autodoc]] SiglipImageProcessor
     - preprocess
 
-## SiglipImageProcessorFast
+## SiglipImageProcessorPil
 
-[[autodoc]] SiglipImageProcessorFast
+[[autodoc]] SiglipImageProcessorPil
     - preprocess
 
 ## SiglipProcessor

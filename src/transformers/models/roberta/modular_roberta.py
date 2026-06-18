@@ -83,7 +83,7 @@ class RobertaEmbeddings(BertEmbeddings):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
-                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
+                buffered_token_type_ids = self.token_type_ids.to(position_ids.device).expand(position_ids.shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
                 token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
             else:
@@ -222,7 +222,6 @@ class RobertaForCausalLM(RobertaPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
@@ -270,7 +269,6 @@ class RobertaForCausalLM(RobertaPreTrainedModel, GenerationMixin):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             return_dict=True,
             **kwargs,
         )

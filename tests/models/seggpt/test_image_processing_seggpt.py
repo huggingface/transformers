@@ -31,8 +31,6 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import SegGptImageProcessor
-
 
 class SegGptImageProcessingTester:
     def __init__(
@@ -110,8 +108,6 @@ def prepare_img():
 @require_torch
 @require_vision
 class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = SegGptImageProcessor if is_vision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = SegGptImageProcessingTester(self)
@@ -121,72 +117,78 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
-        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
+            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_image_processor_palette(self):
         num_labels = 3
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        palette = image_processing.get_palette(num_labels)
-        self.assertEqual(len(palette), num_labels + 1)
-        self.assertEqual(palette[0], (0, 0, 0))
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            palette = image_processing.get_palette(num_labels)
+            self.assertEqual(len(palette), num_labels + 1)
+            self.assertEqual(palette[0], (0, 0, 0))
 
     def test_mask_equivalence(self):
-        image_processor = SegGptImageProcessor()
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class()
 
-        mask_binary = prepare_mask()
-        mask_rgb = mask_binary.convert("RGB")
+            mask_binary = prepare_mask()
+            mask_rgb = mask_binary.convert("RGB")
 
-        inputs_binary = image_processor(images=None, prompt_masks=mask_binary, return_tensors="pt")
-        inputs_rgb = image_processor(images=None, prompt_masks=mask_rgb, return_tensors="pt", do_convert_rgb=False)
+            inputs_binary = image_processor(images=None, prompt_masks=mask_binary, return_tensors="pt")
+            inputs_rgb = image_processor(images=None, prompt_masks=mask_rgb, return_tensors="pt", do_convert_rgb=False)
 
-        self.assertTrue((inputs_binary["prompt_masks"] == inputs_rgb["prompt_masks"]).all().item())
+            self.assertTrue((inputs_binary["prompt_masks"] == inputs_rgb["prompt_masks"]).all().item())
 
     def test_mask_to_rgb(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        mask = prepare_mask()
-        mask = np.array(mask)
-        mask = (mask > 0).astype(np.uint8)
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            mask = prepare_mask()
+            mask = np.array(mask)
+            mask = (mask > 0).astype(np.uint8)
 
-        def check_two_colors(image, color1=(0, 0, 0), color2=(255, 255, 255)):
-            pixels = image.transpose(1, 2, 0).reshape(-1, 3)
-            unique_colors = np.unique(pixels, axis=0)
-            if len(unique_colors) == 2 and (color1 in unique_colors) and (color2 in unique_colors):
-                return True
-            else:
-                return False
+            def check_two_colors(image, color1=(0, 0, 0), color2=(255, 255, 255)):
+                pixels = image.transpose(1, 2, 0).reshape(-1, 3)
+                unique_colors = np.unique(pixels, axis=0)
+                if len(unique_colors) == 2 and (color1 in unique_colors) and (color2 in unique_colors):
+                    return True
+                else:
+                    return False
 
-        num_labels = 1
-        palette = image_processing.get_palette(num_labels)
+            num_labels = 1
+            palette = image_processing.get_palette(num_labels)
 
-        # Should only duplicate repeat class indices map, hence only (0,0,0) and (1,1,1)
-        mask_duplicated = image_processing.mask_to_rgb(mask)
-        # Mask using palette, since only 1 class is present we have colors (0,0,0) and (255,255,255)
-        mask_painted = image_processing.mask_to_rgb(mask, palette=palette)
+            # Should only duplicate class indices map, hence only (0,0,0) and (1,1,1)
+            mask_duplicated = image_processing.mask_to_rgb(mask)
+            # Mask using palette, since only 1 class we have colors (0,0,0) and (255,255,255)
+            mask_painted = image_processing.mask_to_rgb(mask, palette=palette)
 
-        self.assertTrue(check_two_colors(mask_duplicated, color2=(1, 1, 1)))
-        self.assertTrue(check_two_colors(mask_painted, color2=(255, 255, 255)))
+            self.assertTrue(check_two_colors(mask_duplicated, color2=(1, 1, 1)))
+            self.assertTrue(check_two_colors(mask_painted, color2=(255, 255, 255)))
 
     def test_post_processing_semantic_segmentation(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-        outputs = self.image_processor_tester.get_fake_image_segmentation_output()
-        post_processed = image_processor.post_process_semantic_segmentation(outputs)
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            outputs = self.image_processor_tester.get_fake_image_segmentation_output()
+            post_processed = image_processor.post_process_semantic_segmentation(outputs)
 
-        self.assertEqual(len(post_processed), self.image_processor_tester.batch_size)
+            self.assertEqual(len(post_processed), self.image_processor_tester.batch_size)
 
-        expected_semantic_map_shape = self.image_processor_tester.expected_post_processed_shape()
-        self.assertEqual(post_processed[0].shape, expected_semantic_map_shape)
+            expected_semantic_map_shape = self.image_processor_tester.expected_post_processed_shape()
+            self.assertEqual(post_processed[0].shape, expected_semantic_map_shape)
 
     @slow
     def test_pixel_values(self):
@@ -195,116 +197,152 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         prompt_image = images[0]
         prompt_mask = masks[0]
 
-        image_processor = SegGptImageProcessor.from_pretrained("BAAI/seggpt-vit-large")
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class.from_pretrained("BAAI/seggpt-vit-large")
 
-        inputs = image_processor(
-            images=input_image,
-            prompt_images=prompt_image,
-            prompt_masks=prompt_mask,
-            return_tensors="pt",
-            do_convert_rgb=False,
-        )
+            inputs = image_processor(
+                images=input_image,
+                prompt_images=prompt_image,
+                prompt_masks=prompt_mask,
+                return_tensors="pt",
+                do_convert_rgb=False,
+            )
 
-        # Verify pixel values
-        expected_prompt_pixel_values = torch.tensor(
-            [
-                [[-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965]],
-                [[1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583]],
-                [[2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088]],
-            ]
-        )
+            # Verify pixel values
+            expected_prompt_pixel_values = torch.tensor(
+                [
+                    [[-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965]],
+                    [[1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583]],
+                    [[2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088]],
+                ]
+            )
 
-        expected_pixel_values = torch.tensor(
-            [
-                [[1.6324, 1.6153, 1.5810], [1.6153, 1.5982, 1.5810], [1.5810, 1.5639, 1.5639]],
-                [[1.2731, 1.2556, 1.2206], [1.2556, 1.2381, 1.2031], [1.2206, 1.2031, 1.1681]],
-                [[1.6465, 1.6465, 1.6465], [1.6465, 1.6465, 1.6465], [1.6291, 1.6291, 1.6291]],
-            ]
-        )
+            expected_pixel_values = torch.tensor(
+                [
+                    [[1.6324, 1.6153, 1.5810], [1.6153, 1.5982, 1.5810], [1.5810, 1.5639, 1.5639]],
+                    [[1.2731, 1.2556, 1.2206], [1.2556, 1.2381, 1.2031], [1.2206, 1.2031, 1.1681]],
+                    [[1.6465, 1.6465, 1.6465], [1.6465, 1.6465, 1.6465], [1.6291, 1.6291, 1.6291]],
+                ]
+            )
 
-        expected_prompt_masks = torch.tensor(
-            [
-                [[-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179]],
-                [[-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357]],
-                [[-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044]],
-            ]
-        )
+            expected_prompt_masks = torch.tensor(
+                [
+                    [[-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179]],
+                    [[-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357]],
+                    [[-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044]],
+                ]
+            )
 
-        torch.testing.assert_close(inputs.pixel_values[0, :, :3, :3], expected_pixel_values, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(
-            inputs.prompt_pixel_values[0, :, :3, :3], expected_prompt_pixel_values, rtol=1e-4, atol=1e-4
-        )
-        torch.testing.assert_close(inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, rtol=1e-4, atol=1e-4)
+            torch.testing.assert_close(inputs.pixel_values[0, :, :3, :3], expected_pixel_values, rtol=1e-4, atol=1e-4)
+            torch.testing.assert_close(
+                inputs.prompt_pixel_values[0, :, :3, :3], expected_prompt_pixel_values, rtol=1e-4, atol=1e-4
+            )
+            torch.testing.assert_close(inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, rtol=1e-4, atol=1e-4)
 
     def test_prompt_mask_equivalence(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            image_size = self.image_processor_tester.image_size
+
+            # Single Mask Examples
+            expected_single_shape = [1, 3, image_size, image_size]
+
+            # Single Semantic Map (2D)
+            image_np_2d = np.ones((image_size, image_size))
+            image_pt_2d = torch.ones((image_size, image_size))
+            image_pil_2d = Image.fromarray(image_np_2d)
+
+            inputs_np_2d = image_processor(images=None, prompt_masks=image_np_2d, return_tensors="pt")
+            inputs_pt_2d = image_processor(images=None, prompt_masks=image_pt_2d, return_tensors="pt")
+            inputs_pil_2d = image_processor(images=None, prompt_masks=image_pil_2d, return_tensors="pt")
+
+            self.assertTrue((inputs_np_2d["prompt_masks"] == inputs_pt_2d["prompt_masks"]).all().item())
+            self.assertTrue((inputs_np_2d["prompt_masks"] == inputs_pil_2d["prompt_masks"]).all().item())
+            self.assertEqual(list(inputs_np_2d["prompt_masks"].shape), expected_single_shape)
+
+            # Single RGB Images (3D)
+            image_np_3d = np.ones((3, image_size, image_size))
+            image_pt_3d = torch.ones((3, image_size, image_size))
+            image_pil_3d = Image.fromarray(image_np_3d.transpose(1, 2, 0).astype(np.uint8))
+
+            inputs_np_3d = image_processor(
+                images=None, prompt_masks=image_np_3d, return_tensors="pt", do_convert_rgb=False
+            )
+            inputs_pt_3d = image_processor(
+                images=None, prompt_masks=image_pt_3d, return_tensors="pt", do_convert_rgb=False
+            )
+            inputs_pil_3d = image_processor(
+                images=None, prompt_masks=image_pil_3d, return_tensors="pt", do_convert_rgb=False
+            )
+
+            self.assertTrue((inputs_np_3d["prompt_masks"] == inputs_pt_3d["prompt_masks"]).all().item())
+            self.assertTrue((inputs_np_3d["prompt_masks"] == inputs_pil_3d["prompt_masks"]).all().item())
+            self.assertEqual(list(inputs_np_3d["prompt_masks"].shape), expected_single_shape)
+
+            # Batched Examples
+            expected_batched_shape = [2, 3, image_size, image_size]
+
+            # Batched Semantic Maps (3D)
+            image_np_2d_batched = np.ones((2, image_size, image_size))
+            image_pt_2d_batched = torch.ones((2, image_size, image_size))
+
+            inputs_np_2d_batched = image_processor(images=None, prompt_masks=image_np_2d_batched, return_tensors="pt")
+            inputs_pt_2d_batched = image_processor(images=None, prompt_masks=image_pt_2d_batched, return_tensors="pt")
+
+            self.assertTrue(
+                (inputs_np_2d_batched["prompt_masks"] == inputs_pt_2d_batched["prompt_masks"]).all().item()
+            )
+            self.assertEqual(list(inputs_np_2d_batched["prompt_masks"].shape), expected_batched_shape)
+
+            # Batched RGB images
+            image_np_4d = np.ones((2, 3, image_size, image_size))
+            image_pt_4d = torch.ones((2, 3, image_size, image_size))
+
+            inputs_np_4d = image_processor(
+                images=None, prompt_masks=image_np_4d, return_tensors="pt", do_convert_rgb=False
+            )
+            inputs_pt_4d = image_processor(
+                images=None, prompt_masks=image_pt_4d, return_tensors="pt", do_convert_rgb=False
+            )
+
+            self.assertTrue((inputs_np_4d["prompt_masks"] == inputs_pt_4d["prompt_masks"]).all().item())
+            self.assertEqual(list(inputs_np_4d["prompt_masks"].shape), expected_batched_shape)
+
+            # Comparing Single and Batched Examples
+            self.assertTrue((inputs_np_2d["prompt_masks"][0] == inputs_np_3d["prompt_masks"][0]).all().item())
+            self.assertTrue((inputs_np_2d_batched["prompt_masks"][0] == inputs_np_2d["prompt_masks"][0]).all().item())
+            self.assertTrue((inputs_np_2d_batched["prompt_masks"][0] == inputs_np_3d["prompt_masks"][0]).all().item())
+            self.assertTrue((inputs_np_2d_batched["prompt_masks"][0] == inputs_np_4d["prompt_masks"][0]).all().item())
+            self.assertTrue((inputs_np_2d_batched["prompt_masks"][0] == inputs_np_3d["prompt_masks"][0]).all().item())
+
+    def test_backends_equivalence(self):
+        """Override to test equivalence across prompt_images and prompt_masks outputs as well."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
         image_size = self.image_processor_tester.image_size
+        image_np = np.random.randint(0, 256, (3, image_size, image_size), dtype=np.uint8)
+        mask_np = np.zeros((image_size, image_size), dtype=np.uint8)
 
-        # Single Mask Examples
-        expected_single_shape = [1, 3, image_size, image_size]
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(
+                images=image_np,
+                prompt_images=image_np,
+                prompt_masks=mask_np,
+                return_tensors="pt",
+            )
 
-        # Single Semantic Map (2D)
-        image_np_2d = np.ones((image_size, image_size))
-        image_pt_2d = torch.ones((image_size, image_size))
-        image_pil_2d = Image.fromarray(image_np_2d)
-
-        inputs_np_2d = image_processor(images=None, prompt_masks=image_np_2d, return_tensors="pt")
-        inputs_pt_2d = image_processor(images=None, prompt_masks=image_pt_2d, return_tensors="pt")
-        inputs_pil_2d = image_processor(images=None, prompt_masks=image_pil_2d, return_tensors="pt")
-
-        self.assertTrue((inputs_np_2d["prompt_masks"] == inputs_pt_2d["prompt_masks"]).all().item())
-        self.assertTrue((inputs_np_2d["prompt_masks"] == inputs_pil_2d["prompt_masks"]).all().item())
-        self.assertEqual(list(inputs_np_2d["prompt_masks"].shape), expected_single_shape)
-
-        # Single RGB Images (3D)
-        image_np_3d = np.ones((3, image_size, image_size))
-        image_pt_3d = torch.ones((3, image_size, image_size))
-        image_pil_3d = Image.fromarray(image_np_3d.transpose(1, 2, 0).astype(np.uint8))
-
-        inputs_np_3d = image_processor(
-            images=None, prompt_masks=image_np_3d, return_tensors="pt", do_convert_rgb=False
-        )
-        inputs_pt_3d = image_processor(
-            images=None, prompt_masks=image_pt_3d, return_tensors="pt", do_convert_rgb=False
-        )
-        inputs_pil_3d = image_processor(
-            images=None, prompt_masks=image_pil_3d, return_tensors="pt", do_convert_rgb=False
-        )
-
-        self.assertTrue((inputs_np_3d["prompt_masks"] == inputs_pt_3d["prompt_masks"]).all().item())
-        self.assertTrue((inputs_np_3d["prompt_masks"] == inputs_pil_3d["prompt_masks"]).all().item())
-        self.assertEqual(list(inputs_np_3d["prompt_masks"].shape), expected_single_shape)
-
-        # Batched Examples
-        expected_batched_shape = [2, 3, image_size, image_size]
-
-        # Batched Semantic Maps (3D)
-        image_np_2d_batched = np.ones((2, image_size, image_size))
-        image_pt_2d_batched = torch.ones((2, image_size, image_size))
-
-        inputs_np_2d_batched = image_processor(images=None, prompt_masks=image_np_2d_batched, return_tensors="pt")
-        inputs_pt_2d_batched = image_processor(images=None, prompt_masks=image_pt_2d_batched, return_tensors="pt")
-
-        self.assertTrue((inputs_np_2d_batched["prompt_masks"] == inputs_pt_2d_batched["prompt_masks"]).all().item())
-        self.assertEqual(list(inputs_np_2d_batched["prompt_masks"].shape), expected_batched_shape)
-
-        # Batched RGB images
-        image_np_4d = np.ones((2, 3, image_size, image_size))
-        image_pt_4d = torch.ones((2, 3, image_size, image_size))
-
-        inputs_np_4d = image_processor(
-            images=None, prompt_masks=image_np_4d, return_tensors="pt", do_convert_rgb=False
-        )
-        inputs_pt_4d = image_processor(
-            images=None, prompt_masks=image_pt_4d, return_tensors="pt", do_convert_rgb=False
-        )
-
-        self.assertTrue((inputs_np_4d["prompt_masks"] == inputs_pt_4d["prompt_masks"]).all().item())
-        self.assertEqual(list(inputs_np_4d["prompt_masks"].shape), expected_batched_shape)
-
-        # Comparing Single and Batched Examples
-        self.assertTrue((inputs_np_2d["prompt_masks"][0] == inputs_np_3d["prompt_masks"][0]).all().item())
-        self.assertTrue((inputs_np_2d_batched["prompt_masks"][0] == inputs_np_2d["prompt_masks"][0]).all().item())
-        self.assertTrue((inputs_np_2d_batched["prompt_masks"][0] == inputs_np_3d["prompt_masks"][0]).all().item())
-        self.assertTrue((inputs_np_2d_batched["prompt_masks"][0] == inputs_np_4d["prompt_masks"][0]).all().item())
-        self.assertTrue((inputs_np_2d_batched["prompt_masks"][0] == inputs_np_3d["prompt_masks"][0]).all().item())
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
+            )
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].prompt_pixel_values, encodings[backend_name].prompt_pixel_values
+            )
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].prompt_masks, encodings[backend_name].prompt_masks
+            )

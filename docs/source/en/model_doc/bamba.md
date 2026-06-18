@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2024-12-19.*
+*This model was contributed to Hugging Face Transformers on 2024-12-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -40,13 +39,12 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
     model="ibm-ai-platform/Bamba-9B-v2",
-    dtype=torch.bfloat16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -57,23 +55,17 @@ pipeline("Plants create energy through a process known as")
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 tokenizer = AutoTokenizer.from_pretrained("ibm-ai-platform/Bamba-9B-v2")
-model = AutoModelForCausalLM.from_pretrained("ibm-ai-platform/Bamba-9B-v2", dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("ibm-ai-platform/Bamba-9B-v2", device_map="auto", attn_implementation="sdpa")
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-</hfoption>
-
-<hfoption id="transformers CLI">
-```bash
-echo "Plants create energy through a process known as" | transformers run --task text-generation --model ibm-ai-platform/Bamba-9B-v2 --device 0
-```
 </hfoption>
 </hfoptions>
 
@@ -82,8 +74,8 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 tokenizer = AutoTokenizer.from_pretrained("ibm-ai-platform/Bamba-9B-v2")

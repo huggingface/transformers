@@ -14,18 +14,17 @@
 import math
 import pathlib
 from dataclasses import dataclass
-from typing import Optional
 
+import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.transforms.v2.functional as tvF
 from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import load_backbone
-from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width
+from ...image_processing_backends import PilBackend, TorchvisionBackend
+from ...image_processing_utils import BatchFeature, SizeDict
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -35,11 +34,12 @@ from ...image_utils import (
     ChannelDimension,
     PILImageResampling,
     get_image_size,
+    get_max_height_width,
     validate_annotations,
 )
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
@@ -51,13 +51,15 @@ from ...utils import (
     torch_int,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..conditional_detr.modeling_conditional_detr import inverse_sigmoid
 from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
-from ..detr.image_processing_detr_fast import DetrImageProcessorFast
+from ..detr.image_processing_detr import DetrImageProcessor
+from ..detr.image_processing_pil_detr import DetrImageProcessorPil
 from ..detr.modeling_detr import DetrFrozenBatchNorm2d, DetrMLPPredictionHead, DetrSelfAttention, replace_batch_norm
+from ..vit_mae.modeling_vit_mae import build_2d_sinusoidal_position_embedding
 from .configuration_rt_detr import RTDetrConfig
-from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -124,7 +126,76 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
-class RTDetrImageProcessorFast(DetrImageProcessorFast):
+def prepare_coco_detection_annotation_pil(
+    image,
+    target,
+    return_segmentation_masks: bool = False,
+    input_data_format: ChannelDimension | str | None = None,
+):
+    """
+    Convert the target in COCO format into the format expected by RTDETR.
+    """
+    image_height, image_width = get_image_size(image, channel_dim=input_data_format)
+
+    image_id = target["image_id"]
+    image_id = np.asarray([image_id], dtype=np.int64)
+
+    # Get all COCO annotations for the given image.
+    annotations = target["annotations"]
+    annotations = [obj for obj in annotations if "iscrowd" not in obj or obj["iscrowd"] == 0]
+
+    classes = [obj["category_id"] for obj in annotations]
+    classes = np.asarray(classes, dtype=np.int64)
+
+    # for conversion to coco api
+    area = np.asarray([obj["area"] for obj in annotations], dtype=np.float32)
+    iscrowd = np.asarray([obj.get("iscrowd", 0) for obj in annotations], dtype=np.int64)
+
+    boxes = [obj["bbox"] for obj in annotations]
+    # guard against no boxes via resizing
+    boxes = np.asarray(boxes, dtype=np.float32).reshape(-1, 4)
+    boxes[:, 2:] += boxes[:, :2]
+    boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=image_width)
+    boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=image_height)
+
+    keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
+
+    new_target = {}
+    new_target["image_id"] = image_id
+    new_target["class_labels"] = classes[keep]
+    new_target["boxes"] = boxes[keep]
+    new_target["area"] = area[keep]
+    new_target["iscrowd"] = iscrowd[keep]
+    new_target["orig_size"] = np.asarray([int(image_height), int(image_width)], dtype=np.int64)
+
+    if annotations and "keypoints" in annotations[0]:
+        keypoints = [obj["keypoints"] for obj in annotations]
+        # Converting the filtered keypoints list to a numpy array
+        keypoints = np.asarray(keypoints, dtype=np.float32)
+        # Apply the keep mask here to filter the relevant annotations
+        keypoints = keypoints[keep]
+        num_keypoints = keypoints.shape[0]
+        keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
+        new_target["keypoints"] = keypoints
+
+    return new_target
+
+
+class RTDetrImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+    do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        Controls whether to convert the annotations to the format expected by the RT_DETR model. Converts the
+        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+    """
+
+    format: str | AnnotationFormat
+    do_convert_annotations: bool
+
+
+class RTDetrImageProcessor(DetrImageProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -146,7 +217,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
         if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
-        BaseImageProcessorFast.__init__(self, **kwargs)
+        TorchvisionBackend.__init__(self, **kwargs)
 
     def prepare_annotation(
         self,
@@ -172,11 +243,11 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         annotations: AnnotationType | list[AnnotationType] | None,
-        masks_path: str | pathlib.Path | None,
         return_segmentation_masks: bool,
+        masks_path: str | pathlib.Path | None,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -222,7 +293,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
                 )
 
             if do_resize:
-                resized_image = self.resize(image, size=size, interpolation=interpolation)
+                resized_image = self.resize(image, size=size, resample=resample)
                 if annotations is not None:
                     annotation = self.resize_annotation(
                         annotation,
@@ -356,7 +427,242 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
 
 
-@dataclass
+@requires(backends=("torch",))
+class RTDetrImageProcessorPil(DetrImageProcessorPil):
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    format = AnnotationFormat.COCO_DETECTION
+    do_convert_annotations = True
+    do_resize = True
+    do_rescale = True
+    do_normalize = False
+    do_pad = False
+    size = {"height": 640, "width": 640}
+    default_to_square = False
+    model_input_names = ["pixel_values", "pixel_mask"]
+    valid_kwargs = RTDetrImageProcessorKwargs
+
+    def __init__(self, **kwargs: Unpack[RTDetrImageProcessorKwargs]) -> None:
+        # Backwards compatibility
+        do_convert_annotations = kwargs.get("do_convert_annotations")
+        do_normalize = kwargs.get("do_normalize")
+        if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
+            self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
+
+        PilBackend.__init__(self, **kwargs)
+
+    def prepare_annotation(
+        self,
+        image: np.ndarray,
+        target: dict,
+        format: AnnotationFormat | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        input_data_format: str | ChannelDimension | None = None,
+    ) -> dict:
+        format = format if format is not None else self.format
+
+        if format == AnnotationFormat.COCO_DETECTION:
+            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
+            target = prepare_coco_detection_annotation_pil(
+                image, target, return_segmentation_masks, input_data_format=input_data_format
+            )
+        else:
+            raise ValueError(f"Format {format} is not supported.")
+        return target
+
+    def _preprocess(
+        self,
+        images: list[np.ndarray],
+        annotations: AnnotationType | list[AnnotationType] | None,
+        return_segmentation_masks: bool,
+        masks_path: str | pathlib.Path | None,
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        do_convert_annotations: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool,
+        pad_size: SizeDict | None,
+        format: str | AnnotationFormat | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        """
+        Preprocess an image or a batch of images so that it can be used by the model.
+        """
+
+        if annotations is not None and isinstance(annotations, dict):
+            annotations = [annotations]
+
+        if annotations is not None and len(images) != len(annotations):
+            raise ValueError(
+                f"The number of images ({len(images)}) and annotations ({len(annotations)}) do not match."
+            )
+
+        format = AnnotationFormat(format)
+        if annotations is not None:
+            validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
+
+        data = {}
+        processed_images = []
+        processed_annotations = []
+        pixel_masks = []  # Initialize pixel_masks here
+        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+            # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
+            if annotations is not None:
+                annotation = self.prepare_annotation(
+                    image,
+                    annotation,
+                    format,
+                    return_segmentation_masks=return_segmentation_masks,
+                    masks_path=masks_path,
+                    input_data_format=ChannelDimension.FIRST,
+                )
+
+            if do_resize:
+                resized_image = self.resize(image, size=size, resample=resample)
+                if annotations is not None:
+                    annotation = self.resize_annotation(
+                        annotation,
+                        orig_size=image.shape[-2:],
+                        target_size=resized_image.shape[-2:],
+                    )
+                image = resized_image
+
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            if do_convert_annotations and annotations is not None:
+                annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
+
+            processed_images.append(image)
+            processed_annotations.append(annotation)
+        images = processed_images
+        annotations = processed_annotations if annotations is not None else None
+
+        if do_pad:
+            # depends on all resized image shapes so we need another loop
+            if pad_size is not None:
+                padded_size = (pad_size.height, pad_size.width)
+            else:
+                padded_size = get_max_height_width(images)
+
+            padded_images = []
+            padded_annotations = []
+            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+                # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
+                if padded_size == image.shape[-2:]:
+                    padded_images.append(image)
+                    pixel_masks.append(np.ones(padded_size, dtype=np.int64))
+                    padded_annotations.append(annotation)
+                    continue
+                image, pixel_mask, annotation = self.pad(
+                    image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
+                )
+                padded_images.append(image)
+                padded_annotations.append(annotation)
+                pixel_masks.append(pixel_mask)
+            images = padded_images
+            annotations = padded_annotations if annotations is not None else None
+            data.update({"pixel_mask": pixel_masks})
+
+        data.update({"pixel_values": images})
+        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
+        if annotations is not None:
+            encoded_inputs["labels"] = [
+                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+            ]
+        return encoded_inputs
+
+    def post_process_object_detection(
+        self,
+        outputs,
+        threshold: float = 0.5,
+        target_sizes: TensorType | list[tuple] = None,
+        use_focal_loss: bool = True,
+    ):
+        """
+        Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+
+        Args:
+            outputs ([`DetrObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.5):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+            use_focal_loss (`bool` defaults to `True`):
+                Variable informing if the focal loss was used to predict the outputs. If `True`, a sigmoid is applied
+                to compute the scores of each detection, otherwise, a softmax function is used.
+
+        Returns:
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
+        """
+        requires_backends(self, ["torch"])
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+        # convert from relative cxcywh to absolute xyxy
+        boxes = center_to_corners_format(out_bbox)
+        if target_sizes is not None:
+            if len(out_logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+            if isinstance(target_sizes, list):
+                img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+
+        num_top_queries = out_logits.shape[1]
+        num_classes = out_logits.shape[2]
+
+        if use_focal_loss:
+            scores = torch.nn.functional.sigmoid(out_logits)
+            scores, index = torch.topk(scores.flatten(1), num_top_queries, axis=-1)
+            labels = index % num_classes
+            index = index // num_classes
+            boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+        else:
+            scores = torch.nn.functional.softmax(out_logits)[:, :, :-1]
+            scores, labels = scores.max(dim=-1)
+            if scores.shape[1] > num_top_queries:
+                scores, index = torch.topk(scores, num_top_queries, dim=-1)
+                labels = torch.gather(labels, dim=1, index=index)
+                boxes = torch.gather(boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1]))
+
+        results = []
+        for score, label, box in zip(scores, labels, boxes):
+            results.append(
+                {
+                    "scores": score[score > threshold],
+                    "labels": label[score > threshold],
+                    "boxes": box[score > threshold],
+                }
+            )
+
+        return results
+
+    def post_process_instance_segmentation(self):
+        raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
+
+    def post_process_semantic_segmentation(self):
+        raise NotImplementedError("Semantic segmentation post-processing is not implemented for RT-DETR yet.")
+
+    def post_process_panoptic_segmentation(self):
+        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
+
+
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RTDetrDecoder. This class adds two attributes to
@@ -365,6 +671,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class RTDetrDecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -394,12 +701,12 @@ class RTDetrDecoderOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class RTDetrModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -452,12 +759,12 @@ class RTDetrModelOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RTDetrForObjectDetection`].
     """
 )
+@dataclass
 class RTDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -961,7 +1268,11 @@ class RTDetrSinePositionEmbedding(nn.Module):
         self.embed_dim = embed_dim
         self.temperature = temperature
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
+    def _cached_build_2d_sinusoidal_position_embedding(*args, **kwargs) -> torch.Tensor:
+        return build_2d_sinusoidal_position_embedding(*args, **kwargs)
+
     def forward(
         self,
         width: int,
@@ -975,19 +1286,14 @@ class RTDetrSinePositionEmbedding(nn.Module):
         Returns:
             Position embeddings of shape (1, height*width, embed_dim)
         """
-        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
-        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
-        if self.embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = self.embed_dim // 4
-        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
-        omega = 1.0 / (self.temperature**omega)
-
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        return self._cached_build_2d_sinusoidal_position_embedding(
+            height=torch_int(height),
+            width=torch_int(width),
+            embed_dim=self.embed_dim,
+            temperature=self.temperature,
+            device=device,
+            dtype=dtype,
+        ).unsqueeze(0)
 
 
 class RTDetrAIFILayer(nn.Module):
@@ -1020,7 +1326,7 @@ class RTDetrAIFILayer(nn.Module):
         batch_size = hidden_states.shape[0]
         height, width = hidden_states.shape[2:]
 
-        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
         if self.training or self.eval_size is None:
             pos_embed = self.position_embedding(
@@ -1041,7 +1347,7 @@ class RTDetrAIFILayer(nn.Module):
             )
 
         hidden_states = (
-            hidden_states.permute(0, 2, 1).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
+            hidden_states.transpose(1, 2).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
         )
 
         return hidden_states
@@ -1437,13 +1743,14 @@ class RTDetrModel(RTDetrPreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
-        if spatial_shapes is None:
-            spatial_shapes = [
-                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
-                for s in self.config.feat_strides
-            ]
+    def _cached_generate_anchors(
+        spatial_shapes: tuple[tuple[int, int], ...],
+        grid_size: float,
+        device: torch.device | str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
@@ -1465,6 +1772,14 @@ class RTDetrModel(RTDetrPreTrainedModel):
         anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
 
         return anchors, valid_mask
+
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
+        if spatial_shapes is None:
+            spatial_shapes = (
+                (int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s))
+                for s in self.config.feat_strides
+            )
+        return self._cached_generate_anchors(spatial_shapes, grid_size, device, dtype)
 
     @auto_docstring
     @can_return_tuple
@@ -1492,10 +1807,12 @@ class RTDetrModel(RTDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, RTDetrModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
         >>> model = RTDetrModel.from_pretrained("PekingU/rtdetr_r50vd")
@@ -1717,11 +2034,13 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         ```python
         >>> from transformers import RTDetrImageProcessor, RTDetrForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
         >>> model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")
@@ -1825,7 +2144,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
 
 __all__ = [
-    "RTDetrImageProcessorFast",
+    "RTDetrImageProcessor",
+    "RTDetrImageProcessorPil",
     "RTDetrForObjectDetection",
     "RTDetrModel",
     "RTDetrPreTrainedModel",

@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-02-23 and added to Hugging Face Transformers on 2024-07-08.*
+*This model was published in HF papers on 2023-02-23 and contributed to Hugging Face Transformers on 2024-07-08.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # ZoeDepth
 
@@ -35,18 +30,18 @@ The example below demonstrates how to estimate depth with [`Pipeline`] or the [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
-import torch
-from transformers import pipeline
 from PIL import Image
+
+from transformers import pipeline
+
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 pipeline = pipeline(
     task="depth-estimation",
     model="Intel/zoedepth-nyu-kitti",
-    dtype=torch.float16,
     device=0
 )
 results = pipeline(image)
@@ -56,11 +51,13 @@ results["depth"]
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoModelForDepthEstimation, AutoImageProcessor
+
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+
 
 image_processor = AutoImageProcessor.from_pretrained(
     "Intel/zoedepth-nyu-kitti"
@@ -121,9 +118,9 @@ Image.fromarray(depth.astype("uint8"))
 [[autodoc]] ZoeDepthImageProcessor
     - preprocess
 
-## ZoeDepthImageProcessorFast
+## ZoeDepthImageProcessorPil
 
-[[autodoc]] ZoeDepthImageProcessorFast
+[[autodoc]] ZoeDepthImageProcessorPil
     - preprocess
 
 ## ZoeDepthForDepthEstimation

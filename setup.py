@@ -86,15 +86,15 @@ _deps = [
     "filelock",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=1.3.0,<2.0",
+    "hf-doc-builder",
+    "huggingface-hub>=1.5.0,<2.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
     "kenlm",
-    "kernels>=0.10.2,<0.11",
+    "kernels>=0.15.2,<0.16",
     "librosa",
-    "mistral-common[image]>=1.8.8",
+    "mistral-common[image]>=1.10.0",
     "nltk<=3.8.1",
     "num2words",
     "numpy>=1.17",
@@ -105,7 +105,7 @@ _deps = [
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
-    "peft>=0.18.0",
+    "peft>=0.19.0",
     "phonemizer",
     "protobuf",
     "psutil",
@@ -120,18 +120,21 @@ _deps = [
     "pytest-xdist",
     "pytest-order",
     "python>=3.10.0",
-    "regex!=2019.12.17",
+    "regex>=2025.10.22",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.14.10",
-    "ty==0.0.12",
+    # When bumping `transformers-mlinter`, sync repo-local rule overrides from
+    # `utils/rules.toml` back into the released package.
+    "transformers-mlinter==0.1.1",
+    "ty==0.0.20",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
     # `Trainer` tests (see references to `run_translation.py`).
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.4.3",
+    "safetensors>=0.8.0",
     "sagemaker>=2.31.0",
     "schedulefree>=1.2.6",
     "scikit-learn",
@@ -142,6 +145,7 @@ _deps = [
     "sudachidict_core>=20220729",
     "tensorboard",
     "timeout-decorator",
+    "tomli",
     "tiktoken",
     "timm>=1.0.23",
     "tokenizers>=0.22.0,<=0.23.0",
@@ -149,7 +153,7 @@ _deps = [
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
-    "tqdm>=4.27",
+    "tqdm>=4.60",
     "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -159,9 +163,6 @@ _deps = [
     "libcst",
     "rich",
     "ray[tune]>=2.7.0",
-    "opentelemetry-api",
-    "opentelemetry-exporter-otlp",
-    "opentelemetry-sdk",
 ]
 
 # This is a lookup table with items like: {"tokenizers": "tokenizers==0.9.4", "packaging": "packaging"}, i.e.
@@ -182,12 +183,14 @@ if PYTHON_MINOR_VERSION < 13:
     extras["audio"] += deps_list("kenlm")
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
-extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty")
+extras["quality"] = deps_list(
+    "datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "tomli", "transformers-mlinter"
+)
+extras["docs"] = deps_list("hf-doc-builder")
 extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
-if PYTHON_MINOR_VERSION < 14:
-    extras["mistral-common"] = deps_list("mistral-common[image]")
+extras["mistral-common"] = deps_list("mistral-common[image]")
 extras["chat_template"] = deps_list("jinja2", "jmespath")
 extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
@@ -206,8 +209,6 @@ extras["benchmark"] = deps_list("optimum-benchmark")
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "rhoknp")
 if PYTHON_MINOR_VERSION < 14:
     extras["ja"] += deps_list("sudachipy", "sudachidict_core")
-# OpenTelemetry dependencies for metrics collection in continuous batching
-extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
 
 extras["testing"] = (
     deps_list(
@@ -235,13 +236,13 @@ extras["testing"] = (
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
         "filelock",  # filesystem locks, e.g., to prevent parallel downloads
     )
+    + extras["docs"]
     + extras["quality"]
     + extras["retrieval"]
     + extras["sentencepiece"]
     + extras["serving"]
 )
-if PYTHON_MINOR_VERSION < 14:
-    extras["testing"] += extras["mistral-common"]
+extras["testing"] += extras["mistral-common"]
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["all"] = (
@@ -256,8 +257,7 @@ extras["all"] = (
     + extras["chat_template"]
     + extras["num2words"]
 )
-if PYTHON_MINOR_VERSION < 14:
-    extras["all"] += extras["mistral-common"]
+extras["all"] += extras["mistral-common"]
 
 extras["dev"] = extras["all"] + extras["testing"] + extras["ja"] + extras["sklearn"]
 
@@ -294,8 +294,10 @@ class DepsTableUpdateCommand(Command):
         pass
 
     def run(self):
-        if SUPPORTED_PYTHON_VERSIONS[0] != PYTHON_MINOR_VERSION:
-            print(f"Table updated only when running 3.{SUPPORTED_PYTHON_VERSIONS[0]}.x")
+        if SUPPORTED_PYTHON_VERSIONS[0] > PYTHON_MINOR_VERSION:
+            print(
+                f"Table updated only when running 3.{SUPPORTED_PYTHON_VERSIONS[0]}.x, detected version is {sys.version}."
+            )
             return
 
         entries = "\n".join([f'    "{k}": "{v}",' for k, v in deps.items()])
@@ -325,7 +327,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.3.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.13.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

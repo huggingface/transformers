@@ -20,6 +20,9 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import random
+import re
+import time
 import warnings
 from collections import OrderedDict, UserDict
 from collections.abc import Callable, Iterable, MutableMapping
@@ -27,7 +30,7 @@ from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, TypeVar
 
 import numpy as np
 
@@ -35,22 +38,47 @@ from ..utils import logging
 from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy
 
 
-_is_torch_available = False
-if is_torch_available():
-    # required for @can_return_tuple decorator to work with torchdynamo
-    import torch
-    from torch.types import _dtype
-
-    from ..model_debugging_utils import model_addition_debugger_context
-
-    _is_torch_available = True
-
-
 if TYPE_CHECKING:
+    import torch
     from torch import nn
 
 
+# Generic class or function
+T = TypeVar("T")
+
+
 logger = logging.get_logger(__name__)
+
+
+_is_torch_available = False
+if is_torch_available():
+    _is_torch_available = True
+
+_registered_model_output_types: set[type[Any]] = set()
+
+
+def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
+    if not _is_torch_available:
+        return
+    import torch
+
+    # AMD CI runs PyTorch 2.8.0+rocm which does not support tracing `set.__contains__`
+    # through TorchDynamo. Skip registration during compilation since the pytree node
+    # is already registered from the preceding eager run.
+    if torch.compiler.is_compiling():
+        return
+    if output_type in _registered_model_output_types:
+        return
+
+    import torch.utils._pytree as torch_pytree
+
+    torch_pytree.register_pytree_node(
+        output_type,
+        _model_output_flatten,
+        partial(_model_output_unflatten, output_type=output_type),
+        serialized_type_name=f"{output_type.__module__}.{output_type.__name__}",
+    )
+    _registered_model_output_types.add(output_type)
 
 
 # required for @can_return_tuple decorator to work with torchdynamo
@@ -135,14 +163,24 @@ def is_torch_tensor(x) -> bool:
     """
     Tests if `x` is a torch tensor or not. Safe to call even if torch is not installed.
     """
-    return _is_torch_available and isinstance(x, torch.Tensor)
+    if not _is_torch_available:
+        return False
+
+    import torch
+
+    return isinstance(x, torch.Tensor)
 
 
 def is_torch_device(x) -> bool:
     """
     Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
     """
-    return _is_torch_available and isinstance(x, torch.device)
+    if not _is_torch_available:
+        return False
+
+    import torch
+
+    return isinstance(x, torch.device)
 
 
 def is_torch_dtype(x) -> bool:
@@ -151,6 +189,9 @@ def is_torch_dtype(x) -> bool:
     """
     if not _is_torch_available:
         return False
+
+    import torch
+
     if isinstance(x, str):
         if hasattr(torch, x):
             x = getattr(torch, x)
@@ -181,7 +222,7 @@ def _is_tensor_or_array_like(value):
 
 def maybe_autocast(
     device_type: str,
-    dtype: _dtype | None = None,
+    dtype: torch.dtype | None = None,
     enabled: bool = True,
     cache_enabled: bool | None = None,
 ):
@@ -195,6 +236,13 @@ def maybe_autocast(
     Which makes graph splitting in `torch.compile` more flexible as it removes the
     requirement that partition IDs be monotonically increasing.
     """
+    if not _is_torch_available:
+        raise ImportError("`maybe_autocast` requires PyTorch to be installed.")
+
+    import torch
+
+    if device_type == "meta":
+        return nullcontext()
     if torch.is_autocast_enabled(device_type) or enabled:
         return torch.autocast(device_type, dtype=dtype, enabled=enabled, cache_enabled=cache_enabled)
     else:
@@ -214,9 +262,12 @@ def is_mlx_array(x) -> bool:
     return False if not _is_mlx_available else _is_mlx(x)
 
 
-def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None) -> bool:
+def is_flash_attention_requested(
+    config=None, requested_attention_implementation: str | None = None, version: int | None = None
+) -> bool:
     """
-    Checks whether some flavor of flash attention is requested or not.
+    Checks whether some flavor of flash attention is requested or not. Optionally, checks for a specific version of
+    flash attention.
 
     This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
     `requested_attention_implementation`. Otherwise, an error will be raised (ambiguity).
@@ -236,7 +287,28 @@ def is_flash_attention_requested(config=None, requested_attention_implementation
     else:
         checked_attention_implementation = requested_attention_implementation
 
+    # theoretically can happen, equivalent to default implementation (sdpa/eager)
+    if checked_attention_implementation is None:
+        return False
+
+    # If a specific version is requested, look for a pattern of type "flash...{version}"
+    if version is not None:
+        return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
+    # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
+
+
+def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
+    """
+    Split the optional `paged|` prefix from an attention implementation string.
+
+    Note that `None` means using the default attention implementation, which is either torch's native `sdpa` or `eager` (if `sdpa` is not implemented for that model).
+    """
+    if implementation is None:
+        return False, None
+
+    is_paged = implementation.startswith("paged|")
+    return is_paged, implementation.removeprefix("paged|")
 
 
 def to_py_obj(obj):
@@ -328,18 +400,11 @@ class ModelOutput(OrderedDict):
         This is necessary to synchronize gradients when using `torch.nn.parallel.DistributedDataParallel` with
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
-        if _is_torch_available:
-            from torch.utils._pytree import register_pytree_node
-
-            register_pytree_node(
-                cls,
-                _model_output_flatten,
-                partial(_model_output_unflatten, output_type=cls),
-                serialized_type_name=f"{cls.__module__}.{cls.__name__}",
-            )
+        _register_model_output_pytree_node(cls)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        _register_model_output_pytree_node(type(self))
 
         # Subclasses of ModelOutput must use the @dataclass decorator
         # This check is done in __init__ because the @dataclass decorator operates after __init_subclass__
@@ -358,6 +423,7 @@ class ModelOutput(OrderedDict):
 
         Only occurs if @dataclass decorator has been used.
         """
+        _register_model_output_pytree_node(type(self))
         class_fields = fields(self)
 
         # Safety and consistency checks
@@ -367,7 +433,7 @@ class ModelOutput(OrderedDict):
             raise ValueError(f"{self.__class__.__name__} should not have more than one required field.")
 
         first_field = getattr(self, class_fields[0].name)
-        other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
+        other_fields_are_none = all(self.__dict__.get(field.name) is None for field in class_fields[1:])
 
         if other_fields_are_none and not is_tensor(first_field):
             if isinstance(first_field, dict):
@@ -404,7 +470,7 @@ class ModelOutput(OrderedDict):
                 self[class_fields[0].name] = first_field
         else:
             for field in class_fields:
-                v = getattr(self, field.name)
+                v = self.__dict__.get(field.name)
                 if v is not None:
                     self[field.name] = v
 
@@ -454,25 +520,16 @@ class ModelOutput(OrderedDict):
         return tuple(self[k] for k in self.keys())
 
 
-if _is_torch_available:
-    import torch.utils._pytree as _torch_pytree
+def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], list[str]]:
+    return list(output.values()), list(output.keys())
 
-    def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], _torch_pytree.Context]:
-        return list(output.values()), list(output.keys())
 
-    def _model_output_unflatten(
-        values: Iterable[Any],
-        context: _torch_pytree.Context,
-        output_type: type[ModelOutput] | None = None,
-    ) -> ModelOutput:
-        return output_type(**dict(zip(context, values)))
-
-    _torch_pytree.register_pytree_node(
-        ModelOutput,
-        _model_output_flatten,
-        partial(_model_output_unflatten, output_type=ModelOutput),
-        serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
-    )
+def _model_output_unflatten(
+    values: Iterable[Any],
+    context: list[str],
+    output_type: type[ModelOutput] | None = None,
+) -> ModelOutput:
+    return output_type(**dict(zip(context, values)))
 
 
 class ExplicitEnum(str, Enum):
@@ -640,6 +697,8 @@ def torch_int(x):
     if not _is_torch_available:
         return int(x)
 
+    import torch
+
     return x.to(torch.int64) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
 
@@ -649,6 +708,8 @@ def torch_float(x):
     """
     if not _is_torch_available:
         return int(x)
+
+    import torch
 
     return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
@@ -757,6 +818,8 @@ class TransformersKwargs(TypedDict, total=False):
             Indices of positions of each input sequence tokens.
         is_causal (`bool`, *optional*)
             Can be set to False to enable bi-directional attention, i.e. use decoder Attention modules as encoders.
+        seq_idx (`torch.IntTensor`, *optional*):
+            Sequence index for each token in a flattened packed batch.
     """
 
     num_items_in_batch: torch.Tensor | None
@@ -769,6 +832,7 @@ class TransformersKwargs(TypedDict, total=False):
     max_length_k: int | None
     position_ids: torch.LongTensor | None
     is_causal: bool | None
+    seq_idx: torch.IntTensor | None
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -828,7 +892,7 @@ def del_attribute_from_modules(module: nn.Module, key: str):
 def can_return_tuple(func):
     """
     Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
-    use_return_dict=False is set in the config.
+    return_dict=False is set in the config.
 
     Note:
         output.to_tuple() convert output to tuple skipping all `None` values.
@@ -846,6 +910,59 @@ def can_return_tuple(func):
         return output
 
     return wrapper
+
+
+_KNOWN_MODALITIES = ("image", "video", "audio")
+
+
+def accepts_precomputed_kwargs(modality: str):
+    """
+    Decorator for `get_<modality>_features` methods that:
+      - strips the modality prefix from incoming kwargs whose stripped name isn't an existing
+        parameter (e.g. `image_cu_seqlens` → `cu_seqlens`, forwarded via `**kwargs`);
+      - drops kwargs prefixed with another known modality (e.g. `video_*` passed to an
+        image method), so an outer `forward()` can blindly forward `**kwargs` to each
+        modality method without leaking the wrong tensors into the wrong encoder;
+      - leaves everything else untouched (including kwargs that match a named parameter).
+
+    Used so multimodal models can accept arbitrary precomputed tensors (`image_cu_seqlens`,
+    `video_position_ids`, …) without enumerating each one in every signature.
+
+    NOTE: Apply this decorator **only once per modality**, on the innermost base model's
+    `get_<modality>_features` (i.e. on `Model.get_image_features`, not on the outer
+    `ForConditionalGeneration.get_image_features` wrapper). Stacking it at multiple layers
+    causes premature prefix-stripping: the outer layer rewrites `image_foo` → `foo` based
+    on its own (narrower) signature, hiding kwargs that the inner method declares as named
+    parameters. Outer wrappers should just forward `**kwargs` through.
+
+    TODO: these modality-prefixed kwargs (`image_cu_seqlens`, `video_position_ids`, …) are
+    currently power-feature-only — they have no visible declaration in any public signature,
+    so users have to discover them from helper functions or docs. We should find a way to
+    surface them properly (e.g. in `TransformersKwargs`, in a dedicated `MultimodalKwargs`
+    typed dict, or returned grouped from the processor as `BatchFeature.images_data={...}`)
+    so the supported set is discoverable in one place.
+    """
+    prefix = f"{modality}_"
+    other_prefixes = tuple(f"{m}_" for m in _KNOWN_MODALITIES if m != modality)
+
+    def decorator(func):
+        existing_params = set(inspect.signature(func).parameters)
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            translated = {}
+            for k, v in kwargs.items():
+                if k.startswith(other_prefixes):
+                    continue
+                if k.startswith(prefix) and k not in existing_params:
+                    translated[k.removeprefix(prefix)] = v
+                else:
+                    translated[k] = v
+            return func(*args, **translated)
+
+        return wrapper
+
+    return decorator
 
 
 def merge_with_config_defaults(func):
@@ -909,6 +1026,8 @@ def merge_with_config_defaults(func):
         # Call the original forward with the updated kwargs/config
         try:
             if kwargs.get("debug_io", False):
+                from ..model_debugging_utils import model_addition_debugger_context
+
                 with model_addition_debugger_context(
                     self, kwargs.get("debug_io_dir", "model_debug"), kwargs.get("prune_layers")
                 ):
@@ -928,10 +1047,25 @@ def merge_with_config_defaults(func):
     return wrapper
 
 
+# bc for check_model_inputs:
+
+
+def check_model_inputs(func):
+    logger.warning_once("The `check_model_inputs` decorator is deprecated in favor of `merge_with_config_defaults`.")
+    return merge_with_config_defaults(func)
+
+
+def no_inherit_decorator(obj: T) -> T:
+    """
+    Identity decorator that prevents the modular converter from propagating its decorators to specific files.
+    """
+    return obj
+
+
 class GeneralInterface(MutableMapping):
     """
     Dict-like object keeping track of a class-wide mapping, as well as a local one. Allows to have library-wide
-    modifications though the class mapping, as well as local modifications in a single file with the local mapping.
+    modifications through the class mapping, as well as local modifications in a single file with the local mapping.
     """
 
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
@@ -967,3 +1101,54 @@ class GeneralInterface(MutableMapping):
 
     def valid_keys(self) -> list[str]:
         return list(self.keys())
+
+
+def retry(
+    max_retries=5,
+    initial_delay=1.0,
+    max_delay=30.0,
+    jitter=True,
+    exceptions=(Exception,),
+):
+    """
+    Decorator that retries a function call with exponential backoff.
+
+    Args:
+        max_retries (`int`, *optional*, defaults to 5):
+            Maximum number of retry attempts.
+        initial_delay (`float`, *optional*, defaults to 1.0):
+            Initial delay in seconds before the first retry.
+        max_delay (`float`, *optional*, defaults to 30.0):
+            Maximum delay in seconds between retries.
+        jitter (`bool`, *optional*, defaults to `True`):
+            Whether to add random jitter to the delay.
+        exceptions (`tuple`, *optional*, defaults to `(Exception,)`):
+            Tuple of exception types to catch and retry on.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            delay = initial_delay
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as exc:
+                    if attempt == max_retries:
+                        raise
+
+                    sleep_for = min(delay, max_delay)
+                    if jitter:
+                        sleep_for *= random.uniform(0.8, 1.2)
+
+                    logger.info(
+                        f"[{func.__name__}] attempt {attempt}/{max_retries} failed: {exc}\n"
+                        f"Retrying in {sleep_for:.1f}s..."
+                    )
+                    time.sleep(sleep_for)
+                    delay = min(delay * 2, max_delay)
+
+        return wrapper
+
+    return decorator

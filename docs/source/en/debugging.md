@@ -14,160 +14,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Multi-GPU debugging
+# Debugging
 
-Distributed training can be tricky because you have to ensure you're using the correct CUDA version across your system. You may encounter inter-communication issues between GPUs, and there may be underflow or overflow problems in your model.
-
-This guide covers how to debug these issues, especially as it relates to DeepSpeed and PyTorch.
-
-## DeepSpeed CUDA
-
-DeepSpeed compiles CUDA C++ which can be a potential source of errors when building PyTorch extensions that require CUDA. These errors depend on how CUDA is installed on your system. This section focuses on PyTorch built with *CUDA 10.2*
-
-```bash
-pip install deepspeed
-```
-
-> [!TIP]
-> For any other installation issues, please [open an issue](https://github.com/microsoft/DeepSpeed/issues) with the DeepSpeed team.
-
-### Non-identical toolkits
-
-PyTorch comes with its own CUDA toolkit, but to use DeepSpeed with PyTorch, you need to have an identical version of CUDA installed system-wide. For example, if you installed PyTorch with `cudatoolkit==10.2` in your Python environment, then you'll also need to have CUDA 10.2 installed everywhere.
-
-The exact location can vary from system to system, but `/usr/local/cuda-10.2` is the most common location on many Unix systems. When CUDA is correctly set up and added to your `PATH` environment variable, you can find the installation location with the following command.
-
-```bash
-which nvcc
-```
-
-### Multiple toolkits
-
-You may also have more than one CUDA toolkit installed on your system.
-
-```text
-/usr/local/cuda-10.2
-/usr/local/cuda-11.0
-```
-
-Typically, package installers set the paths to whatever the last version was installed. If the package build fails because it can't find the right CUDA version (despite it being installed already), then you need to configure the `PATH` and `LD_LIBRARY_PATH` environment variables to point to the correct path.
-
-Take a look at the contents of the following environment variables first.
-
-```bash
-echo $PATH
-echo $LD_LIBRARY_PATH
-```
-
-`PATH` lists the locations of the executables and `LD_LIBRARY_PATH` lists where to look for shared libraries. Earlier entries are prioritized over later ones, and `:` is used to separate multiple entries. To find a specific CUDA toolkit, insert the correct path to list first. This command prepends rather than overwrites the existing values.
-
-```bash
-# adjust the version and full path if needed
-export PATH=/usr/local/cuda-10.2/bin:$PATH
-export LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:$LD_LIBRARY_PATH
-```
-
-In addition, you should also check that the assigned directories actually exist. The `lib64` sub-directory contains various CUDA `.so` objects (like `libcudart.so`), and while it is unlikely your system names them differently, you should check the actual names and change them accordingly.
-
-### Older versions
-
-Sometimes, older CUDA versions may refuse to build with newer compilers. For example, if you have `gcc-9` but CUDA wants `gcc-7`. Usually, installing the latest CUDA toolkit enables support for the newer compiler.
-
-You could also install an older version of the compiler in addition to the one you're currently using (or it may already be installed but it's not used by default and the build system can't see it). To resolve this, create a symlink to give the build system visibility to the older compiler.
-
-```bash
-# adjust the path to your system
-sudo ln -s /usr/bin/gcc-7  /usr/local/cuda-10.2/bin/gcc
-sudo ln -s /usr/bin/g++-7  /usr/local/cuda-10.2/bin/g++
-```
-
-### Prebuild
-
-If you're still having issues with installing DeepSpeed or if you're building DeepSpeed at run time, try to prebuild the DeepSpeed modules before installing them. Run the commands below to make a local build for DeepSpeed.
-
-```bash
-git clone https://github.com/deepspeedai/DeepSpeed/
-cd DeepSpeed
-rm -rf build
-TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 pip install . \
---global-option="build_ext" --global-option="-j8" --no-cache -v \
---disable-pip-version-check 2>&1 | tee build.log
-```
-
-> [!TIP]
-> Add the `DS_BUILD_AIO=1` parameter to the build command to use NVMe offload. Make sure you install the libaio-dev package across your system.
-
-Next, specify your GPUs architecture by editing the `TORCH_CUDA_ARCH_LIST` variable (find a complete list of NVIDIA GPUs and their corresponding architectures on this [page](https://developer.nvidia.com/cuda-gpus)). To check the PyTorch version that corresponds to your architecture, run the following command.
-
-```bash
-python -c "import torch; print(torch.cuda.get_arch_list())"
-```
-
-Find the architecture for a GPU with the following command.
-
-<hfoptions id="arch">
-<hfoption id="same GPUs">
-
-```bash
-CUDA_VISIBLE_DEVICES=0 python -c "import torch; print(torch.cuda.get_device_capability())"
-```
-
-</hfoption>
-<hfoption id="specific GPU">
-
-Run the following command to find the architecture for GPU `0`. The results will show a value for `major` and `minor`, which is your GPU architecture. The GPU architecture below is `8.6`.
-
-```bash
-CUDA_VISIBLE_DEVICES=0 python -c "import torch; \
-print(torch.cuda.get_device_properties(torch.device('cuda')))
-"_CudaDeviceProperties(name='GeForce RTX 3090', major=8, minor=6, total_memory=24268MB, multi_processor_count=82)"
-```
-
-</hfoption>
-</hfoptions>
-
-If you get `8, 6`, then you can set `TORCH_CUDA_ARCH_LIST="8.6"`. For multiple GPUs with different architectures, list them like `TORCH_CUDA_ARCH_LIST="6.1;8.6"`.
-
-It is also possible to not specify `TORCH_CUDA_ARCH_LIST` and the build program automatically queries the GPU architecture of the build. However, it may or may not match the actual GPU on the target machine which is why it is better to explicitly specify the correct architecture.
-
-For training on multiple machines with the same setup, you'll need to make a binary wheel as shown below.
-
-```bash
-git clone https://github.com/deepspeedai/DeepSpeed/
-cd DeepSpeed
-rm -rf build
-TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 \
-python setup.py build_ext -j8 bdist_wheel
-```
-
-This command generates a binary wheel that'll look something like `dist/deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl`. Install this wheel locally or on another machine.
-
-```bash
-pip install deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl
-```
-
-## Communication
-
-Distributed training involves communication between processes and or nodes and this can be a potential source of errors.
-
-Download the script below to diagnose network issues, and then run it to test GPU communication. The example command below tests how two GPUs communicate. Adjust the `--nproc_per_node` and `--nnodes` parameters to adapt it to your system.
-
-```bash
-wget https://raw.githubusercontent.com/huggingface/transformers/main/scripts/distributed/torch-distributed-gpu-test.py
-python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 torch-distributed-gpu-test.py
-```
-
-The script prints an `OK` status if both GPUs are able to communicate and allocate memory. Take a closer look at the diagnostic script for more details and a recipe for running it in a SLURM environment.
-
-Add the `NCCL_DEBUG=INFO` environment variable to report more NCCL-related debugging information.
-
-```bash
-NCCL_DEBUG=INFO python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 torch-distributed-gpu-test.py
-```
+Debugging distributed training problems typically falls into one of these categories: numerical issues, communication failures, runtime errors, and build errors.
 
 ## Underflow and overflow detection
 
-Underflow and overflow can occur when activations or weights are `inf`, `nan`, and when `loss=NaN`. This may indicate an underflow or overflow issue. To detect these issues, activate the `DebugUnderflowOverflow` module in [`TrainingArguments.debug`] or import and add the module to your own training loop or another trainer class.
+Underflow and overflow occur when activations or weights reach `inf` or `nan`, or when `loss=NaN`. To detect these, enable the `DebugUnderflowOverflow` module in [`TrainingArguments.debug`], or import and add it to your own training loop.
 
 <hfoptions id="overflow">
 <hfoption id="Trainer">
@@ -193,7 +46,7 @@ debug_overflow = DebugUnderflowOverflow(model)
 </hfoption>
 </hfoptions>
 
-The [`~debug_utils.DebugUnderflowOverflow`] module inserts hooks into the model to test the input and output variables and the corresponding model weights after each forward call. If `inf` or `nan` is detected in at least one element of the activations or weights, the module prints a report like the one shown below.
+[`~debug_utils.DebugUnderflowOverflow`] inserts hooks into the model to test input and output variables and the corresponding model weights after each forward call. When `inf` or `nan` is detected in at least one element of the activations or weights, the module prints a report like the one below.
 
 The example below is for fp16 mixed precision training with [google/mt5-small](https://huggingface.co/google/mt5-small).
 
@@ -237,9 +90,9 @@ abs min  abs max  metadata
 0.00e+00      inf output
 ```
 
-At the start of the report, you can see which batch number the error occurred. In this case, it occurred on the first batch.
+The first line shows the batch number where the error occurred. In this case, it occurred on batch 0.
 
-Each frame describes the module it is reporting on. For example, the frame below inspected `encoder.block.2.layer.1.layer_norm`. This indicates the layer norm in the first layer of the second block of the encoder. The forward calls are to `T5LayerNorm`.
+Each frame describes the module it reports on. For example, the frame below reports on `encoder.block.2.layer.1.layer_norm`, the layer norm in the first layer of the encoder's second block. The forward calls are to `T5LayerNorm`.
 
 ```shell
                   encoder.block.2.layer.1.layer_norm T5LayerNorm
@@ -248,7 +101,7 @@ Each frame describes the module it is reporting on. For example, the frame below
 1.79e-06 4.65e+00 output
 ```
 
-The last frame reports on the `Dropout.forward` function. It called the `dropout` attribute from inside the `DenseReluDense` class. You can observe that the overflow (`inf`) occurred in the first layer of the encoders second block in the first batch. The absolute largest input element was 6.27e+04.
+The last frame reports on the `Dropout.forward` function, which calls the `dropout` attribute inside the `DenseReluDense` class. The overflow (`inf`) occurred in the encoder's second block on the first batch. The largest input element was 6.27e+04.
 
 ```shell
                   encoder.block.2.layer.1.DenseReluDense T5DenseGatedGeluDense
@@ -259,9 +112,9 @@ The last frame reports on the `Dropout.forward` function. It called the `dropout
 0.00e+00      inf output
 ```
 
-The `T5DenseGatedGeluDense.forward` function output activations had an absolute maximum value of 6.27e+04 which is close to fp16s maximum limit of 6.4e+04. In the next step, `Dropout` renormalizes the weights, after zeroing some elements, which pushes the absolute maximum value to greater than 6.4e+04 resulting in an overflow.
+`T5DenseGatedGeluDense.forward` output activations reached a maximum of 6.27e+04, which is close to fp16's maximum of 6.4e+04. In the next step, `Dropout` renormalizes the weights after zeroing some elements, pushing the maximum above 6.4e+04 and causing the overflow.
 
-Now that you know where the error is happening, you can investigate the modeling code in [modeling_t5.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/t5/modeling_t5.py).
+Now that you know where the error is happening, investigate the modeling code in [modeling_t5.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/t5/modeling_t5.py).
 
 ```py
 class T5DenseGatedGeluDense(nn.Module):
@@ -282,7 +135,7 @@ class T5DenseGatedGeluDense(nn.Module):
         return hidden_states
 ```
 
-One solution is to go back a few steps before the values started growing too large and switch to fp32 so the numbers don't overflow when multiplied or summed. Another potential solution is to temporarily disable mixed precision training (`amp`).
+One fix is to switch to fp32 a few steps before the values grew too large, so numbers don't overflow when multiplied or summed. Another option is to disable mixed precision training (`amp`) temporarily.
 
 ```py
 import torch
@@ -296,10 +149,10 @@ def forward(self, hidden_states):
         return self._forward(hidden_states)
 ```
 
-The report only returns inputs and outputs of full frames, so you may also want to analyze the intermediate values of any `forward` function as well. Add the `detect_overflow` function after the forward calls to track `inf` or `nan` values in the intermediate `forwarded_states`.
+The report only covers inputs and outputs of full frames. To analyze intermediate values inside any `forward` function, add `detect_overflow` after each forward call to track `inf` or `nan` in `forwarded_states`.
 
 ```py
-from debug_utils import detect_overflow
+from transformers.debug_utils import detect_overflow
 
 class T5LayerFF(nn.Module):
     [...]
@@ -312,7 +165,7 @@ class T5LayerFF(nn.Module):
         return hidden_states + self.dropout(forwarded_states)
 ```
 
-Finally, you can configure the number of frames printed by [`~debug_utils.DebugUnderflowOverflow`].
+Configure the number of frames printed by [`~debug_utils.DebugUnderflowOverflow`].
 
 ```py
 from transformers.debug_utils import DebugUnderflowOverflow
@@ -322,9 +175,9 @@ debug_overflow = DebugUnderflowOverflow(model, max_frames_to_save=100)
 
 ### Batch tracing
 
-[`~debug_utils.DebugUnderflowOverflow`] is able to trace the absolute minimum and maximum values in each batch with the underflow and overflow feature disabled. This is useful for identifying where errors are occurring in the model.
+[`~debug_utils.DebugUnderflowOverflow`] can also trace the absolute minimum and maximum values in each batch with underflow and overflow detection disabled. This helps you locate where values start diverging in your model.
 
-The example below shows how to trace the minimum and maximum values in batches 1 and 3 (batches are zero-indexd).
+The example below traces batches 1 and 3 (batches are zero-indexed).
 
 ```py
 debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3])
@@ -359,10 +212,218 @@ abs min  abs max  metadata
 [...]
 ```
 
-[`~debug_utils.DebugUnderflowOverflow`] reports on a large number of frames which is easier for debugging. Once you know where a problem is occurring, say batch 150, then you can focus the trace for batches 149 and 150 and compare where the numbers are diverging.
+[`~debug_utils.DebugUnderflowOverflow`] reports many frames, which makes it easier to spot where values diverge. If you know the problem is around batch 150, focus the trace on batches 149 and 150 to compare where the numbers start to differ.
 
-It is also possible to abort the trace after a certain batch number, for example, batch 3.
+You can also stop the trace after a specific batch number, for example batch 3.
 
 ```py
 debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3], abort_after_batch_num=3)
+```
+
+## Communication
+
+Distributed training requires inter-process and inter-node communication, which is a common source of errors.
+
+Download the script below to diagnose network issues, then run it to test GPU communication. The command below tests two GPUs. Adjust `--nproc_per_node` and `--nnodes` for your system.
+
+```bash
+wget https://raw.githubusercontent.com/huggingface/transformers/main/scripts/distributed/torch-distributed-gpu-test.py
+python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 torch-distributed-gpu-test.py
+```
+
+The script prints `OK` if both GPUs communicate and allocate memory successfully. See the diagnostic script for more details and a recipe for running it in a SLURM environment.
+
+Set `NCCL_DEBUG=INFO` to get detailed NCCL debugging output.
+
+```bash
+NCCL_DEBUG=INFO python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 torch-distributed-gpu-test.py
+```
+
+## DeepSpeed
+
+When you hit an error, first check whether DeepSpeed is the cause. Retry your setup without DeepSpeed, and if the error persists, report the issue. For issues unrelated to the Transformers integration, open an issue on the DeepSpeed [repository](https://github.com/microsoft/DeepSpeed).
+
+For issues related to the Transformers integration, include the following information.
+
+* The full DeepSpeed config file.
+* The command line arguments for [`Trainer`] or the [`TrainingArguments`] if you're scripting the [`Trainer`] setup yourself (don't dump the entire [`TrainingArguments`] which contains many irrelevant entries).
+* The outputs of these commands.
+
+    ```bash
+    python -c 'import torch; print(f"torch: {torch.__version__}")'
+    python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
+    python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
+    ```
+
+* A link to a Google Colab notebook to reproduce the issue.
+* A standard or non-custom dataset or an existing example to reproduce the issue.
+
+### Process killed at startup
+
+If the DeepSpeed process is killed during launch without a traceback, the program tried to allocate more CPU memory than is available or allowed. The OS kernel terminates the process in either case.
+
+Check whether your config file has `offload_optimizer`, `offload_param`, or both configured to offload to the CPU.
+
+If you have NVMe and ZeRO-3 set up, try offloading to the NVMe instead. [Estimate](https://deepspeed.readthedocs.io/en/latest/memory.html) the memory requirements of your model first.
+
+### NaN loss
+
+NaN loss often occurs when a model is pretrained in bf16 and then it is used with fp16 (this is especially common with TPU-trained models). Use fp32 or bf16 if your hardware supports it (TPUs, Ampere GPUs or newer).
+
+fp16 can also cause overflow. If your config file looks like the one below, you may see overflow errors in the logs.
+
+```json
+{
+    "fp16": {
+        "enabled": "auto",
+        "loss_scale": 0,
+        "loss_scale_window": 1000,
+        "initial_scale_power": 16,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    }
+}
+```
+
+The `OVERFLOW!` error below means the DeepSpeed loss scaler couldn't find a scaling coefficient to overcome the loss overflow. Try a higher `initial_scale_power` value (32 usually works).
+
+```bash
+0%|                                                                                                                             | 0/189 [00:00<?, ?it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 262144, reducing to 262144
+  1%|▌                                                                                                                    | 1/189 [00:00<01:26,  2.17it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 262144, reducing to 131072.0
+  1%|█▏
+ [...]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 14%|████████████████▌                                                                                                   | 27/189 [00:14<01:13,  2.21it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 15%|█████████████████▏                                                                                                  | 28/189 [00:14<01:13,  2.18it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 15%|█████████████████▊                                                                                                  | 29/189 [00:15<01:13,  2.18it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+[...]
+```
+
+## DeepSpeed CUDA
+
+DeepSpeed compiles CUDA C++ code, which is a common source of build errors for PyTorch extensions that require CUDA. These errors depend on how CUDA is installed on your system.
+
+```bash
+pip install deepspeed
+```
+
+> [!TIP]
+> For any other installation issues, [open an issue](https://github.com/microsoft/DeepSpeed/issues) with the DeepSpeed team.
+
+### Non-identical toolkits
+
+PyTorch ships with its own CUDA toolkit, but DeepSpeed requires an identical CUDA version installed system-wide. If you installed PyTorch with `cudatoolkit==10.2` in your Python environment, you'll also need CUDA 10.2 installed everywhere.
+
+The exact location varies by system, but `/usr/local/cuda-10.2` is the most common path on Unix systems. Once CUDA is set up and added to your `PATH`, find the installation location with this command.
+
+```bash
+which nvcc
+```
+
+### Multiple toolkits
+
+Your system may have more than one CUDA toolkit installed.
+
+```text
+/usr/local/cuda-10.2
+/usr/local/cuda-11.0
+```
+
+Package installers typically set paths to the last installed version. If the build fails because it can't find the right CUDA version, configure `PATH` and `LD_LIBRARY_PATH` to point to the correct path.
+
+Check these environment variables first.
+
+```bash
+echo $PATH
+echo $LD_LIBRARY_PATH
+```
+
+`PATH` lists executable locations. `LD_LIBRARY_PATH` lists shared library locations. Earlier entries take priority, and `:` separates multiple entries. Prepend the correct CUDA path to prioritize it.
+
+```bash
+# adjust the version and full path if needed
+export PATH=/usr/local/cuda-10.2/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:$LD_LIBRARY_PATH
+```
+
+Also verify the assigned directories exist. The `lib64` sub-directory contains CUDA `.so` objects like `libcudart.so`. Check the actual filenames and update accordingly.
+
+### Older versions
+
+Older CUDA versions sometimes require older compiler versions. For example, if CUDA requires `gcc-7` but your system only has `gcc-9`, the build will fail. Install the required older compiler and create a symlink so the CUDA build system can find it.
+
+```bash
+# adjust the path to your system
+sudo ln -s /usr/bin/gcc-7  /usr/local/cuda-10.2/bin/gcc
+sudo ln -s /usr/bin/g++-7  /usr/local/cuda-10.2/bin/g++
+```
+
+### Prebuild
+
+If you're still having trouble installing DeepSpeed or building it at runtime, prebuild the DeepSpeed modules first. Run the commands below for a local build.
+
+```bash
+git clone https://github.com/deepspeedai/DeepSpeed/
+cd DeepSpeed
+rm -rf build
+TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 pip install . \
+--global-option="build_ext" --global-option="-j8" --no-cache -v \
+--disable-pip-version-check 2>&1 | tee build.log
+```
+
+> [!TIP]
+> Add `DS_BUILD_AIO=1` to the build command to use NVMe offload. Make sure you install the libaio-dev package system-wide.
+
+Next, set your GPU architecture in `TORCH_CUDA_ARCH_LIST`. A complete list of NVIDIA GPUs and their architectures is on the [CUDA GPUs page](https://developer.nvidia.com/cuda-gpus). To check the PyTorch version that corresponds to your architecture, run the command below.
+
+```bash
+python -c "import torch; print(torch.cuda.get_arch_list())"
+```
+
+Find the architecture for a GPU with the following command.
+
+<hfoptions id="arch">
+<hfoption id="same GPUs">
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python -c "import torch; print(torch.cuda.get_device_capability())"
+```
+
+</hfoption>
+<hfoption id="specific GPU">
+
+Run the following command to find the architecture for GPU `0`. The output shows `major` and `minor` values that together form the GPU architecture. The example below shows architecture `8.6`.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python -c "import torch; \
+print(torch.cuda.get_device_properties(torch.device('cuda')))
+"_CudaDeviceProperties(name='GeForce RTX 3090', major=8, minor=6, total_memory=24268MB, multi_processor_count=82)"
+```
+
+</hfoption>
+</hfoptions>
+
+For a result of `8, 6`, set `TORCH_CUDA_ARCH_LIST="8.6"`. For multiple GPUs with different architectures, list them like `TORCH_CUDA_ARCH_LIST="6.1;8.6"`.
+
+You can omit `TORCH_CUDA_ARCH_LIST` and let the build program detect the GPU architecture automatically, but it might not match the actual GPU on the target machine. Explicitly setting the architecture is more reliable.
+
+For training on multiple machines with the same setup, build a binary wheel.
+
+```bash
+git clone https://github.com/deepspeedai/DeepSpeed/
+cd DeepSpeed
+rm -rf build
+TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 \
+python setup.py build_ext -j8 bdist_wheel
+```
+
+This generates a binary wheel like `dist/deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl`. Install it locally or on another machine.
+
+```bash
+pip install deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl
 ```

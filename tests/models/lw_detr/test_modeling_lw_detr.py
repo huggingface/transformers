@@ -15,7 +15,7 @@ import unittest
 from functools import cached_property
 
 from transformers import (
-    DeformableDetrImageProcessor,
+    DeformableDetrImageProcessorPil,
     LwDetrConfig,
     LwDetrViTConfig,
     is_torch_available,
@@ -658,8 +658,8 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         if is_vision_available():
             return {
-                "tiny": DeformableDetrImageProcessor.from_pretrained(CHECKPOINT["tiny"]),
-                "xlarge": DeformableDetrImageProcessor.from_pretrained(CHECKPOINT["xlarge"]),
+                "tiny": DeformableDetrImageProcessorPil.from_pretrained(CHECKPOINT["tiny"]),
+                "xlarge": DeformableDetrImageProcessorPil.from_pretrained(CHECKPOINT["xlarge"]),
             }
 
     @slow

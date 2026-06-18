@@ -44,7 +44,7 @@ if is_torch_available():
     from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerModel
 
     if is_vision_available():
-        from transformers import Mask2FormerImageProcessor
+        from transformers import Mask2FormerImageProcessorPil
 
 if is_vision_available():
     from PIL import Image
@@ -375,7 +375,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_image_processor(self):
-        return Mask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
+        return Mask2FormerImageProcessorPil.from_pretrained(self.model_checkpoints) if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = Mask2FormerModel.from_pretrained(self.model_checkpoints).to(torch_device)

@@ -35,7 +35,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import ViTImageProcessorPil
 
 
 class ViTMSNModelTester:
@@ -165,7 +165,7 @@ class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ViTMSNModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTMSNConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ViTMSNConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -209,7 +209,7 @@ def prepare_img():
 class ViTMSNModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
+        return ViTImageProcessorPil.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):

@@ -66,14 +66,14 @@ class DepthProModelTester:
             "patch_size": 4,
         },
         patch_model_config={
-            "model_type": "vit",
+            "model_type": "dinov2",
             "num_hidden_layers": 2,
             "hidden_size": 24,
             "num_attention_heads": 2,
             "patch_size": 6,
         },
         fov_model_config={
-            "model_type": "vit",
+            "model_type": "dinov2",
             "num_hidden_layers": 2,
             "hidden_size": 32,
             "num_attention_heads": 4,
@@ -214,7 +214,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = DepthProModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DepthProConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DepthProConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

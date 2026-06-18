@@ -24,20 +24,18 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from transformers.utils.generic import TransformersKwargs
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import TransformersKwargs, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_olmo3 import Olmo3Config
 
@@ -100,6 +98,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -415,10 +414,10 @@ class Olmo3Model(Olmo3PreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.self_attn.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 position_embeddings=position_embeddings,
@@ -506,4 +505,8 @@ class Olmo3ForCausalLM(Olmo3PreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["Olmo3ForCausalLM", "Olmo3Model", "Olmo3PreTrainedModel"]
+class Olmo3ForSequenceClassification(GenericForSequenceClassification, Olmo3PreTrainedModel):
+    pass
+
+
+__all__ = ["Olmo3ForCausalLM", "Olmo3ForSequenceClassification", "Olmo3Model", "Olmo3PreTrainedModel"]

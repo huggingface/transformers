@@ -35,12 +35,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from ...utils.generic import TransformersKwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
@@ -56,20 +51,12 @@ from .configuration_sam2 import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
+@dataclass
 class Sam2VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
-        model at the output of each stage.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-        the self-attention heads.
     fpn_hidden_states (`tuple(torch.FloatTensor)`):
         Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
@@ -82,8 +69,8 @@ class Sam2VisionEncoderOutput(BaseModelOutputWithPooling):
     fpn_position_encoding: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
+@dataclass
 class Sam2ImageSegmentationOutput(ModelOutput):
     r"""
     iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
@@ -123,7 +110,7 @@ class Sam2PatchEmbeddings(nn.Module):
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Sam2ImageProcessorFast.__call__`] for details.
+            [`AutoImageProcessor`]. See [`Sam2ImageProcessor.__call__`] for details.
 
     Returns:
         embeddings (`torch.FloatTensor`):
@@ -149,7 +136,6 @@ class Sam2PatchEmbeddings(nn.Module):
         return embeddings
 
 
-# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
 class Sam2SinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -157,36 +143,43 @@ class Sam2SinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=1)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        y_embed = mask.cumsum(1, dtype=dtype)
+        x_embed = mask.cumsum(2, dtype=dtype)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -195,13 +188,26 @@ class Sam2SinePositionEmbedding(nn.Module):
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
 
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
+
 
 class Sam2VisionNeck(nn.Module):
     def __init__(self, config: Sam2VisionConfig):
         super().__init__()
         self.config = config
 
-        self.position_encoding = Sam2SinePositionEmbedding(num_pos_feats=config.fpn_hidden_size // 2, normalize=True)
+        self.position_encoding = Sam2SinePositionEmbedding(
+            num_position_features=config.fpn_hidden_size // 2, normalize=True
+        )
         self.convs = nn.ModuleList()
         for in_channels in config.backbone_channel_list:
             self.convs.append(
@@ -531,12 +537,12 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Hiera model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class Sam2HieraDetModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
@@ -1030,8 +1036,8 @@ class Sam2TwoWayTransformer(nn.Module):
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
-        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
-        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
+        image_embeddings = image_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
+        image_positional_embeddings = image_positional_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
 
         # Prepare queries
         queries = point_embeddings
@@ -1596,8 +1602,8 @@ class Sam2Model(Sam2PreTrainedModel):
         # flatten NxCxHxW to HWxNxC
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
         feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
+            feature_maps_position_embeddings.flatten(2).permute(2, 0, 1)
+            for feature_maps_position_embeddings in feature_maps_position_embeddings
         ]
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings

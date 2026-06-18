@@ -18,32 +18,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
 
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from .configuration_glm_image import GlmImageConfig, GlmImageTextConfig, GlmImageVisionConfig, GlmImageVQVAEConfig
-
-
-if is_torch_available():
-    import torch
 
 
 class GlmImageVisionMLP(nn.Module):
@@ -112,6 +117,7 @@ class GlmImageVisionAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -130,7 +136,7 @@ class GlmImageVisionAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        if "flash" in self.config._attn_implementation:
+        if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
@@ -239,12 +245,11 @@ class GlmImageVisionEmbeddings(nn.Module):
         )
 
         # Calculate target dimensions for each patch
-        target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
-            device=device, dtype=torch.float32
-        )
-        target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).to(
-            device=device, dtype=torch.float32
-        )
+        num_tokens = embeddings.shape[0]
+        token_positions = torch.arange(num_tokens, device=embeddings.device)
+        seq_ids = (token_positions.unsqueeze(0) >= lengths.cumsum(0).unsqueeze(1)).sum(0)
+        target_h = image_shapes[seq_ids, 1].to(dtype=torch.float32)
+        target_w = image_shapes[seq_ids, 2].to(dtype=torch.float32)
 
         # Normalize coordinates to [-1, 1] range for grid_sample
         norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
@@ -275,6 +280,8 @@ class GlmImageVisionBlock(GradientCheckpointingLayer):
         self.attn = GlmImageVisionAttention(config)
         self.mlp = GlmImageVisionMLP(config)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -284,8 +291,6 @@ class GlmImageVisionBlock(GradientCheckpointingLayer):
         r"""
         cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
             The cumulative sequence lengths of each image or video feature.
-        position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
-            The cosine and sine position embeddings for vision attention.
         """
         residual = hidden_states
 
@@ -348,7 +353,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class GlmImageTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -380,7 +384,6 @@ class GlmImageTextAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -398,9 +401,7 @@ class GlmImageTextAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -422,97 +423,6 @@ class GlmImageTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class GlmImageRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        GlmImageRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class GlmImageTextMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        self.config = config
-        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
-        self.activation_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
-        up_states = self.gate_up_proj(hidden_states)
-
-        gate, up_states = up_states.chunk(2, dim=-1)
-        up_states = up_states * self.activation_fn(gate)
-
-        return self.down_proj(up_states)
-
-
-class GlmImageTextDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: GlmImageTextConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.self_attn = GlmImageTextAttention(config, layer_idx)
-        self.mlp = GlmImageTextMLP(config)
-        self.input_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_self_attn_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_mlp_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_mlp_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
-
-
 @auto_docstring
 class GlmImagePreTrainedModel(PreTrainedModel):
     config: GlmImageConfig
@@ -520,43 +430,27 @@ class GlmImagePreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["GlmImageTextDecoderLayer", "GlmImageVisionBlock"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": GlmImageTextDecoderLayer,
-        "attentions": GlmImageTextAttention,
-    }
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
 
+@auto_docstring
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
-    """
-)
-class GlmImageModelOutputWithPast(ModelOutput):
+class GlmImageModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
@@ -612,8 +506,8 @@ class GlmImageVQVAEVectorQuantizer(nn.Module):
         return hidden_state_quant, loss, min_encoding_indices
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class GlmImageVQVAEModelOutput(BaseModelOutputWithPooling):
     r"""
     quantized_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
@@ -692,30 +586,12 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self.post_init()
 
     def rot_pos_emb(self, grid_thw):
-        pos_ids = []
-        for t, h, w in grid_thw:
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-        pos_ids = torch.cat(pos_ids, dim=0)
-        return pos_ids
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -732,22 +608,17 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         Returns:
             `torch.Tensor` of shape `(total_patches, hidden_size)`: Hidden states.
         """
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
 
         hidden_states = self.patch_embed(pixel_values)
-        image_type_ids = self.rot_pos_emb(grid_thw)
-
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+        seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(
             hidden_states,
             seqlens,
             grid_thw,
-            image_type_ids[:, 0].to(hidden_states.device),
-            image_type_ids[:, 1].to(hidden_states.device),
+            position_ids[:, 0].to(hidden_states.device),
+            position_ids[:, 1].to(hidden_states.device),
         )
 
         # Transformer blocks (no position_embeddings needed, already added above)
@@ -758,6 +629,27 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
             )
 
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class GlmImageRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        GlmImageRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class GlmImageTextRotaryEmbedding(nn.Module):
@@ -837,10 +729,82 @@ class GlmImageTextRotaryEmbedding(nn.Module):
         return result
 
 
+class GlmImageTextMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.config = config
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.activation_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+        up_states = self.gate_up_proj(hidden_states)
+
+        gate, up_states = up_states.chunk(2, dim=-1)
+        up_states = up_states * self.activation_fn(gate)
+
+        return self.down_proj(up_states)
+
+
+class GlmImageTextDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: GlmImageTextConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.self_attn = GlmImageTextAttention(config, layer_idx)
+        self.mlp = GlmImageTextMLP(config)
+        self.input_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_self_attn_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_mlp_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = self.post_self_attn_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_mlp_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
 @auto_docstring
 class GlmImageTextModel(GlmImagePreTrainedModel):
     config: GlmImageTextConfig
     input_modalities = ("text",)
+    _can_record_outputs = {
+        "hidden_states": GlmImageTextDecoderLayer,
+        "attentions": GlmImageTextAttention,
+    }
 
     def __init__(self, config: GlmImageTextConfig):
         super().__init__(config)
@@ -869,7 +833,6 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -882,15 +845,11 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
-            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
@@ -915,7 +874,6 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
             "config": self.config,
             "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
-            "cache_position": cache_position,
             "past_key_values": past_key_values,
             "position_ids": text_position_ids,
         }
@@ -931,7 +889,6 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
                 attention_mask=causal_mask,
                 position_ids=text_position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -948,7 +905,6 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
 @auto_docstring
 class GlmImageModel(GlmImagePreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _no_split_modules = ["GlmImageTextDecoderLayer", "GlmImageVisionBlock"]
@@ -967,12 +923,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def get_vision_position_ids(
         self,
@@ -1017,15 +967,17 @@ class GlmImageModel(GlmImagePreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        image_seq_length = llm_grid_h * llm_grid_w * llm_grid_t
-        position_width = torch.arange(start_position, start_position + llm_grid_w, device=device).repeat(
-            llm_grid_h * llm_grid_t
-        )
-        position_height = torch.arange(start_position, start_position + llm_grid_h, device=device).repeat_interleave(
-            llm_grid_w * llm_grid_t
-        )
-        position_temporal = torch.full((image_seq_length,), start_position, device=device, dtype=torch.long)
-        position_temporal = position_temporal * time_interval
+        # Add `start_position` after arange for compile
+        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
+        position_width = torch.arange(llm_grid_w, device=device) + start_position
+        position_height = torch.arange(llm_grid_h, device=device) + start_position
+
+        # Repeat the positions per each grid and per video frame. Repeat patterns are important
+        # do not modify without checking values!
+        position_width = position_width.repeat(llm_grid_h * llm_grid_t)
+        position_height = position_height.repeat_interleave(llm_grid_w).repeat(llm_grid_t)
+        # Important: add `start_positions` after applying `time_interval`, order matters
+        position_temporal = position_temporal.repeat_interleave(llm_grid_h * llm_grid_w) + start_position
         vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
 
         return vision_position_ids
@@ -1199,6 +1151,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1214,7 +1167,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.last_hidden_state, split_sizes)
         vision_outputs.pooler_output = image_embeds
@@ -1260,7 +1213,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
         inputs_embeds: torch.Tensor | None,
         attention_mask: torch.Tensor | None,
         past_key_values: torch.Tensor | None,
-        cache_position: torch.Tensor | None,
     ) -> torch.Tensor | None:
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
         can_compute_mrope = input_ids is not None and image_grid_thw is not None
@@ -1273,19 +1225,26 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 images_per_sample=images_per_sample,
             )
             self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids
-        elif self.rope_deltas is not None:
+        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
+        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if self._cached_decode_position_ids is not None:
-                step = cache_position[0].item() - self._prefill_len
+                step = past_key_values_length - self._prefill_len
                 position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
             else:
-                position_ids = cache_position.view(1, 1, -1).repeat(3, batch_size, 1)
+                position_ids = (
+                    torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_key_values_length
+                )
+                position_ids = position_ids.view(1, 1, -1).repeat(3, batch_size, 1)
         else:
-            # Can't build correct 3D positions. Let the model infer it from `cache_position`
+            # Can't build correct 3D positions. Let the model infer it
             position_ids = None
         return position_ids
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1298,8 +1257,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageModelOutputWithPast:
         r"""
@@ -1308,8 +1265,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
             Images are packed across all samples in the batch.
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1352,7 +1307,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 # Fallback for batch_size=1: all but last grid are source images
                 source_grids = image_grid_thw[:-1]
 
-            image_features = self.get_image_features(pixel_values, source_grids, return_dict=True)
+            image_features = self.get_image_features(pixel_values, source_grids, return_dict=True, **kwargs)
             image_embeds = torch.cat(image_features.pooler_output, dim=0)
             image_ids = self.get_image_tokens(image_embeds, source_grids)
             image_ids = image_ids.view(-1).to(input_ids.device)
@@ -1370,7 +1325,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
             )
 
         outputs = self.language_model(
@@ -1379,7 +1333,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1423,37 +1376,19 @@ class GlmImageModel(GlmImagePreTrainedModel):
         return torch.cat(all_image_toks, dim=0)
 
 
+@auto_docstring
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for GlmImage causal language model (or autoregressive) outputs.
-    """
-)
-class GlmImageCausalLMOutputWithPast(ModelOutput):
+class GlmImageCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1497,7 +1432,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageCausalLMOutputWithPast:
@@ -1553,7 +1487,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1582,7 +1515,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values=None,
@@ -1596,7 +1528,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
@@ -1716,8 +1647,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
                 if (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):

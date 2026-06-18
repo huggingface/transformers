@@ -29,16 +29,13 @@ import httpx
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
+    HfApi,
     ModelCard,
     ModelCardData,
     constants,
-    create_branch,
-    create_commit,
-    create_repo,
     hf_hub_download,
     hf_hub_url,
     is_offline_mode,
-    list_repo_tree,
     snapshot_download,
     try_to_load_from_cache,
 )
@@ -73,6 +70,24 @@ CHAT_TEMPLATE_DIR = "additional_chat_templates"
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
+_hf_api: HfApi | None = None
+
+
+def hf_api() -> HfApi:
+    """Return a shared HfApi instance tagged with transformers's library info.
+
+    Routing Hub calls (create_repo, create_commit, snapshot_download, ...) through this
+    instance ensures the library_name/library_version are reported consistently to the Hub.
+    """
+    global _hf_api
+    if _hf_api is None:
+        _hf_api = HfApi(
+            library_name="transformers",
+            library_version=__version__,
+        )
+    return _hf_api
+
+
 class DownloadKwargs(TypedDict, total=False):
     cache_dir: str | os.PathLike | None
     force_download: bool
@@ -82,6 +97,7 @@ class DownloadKwargs(TypedDict, total=False):
     revision: str | None
     subfolder: str
     commit_hash: str | None
+    tqdm_class: type | None
 
 
 # Determine default cache directory.
@@ -130,7 +146,7 @@ def list_repo_templates(
         try:
             return [
                 entry.path.removeprefix(f"{CHAT_TEMPLATE_DIR}/")
-                for entry in list_repo_tree(
+                for entry in hf_api().list_repo_tree(
                     repo_id=repo_id,
                     revision=revision,
                     path_in_repo=CHAT_TEMPLATE_DIR,
@@ -146,7 +162,7 @@ def list_repo_templates(
 
     # check local files
     try:
-        snapshot_dir = snapshot_download(
+        snapshot_dir = hf_api().snapshot_download(
             repo_id=repo_id, revision=revision, cache_dir=cache_dir, local_files_only=True
         )
     except LocalEntryNotFoundError:  # No local repo means no local files
@@ -295,6 +311,7 @@ def cached_files(
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
     _commit_hash: str | None = None,
+    tqdm_class: type | None = None,
     **deprecated_kwargs,
 ) -> list[str] | None:
     """
@@ -429,6 +446,7 @@ def cached_files(
                 proxies=proxies,
                 token=token,
                 local_files_only=local_files_only,
+                tqdm_class=tqdm_class,
             )
         else:
             snapshot_download(
@@ -442,6 +460,7 @@ def cached_files(
                 proxies=proxies,
                 token=token,
                 local_files_only=local_files_only,
+                tqdm_class=tqdm_class,
             )
 
     except Exception as e:
@@ -688,7 +707,7 @@ class PushToHubMixin:
 
         if revision is not None and not revision.startswith("refs/pr"):
             try:
-                create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
+                hf_api().create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
             except HfHubHTTPError as e:
                 if e.response.status_code == 403 and create_pr:
                     # If we are creating a PR on a repo we don't have access to, we can't create the branch.
@@ -699,7 +718,7 @@ class PushToHubMixin:
                     raise
 
         logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
-        return create_commit(
+        return hf_api().create_commit(
             repo_id=repo_id,
             operations=operations,
             commit_message=commit_message,
@@ -771,7 +790,7 @@ class PushToHubMixin:
         ```
         """
         # Create repo if it doesn't exist yet
-        repo_id = create_repo(repo_id, private=private, token=token, exist_ok=True).repo_id
+        repo_id = hf_api().create_repo(repo_id, private=private, token=token, exist_ok=True).repo_id
 
         # Load model card or create a new one + eventually tag it
         model_card = create_and_tag_model_card(repo_id, tags, token=token)
@@ -841,6 +860,7 @@ def get_checkpoint_shard_files(
     revision=None,
     subfolder="",
     _commit_hash=None,
+    tqdm_class=None,
     **deprecated_kwargs,
 ):
     """
@@ -883,6 +903,7 @@ def get_checkpoint_shard_files(
         revision=revision,
         subfolder=subfolder,
         _commit_hash=_commit_hash,
+        tqdm_class=tqdm_class,
     )
 
     return cached_filenames, sharded_metadata

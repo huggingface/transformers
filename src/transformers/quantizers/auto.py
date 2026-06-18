@@ -28,6 +28,7 @@ from ..utils.quantization_config import (
     FineGrainedFP8Config,
     FourOverSixConfig,
     FPQuantConfig,
+    GemmaQuantizationConfig,
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
@@ -55,6 +56,7 @@ from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
+from .quantizer_gemma import GemmaQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
@@ -88,10 +90,15 @@ AUTO_QUANTIZER_MAPPING = {
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
+    # MXFP8 = FP8 (E4M3 weights) with per-block ``[1, 32]`` E8M0 (uint8) scales —
+    # reuses the FineGrainedFP8 dequant path, with the E8M0 byte→exponent
+    # unpacking handled inside ``Fp8Dequantize._dequantize_one``.
+    "mxfp8": FineGrainedFP8HfQuantizer,
     "auto-round": AutoRoundQuantizer,
     "mxfp4": Mxfp4HfQuantizer,
     "metal": MetalHfQuantizer,
     "sinq": SinqHfQuantizer,
+    "gemma": GemmaQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -114,11 +121,24 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,
+    "mxfp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
     "mxfp4": Mxfp4Config,
     "metal": MetalConfig,
     "sinq": SinqConfig,
+    "gemma": GemmaQuantizationConfig,
 }
+
+LOADING_ATTRIBUTES_CONFIG_TYPES = (
+    GPTQConfig,
+    AwqConfig,
+    AutoRoundConfig,
+    FbgemmFp8Config,
+    CompressedTensorsConfig,
+    Mxfp4Config,
+    MetalConfig,
+    FineGrainedFP8Config,
+)
 
 logger = logging.get_logger(__name__)
 
@@ -181,6 +201,10 @@ class AutoHfQuantizer:
         # Again, we need a special care for bnb as we have a single quantization config
         # class for both 4-bit and 8-bit quantization
         if quant_method == QuantizationMethod.BITS_AND_BYTES:
+            if not isinstance(quantization_config, BitsAndBytesConfig):
+                raise TypeError(
+                    "Found `quant_method=bitsandbytes` but `quantization_config` is not a `BitsAndBytesConfig`."
+                )
             if quantization_config.load_in_8bit:
                 quant_method += "_8bit"
             else:
@@ -233,27 +257,15 @@ class AutoHfQuantizer:
                 "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
             )
 
-        if (
-            isinstance(
-                quantization_config,
-                (
-                    GPTQConfig,
-                    AwqConfig,
-                    AutoRoundConfig,
-                    FbgemmFp8Config,
-                    CompressedTensorsConfig,
-                    Mxfp4Config,
-                    MetalConfig,
-                    FineGrainedFP8Config,
-                ),
-            )
-            and quantization_config_from_args is not None
+        if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
+            quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES
         ):
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)
 
-            warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
+            if loading_attr_dict:
+                warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
         if warning_msg != "" and not isinstance(quantization_config, (Mxfp4Config, MetalConfig, FineGrainedFP8Config)):
             warnings.warn(warning_msg)
@@ -316,7 +328,7 @@ def register_quantizer(name: str):
 
 
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent):
-    pre_quantized = hasattr(config, "quantization_config")
+    pre_quantized = getattr(config, "quantization_config", None) is not None
     if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
         pre_quantized = False
 

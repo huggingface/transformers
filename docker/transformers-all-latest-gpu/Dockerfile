@@ -9,12 +9,12 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.9.0'
+ARG PYTORCH='2.11.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 
 # This needs to be compatible with the above `PYTORCH`.
-ARG TORCHCODEC='0.8.0'
+ARG TORCHCODEC='0.11.0'
 
 ARG FLASH_ATTN='false'
 
@@ -36,9 +36,11 @@ RUN set -e; \
     # Determine torch version
     if [ ${#PYTORCH} -gt 0 ] && [ "$PYTORCH" != "pre" ]; then \
         VERSION="torch==${PYTORCH}.*"; \
+        TORCHAUDIO_VERSION="torchaudio==${PYTORCH}.*"; \
         TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
     else \
         VERSION="torch"; \
+        TORCHAUDIO_VERSION="torchaudio"; \
         TORCHCODEC_VERSION="torchcodec"; \
     fi; \
     \
@@ -50,7 +52,7 @@ RUN set -e; \
         python3 -m pip install --no-cache-dir -U \
             $VERSION \
             torchvision \
-            torchaudio \
+            $TORCHAUDIO_VERSION \
             --extra-index-url https://download.pytorch.org/whl/$CUDA; \
         # We need to specify the version if the torch version is not the latest stable one.
         python3 -m pip install --no-cache-dir -U \
@@ -105,11 +107,11 @@ RUN python3 -m pip install --no-cache-dir python-Levenshtein
 # For `FastSpeech2ConformerTokenizer` tokenizer
 RUN python3 -m pip install --no-cache-dir g2p-en
 
+# For serving tests (audio pipelines)
+RUN python3 -m pip install --no-cache-dir librosa python-multipart
+
 # For Some bitsandbytes tests
 RUN python3 -m pip install --no-cache-dir einops
-
-# For Some tests with `@require_liger_kernel`
-RUN python3 -m pip install --no-cache-dir liger-kernel
 
 # For `VibeVoice` (added in PR #40546)
 RUN python3 -m pip install --no-cache-dir diffusers

@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-04-02 and added to Hugging Face Transformers on 2022-06-01.*
+*This model was published in HF papers on 2021-04-02 and contributed to Hugging Face Transformers on 2022-06-01.*
 
 # LeViT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -90,9 +87,9 @@ If you're interested in submitting a resource to be included here, please feel f
   [[autodoc]] LevitImageProcessor
     - preprocess
 
-## LevitImageProcessorFast
+## LevitImageProcessorPil
 
-  [[autodoc]] LevitImageProcessorFast
+[[autodoc]] LevitImageProcessorPil
     - preprocess
 
 ## LevitModel

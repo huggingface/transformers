@@ -6,15 +6,20 @@ on:
     branches:
       - 'v*-release'
 
+permissions:
+  contents: read
+
 jobs:
   build_and_test:
     name: build release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: set up python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: "3.13"
 
@@ -30,8 +35,11 @@ jobs:
       - run: pip install -e .[torch]
       - run: python -c "from transformers import pipeline; classifier = pipeline('text-classification'); assert classifier('What a nice release')[0]['score'] > 0"
 
+      - run: pip install twine
+      - run: twine check --strict dist/*
+
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: python-dist
           path: |
@@ -47,14 +55,18 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
           name: python-dist
           path: .
 
       - name: Publish package distributions to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # release/v1
+        with:
+          verbose: true
 

@@ -19,46 +19,17 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
-from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPoolingAndNoAttention
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
-from ...utils.generic import can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->DINOv3ConvNext
-class DINOv3ConvNextDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
 
 
 class DINOv3ConvNextLayerNorm(nn.LayerNorm):
@@ -87,6 +58,31 @@ class DINOv3ConvNextLayerNorm(nn.LayerNorm):
         return features
 
 
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->Dinov3ConvnextDropPath
+class Dinov3ConvnextDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 class DINOv3ConvNextLayer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
@@ -113,7 +109,7 @@ class DINOv3ConvNextLayer(nn.Module):
         self.activation_fn = ACT2FN[config.hidden_act]
         self.pointwise_conv2 = nn.Linear(4 * channels, channels)  # can be seen as a 1x1 conv
         self.gamma = nn.Parameter(torch.full((channels,), config.layer_scale_init_value), requires_grad=True)
-        self.drop_path = DINOv3ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = Dinov3ConvnextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         """
@@ -134,8 +130,6 @@ class DINOv3ConvNextLayer(nn.Module):
 
 
 class DINOv3ConvNextStage(nn.Module):
-    """ """
-
     def __init__(self, config: DINOv3ConvNextConfig, stage_idx: int):
         super().__init__()
 
@@ -169,7 +163,7 @@ class DINOv3ConvNextStage(nn.Module):
             ]
         )
 
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
+    def forward(self, features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         """
         Args:
             features: Tensor of shape (batch_size, channels, height, width)
@@ -184,10 +178,11 @@ class DINOv3ConvNextStage(nn.Module):
 @auto_docstring
 class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     config: DINOv3ConvNextConfig
-    base_model_prefix = "dinov3_convnext"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["DINOv3ConvNextLayer"]
+    _can_record_outputs = {"hidden_states": DINOv3ConvNextStage}
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -198,32 +193,42 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
                 init.constant_(module.gamma, self.config.layer_scale_init_value)
 
 
+class DINOv3ConvNextEncoder(DINOv3ConvNextPreTrainedModel):
+    def __init__(self, config: DINOv3ConvNextConfig):
+        super().__init__(config)
+        self.stages = nn.ModuleList([DINOv3ConvNextStage(config, stage_idx) for stage_idx in range(config.num_stages)])
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for stage in self.stages:
+            hidden_states = stage(hidden_states, **kwargs)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring
 class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
     def __init__(self, config: DINOv3ConvNextConfig):
         super().__init__(config)
-        self.config = config
-        self.stages = nn.ModuleList([DINOv3ConvNextStage(config, stage_idx) for stage_idx in range(config.num_stages)])
+        self.model = DINOv3ConvNextEncoder(config)
         self.layer_norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)  # final norm layer
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.post_init()
 
     @can_return_tuple
     @auto_docstring
-    def forward(
-        self, pixel_values: torch.FloatTensor, output_hidden_states: bool | None = None, **kwargs
-    ) -> BaseModelOutputWithPoolingAndNoAttention:
+    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutputWithPoolingAndNoAttention:
         hidden_states = pixel_values
 
-        output_hidden_states = output_hidden_states or self.config.output_hidden_states
-        all_hidden_states = [hidden_states] if output_hidden_states else []
-
-        for stage in self.stages:
-            hidden_states = stage(hidden_states)
-
-            # store intermediate stage outputs
-            if output_hidden_states:
-                all_hidden_states.append(hidden_states)
+        output = self.model(hidden_states, **kwargs)
+        hidden_states = output.last_hidden_state
 
         # make global representation, a.k.a [CLS] token
         pooled_output = self.pool(hidden_states)
@@ -239,20 +244,20 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states[:, 0],
-            hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
+            hidden_states=output.hidden_states,
         )
 
 
 @auto_docstring
 class DINOv3ConvNextBackbone(BackboneMixin, DINOv3ConvNextPreTrainedModel):
-    config: DINOv3ConvNextConfig
+    has_attentions = False
 
     def __init__(self, config: DINOv3ConvNextConfig):
         super().__init__(config)
 
         self.num_features = [config.num_channels] + list(config.hidden_sizes)
 
-        self.stages = nn.ModuleList([DINOv3ConvNextStage(config, s) for s in range(config.num_stages)])
+        self.model = DINOv3ConvNextEncoder(config)
 
         self.post_init()
 
@@ -260,33 +265,19 @@ class DINOv3ConvNextBackbone(BackboneMixin, DINOv3ConvNextPreTrainedModel):
         return None
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        output_hidden_states: bool | None = None,
-        **kwargs,
-    ) -> BackboneOutput:
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
-        hidden_states = pixel_values
-        all_hidden_states: list[torch.Tensor] = [hidden_states]
-
-        for stage in self.stages:
-            hidden_states = stage(hidden_states)
-            all_hidden_states.append(hidden_states)
+    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BackboneOutput:
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+        output = self.model(pixel_values, **kwargs)
 
         # hidden_states are already in NCHW (batch_size, channels, height, width) format
         feature_maps: list[torch.Tensor] = []
-        for stage, hidden_states in zip(self.stage_names, all_hidden_states):
+        for stage, hidden_states in zip(self.stage_names, output.hidden_states):
             if stage in self.out_features:
                 feature_maps.append(hidden_states)
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps),
-            hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
-        )
+        return BackboneOutput(feature_maps=tuple(feature_maps), hidden_states=output.hidden_states)
 
 
 __all__ = ["DINOv3ConvNextModel", "DINOv3ConvNextPreTrainedModel", "DINOv3ConvNextBackbone"]

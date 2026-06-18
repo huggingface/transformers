@@ -18,6 +18,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import BitsAndBytesConfig
 
 from ..utils import (
     ACCELERATE_MIN_VERSION,
@@ -47,6 +48,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "BitsAndBytesConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -87,9 +89,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         if device_map is None:
             if torch.cuda.is_available():
                 device_map = {"": torch.cuda.current_device()}
-            elif is_torch_npu_available():
+            elif is_torch_npu_available() and hasattr(torch, "npu"):
                 device_map = {"": f"npu:{torch.npu.current_device()}"}
-            elif is_torch_hpu_available():
+            elif is_torch_hpu_available() and hasattr(torch, "hpu"):
                 device_map = {"": f"hpu:{torch.hpu.current_device()}"}
             elif is_torch_xpu_available():
                 device_map = {"": torch.xpu.current_device()}
@@ -116,7 +118,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         return isinstance(module, bnb.nn.Linear8bitLt) and name != "bias"
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.is_loaded_in_8bit = True
+        setattr(model, "is_loaded_in_8bit", True)
         model.is_8bit_serializable = self.is_serializable()
         return model
 

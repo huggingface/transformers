@@ -72,12 +72,12 @@ class Cohere2VisionMultiModalProjector(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Cohere2Vision outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Cohere2VisionModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -93,12 +93,12 @@ class Cohere2VisionModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Cohere2Vision causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Cohere2VisionCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -129,17 +129,13 @@ class Cohere2VisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": "DecoderLayer",
-        "attentions": "Attention",
-    }
 
 
 @auto_docstring(
@@ -148,8 +144,6 @@ class Cohere2VisionPreTrainedModel(PreTrainedModel):
     """
 )
 class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Cohere2VisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -157,12 +151,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
         self.multi_modal_projector = Cohere2VisionMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(
@@ -194,9 +182,9 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -212,7 +200,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | Cohere2VisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -235,7 +222,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -254,7 +240,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
     """
 )
 class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Cohere2VisionConfig):
@@ -262,12 +247,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
         self.model = Cohere2VisionModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
@@ -290,7 +269,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -338,7 +316,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             image_sizes=image_sizes,
             **kwargs,
         )
@@ -370,7 +347,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
         inputs_embeds=None,
         pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -382,7 +358,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,

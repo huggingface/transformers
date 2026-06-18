@@ -153,9 +153,11 @@ class ProcessorTesterMixin:
 
     @classmethod
     def _setup_test_attributes(cls, processor):
-        # to override in the child class to define class attributes
-        # such as image_token, video_token, audio_token, etc.
-        pass
+        # can be overriden in the child class to define more class attributes
+        for token_attr in ("image_token", "video_token", "audio_token"):
+            token = getattr(processor, token_attr, None)
+            if token is not None:
+                setattr(cls, token_attr, token)
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
@@ -250,10 +252,20 @@ class ProcessorTesterMixin:
         import re
 
         from transformers.models.auto.configuration_auto import (
-            CONFIG_MAPPING,
             CONFIG_MAPPING_NAMES,
             SPECIAL_MODEL_TYPE_TO_MODULE_NAME,
         )
+
+        # Get the component class from the appropriate Auto mapping
+        if attribute in MODALITY_TO_AUTOPROCESSOR_MAPPING:
+            mapping_name = attribute
+        elif "tokenizer" in attribute:
+            mapping_name = "tokenizer"
+        else:
+            raise ValueError(
+                f"Unknown attribute type: '{attribute}'. "
+                f"Please override _setup_{attribute}() in your test class to provide custom setup."
+            )
 
         # Extract model_type from the test file name
         # Test files are named like test_processing_align.py or test_processor_align.py
@@ -266,32 +278,45 @@ class ProcessorTesterMixin:
             )
 
         model_type = match.group(1)
+
         if model_type not in CONFIG_MAPPING_NAMES:
             # check if the model type is a special model type
             for special_model_type, special_module_name in SPECIAL_MODEL_TYPE_TO_MODULE_NAME.items():
-                if model_type == special_module_name:
-                    model_type = special_model_type
-                    break
+                if model_type != special_module_name or special_model_type not in CONFIG_MAPPING_NAMES:
+                    continue
 
-        # Get the config class for this model type
-        if model_type not in CONFIG_MAPPING_NAMES:
+                component_class = cls.resolve_model_type_to_attribute(special_model_type, mapping_name)
+                if component_class is not None:
+                    break
+        else:
+            component_class = cls.resolve_model_type_to_attribute(model_type, mapping_name)
+
+        if component_class is None:
             raise ValueError(
-                f"Model type '{model_type}' not found in CONFIG_MAPPING_NAMES. "
+                f"Could not find {mapping_name} class for model {match.group(1)}. "
                 f"Please override _setup_{attribute}() in your test class."
             )
 
-        config_class = CONFIG_MAPPING[model_type]
+        # Handle tuple case (some mappings return tuples of classes)
+        if isinstance(component_class, tuple):
+            if use_fast:
+                component_class = component_class[-1] if component_class[-1] is not None else component_class[0]
+            else:
+                component_class = component_class[0] if component_class[0] is not None else component_class[1]
+        elif isinstance(component_class, dict):
+            if not use_fast:
+                component_class = component_class["pil"]
+            else:
+                component_class = (
+                    component_class["torchvision"] if "torchvision" in component_class else component_class["pil"]
+                )
+        return component_class
 
-        # Now get the component class from the appropriate Auto mapping
-        if attribute in MODALITY_TO_AUTOPROCESSOR_MAPPING:
-            mapping_name = attribute
-        elif "tokenizer" in attribute:
-            mapping_name = "tokenizer"
-        else:
-            raise ValueError(
-                f"Unknown attribute type: '{attribute}'. "
-                f"Please override _setup_{attribute}() in your test class to provide custom setup."
-            )
+    @staticmethod
+    def resolve_model_type_to_attribute(model_type, mapping_name):
+        from transformers.models.auto.configuration_auto import CONFIG_MAPPING
+
+        config_class = CONFIG_MAPPING[model_type]
 
         # Get the appropriate Auto mapping for this component type
         if mapping_name == "tokenizer":
@@ -316,21 +341,7 @@ class ProcessorTesterMixin:
 
             component_class = VIDEO_PROCESSOR_MAPPING.get(config_class, None)
         else:
-            raise ValueError(f"Unknown mapping for attribute: {attribute}")
-
-        if component_class is None:
-            raise ValueError(
-                f"Could not find {mapping_name} class for config {config_class.__name__}. "
-                f"Please override _setup_{attribute}() in your test class."
-            )
-
-        # Handle tuple case (some mappings return tuples of classes)
-        if isinstance(component_class, tuple):
-            if use_fast:
-                component_class = component_class[-1] if component_class[-1] is not None else component_class[0]
-            else:
-                component_class = component_class[0] if component_class[0] is not None else component_class[1]
-
+            raise ValueError(f"Unknown mapping for attribute: {mapping_name}")
         return component_class
 
     @classmethod
@@ -552,6 +563,9 @@ class ProcessorTesterMixin:
         call_signature = inspect.signature(processor.__call__)
         input_args = [param.name for param in call_signature.parameters.values()]
         inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+        # Shouldn't sample when input is a decoded video without metadata (fpx/duration/etc.)
+        if "videos" in inputs_dict:
+            inputs_dict["do_sample_frames"] = False
 
         inputs = processor(**inputs_dict, return_tensors="pt")
 
@@ -586,7 +600,8 @@ class ProcessorTesterMixin:
 
         # Verify outputs match
         for key in input_image_proc:
-            torch.testing.assert_close(input_image_proc[key], input_processor[key])
+            if key in processor.model_input_names:
+                torch.testing.assert_close(input_image_proc[key], input_processor[key])
 
     def test_tokenizer_defaults(self):
         """
@@ -679,9 +694,9 @@ class ProcessorTesterMixin:
         video_input = self.prepare_video_inputs()
 
         # Process with both video_processor and processor
-        input_video_proc = video_processor(video_input, return_tensors="pt")
+        input_video_proc = video_processor(video_input, do_sample_frames=False, return_tensors="pt")
         try:
-            input_processor = processor(videos=video_input, return_tensors="pt")
+            input_processor = processor(videos=video_input, do_sample_frames=False, return_tensors="pt")
         except Exception:
             # The processor does not accept video only input, so we can skip this test
             self.skipTest("Processor does not accept video-only input.")
@@ -750,6 +765,7 @@ class ProcessorTesterMixin:
                         modalities.append("image")
                     if "video_processor" in attributes:
                         modalities.append("video")
+                        processor_inputs["do_sample_frames"] = False
                     if "audio_processor" in attributes or "feature_extractor" in attributes:
                         modalities.append("audio")
                     processor_inputs[param_name] = prepare_method(modalities=modalities)
@@ -796,6 +812,7 @@ class ProcessorTesterMixin:
         inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
 
         processing_kwargs = {"return_tensors": "pt", "padding": True}
+        # Shouldn't sample when input is a decoded video without metadata (fpx/duration/etc.)
         if "videos" in inputs_dict:
             processing_kwargs["do_sample_frames"] = False
 
@@ -857,7 +874,7 @@ class ProcessorTesterMixin:
                 tokenize=True,
                 return_dict=True,
                 return_tensors="pt",
-                padding=True,
+                processor_kwargs={"padding": True},
             )
             self.assertTrue(self.text_input_name in inputs_chat_template)
 
@@ -1037,6 +1054,31 @@ class ProcessorTesterMixin:
                 do_rescale=True,
                 return_tensors="pt",
             )
+
+    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
+        # Regression for #46192: a flat top-level kwarg (e.g. return_tensors) was silently
+        # dropped when its modality dict (e.g. text_kwargs={...}) was also passed without
+        # that key. Companion to test_doubly_passed_kwargs which covers the conflict case.
+        processor = self.get_processor()
+        self.skip_processor_without_typed_kwargs(processor)
+
+        text = self.prepare_text_inputs(modalities=["image", "video", "audio"])
+        inputs_dict = {
+            "text": text,
+            "images": self.prepare_image_inputs(),
+            "videos": self.prepare_video_inputs(),
+            "audio": self.prepare_audio_inputs(),
+        }
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values()]
+        inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+
+        # Sampling frames from a numpy video array can raise on some video processors.
+        extra_kwargs = {"do_sample_frames": False} if "videos" in inputs_dict else {}
+
+        inputs = processor(**inputs_dict, **extra_kwargs, text_kwargs={}, return_tensors="pt")
+        for k, v in inputs.items():
+            self.assertIsInstance(v, torch.Tensor, msg=f"{k} should be a torch.Tensor")
 
     def test_args_overlap_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
@@ -1529,6 +1571,26 @@ class ProcessorTesterMixin:
             # the reloaded tokenizer should get the chat template as well
             self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
 
+    def test_chat_template_saving_rejects_path_traversal(self):
+        # A malicious chat_template dict key must not be usable to escape the save directory and write
+        # attacker-controlled content to an arbitrary path (path traversal, CWE-22). The dict key is used
+        # verbatim as a `<name>.jinja` filename, so `save_pretrained` must reject names that are not plain
+        # filenames instead of silently writing outside the target directory.
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        signature = inspect.signature(processor.__init__)
+        if "chat_template" not in {*signature.parameters.keys()}:
+            self.skipTest("Processor doesn't accept chat templates at input")
+
+        processor.chat_template = {"default": "a", "../../PWNED": "attacker content"}
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            save_dir = os.path.join(tmpdirname, "save")
+            # Where the "../../PWNED" key would land if traversal succeeded:
+            # save/additional_chat_templates/../../PWNED.jinja -> tmpdirname/PWNED.jinja
+            canary = Path(tmpdirname, "PWNED.jinja")
+            with self.assertRaises(ValueError):
+                processor.save_pretrained(save_dir)
+            self.assertFalse(canary.exists())
+
     @require_torch
     def _test_apply_chat_template(
         self,
@@ -1579,10 +1641,12 @@ class ProcessorTesterMixin:
             batch_messages,
             add_generation_prompt=True,
             tokenize=True,
-            padding="max_length",
-            truncation=True,
             return_tensors=return_tensors,
-            max_length=self.chat_template_max_length,
+            processor_kwargs={
+                "padding": "max_length",
+                "truncation": True,
+                "max_length": self.chat_template_max_length,
+            },
         )
         self.assertEqual(len(tokenized_prompt_100[0]), self.chat_template_max_length)
 
@@ -1608,7 +1672,7 @@ class ProcessorTesterMixin:
             tokenize=True,
             return_dict=True,
             return_tensors=return_tensors,
-            num_frames=2,  # by default no more than 2 frames, otherwise too slow
+            processor_kwargs={"num_frames": 2},  # by default no more than 2 frames, otherwise too slow
         )
         input_name = getattr(self, input_name)
         self.assertTrue(input_name in out_dict)
@@ -1682,11 +1746,7 @@ class ProcessorTesterMixin:
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest("Processor doesn't accept videos at input")
 
         messages = [
@@ -1712,8 +1772,8 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            num_frames=num_frames,
             return_tensors="pt",
+            processor_kwargs={"num_frames": num_frames, "fps": None},
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -1726,8 +1786,8 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            fps=fps,
             return_tensors="pt",
+            processor_kwargs={"fps": fps, "num_frames": None},
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -1741,9 +1801,11 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            do_sample_frames=False,
-            fps=fps,
-            return_tensors="pt",
+            processor_kwargs={
+                "do_sample_frames": False,
+                "fps": fps,
+                "return_tensors": "pt",
+            },
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -1756,8 +1818,7 @@ class ProcessorTesterMixin:
                 add_generation_prompt=True,
                 tokenize=True,
                 return_dict=True,
-                fps=fps,
-                num_frames=num_frames,
+                processor_kwargs={"fps": fps, "num_frames": num_frames},
             )
 
         # Load without any arg should load the whole video
@@ -1802,7 +1863,7 @@ class ProcessorTesterMixin:
                 add_generation_prompt=True,
                 tokenize=True,
                 return_dict=True,
-                do_sample_frames=True,
+                processor_kwargs={"do_sample_frames": True},
             )
 
     @require_librosa
@@ -1981,6 +2042,31 @@ class ProcessorTesterMixin:
         ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
         self.assertTrue(text_is_same or ids_is_same)
 
+    @require_torch
+    def test_apply_chat_template_tool_calls_no_content(self):
+        processor = self.get_processor()
+
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        if "tool" not in processor.chat_template:  # good heuristic to check if template supports tools
+            self.skipTest("Chat template does not support tools")
+
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is the weather?"}],
+            },
+            {
+                "role": "assistant",
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": "{}"}}],
+            },
+        ]
+
+        # Regression test for #45290: tokenize=True used to raise KeyError when "content" was missing
+        result = processor.apply_chat_template(messages, tokenize=True)
+        self.assertIsInstance(result, list)
+
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         "Tests that the helper used internally in vLLM works correctly"
 
@@ -1997,7 +2083,8 @@ class ProcessorTesterMixin:
         for h, w in image_sizes:
             image_inputs.append(np.random.randint(255, size=(h, w, 3), dtype=np.uint8))
 
-        text = [f"This is an image {getattr(self, 'image_token', '')}"] * len(image_inputs)
+        image_token = getattr(self, "image_token", "")
+        text = [f"This is an image {image_token}"] * len(image_inputs)
         inputs = processor(
             text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
         )
@@ -2008,3 +2095,17 @@ class ProcessorTesterMixin:
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+        # Test with two images per single text
+        text = [f"These are two images {image_token}{image_token}"] * len(image_inputs)
+        inputs = processor(
+            text=text,
+            images=image_inputs * 2,
+            padding=True,
+            return_mm_token_type_ids=True,
+            return_tensors="pt",
+        )
+
+        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
+        self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))

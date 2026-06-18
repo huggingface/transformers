@@ -41,7 +41,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from ...utils.generic import maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from .generation_dia import DiaGenerationMixin
 
@@ -424,7 +425,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
-        self_attn_output, self_attn_weights = self.self_attention(
+        self_attn_output, _ = self.self_attention(
             normed_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
@@ -437,10 +438,15 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         mlp_out = self.mlp(normed_states)
         hidden_states = residual + mlp_out
 
-        return hidden_states, self_attn_weights
+        return hidden_states
 
 
 class DiaEncoder(DiaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": DiaEncoderLayer,
+        "attentions": DiaSelfAttention,
+    }
+
     def __init__(self, config: DiaEncoderConfig):
         super().__init__(config)
         self.config = config
@@ -454,16 +460,15 @@ class DiaEncoder(DiaPreTrainedModel):
 
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
-        output_hidden_states: bool | None = False,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> BaseModelOutput | tuple:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         hidden_states = self.embedding(input_ids)
 
         # RoPE
@@ -478,33 +483,18 @@ class DiaEncoder(DiaPreTrainedModel):
         )
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         for encoder_layer in self.layers:
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
 
-        if output_hidden_states:
-            encoder_states += (hidden_states,)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class DiaDecoderLayer(GradientCheckpointingLayer):
@@ -534,7 +524,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
 
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
-        self_attn_output, self_attn_weights = self.self_attention(
+        self_attn_output, _ = self.self_attention(
             normed_states,
             position_embeddings,
             attention_mask,
@@ -547,7 +537,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
 
         residual = hidden_states
         normed_states = self.pre_ca_norm(hidden_states)
-        cross_states, cross_attn_weights = self.cross_attention(
+        cross_states, _ = self.cross_attention(
             normed_states,
             encoder_hidden_states,
             attention_mask=encoder_attention_mask,
@@ -561,11 +551,16 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         mlp_out = self.mlp(normed_states)
         hidden_states = residual + mlp_out
 
-        return hidden_states, self_attn_weights, cross_attn_weights
+        return hidden_states
 
 
 class DiaDecoder(DiaPreTrainedModel):
     """Transformer Decoder Stack using DenseGeneral."""
+
+    _can_record_outputs = {
+        "hidden_states": DiaDecoderLayer,
+        "attentions": [DiaSelfAttention, DiaCrossAttention],
+    }
 
     def __init__(self, config: DiaDecoderConfig):
         super().__init__(config)
@@ -580,8 +575,9 @@ class DiaDecoder(DiaPreTrainedModel):
 
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -590,9 +586,7 @@ class DiaDecoder(DiaPreTrainedModel):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        output_attentions: bool | None = False,
-        output_hidden_states: bool | None = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions | tuple:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks)`):
@@ -630,15 +624,8 @@ class DiaDecoder(DiaPreTrainedModel):
         )
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-
         for layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = layer(
+            hidden_states = layer(
                 hidden_states,
                 # Needs to be an arg in order to function properly
                 # on inplace operations to be carried (e.g. compile)
@@ -650,25 +637,12 @@ class DiaDecoder(DiaPreTrainedModel):
                 position_ids=position_ids,
                 **kwargs,
             )
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns = all_self_attns + (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         hidden_states = self.norm(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -697,8 +671,6 @@ class DiaModel(DiaPreTrainedModel):
         encoder_outputs: BaseModelOutput | tuple | None = None,
         past_key_values: EncoderDecoderCache | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqModelOutput:
         r"""
@@ -728,12 +700,6 @@ class DiaModel(DiaPreTrainedModel):
                 "You should either provide text ids or the cached text encodings. Neither has been found."
             )
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if self.is_gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -748,8 +714,6 @@ class DiaModel(DiaPreTrainedModel):
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
                 **kwargs,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput
@@ -777,8 +741,6 @@ class DiaModel(DiaPreTrainedModel):
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             **kwargs,
         )
@@ -831,8 +793,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
         encoder_outputs: BaseModelOutput | tuple | None = None,
         past_key_values: EncoderDecoderCache | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqLMOutput:
@@ -871,8 +831,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             **kwargs,
         )
 

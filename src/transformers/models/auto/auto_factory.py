@@ -21,8 +21,6 @@ from collections import OrderedDict
 from collections.abc import Iterator
 from typing import Any, TypeVar
 
-from huggingface_hub import repo_exists
-
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import (
@@ -31,6 +29,7 @@ from ...utils import (
     copy_func,
     extract_commit_hash,
     find_adapter_config_file,
+    hf_api,
     is_peft_available,
     is_torch_available,
     logging,
@@ -208,6 +207,9 @@ class _BaseAutoModelClass:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping
+        explicit_local_code = has_local_code and not _get_model_class(
+            config, cls._model_mapping
+        ).__module__.startswith("transformers.")
         if has_remote_code:
             class_ref = config.auto_map[cls.__name__]
             if "--" in class_ref:
@@ -218,7 +220,7 @@ class _BaseAutoModelClass:
                 trust_remote_code, config._name_or_path, has_local_code, has_remote_code, upstream_repo=upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             if "--" in class_ref:
                 repo_id, class_ref = class_ref.split("--")
             else:
@@ -233,8 +235,20 @@ class _BaseAutoModelClass:
             _ = kwargs.pop("code_revision", None)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class._from_config(config, **kwargs)
-        elif type(config) in cls._model_mapping:
+        elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
+            text_config_class = config.sub_configs.get("text_config", None)
+            # getattr avoids AttributeError, as registered remote-code model classes may lack config_class
+            if text_config_class is not None and getattr(model_class, "config_class", None) == text_config_class:
+                # TODO: Validate that copying the parent quantization config to the text sub-config preserves
+                # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
+                parent_config = config
+                config = config.get_text_config()
+                # Check both `quantization_config` being present and also not null,
+                # as a `config.json` can have `"quantization_config": null` in it
+                parent_quant = getattr(parent_config, "quantization_config", None)
+                if parent_quant is not None:
+                    config.quantization_config = parent_quant
             return model_class._from_config(config, **kwargs)
 
         raise ValueError(
@@ -332,16 +346,21 @@ class _BaseAutoModelClass:
                 **kwargs,
             )
 
-            # if torch_dtype=auto was passed here, ensure to pass it on
-            if kwargs_orig.get("torch_dtype", None) == "auto":
-                kwargs["torch_dtype"] = "auto"
-            if kwargs_orig.get("dtype", None) == "auto":
-                kwargs["dtype"] = "auto"
+            # A concrete dtype is absorbed into the config above and then dropped at the composite
+            # `get_text_config()` swap, so re-inject the user's value as an explicit kwarg to force the model's
+            # `from_pretrained` to honor it over the config's saved dtype (#46459).
+            if kwargs_orig.get("torch_dtype", None) is not None:
+                kwargs["torch_dtype"] = kwargs_orig["torch_dtype"]
+            if kwargs_orig.get("dtype", None) is not None:
+                kwargs["dtype"] = kwargs_orig["dtype"]
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping
+        explicit_local_code = has_local_code and not _get_model_class(
+            config, cls._model_mapping
+        ).__module__.startswith("transformers.")
         upstream_repo = None
         if has_remote_code:
             class_ref = config.auto_map[cls.__name__]
@@ -359,7 +378,7 @@ class _BaseAutoModelClass:
         # Set the adapter kwargs
         kwargs["adapter_kwargs"] = adapter_kwargs
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             model_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )
@@ -374,10 +393,20 @@ class _BaseAutoModelClass:
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
-        elif type(config) in cls._model_mapping:
+        elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
-            if model_class.config_class == config.sub_configs.get("text_config", None):
+            text_config_class = config.sub_configs.get("text_config", None)
+            # getattr avoids AttributeError, as registered remote-code model classes may lack config_class
+            if text_config_class is not None and getattr(model_class, "config_class", None) == text_config_class:
+                # TODO: Validate that copying the parent quantization config to the text sub-config preserves
+                # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
+                parent_config = config
                 config = config.get_text_config()
+                # Check both `quantization_config` being present and also not null,
+                # as a `config.json` can have `"quantization_config": null` in it
+                parent_quant = getattr(parent_config, "quantization_config", None)
+                if parent_quant is not None:
+                    config.quantization_config = parent_quant
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
@@ -439,7 +468,7 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         kwargs.pop("use_timm_backbone", None)
-        if not repo_exists(pretrained_model_name_or_path):
+        if not hf_api().repo_exists(pretrained_model_name_or_path):
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
@@ -502,6 +531,8 @@ def getattribute_from_module(module, attr):
         return None
     if isinstance(attr, tuple):
         return tuple(getattribute_from_module(module, a) for a in attr)
+    if isinstance(attr, dict):
+        return {k: getattribute_from_module(module, v) for k, v in attr.items()}
     if hasattr(module, attr):
         return getattr(module, attr)
     # Some of the mappings have entries model_type -> object of another model type. In that case we try to grab the

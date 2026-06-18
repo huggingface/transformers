@@ -28,6 +28,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
@@ -43,12 +44,12 @@ PostprocessorType = Callable[..., Any]
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver base model's outputs, with potential hidden states, attentions and cross-attentions.
     """
 )
+@dataclass
 class PerceiverModelOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
@@ -62,12 +63,12 @@ class PerceiverModelOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver decoder outputs, with potential cross-attentions.
     """
 )
+@dataclass
 class PerceiverDecoderOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
@@ -78,12 +79,12 @@ class PerceiverDecoderOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver's masked language model outputs.
     """
 )
+@dataclass
 class PerceiverMaskedLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -99,13 +100,13 @@ class PerceiverMaskedLMOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver's outputs of sequence/image classification models, optical flow and multimodal
     autoencoding.
     """
 )
+@dataclass
 class PerceiverClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -724,7 +725,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.input_preprocessor is not None:
             inputs, modality_sizes, inputs_without_pos = self.input_preprocessor(
@@ -745,16 +746,20 @@ class PerceiverModel(PerceiverPreTrainedModel):
         # If no attention mask is provided, make them all ones
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length), device=device)
-        # Make the attention mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        extended_attention_mask = self.invert_attention_mask(attention_mask)
 
         embedding_output = self.embeddings(batch_size=batch_size)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=None,
             inputs=inputs,
-            inputs_mask=extended_attention_mask,
+            inputs_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -777,7 +782,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
             decoder_outputs = self.decoder(
                 decoder_query,
                 z=sequence_output,
-                query_mask=extended_attention_mask,
+                query_mask=attention_mask,
                 output_attentions=output_attentions,
             )
             logits = decoder_outputs.logits
@@ -914,7 +919,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         elif inputs is None and input_ids is not None:
             inputs = input_ids
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1012,7 +1017,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         elif inputs is None and input_ids is not None:
             inputs = input_ids
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1156,7 +1161,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         elif inputs is None and pixel_values is not None:
             inputs = pixel_values
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1280,7 +1285,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
         elif inputs is None and pixel_values is not None:
             inputs = pixel_values
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1404,7 +1409,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
         elif inputs is None and pixel_values is not None:
             inputs = pixel_values
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1530,7 +1535,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         >>> list(logits.shape)
         [1, 368, 496, 2]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         if labels is not None:
@@ -1764,7 +1769,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         >>> list(logits["label"].shape)
         [1, 700]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         if labels is not None:
@@ -2567,7 +2572,7 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
 
         position_embeddings = nn.functional.interpolate(
             position_embeddings,
-            size=(new_height, new_width),
+            size=(height, width),
             mode="bicubic",
             align_corners=False,
         )

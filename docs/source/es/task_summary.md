@@ -239,15 +239,6 @@ La traducción convierte una secuencia de texto en un idioma a otro. Es importan
 
 En sus primeros días, los modelos de traducción eran principalmente monolingües, pero recientemente ha habido un creciente interés en modelos multilingües que pueden traducir entre muchas combinaciones de idiomas.
 
-```py
->>> from transformers import pipeline
-
->>> text = "translate English to French: Hugging Face is a community-based open-source platform for machine learning."
->>> translator = pipeline(task="translation", model="t5-small")
->>> translator(text)
-[{'translation_text': "Hugging Face est une tribune communautaire de l'apprentissage des machines."}]
-```
-
 ### Modelado de lenguaje
 
 El modelado de lenguaje es una tarea que predice una palabra en una secuencia de texto. Se ha vuelto una tarea de NLP muy popular porque un modelo de lenguaje preentrenado puede ser afinado para muchas otras tareas secundarias. Últimamente, ha habido mucho interés en modelos de lenguaje grandes (LLM, por sus siglas en inglés) que demuestran aprendizaje de cero o con pocas muestras (zero- or few-shot learning). ¡Esto significa que el modelo puede resolver tareas para las cuales no fue entrenado explícitamente! Los modelos de lenguaje se pueden utilizar para generar texto fluido y convincente, aunque debes tener cuidado, ya que el texto no siempre puede ser preciso.

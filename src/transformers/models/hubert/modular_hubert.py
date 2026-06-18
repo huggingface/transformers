@@ -49,7 +49,7 @@ class HubertPositionalConvEmbedding(nn.Module):
         )
 
         self.batch_norm = None
-        if config.conv_pos_batch_norm:
+        if getattr(config, "conv_pos_batch_norm", False):
             self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         else:
             weight_norm = nn.utils.weight_norm
@@ -260,7 +260,7 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)

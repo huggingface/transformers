@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Qwen3-VL model."""
 
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -20,25 +21,23 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...video_utils import VideoInput
+from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
+from ..auto.modeling_auto import AutoModel
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLCausalLMOutputWithPast,
@@ -67,8 +66,8 @@ from ..qwen3.modeling_qwen3 import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     r"""
     deepstack_features (`List[torch.FloatTensor]`, *optional*):
@@ -78,96 +77,41 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     deepstack_features: list[torch.FloatTensor] | None = None
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
+@strict
 class Qwen3VLVisionConfig(PreTrainedConfig):
-    model_type = "qwen3_vl"
+    r"""
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    num_position_embeddings (`int`, *optional*, defaults to 2304):
+        The maximum sequence length that this model might ever be used with
+    deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[8, 16, 24]`):
+        Indexed of layers for deepstack embeddings.
+    """
+
+    model_type = "qwen3_vl_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        depth=27,
-        hidden_size=1152,
-        hidden_act="gelu_pytorch_tanh",
-        intermediate_size=4304,
-        num_heads=16,
-        in_channels=3,
-        patch_size=16,
-        spatial_merge_size=2,
-        temporal_patch_size=2,
-        out_hidden_size=3584,
-        num_position_embeddings=2304,
-        deepstack_visual_indexes=[8, 16, 24],
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.patch_size = patch_size
-        self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
-        self.out_hidden_size = out_hidden_size
-        self.num_position_embeddings = num_position_embeddings
-        self.initializer_range = initializer_range
-        self.deepstack_visual_indexes = deepstack_visual_indexes
+    depth: int = 27
+    hidden_size: int = 1152
+    hidden_act: str = "gelu_pytorch_tanh"
+    intermediate_size: int = 4304
+    num_heads: int = 16
+    in_channels: int = 3
+    patch_size: int | list[int] | tuple[int, int] = 16
+    spatial_merge_size: int = 2
+    temporal_patch_size: int | list[int] | tuple[int, int] = 2
+    out_hidden_size: int = 3584
+    num_position_embeddings: int = 2304
+    deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
+@strict
 class Qwen3VLTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3VLTextModel`]. It is used to instantiate a
-    Qwen3-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    Qwen3-VL-4B-Instruct [Qwen/Qwen3-VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the Qwen3VL model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Qwen3VLModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 22016):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 32):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-        head_dim (`int`, *optional*, defaults to 128):
-            The dimension of the head. If not specified, will default to `hidden_size // num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 128000):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        pad_token_id (`int`, *optional*):
-            The id of the padding token. If unset, the config is treated as not having a dedicated padding token.
+    Example:
 
     ```python
     >>> from transformers import Qwen3VLTextModel, Qwen3VLTextConfig
@@ -185,81 +129,37 @@ class Qwen3VLTextConfig(PreTrainedConfig):
     model_type = "qwen3_vl_text"
     base_config_key = "text_config"
     default_theta = 500000.0
+    ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 151936,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 22016,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 32,
-        head_dim: int | None = 128,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 128000,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-6,
-        use_cache: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 151936
+    hidden_size: int = 4096
+    intermediate_size: int = 22016
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = 32
+    head_dim: int = 128
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 128000
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    pad_token_id: int | None = None
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-
-        super().__init__(
-            ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
+@strict
 class Qwen3VLConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3VLModel`]. It is used to instantiate a
-    Qwen3-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    Qwen3-VL-4B-Instruct [Qwen/Qwen3-VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen3VLTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Qwen3VLVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151655):
-            The token id used as the placeholder for image inputs.
-        video_token_id (`int`, *optional*, defaults to 151656):
-            The token id used as the placeholder for video inputs.
-        vision_start_token_id (`int`, *optional*, defaults to 151652):
-            The token id that marks the start of a vision segment (image or video).
-        vision_end_token_id (`int`, *optional*, defaults to 151653):
-            The token id that marks the end of a vision segment (image or video).
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
+    Example:
 
     ```python
     >>> from transformers import Qwen3VLForConditionalGeneration, Qwen3VLConfig
@@ -278,33 +178,29 @@ class Qwen3VLConfig(PreTrainedConfig):
     sub_configs = {"vision_config": Qwen3VLVisionConfig, "text_config": Qwen3VLTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=151655,
-        video_token_id=151656,
-        vision_start_token_id=151652,
-        vision_end_token_id=151653,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 151655
+    video_token_id: int = 151656
+    vision_start_token_id: int = 151652
+    vision_end_token_id: int = 151653
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            # old ckpt with incorrect model type -> override manually
+            if self.vision_config.get("model_type") == "qwen3_vl":
+                self.vision_config["model_type"] = "qwen3_vl_vision"
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
-        if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        elif text_config is None:
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.vision_start_token_id = vision_start_token_id
-        self.vision_end_token_id = vision_end_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class Qwen3VLVisionMLP(nn.Module):
@@ -399,7 +295,9 @@ class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
         # So we expand the inv_freq to shape (3, ...)
         if position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
+        )
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
@@ -507,7 +405,6 @@ class Qwen3VLPreTrainedModel(Qwen2VLPreTrainedModel):
 class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
     config: Qwen3VLVisionConfig
     input_modalities = ("image", "video")
-    _no_split_modules = ["Qwen3VLVisionBlock"]
     _can_record_outputs = {
         "hidden_states": Qwen3VLVisionBlock,
         "attentions": Qwen3VLVisionAttention,
@@ -551,107 +448,27 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         self.post_init()
 
     def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
-        merge_size = self.spatial_merge_size
-        grid_thw_list = grid_thw.tolist()
-
-        max_hw = max(max(h, w) for _, h, w in grid_thw_list)
-        freq_table = self.rotary_pos_emb(max_hw)  # (max_hw, dim // 2)
-        device = freq_table.device
-
-        total_tokens = sum(t * h * w for t, h, w in grid_thw_list)
-        pos_ids = torch.empty((total_tokens, 2), dtype=torch.long, device=device)
-
-        offset = 0
-        for num_frames, height, width in grid_thw_list:
-            merged_h, merged_w = height // merge_size, width // merge_size
-
-            block_rows = torch.arange(merged_h, device=device)  # block row indices
-            block_cols = torch.arange(merged_w, device=device)  # block col indices
-            intra_row = torch.arange(merge_size, device=device)  # intra-block row offsets
-            intra_col = torch.arange(merge_size, device=device)  # intra-block col offsets
-
-            # Compute full-resolution positions
-            row_idx = block_rows[:, None, None, None] * merge_size + intra_row[None, None, :, None]
-            col_idx = block_cols[None, :, None, None] * merge_size + intra_col[None, None, None, :]
-
-            row_idx = row_idx.expand(merged_h, merged_w, merge_size, merge_size).reshape(-1)
-            col_idx = col_idx.expand(merged_h, merged_w, merge_size, merge_size).reshape(-1)
-
-            coords = torch.stack((row_idx, col_idx), dim=-1)
-
-            if num_frames > 1:
-                coords = coords.repeat(num_frames, 1)
-
-            num_tokens = coords.shape[0]
-            pos_ids[offset : offset + num_tokens] = coords
-            offset += num_tokens
-
-        embeddings = freq_table[pos_ids]  # lookup rotary embeddings
-        embeddings = embeddings.flatten(1)
-        return embeddings
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
+        return rotary_pos_emb
 
     def fast_pos_embed_interpolate(self, grid_thw):
-        grid_thw_list = grid_thw.tolist()
-        grid_ts = [row[0] for row in grid_thw_list]
-        grid_hs = [row[1] for row in grid_thw_list]
-        grid_ws = [row[2] for row in grid_thw_list]
-        device = self.pos_embed.weight.device
-
-        idx_list = [[] for _ in range(4)]
-        weight_list = [[] for _ in range(4)]
-
-        for t, h, w in grid_thw_list:
-            h_idxs = torch.linspace(0, self.num_grid_per_side - 1, h)
-            w_idxs = torch.linspace(0, self.num_grid_per_side - 1, w)
-
-            h_idxs_floor = h_idxs.int()
-            w_idxs_floor = w_idxs.int()
-            h_idxs_ceil = (h_idxs.int() + 1).clip(max=self.num_grid_per_side - 1)
-            w_idxs_ceil = (w_idxs.int() + 1).clip(max=self.num_grid_per_side - 1)
-
-            dh = h_idxs - h_idxs_floor
-            dw = w_idxs - w_idxs_floor
-
-            base_h = h_idxs_floor * self.num_grid_per_side
-            base_h_ceil = h_idxs_ceil * self.num_grid_per_side
-
-            indices = [
-                (base_h[None].T + w_idxs_floor[None]).flatten(),
-                (base_h[None].T + w_idxs_ceil[None]).flatten(),
-                (base_h_ceil[None].T + w_idxs_floor[None]).flatten(),
-                (base_h_ceil[None].T + w_idxs_ceil[None]).flatten(),
-            ]
-
-            weights = [
-                ((1 - dh)[None].T * (1 - dw)[None]).flatten(),
-                ((1 - dh)[None].T * dw[None]).flatten(),
-                (dh[None].T * (1 - dw)[None]).flatten(),
-                (dh[None].T * dw[None]).flatten(),
-            ]
-
-            for i in range(4):
-                idx_list[i].extend(indices[i].tolist())
-                weight_list[i].extend(weights[i].tolist())
-
-        idx_tensor = torch.tensor(idx_list, dtype=torch.long, device=device)
-        weight_tensor = torch.tensor(weight_list, dtype=self.pos_embed.weight.dtype, device=device)
-        pos_embeds = self.pos_embed(idx_tensor).to(device) * weight_tensor[:, :, None]
-        patch_pos_embeds = pos_embeds[0] + pos_embeds[1] + pos_embeds[2] + pos_embeds[3]
-
-        patch_pos_embeds = patch_pos_embeds.split([h * w for h, w in zip(grid_hs, grid_ws)])
-
-        patch_pos_embeds_permute = []
-        merge_size = self.config.spatial_merge_size
-        for pos_embed, t, h, w in zip(patch_pos_embeds, grid_ts, grid_hs, grid_ws):
-            pos_embed = pos_embed.repeat(t, 1)
-            pos_embed = (
-                pos_embed.view(t, h // merge_size, merge_size, w // merge_size, merge_size, -1)
-                .permute(0, 1, 3, 2, 4, 5)
-                .flatten(0, 4)
-            )
-            patch_pos_embeds_permute.append(pos_embed)
-        patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
-        return patch_pos_embeds
+        warnings.warn(
+            f"`{self.__class__.__name__}.fast_pos_embed_interpolate` is deprecated and will be removed in v5.11. Use `get_vision_bilinear_indices_and_weights` from `transformers.vision_utils` and apply `self.pos_embed`.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            spatial_merge_size=self.config.spatial_merge_size,
+        )
+        return (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -668,28 +485,25 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            spatial_merge_size=self.config.spatial_merge_size,
+            kwargs=kwargs,
+        )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+
         hidden_states = self.patch_embed(hidden_states)
-
-        pos_embeds = self.fast_pos_embed_interpolate(grid_thw)
-        hidden_states = hidden_states + pos_embeds
-
-        rotary_pos_emb = self.rot_pos_emb(grid_thw)
+        pos_embeds = (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
+        hidden_states = hidden_states + pos_embeds.to(hidden_states.dtype)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)
         rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
-
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
         deepstack_feature_lists = []
         for layer_num, blk in enumerate(self.blocks):
@@ -723,7 +537,6 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
     config: Qwen3VLTextConfig
     input_modalities = ("text",)
-    _no_split_modules = ["Qwen3VLTextDecoderLayer"]
 
     def __init__(self, config: Qwen3VLTextConfig):
         super().__init__(config)
@@ -830,16 +643,49 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
 
 @auto_docstring
 class Qwen3VLModel(Qwen2VLModel):
-    config: Qwen3VLConfig
-    base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
-    _no_split_modules = ["Qwen3VLTextDecoderLayer", "Qwen3VLVisionBlock"]
-
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Qwen3VLVisionModel._from_config(config.vision_config)
-        self.language_model = Qwen3VLTextModel._from_config(config.text_config)
+        self.visual = AutoModel.from_config(config.vision_config)
+        self.language_model = AutoModel.from_config(config.text_config)
 
+    def get_rope_index(
+        self,
+        video_grid_thw: torch.LongTensor | None = None,
+        **super_kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
+        - Since Qwen3.5 use timestamps to separate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+        """
+
+        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
+
+        return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
+
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -865,6 +711,7 @@ class Qwen3VLModel(Qwen2VLModel):
 
         return vision_output
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -915,7 +762,7 @@ class Qwen3VLModel(Qwen2VLModel):
 
         if pixel_values is not None:
             image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
-                pixel_values, image_grid_thw, return_dict=True
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
             image_embeds = image_outputs.pooler_output
             deepstack_image_embeds = image_outputs.deepstack_features
@@ -927,7 +774,7 @@ class Qwen3VLModel(Qwen2VLModel):
 
         if pixel_values_videos is not None:
             video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
             video_embeds = video_outputs.pooler_output
             deepstack_video_embeds = video_outputs.deepstack_features
@@ -994,9 +841,6 @@ class Qwen3VLCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 
 
 class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
-    config: Qwen3VLConfig
-    _checkpoint_conversion_mapping = {}
-
     @auto_docstring
     def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
         return super().get_image_features(**super_kwargs)
@@ -1215,8 +1059,7 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
                 if key == "position_ids" and dict_to_expand[key].ndim == 3:
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
                 elif (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):
@@ -1269,117 +1112,33 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
             else tokenizer.convert_tokens_to_ids(self.vision_end_token)
         )
 
-    def __call__(
-        self,
-        images: ImageInput = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        videos: VideoInput = None,
-        **kwargs: Unpack[Qwen3VLProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        merge_length = self.video_processor.merge_size**2
+        num_frames = video_inputs["video_grid_thw"][video_idx][0]
+        frame_seqlen = video_inputs["video_grid_thw"][video_idx][1:].prod() // merge_length
+        metadata = video_inputs["video_metadata"][video_idx]
+        video_placeholder = ""
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
-            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            Qwen3VLProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
+        if metadata.fps is None:
+            logger.warning_once(
+                "Qwen3VL requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+            )
+        metadata.fps = 24 if metadata.fps is None else metadata.fps
+
+        # if timestamps are not provided, calculate them
+        curr_timestamp = self._calculate_timestamps(
+            metadata.frames_indices,
+            metadata.fps,
+            self.video_processor.temporal_patch_size,
         )
-        if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
-        else:
-            image_inputs = {}
-            image_grid_thw = None
 
-        if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            video_grid_thw = videos_inputs["video_grid_thw"]
-            # If user has not requested video metadata, pop it
-            if not kwargs.get("return_metadata"):
-                video_metadata = videos_inputs.pop("video_metadata")
-            else:
-                video_metadata = videos_inputs["video_metadata"]
-        else:
-            videos_inputs = {}
-            video_grid_thw = None
-
-        if not isinstance(text, list):
-            text = [text]
-
-        text = text.copy()  # below lines change text in-place
-        if image_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    num_image_tokens = image_grid_thw[index].prod() // merge_length
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
-        if video_grid_thw is not None:
-            merge_length = self.video_processor.merge_size**2
-            index = 0
-            for i in range(len(text)):
-                while self.video_token in text[i]:
-                    metadata = video_metadata[index]
-                    if metadata.fps is None:
-                        logger.warning_once(
-                            "Qwen3VL requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
-                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
-                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
-                        )
-                        metadata.fps = 24 if metadata.fps is None else metadata.fps
-
-                    # if timestamps are not provided, calculate them
-                    curr_timestamp = self._calculate_timestamps(
-                        metadata.frames_indices,
-                        metadata.fps,
-                        self.video_processor.temporal_patch_size,
-                    )
-
-                    video_placeholder = ""
-                    frame_seqlen = video_grid_thw[index][1:].prod() // merge_length
-                    for frame_idx in range(video_grid_thw[index][0]):
-                        curr_time = curr_timestamp[frame_idx]
-                        video_placeholder += f"<{curr_time:.1f} seconds>"
-                        video_placeholder += (
-                            self.vision_start_token + "<|placeholder|>" * frame_seqlen + self.vision_end_token
-                        )
-                    if f"{self.vision_start_token}{self.video_token}{self.vision_end_token}" in text[i]:
-                        text[i] = text[i].replace(
-                            f"{self.vision_start_token}{self.video_token}{self.vision_end_token}", video_placeholder, 1
-                        )
-                    else:
-                        # vllm may input video token directly
-                        text[i] = text[i].replace(self.video_token, video_placeholder, 1)
-                    index += 1
-
-                text[i] = text[i].replace("<|placeholder|>", self.video_token)
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
-
-        if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            mm_token_type_ids[array_ids == self.video_token_id] = 2
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+        for frame_idx in range(num_frames):
+            curr_time = curr_timestamp[frame_idx]
+            video_placeholder += f"<{curr_time:.1f} seconds>"
+            video_placeholder += self.vision_start_token + self.video_token * frame_seqlen + self.vision_end_token
+        return video_placeholder
 
     def _calculate_timestamps(self, indices: list[int] | np.ndarray, video_fps: float, merge_size: int = 2):
         if not isinstance(indices, list):
@@ -1398,6 +1157,7 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
 __all__ = [
     "Qwen3VLConfig",
     "Qwen3VLTextConfig",
+    "Qwen3VLVisionConfig",
     "Qwen3VLVisionModel",
     "Qwen3VLForConditionalGeneration",
     "Qwen3VLModel",

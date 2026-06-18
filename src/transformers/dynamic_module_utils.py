@@ -311,6 +311,38 @@ def get_class_in_module(
         return getattr(module, class_name)
 
 
+def _compute_local_source_files_hash(
+    pretrained_model_name_or_path: str | os.PathLike,
+    resolved_module_file: str | os.PathLike,
+) -> str:
+    """
+    Computes a stable hash from the bytes of the local source file and its relative-import source files.
+    """
+    model_path = Path(pretrained_model_name_or_path).resolve()
+    resolved_module_file = Path(resolved_module_file)
+
+    def _resolve_relative_source_path(source_file_path: Path) -> str:
+        canonical_path = source_file_path.parent.resolve() / source_file_path.name
+        try:
+            return canonical_path.relative_to(model_path).as_posix()
+        except ValueError:
+            return canonical_path.as_posix()
+
+    files_to_hash = [
+        (_resolve_relative_source_path(resolved_module_file), resolved_module_file),
+    ]
+    for source_file in get_relative_import_files(resolved_module_file):
+        source_file_path = Path(source_file)
+        files_to_hash.append((_resolve_relative_source_path(source_file_path), source_file_path))
+
+    source_files_hash = hashlib.sha256()
+    for relative_path, file_path in sorted(files_to_hash, key=lambda entry: entry[0]):
+        source_files_hash.update(relative_path.encode("utf-8"))
+        source_files_hash.update(file_path.read_bytes())
+
+    return source_files_hash.hexdigest()[:16]
+
+
 def get_cached_module_file(
     pretrained_model_name_or_path: str | os.PathLike,
     module_file: str,
@@ -376,9 +408,8 @@ def get_cached_module_file(
     # Download and cache module_file from the repo `pretrained_model_name_or_path` of grab it if it's a local file.
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
     is_local = os.path.isdir(pretrained_model_name_or_path)
-    if is_local:
-        submodule = _sanitize_module_name(os.path.basename(pretrained_model_name_or_path))
-    else:
+    cached_module = None
+    if not is_local:
         submodule = os.path.sep.join(map(_sanitize_module_name, pretrained_model_name_or_path.split("/")))
         cached_module = try_to_load_from_cache(
             pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
@@ -408,27 +439,36 @@ def get_cached_module_file(
 
     # Check we have all the requirements in our environment
     modules_needed = check_imports(resolved_module_file)
+    if is_local:
+        local_model_name = _sanitize_module_name(os.path.basename(os.path.normpath(pretrained_model_name_or_path)))
+        local_source_files_hash = _compute_local_source_files_hash(pretrained_model_name_or_path, resolved_module_file)
+        if local_model_name:
+            submodule = os.path.sep.join([local_model_name, local_source_files_hash])
+        else:
+            submodule = local_source_files_hash
 
     # Now we move the module inside our cached dynamic modules.
     full_submodule = TRANSFORMERS_DYNAMIC_MODULE_NAME + os.path.sep + submodule
     create_dynamic_module(full_submodule)
     submodule_path = Path(HF_MODULES_CACHE) / full_submodule
-    if submodule == _sanitize_module_name(os.path.basename(pretrained_model_name_or_path)):
+    if is_local:
         # We copy local files to avoid putting too many folders in sys.path. This copy is done when the file is new or
         # has changed since last copy.
         if not (submodule_path / module_file).exists() or not filecmp.cmp(
             resolved_module_file, str(submodule_path / module_file)
         ):
             (submodule_path / module_file).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(resolved_module_file, submodule_path / module_file)
+            shutil.copyfile(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
-        for module_needed in modules_needed:
-            module_needed = Path(module_file).parent / f"{module_needed}.py"
-            module_needed_file = os.path.join(pretrained_model_name_or_path, module_needed)
-            if not (submodule_path / module_needed).exists() or not filecmp.cmp(
-                module_needed_file, str(submodule_path / module_needed)
-            ):
-                shutil.copy(module_needed_file, submodule_path / module_needed)
+        for source_file in get_relative_import_files(resolved_module_file):
+            try:
+                module_needed = Path(source_file).relative_to(pretrained_model_name_or_path)
+                target_path = submodule_path / module_needed
+            except ValueError:
+                continue
+            if not target_path.exists() or not filecmp.cmp(source_file, str(target_path)):
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source_file, target_path)
                 importlib.invalidate_caches()
     else:
         # Get the commit hash
@@ -442,7 +482,7 @@ def get_cached_module_file(
         create_dynamic_module(Path(full_submodule_module_file_path).parent)
 
         if not (submodule_path / module_file).exists():
-            shutil.copy(resolved_module_file, submodule_path / module_file)
+            shutil.copyfile(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
         # Make sure we also have every file with relative
         for module_needed in modules_needed:
@@ -647,13 +687,13 @@ def custom_object_save(obj: Any, folder: str | os.PathLike, config: dict | None 
     # Copy module file to the output folder.
     object_file = sys.modules[obj.__module__].__file__
     dest_file = Path(folder) / (Path(object_file).name)
-    shutil.copy(object_file, dest_file)
+    shutil.copyfile(object_file, dest_file)
     result.append(dest_file)
 
     # Gather all relative imports recursively and make sure they are copied as well.
     for needed_file in get_relative_import_files(object_file):
         dest_file = Path(folder) / (Path(needed_file).name)
-        shutil.copy(needed_file, dest_file)
+        shutil.copyfile(needed_file, dest_file)
         result.append(dest_file)
 
     return result

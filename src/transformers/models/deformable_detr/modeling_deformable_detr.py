@@ -42,7 +42,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deformable_detr import DeformableDetrConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the DEFORMABLE_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
@@ -50,12 +49,9 @@ from .configuration_deformable_detr import DeformableDetrConfig
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 class DeformableDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -68,12 +64,12 @@ class DeformableDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     intermediate_reference_points: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Deformable DETR encoder-decoder model.
     """
 )
+@dataclass
 class DeformableDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
@@ -106,12 +102,12 @@ class DeformableDetrModelOutput(ModelOutput):
     enc_outputs_coord_logits: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`DeformableDetrForObjectDetection`].
     """
 )
+@dataclass
 class DeformableDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -358,7 +354,37 @@ class DeformableDetrSinePositionEmbedding(nn.Module):
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=1)
+    def build_sine_position_embedding(
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if mask is None:
+            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        y_embed = mask.cumsum(1, dtype=dtype)
+        x_embed = mask.cumsum(2, dtype=dtype)
+        if normalize:
+            eps = 1e-6
+            y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * scale
+
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
+
+        pos_x = x_embed[:, :, :, None] / dim_t
+        pos_y = y_embed[:, :, :, None] / dim_t
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        return pos
+
     def forward(
         self,
         shape: torch.Size,
@@ -366,27 +392,9 @@ class DeformableDetrSinePositionEmbedding(nn.Module):
         dtype: torch.dtype,
         mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        y_embed = mask.cumsum(1, dtype=dtype)
-        x_embed = mask.cumsum(2, dtype=dtype)
-        if self.normalize:
-            eps = 1e-6
-            y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_position_features)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
-        return pos
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 class DeformableDetrLearnedPositionEmbedding(nn.Module):
@@ -416,9 +424,6 @@ class DeformableDetrLearnedPositionEmbedding(nn.Module):
         pos = pos.permute(2, 0, 1)
         pos = pos.unsqueeze(0)
         pos = pos.repeat(shape[0], 1, 1, 1)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
 
 
@@ -1328,10 +1333,12 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrModel.from_pretrained("SenseTime/deformable-detr")
@@ -1403,6 +1410,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             spatial_shape = (height, width)
             spatial_shapes_list.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
+            pos_embed = pos_embed.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
             lvl_pos_embed = pos_embed + self.level_embed[level].view(1, 1, -1)
             lvl_pos_embed_flatten.append(lvl_pos_embed)
@@ -1592,10 +1600,12 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io imoprt BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr")

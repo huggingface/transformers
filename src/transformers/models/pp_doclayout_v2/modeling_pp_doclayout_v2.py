@@ -183,12 +183,7 @@ class PPDocLayoutV2ReadingOrderSelfAttention(nn.Module):
         return nn.Softmax(dim=-1)(new_attention_scores)
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        rel_pos=None,
-        rel_2d_pos=None,
+        self, hidden_states, attention_mask=None, rel_pos=None, rel_2d_pos=None, **kwargs: Unpack[TransformersKwargs]
     ):
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
@@ -238,9 +233,7 @@ class PPDocLayoutV2ReadingOrderSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
+        return context_layer, attention_probs
 
 
 class PPDocLayoutV2ReadingOrderSelfOutput(nn.Module):
@@ -296,20 +289,20 @@ class PPDocLayoutV2ReadingOrderAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions=False,
         rel_pos=None,
         rel_2d_pos=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        self_outputs = self.self(
+        residual = hidden_states
+        attention_output, _ = self.self(
             hidden_states,
             attention_mask,
-            output_attentions,
             rel_pos=rel_pos,
             rel_2d_pos=rel_2d_pos,
+            **kwargs,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        attention_output = self.output(attention_output, residual)
+        return attention_output
 
 
 class PPDocLayoutV2ReadingOrderLayer(GradientCheckpointingLayer):
@@ -328,24 +321,20 @@ class PPDocLayoutV2ReadingOrderLayer(GradientCheckpointingLayer):
         output_attentions=False,
         rel_pos=None,
         rel_2d_pos=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        self_attention_outputs = self.attention(
+        attention_output = self.attention(
             hidden_states,
             attention_mask,
-            output_attentions=output_attentions,
             rel_pos=rel_pos,
             rel_2d_pos=rel_2d_pos,
         )
-        attention_output = self_attention_outputs[0]
-
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        outputs = (layer_output,) + outputs
 
-        return outputs
+        return layer_output
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -440,53 +429,24 @@ class PPDocLayoutV2ReadingOrderEncoder(nn.Module):
         hidden_states,
         bbox=None,
         attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
         position_ids=None,
         patch_height=None,
         patch_width=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
         rel_pos = self._cal_1d_pos_emb(position_ids) if self.has_relative_attention_bias else None
         rel_2d_pos = self._cal_2d_pos_emb(bbox) if self.has_spatial_attention_bias else None
 
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
+        for layer_module in self.layer:
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
-                output_attentions,
                 rel_pos=rel_pos,
                 rel_2d_pos=rel_2d_pos,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class PPDocLayoutV2TextEmbeddings(nn.Module):
@@ -942,8 +902,8 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
         return read_order_logits
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
@@ -1006,12 +966,12 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the PP-DocLayoutV2 encoder-decoder model.
     """
 )
+@dataclass
 class PPDocLayoutV2ModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1083,7 +1043,6 @@ class PPDocLayoutV2MLPPredictionHead(nn.Module):
         return x
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the PPDocLayoutV2Decoder. This class adds two attributes to
@@ -1092,6 +1051,7 @@ class PPDocLayoutV2MLPPredictionHead(nn.Module):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class PPDocLayoutV2DecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -1570,6 +1530,54 @@ class PPDocLayoutV2DecoderLayer(nn.Module):
         return hidden_states
 
 
+def build_2d_sinusoidal_position_embedding(
+    height: int,
+    width: int,
+    embed_dim: int = 256,
+    temperature: float = 10000.0,
+    cls_token: bool = False,
+    device: torch.device | None = None,
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """2D sinusoidal position embeddings for an image patch grid.
+
+    Each (h, w) position gets an ``embed_dim``-dimensional vector laid out as
+    ``[sin_h | cos_h | sin_w | cos_w]``, with row-major (H-outer) patch ordering.
+
+    Args:
+        height: Grid height in patches.
+        width: Grid width in patches.
+        embed_dim: Total embedding dimension; must be divisible by 4.
+        temperature: Base for the frequency decay.
+        cls_token: If `True`, prepend a zero row for a CLS token.
+        device: Target device; defaults to CPU.
+        dtype: Output dtype; frequency arithmetic uses float64 internally.
+
+    Returns:
+        Tensor of shape ``(height * width [+1], embed_dim)``.
+    """
+    if embed_dim % 4 != 0:
+        raise ValueError(f"`embed_dim` must be divisible by 4, got {embed_dim}")
+
+    pos_dim = embed_dim // 4
+    omega = torch.arange(pos_dim, dtype=torch.float64, device=device) / pos_dim
+    omega = 1.0 / temperature**omega  # (D/4,)
+
+    grid_h = torch.arange(height, dtype=torch.float64, device=device)
+    grid_w = torch.arange(width, dtype=torch.float64, device=device)
+    grid_h, grid_w = torch.meshgrid(grid_h, grid_w, indexing="ij")  # (H, W) each
+
+    emb_h = grid_h.flatten().outer(omega)  # (H*W, D/4)
+    emb_w = grid_w.flatten().outer(omega)  # (H*W, D/4)
+
+    pos_embed = torch.cat([emb_h.sin(), emb_h.cos(), emb_w.sin(), emb_w.cos()], dim=1)
+
+    if cls_token:
+        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=torch.float64, device=device), pos_embed], dim=0)
+
+    return pos_embed.to(dtype)
+
+
 class PPDocLayoutV2SinePositionEmbedding(nn.Module):
     """
     2D sinusoidal position embedding used in RT-DETR hybrid encoder.
@@ -1580,7 +1588,11 @@ class PPDocLayoutV2SinePositionEmbedding(nn.Module):
         self.embed_dim = embed_dim
         self.temperature = temperature
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
+    def _cached_build_2d_sinusoidal_position_embedding(*args, **kwargs) -> torch.Tensor:
+        return build_2d_sinusoidal_position_embedding(*args, **kwargs)
+
     def forward(
         self,
         width: int,
@@ -1594,19 +1606,14 @@ class PPDocLayoutV2SinePositionEmbedding(nn.Module):
         Returns:
             Position embeddings of shape (1, height*width, embed_dim)
         """
-        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
-        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
-        if self.embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = self.embed_dim // 4
-        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
-        omega = 1.0 / (self.temperature**omega)
-
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        return self._cached_build_2d_sinusoidal_position_embedding(
+            height=torch_int(height),
+            width=torch_int(width),
+            embed_dim=self.embed_dim,
+            temperature=self.temperature,
+            device=device,
+            dtype=dtype,
+        ).unsqueeze(0)
 
 
 class PPDocLayoutV2AIFILayer(nn.Module):
@@ -1639,7 +1646,7 @@ class PPDocLayoutV2AIFILayer(nn.Module):
         batch_size = hidden_states.shape[0]
         height, width = hidden_states.shape[2:]
 
-        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
         if self.training or self.eval_size is None:
             pos_embed = self.position_embedding(
@@ -1660,7 +1667,7 @@ class PPDocLayoutV2AIFILayer(nn.Module):
             )
 
         hidden_states = (
-            hidden_states.permute(0, 2, 1).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
+            hidden_states.transpose(1, 2).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
         )
 
         return hidden_states
@@ -2107,13 +2114,14 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
-        if spatial_shapes is None:
-            spatial_shapes = [
-                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
-                for s in self.config.feat_strides
-            ]
+    def _cached_generate_anchors(
+        spatial_shapes: tuple[tuple[int, int], ...],
+        grid_size: float,
+        device: torch.device | str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
@@ -2135,6 +2143,14 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
         anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
 
         return anchors, valid_mask
+
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
+        if spatial_shapes is None:
+            spatial_shapes = (
+                (int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s))
+                for s in self.config.feat_strides
+            )
+        return self._cached_generate_anchors(spatial_shapes, grid_size, device, dtype)
 
     @auto_docstring
     @can_return_tuple
@@ -2162,10 +2178,12 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PPDocLayoutV2Model
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/PPDocLayoutV2_r50vd")
         >>> model = PPDocLayoutV2Model.from_pretrained("PekingU/PPDocLayoutV2_r50vd")
@@ -2396,11 +2414,13 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
         >>> image_processor = AutoImageProcessor.from_pretrained(model_path)

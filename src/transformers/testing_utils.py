@@ -83,6 +83,7 @@ from .utils import (
     is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_causal_conv1d_available,
     is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
@@ -94,6 +95,8 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
+    is_flash_linear_attention_available,
     is_flute_available,
     is_fouroversix_available,
     is_fp_quant_available,
@@ -106,6 +109,7 @@ from .utils import (
     is_hadamard_available,
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
+    is_ipython_available,
     is_jinja_available,
     is_jmespath_available,
     is_jumanpp_available,
@@ -115,6 +119,7 @@ from .utils import (
     is_liger_kernel_available,
     is_lomo_available,
     is_mistral_common_available,
+    is_multipart_available,
     is_natten_available,
     is_nltk_available,
     is_numba_available,
@@ -140,6 +145,7 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
+    is_serve_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -159,6 +165,7 @@ from .utils import (
     is_torch_optimi_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
+    is_torch_tpu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     is_torchao_available,
@@ -215,6 +222,42 @@ _COMMON_MODEL_NAMES_MAP = {
     "question_answering_class": "ForQuestionAnswering",
     "sequence_classification_class": "ForSequenceClassification",
     "token_classification_class": "ForTokenClassification",
+}
+
+# Used in VLMModelTester (and related classes/methods) to infer the common model classes from the base model class
+_VLM_COMMON_MODEL_NAMES_MAP = {
+    "config_class": "Config",
+    "text_config_class": "TextConfig",
+    "vision_config_class": "VisionConfig",
+    "conditional_generation_class": "ForConditionalGeneration",
+}
+
+# Shared text-model defaults for CausalLMModelTester and MultiModalModelTester.
+_TEXT_MODEL_TESTER_DEFAULTS = {
+    "batch_size": 13,
+    "seq_length": 7,
+    "is_training": True,
+    "use_input_mask": True,
+    "use_labels": True,
+    "vocab_size": 99,
+    "hidden_size": 32,
+    "num_hidden_layers": 2,
+    "num_attention_heads": 2,
+    "num_key_value_heads": 2,
+    "intermediate_size": 32,
+    "hidden_act": "gelu",
+    "max_position_embeddings": 512,
+    "pad_token_id": 0,
+    "bos_token_id": 1,
+    "eos_token_id": 2,
+    "expert_interval": 1,
+    "moe_layer_start_index": 0,
+    "moe_intermediate_size": 16,
+    "shared_expert_intermediate_size": 36,
+    "shared_expert_gate": True,
+    "moe_num_shared_experts": 2,
+    "num_experts_per_tok": 2,
+    "num_experts": 8,
 }
 
 
@@ -638,7 +681,7 @@ def require_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
     except Exception as _:
         kernels_available = False
 
@@ -662,6 +705,63 @@ def require_flash_attn_3(test_case):
     These tests are skipped when Flash Attention 3 isn't installed.
     """
     return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
+
+
+def require_flash_attn_4(test_case):
+    """
+    Decorator marking a test that requires Flash Attention 4.
+
+    These tests are skipped when Flash Attention 4 isn't installed.
+    """
+    return unittest.skipUnless(is_flash_attn_4_available(), "test requires Flash Attention 4")(test_case)
+
+
+def require_all_flash_attn(test_case):
+    flash_attn_available = is_flash_attn_2_available()
+    kernels_available = is_kernels_available()
+    try:
+        from kernels import get_kernel
+
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
+    except Exception as _:
+        kernels_available = False
+
+    return unittest.skipUnless(
+        all(
+            (
+                flash_attn_available | kernels_available,
+                is_flash_attn_3_available(),
+                is_flash_attn_4_available(),
+            )
+        ),
+        "test requires all mainline Flash Attention packages",
+    )(test_case)
+
+
+def require_flash_linear_attention(test_case):
+    """
+    Decorator marking a test that requires Flash Linear Attention.
+
+    These tests are skipped when Flash Linear Attention isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_flash_linear_attention_available(),
+        "test requires `flash-linear-attention`",
+    )(test_case)
+
+
+def require_causal_conv1d(test_case):
+    """
+    Decorator marking a test that requires causal-conv1d.
+
+    These tests are skipped when causal-conv1d isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_causal_conv1d_available(),
+        "test requires `causal-conv1d`",
+    )(test_case)
 
 
 def require_peft(test_case):
@@ -804,6 +904,19 @@ def require_torch_multi_accelerator(test_case):
     )
 
 
+def require_torch_n_accelerators(n: int):
+    """Decorator marking a test that requires at least `n` accelerators (in PyTorch)."""
+
+    def decorator(test_case):
+        if not is_torch_available():
+            return unittest.skip(reason="test requires PyTorch")(test_case)
+        return unittest.skipUnless(backend_device_count(torch_device) >= n, f"test requires >= {n} accelerators")(
+            test_case
+        )
+
+    return decorator
+
+
 def require_torch_non_multi_gpu(test_case):
     """
     Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
@@ -864,6 +977,13 @@ def require_torch_neuroncore(test_case):
     return unittest.skipUnless(is_torch_neuroncore_available(check_device=False), "test requires PyTorch NeuronCore")(
         test_case
     )
+
+
+def require_torch_tpu(test_case):
+    """
+    Decorator marking a test that requires TPU (in PyTorch via torch_tpu).
+    """
+    return unittest.skipUnless(is_torch_tpu_available(), "test requires PyTorch TPU")(test_case)
 
 
 def require_torch_npu(test_case):
@@ -1088,6 +1208,19 @@ def require_fp8(test_case):
     )
 
 
+def require_cuda_capability_at_least(major, minor):
+    """Decorator: when running on CUDA, skip if device capability is below the given
+    threshold. On non-CUDA backends this is a no-op — pair with :func:`require_torch_gpu`
+    if the test is CUDA-only, or leave alone if it should also run on other backends
+    (which won't be capability-gated)."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return lambda test_case: test_case
+    capability = torch.cuda.get_device_capability()
+    return unittest.skipIf(capability < (major, minor), f"Requires CUDA capability >= {major}.{minor}")
+
+
 def require_torch_bf16(test_case):
     """Decorator marking a test that requires a device that supports bf16"""
     return unittest.skipUnless(
@@ -1126,6 +1259,11 @@ def require_detectron2(test_case):
 def require_faiss(test_case):
     """Decorator marking a test that requires faiss."""
     return unittest.skipUnless(is_faiss_available(), "test requires `faiss`")(test_case)
+
+
+def require_ipython(test_case):
+    """Decorator marking a test that requires IPython. These tests are skipped when IPython isn't installed."""
+    return unittest.skipUnless(is_ipython_available(), "test requires `IPython`")(test_case)
 
 
 def require_optuna(test_case):
@@ -1372,6 +1510,13 @@ def require_librosa(test_case):
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
 
 
+def require_multipart(test_case):
+    """
+    Decorator marking a test that requires python-multipart
+    """
+    return unittest.skipUnless(is_multipart_available(), "test requires python-multipart")(test_case)
+
+
 def require_liger_kernel(test_case):
     """
     Decorator marking a test that requires liger_kernel
@@ -1453,6 +1598,13 @@ def require_openai(test_case):
     Decorator marking a test that requires openai
     """
     return unittest.skipUnless(is_openai_available(), "test requires openai")(test_case)
+
+
+def require_serve(test_case):
+    """
+    Decorator marking a test that requires the serving dependencies (fastapi, uvicorn, pydantic, openai).
+    """
+    return unittest.skipUnless(is_serve_available(), "test requires serving dependencies")(test_case)
 
 
 def require_mistral_common(test_case):
@@ -1559,9 +1711,9 @@ def set_config_for_less_flaky_test(config):
 
     # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
     # (We don't need the original epsilon values to check eager/sdpa matches)
-    attrs = ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]
+    attrs = ["text_config", "vision_config", "audio_config", "text_encoder", "audio_encoder", "decoder"]
     for attr in attrs:
-        if hasattr(config, attr):
+        if hasattr(config, attr) and getattr(config, attr) is not None:
             for target_attr in target_attrs:
                 setattr(getattr(config, attr), target_attr, 1.0)
 
@@ -2407,14 +2559,16 @@ def pytest_xdist_worker_id():
 
 def get_torch_dist_unique_port():
     """
-    Returns a port number that can be fed to `torch.distributed.launch`'s `--master_port` argument.
+    Returns a free port number that can be fed to `torch.distributed.launch`'s `--master_port` argument.
 
-    Under `pytest-xdist` it adds a delta number based on a worker id so that concurrent tests don't try to use the same
-    port at once.
+    Binds to port 0 to let the OS assign an available port, avoiding collisions from hardcoded ports
+    and TCP TIME_WAIT issues between sequential subprocess launches.
     """
-    port = 29500
-    uniq_delta = pytest_xdist_worker_id()
-    return port + uniq_delta
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 
 def nested_simplify(obj, decimals=3):
@@ -2594,42 +2748,23 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: float | None = 2):
     To decorate tests that download from the Hub. They can fail due to a
     variety of network issues such as timeouts, connection resets, etc.
 
+    Uses exponential backoff starting from `wait_before_retry`.
+
     Args:
         max_attempts (`int`, *optional*, defaults to 5):
             The maximum number of attempts to retry the flaky test.
         wait_before_retry (`float`, *optional*, defaults to 2):
-            If provided, will wait that number of seconds before retrying the test.
+            If provided, the initial delay in seconds before the first retry.
+            Subsequent retries use exponential backoff with jitter.
     """
+    from .utils.generic import retry
 
-    def decorator(test_func_ref):
-        @functools.wraps(test_func_ref)
-        def wrapper(*args, **kwargs):
-            retry_count = 1
-
-            while retry_count < max_attempts:
-                try:
-                    return test_func_ref(*args, **kwargs)
-                # We catch all exceptions related to network issues from httpx
-                except (
-                    httpx.HTTPError,
-                    httpx.RequestError,
-                    httpx.TimeoutException,
-                    httpx.ReadTimeout,
-                    httpx.ConnectError,
-                    httpx.NetworkError,
-                ) as err:
-                    logger.error(
-                        f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specified Hub repository."
-                    )
-                    if wait_before_retry is not None:
-                        time.sleep(wait_before_retry)
-                    retry_count += 1
-
-            return test_func_ref(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
+    return retry(
+        max_retries=max_attempts,
+        initial_delay=wait_before_retry or 0,
+        jitter=wait_before_retry is not None,
+        exceptions=(httpx.HTTPError,),
+    )
 
 
 def run_first(test_case):
@@ -3160,23 +3295,25 @@ def get_device_properties() -> DeviceProperties:
     if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
         import torch
 
-        major, minor = torch.cuda.get_device_capability()
-        if IS_ROCM_SYSTEM:
-            return ("rocm", major, minor)
-        else:
-            return ("cuda", major, minor)
-    elif IS_XPU_SYSTEM:
+        if torch.cuda.is_available():
+            major, minor = torch.cuda.get_device_capability()
+            if IS_ROCM_SYSTEM:
+                return ("rocm", major, minor)
+            else:
+                return ("cuda", major, minor)
+    if IS_XPU_SYSTEM:
         import torch
 
-        # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
-        arch = torch.xpu.get_device_capability()["architecture"]
-        gen_mask = 0x000000FF00000000
-        gen = (arch & gen_mask) >> 32
-        return ("xpu", gen, None)
-    elif IS_NPU_SYSTEM:
+        if torch.xpu.is_available():
+            # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
+            arch = torch.xpu.get_device_capability()["architecture"]
+            gen_mask = 0x000000FF00000000
+            gen = (arch & gen_mask) >> 32
+            return ("xpu", gen, None)
+    if IS_NPU_SYSTEM:
+        # TODO: after torch 2.5.1, use `if hasattr(torch, "npu") and torch.npu.is_available()` here for consistency with CUDA/XPU blocks
         return ("npu", None, None)
-    else:
-        return (torch_device, None, None)
+    return (torch_device, None, None)
 
 
 def unpack_device_properties(

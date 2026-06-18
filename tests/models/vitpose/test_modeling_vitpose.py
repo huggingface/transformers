@@ -17,6 +17,7 @@ import inspect
 import unittest
 from functools import cached_property
 
+import pytest
 import requests
 
 from transformers import VitPoseBackboneConfig, VitPoseConfig
@@ -38,7 +39,7 @@ if is_vision_available():
 
 
 if is_torchvision_available():
-    from transformers import VitPoseImageProcessorFast
+    from transformers import VitPoseImageProcessor
 
 
 class VitPoseModelTester:
@@ -51,6 +52,7 @@ class VitPoseModelTester:
         num_channels=3,
         is_training=True,
         use_labels=True,
+        use_flip_pairs=True,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
@@ -72,6 +74,7 @@ class VitPoseModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.use_labels = use_labels
+        self.use_flip_pairs = use_flip_pairs
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -97,9 +100,13 @@ class VitPoseModelTester:
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
+        flip_pairs = None
+        if self.use_flip_pairs:
+            flip_pairs = torch.arange(self.num_labels).view(-1, 2)
+
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, pixel_values, labels, flip_pairs
 
     def get_config(self):
         return VitPoseConfig(
@@ -119,7 +126,7 @@ class VitPoseModelTester:
             out_indices=self.out_indices,
         )
 
-    def create_and_check_for_pose_estimation(self, config, pixel_values, labels):
+    def create_and_check_for_pose_estimation(self, config, pixel_values, labels, flip_pairs):
         model = VitPoseForPoseEstimation(config)
         model.to(torch_device)
         model.eval()
@@ -132,12 +139,27 @@ class VitPoseModelTester:
             result.heatmaps.shape, (self.batch_size, self.num_labels, expected_height, expected_width)
         )
 
+        result_flipped = model(pixel_values, flip_pairs=flip_pairs)
+        self.parent.assertEqual(
+            result_flipped.heatmaps.shape, (self.batch_size, self.num_labels, expected_height, expected_width)
+        )
+
+    def create_and_check_for_pose_estimation_without_graph_break(self, config, pixel_values, labels, flip_pairs):
+        model = VitPoseForPoseEstimation(config)
+        model.to(torch_device)
+        model.eval()
+
+        torch.compiler.reset()
+        model = torch.compile(model, fullgraph=True)
+        model(pixel_values, flip_pairs=flip_pairs)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
             pixel_values,
             labels,
+            flip_pairs,
         ) = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
@@ -156,7 +178,7 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = VitPoseModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VitPoseConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VitPoseConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
@@ -214,6 +236,12 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_for_pose_estimation(*config_and_inputs)
 
     @slow
+    @pytest.mark.torch_compile_test
+    def test_for_post_estimation_without_graph_break(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_pose_estimation_without_graph_break(*config_and_inputs)
+
+    @slow
     def test_model_from_pretrained(self):
         model_name = "usyd-community/vitpose-base-simple"
         model = VitPoseForPoseEstimation.from_pretrained(model_name)
@@ -233,7 +261,7 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            VitPoseImageProcessorFast.from_pretrained("usyd-community/vitpose-base-simple")
+            VitPoseImageProcessor.from_pretrained("usyd-community/vitpose-base-simple")
             if is_vision_available()
             else None
         )
@@ -311,7 +339,6 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
         assert torch.allclose(heatmaps[0, 0, :3, :3], expected_slice, atol=1e-4)
 
         pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)
-        print(pose_results)
 
         expected_bbox = torch.tensor([391.9900, 190.0800, 391.1575, 189.3034])
         expected_keypoints = torch.tensor(

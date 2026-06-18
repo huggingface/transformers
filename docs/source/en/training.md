@@ -68,7 +68,7 @@ A data collator assembles dataset samples into batches for the model to process.
 - Set `mlm=False` to avoid randomly masking tokens.
 
 ```py
-data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False),
+data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 ```
 
 ## Loading a model
@@ -115,7 +115,7 @@ model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto")
 </hfoptions>
 
 ```py
-TrainingArguments(
+training_args = TrainingArguments(
     output_dir="qwen3-finetuned",
     num_train_epochs=3,
     per_device_train_batch_size=2,
@@ -152,6 +152,7 @@ trainer.push_to_hub()
 
 ## Next steps
 
+- Read the [Trainer features](./trainer_recipes) guide for minimal working examples of common Trainer features like custom loss functions, memory-efficient evaluation, checkpointing, and more.
 - Read the [Subclassing Trainer methods](./trainer_customize) guide to learn how to subclass [`Trainer`] methods to support new and custom functionalities.
 - Read the [Callbacks](./trainer_callbacks) guide to learn how to hook into training events for logging, early stopping, and other custom behavior.
 - Read the [Data collators](./data_collators) guide to learn how to customize how samples are assembled into batches.
