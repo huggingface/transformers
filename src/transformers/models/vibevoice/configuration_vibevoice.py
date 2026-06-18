@@ -18,48 +18,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class VibeVoiceConfig(PretrainedConfig):
+@auto_docstring(checkpoint="bezzam/VibeVoice-1.5B-hf")
+@strict
+class VibeVoiceConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VibeVoiceForConditionalGeneration`]. It is used to instantiate an
-    VibeVoice model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults similar to that of [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        acoustic_tokenizer_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the acoustic tokenizer.
-        semantic_tokenizer_encoder_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the semantic tokenizer. This tokenizer extracts semantic features from audio.
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the text model.
-        pad_token_id (`int`, *optional*, defaults to 151643):
-            The token ID for padding.
-        eos_token_id (`int`, *optional*, defaults to 151643):
-            The token ID for the end of sequence.
-        audio_bos_token_id (`int`, *optional*, defaults to 151652):
-            The token ID indicating the start of audio tokens.
-        audio_eos_token_id (`int`, *optional*, defaults to 151653):
-            The token ID indicating the end of audio tokens.
-        audio_diffusion_token_id (`int`, *optional*, defaults to 151654):
-            The token ID indicating the start of audio diffusion tokens.
-        num_head_layers (`int`, *optional*, defaults to 4):
-            Number of layers in the diffusion head.
-        intermediate_size (`int`, *optional*, defaults to 4608):
-            The intermediate size of the feed-forward layers.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the RMSNorm layers.
-        hidden_act (`str`, *optional*, defaults to `"silu"`):
-            The activation function used by the diffusion head.
-        frequency_embedding_size (`int`, *optional*, defaults to 256):
-            The size of the frequency embedding.
-        num_diffusion_steps (`int`, *optional*, defaults to 10):
-            The number of diffusion steps for inference (and the default for training).
+    acoustic_tokenizer_config (`Union[AutoConfig, dict]`, *optional*):
+        The config object or dictionary of the acoustic tokenizer.
+    semantic_tokenizer_encoder_config (`Union[AutoConfig, dict]`, *optional*):
+        The config object or dictionary of the semantic tokenizer encoder. This tokenizer extracts semantic features from audio.
+    audio_bos_token_id (`int`, *optional*, defaults to 151652):
+        The token ID indicating the start of audio tokens.
+    audio_eos_token_id (`int`, *optional*, defaults to 151653):
+        The token ID indicating the end of audio tokens.
+    audio_diffusion_token_id (`int`, *optional*, defaults to 151654):
+        The token ID for audio diffusion placeholder tokens in the input sequence.
+    num_head_layers (`int`, *optional*, defaults to 4):
+        Number of layers in the diffusion head.
+    hidden_act (`str`, *optional*, defaults to `"silu"`):
+        The activation function used by the diffusion head.
+    frequency_embedding_size (`int`, *optional*, defaults to 256):
+        The size of the sinusoidal frequency embedding for timestep encoding in the diffusion head.
+    num_diffusion_steps (`int`, *optional*, defaults to 10):
+        The number of diffusion steps used during inference.
 
     ```python
     >>> from transformers import VibeVoiceForConditionalGeneration, VibeVoiceConfig
@@ -92,74 +79,54 @@ class VibeVoiceConfig(PretrainedConfig):
         "language_model.layers.*.mlp.down_proj": "rowwise",
     }
 
-    def __init__(
-        self,
-        acoustic_tokenizer_config=None,
-        semantic_tokenizer_encoder_config=None,
-        text_config=None,
-        pad_token_id=151643,
-        eos_token_id=151643,
-        audio_bos_token_id=151652,
-        audio_eos_token_id=151653,
-        audio_diffusion_token_id=151654,
-        num_head_layers=4,
-        intermediate_size=4608,
-        rms_norm_eps=1e-5,
-        hidden_act="silu",
-        frequency_embedding_size=256,
-        num_diffusion_steps=10,
-        **kwargs,
-    ):
-        if isinstance(acoustic_tokenizer_config, dict):
-            acoustic_tokenizer_config["model_type"] = acoustic_tokenizer_config.get(
+    acoustic_tokenizer_config: dict | PreTrainedConfig | None = None
+    semantic_tokenizer_encoder_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    pad_token_id: int = 151643
+    eos_token_id: int = 151643
+    audio_bos_token_id: int = 151652
+    audio_eos_token_id: int = 151653
+    audio_diffusion_token_id: int = 151654
+    num_head_layers: int = 4
+    intermediate_size: int = 4608
+    rms_norm_eps: float = 1e-5
+    hidden_act: str = "silu"
+    frequency_embedding_size: int = 256
+    num_diffusion_steps: int = 10
+    mlp_bias: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.acoustic_tokenizer_config, dict):
+            self.acoustic_tokenizer_config["model_type"] = self.acoustic_tokenizer_config.get(
                 "model_type", "vibevoice_acoustic_tokenizer"
             )
-            acoustic_tokenizer_config = CONFIG_MAPPING[acoustic_tokenizer_config["model_type"]](
-                **acoustic_tokenizer_config
+            self.acoustic_tokenizer_config = CONFIG_MAPPING[self.acoustic_tokenizer_config["model_type"]](
+                **self.acoustic_tokenizer_config
             )
-        elif acoustic_tokenizer_config is None:
-            acoustic_tokenizer_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer"]()
-        self.acoustic_tokenizer_config = acoustic_tokenizer_config
+        elif self.acoustic_tokenizer_config is None:
+            self.acoustic_tokenizer_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer"]()
 
-        if isinstance(semantic_tokenizer_encoder_config, dict):
-            semantic_tokenizer_encoder_config["model_type"] = semantic_tokenizer_encoder_config.get(
+        if isinstance(self.semantic_tokenizer_encoder_config, dict):
+            self.semantic_tokenizer_encoder_config["model_type"] = self.semantic_tokenizer_encoder_config.get(
                 "model_type", "vibevoice_acoustic_tokenizer_encoder"
             )
-            semantic_tokenizer_encoder_config = CONFIG_MAPPING[semantic_tokenizer_encoder_config["model_type"]](
-                **semantic_tokenizer_encoder_config
+            self.semantic_tokenizer_encoder_config = CONFIG_MAPPING[
+                self.semantic_tokenizer_encoder_config["model_type"]
+            ](**self.semantic_tokenizer_encoder_config)
+        elif self.semantic_tokenizer_encoder_config is None:
+            self.semantic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](
+                hidden_size=128
             )
-        elif semantic_tokenizer_encoder_config is None:
-            semantic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](hidden_size=128)
-        self.semantic_tokenizer_encoder_config = semantic_tokenizer_encoder_config
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"]()
-        self.text_config = text_config
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen2"]()
 
-        self.vocab_size = text_config.vocab_size
-        self.audio_bos_token_id = audio_bos_token_id
-        self.audio_eos_token_id = audio_eos_token_id
-        self.audio_diffusion_token_id = audio_diffusion_token_id
-        self.num_head_layers = num_head_layers
-        self.rms_norm_eps = rms_norm_eps
-        self.hidden_act = hidden_act
-        self.frequency_embedding_size = frequency_embedding_size
-        self.num_diffusion_steps = num_diffusion_steps
-
-        # NOTE (ebezzam) to use LlamaMLP via modular
-        self.mlp_bias = False
-        self.intermediate_size = intermediate_size
-
-        kwargs.pop("tie_word_embeddings", None)  # remove if present, to take priority from text_config
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=getattr(text_config, "tie_word_embeddings", False),
-            **kwargs,
-        )
+        self.vocab_size = self.text_config.vocab_size
+        self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", False)
+        super().__post_init__(**kwargs)
 
     # NOTE (ebezzam) for modular usage of `LlamaMLP`
     @property
