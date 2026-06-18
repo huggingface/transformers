@@ -367,6 +367,7 @@ class Tipsv2VisionEmbeddings(Dinov2WithRegistersEmbeddings):
 class Tipsv2VisionPreTrainedModel(Dinov2WithRegistersPreTrainedModel):
     config: Tipsv2VisionConfig
     base_model_prefix = "vision_model"
+    _keys_to_ignore_on_load_unexpected = {"text_encoder"}
 
 
 class Tipsv2VisionEncoder(Dinov2WithRegistersEncoder):
@@ -374,7 +375,7 @@ class Tipsv2VisionEncoder(Dinov2WithRegistersEncoder):
 
 
 class Tipsv2VisionModel(Dinov2WithRegistersModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = {"text_encoder"}
 
 
 class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
@@ -552,6 +553,7 @@ class Tipsv2TextPreTrainedModel(PreTrainedModel):
     main_input_name = "input_ids"
     input_modalities = ["text"]
     supports_gradient_checkpointing = True
+    _keys_to_ignore_on_load_unexpected = {"vision_encoder"}
     _no_split_modules = ["Tipsv2TextEmbeddings", "Tipsv2TextEncoderLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True

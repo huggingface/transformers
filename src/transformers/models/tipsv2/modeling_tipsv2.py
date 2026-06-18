@@ -454,6 +454,7 @@ class Tipsv2VisionPreTrainedModel(PreTrainedModel):
         "hidden_states": Tipsv2VisionLayer,
         "attentions": Tipsv2VisionSelfAttention,
     }
+    _keys_to_ignore_on_load_unexpected = {"text_encoder"}
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
@@ -491,6 +492,8 @@ class Tipsv2VisionEncoder(Tipsv2VisionPreTrainedModel):
 
 @auto_docstring
 class Tipsv2VisionModel(Tipsv2VisionPreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = {"text_encoder"}
+
     def __init__(self, config: Tipsv2VisionConfig):
         super().__init__(config)
         self.config = config
@@ -864,6 +867,7 @@ class Tipsv2TextPreTrainedModel(PreTrainedModel):
     main_input_name = "input_ids"
     input_modalities = ["text"]
     supports_gradient_checkpointing = True
+    _keys_to_ignore_on_load_unexpected = {"vision_encoder"}
     _no_split_modules = ["Tipsv2TextEmbeddings", "Tipsv2TextEncoderLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True

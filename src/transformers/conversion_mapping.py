@@ -1417,6 +1417,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"segmentation_", ""),
         ]
     )
+    # The standalone vision model has the same Dinov2WithRegisters structure as the
+    # backbone, so it reuses the backbone's vision renames (strip the `vision_encoder.`
+    # prefix and the text weights via `_keys_to_ignore_on_load_unexpected`).
+    mapping["Tipsv2VisionModel"] = mapping["Tipsv2VisionBackbone"].copy()
 
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()

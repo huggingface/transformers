@@ -55,7 +55,7 @@ candidate_labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
 classifier = pipeline(task="zero-shot-image-classification", model="google/tipsv2-b14", device_map="auto")
 out = classifier(image, candidate_labels=candidate_labels)
 print(out)
-# [{'score': 0.997, 'label': 'a photo of a cat'}, {'score': 0.002, 'label': 'a photo of a dog'}, {'score': 0.001, 'label': 'a photo of a car'}]
+# [{'score': 0.999, 'label': 'a photo of a cat'}, {'score': 0.001, 'label': 'a photo of a dog'}, {'score': 0.0, 'label': 'a photo of a car'}]
 ```
 
 </hfoption>
@@ -65,7 +65,7 @@ print(out)
 import torch
 
 from transformers import AutoModel, AutoProcessor
-from transformers.utils import load_image
+from transformers.image_utils import load_image
 
 
 model_id = "google/tipsv2-b14"
@@ -75,7 +75,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 candidate_labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
 
-inputs = processor(text=texts, images=image, return_tensors="pt").to(model.device)
+inputs = processor(text=candidate_labels, images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -84,7 +84,7 @@ probs = outputs.logits_per_image.softmax(dim=1)
 most_likely_idx = probs.argmax(dim=1).item()
 most_likely_label = candidate_labels[most_likely_idx]
 print(f"Most likely label: '{most_likely_label}' with probability: {probs[0][most_likely_idx].item():.3f}")
-# Most likely label: 'a photo of a cat' with probability: 0.997
+# Most likely label: 'a photo of a cat' with probability: 0.975
 ```
 
 </hfoption>
@@ -97,7 +97,7 @@ import torch
 import torch.nn.functional as F
 
 from transformers import AutoModel, AutoProcessor
-from transformers.utils import load_image
+from transformers.image_utils import load_image
 
 
 model_id = "google/tipsv2-b14"
@@ -121,7 +121,7 @@ probs = (image_embeds @ text_embeds.T / model.temperature).softmax(dim=-1)
 most_likely_idx = probs.argmax(dim=-1).item()
 most_likely_label = candidate_labels[most_likely_idx]
 print(f"Most likely label: '{most_likely_label}' with probability: {probs[0][most_likely_idx].item():.3f}")
-# Most likely label: 'a photo of a cat' with probability: 0.997
+# Most likely label: 'a photo of a cat' with probability: 0.975
 ```
 
 <hfoption id="AutoBackbone for vision feature maps">
@@ -131,11 +131,11 @@ Use [`AutoBackbone`] to load the vision backbone directly and get spatial featur
 ```python
 import torch
 from transformers import AutoBackbone, AutoImageProcessor
-from transformers.utils import load_image
+from transformers.image_utils import load_image
 
 
 model_id = "google/tipsv2-b14"
-backbone = AutoBackbone.from_pretrained(model_id, out_indices=[-1], device_map="auto")
+backbone = AutoBackbone.from_pretrained(model_id, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_id)
 
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -161,7 +161,7 @@ Use [`Tipsv2VisionModel`] if you only need access to the vision features. In par
 ```python
 import torch
 from transformers import AutoConfig, Tipsv2VisionModel, AutoImageProcessor
-from transformers.utils import load_image
+from transformers.image_utils import load_image
 
 
 model_id = "google/tipsv2-b14"
