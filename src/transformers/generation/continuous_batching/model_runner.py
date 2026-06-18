@@ -118,10 +118,9 @@ class ModelRunner:
                 mm_embeddings = self.cache.encoder_cache.extract_mm_embeddings(encoding_output)
                 self.cache.encoder_cache.store_mm_embeddings(request_id, mm_embeddings)
 
-    def fill_inputs_embeds(self, model: nn.Module, batch_data: PagedAttentionArgs) -> None:
+    def fill_inputs_embeds(self, model: nn.Module, input_ids: torch.Tensor, batch_data: PagedAttentionArgs) -> None:
         """Fill the inputs_embeds tensor inside the batch_data dictionary."""
         # Run the embedding layer to get all text tokens embeddings
-        input_ids = batch_data["input_ids"]
         inputs_embeds: torch.Tensor = batch_data["inputs_embeds"]  # shape [1, q_tokens, hidden_size]
         embedding_module = model.get_input_embeddings()
         inputs_embeds.copy_(embedding_module(input_ids))
@@ -150,11 +149,15 @@ class ModelRunner:
         # This is the stream on which the compute happens
         compute_stream = self.inputs_and_outputs.compute_stream
 
-        # TODO; BUG: carry over needs to happen here, before the embeddings are filled
+        # If there is inputs_embeds tensor, it is filled before the forward pass
+        input_ids = self._pop_or_get_input_ids(batch_data)
         if batch_data["inputs_embeds"] is not None:
             with self.compute_stream_ctx():
-                self.fill_inputs_embeds(model, batch_data)
-        input_ids = self._pop_or_get_input_ids(batch_data)
+                # First carry over the tokens from the previous batch
+                self.inputs_and_outputs.carry_over_tokens(input_ids, carry_over_ids, prev_output_ids)
+                carry_over_ids = None  # lets the forward know that carry over has been done
+                # Then fill the inputs_embeds tensor
+                self.fill_inputs_embeds(model, input_ids, batch_data)
 
         # Get the appropriate forward function (compiled or not, based on current path)
         forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)
@@ -205,14 +208,15 @@ class ModelRunner:
         model: nn.Module,
         input_ids: torch.Tensor,  # separate from batch_data when there are input_embeds # TODO: can this be avoided?
         batch_data: PagedAttentionArgs,
-        carry_over_ids: torch.Tensor,
+        carry_over_ids: torch.Tensor | None,
         prev_output_ids: torch.Tensor,
         output_ids: torch.Tensor,
     ) -> None:
         """This function performs the forward pass, logits processing, and sampling. This is what is either captured
         and/or compiled."""
-        # Perform carry-over (no-op for synchronous batching)
-        self.inputs_and_outputs.carry_over_tokens(input_ids, carry_over_ids, prev_output_ids)
+        # Perform carry-over (no-op for synchronous batching) if it has not been done yet
+        if carry_over_ids is not None:
+            self.inputs_and_outputs.carry_over_tokens(input_ids, carry_over_ids, prev_output_ids)
 
         # Run model forward pass
         logits = model(**batch_data).logits  # shape [1, seq_len OR num_logits, vocab_size]
