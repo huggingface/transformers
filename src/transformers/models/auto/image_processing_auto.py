@@ -399,9 +399,9 @@ def _format_unavailable_image_processor_error(pretrained_model_name_or_path, map
         "None of these classes could be imported."
     )
     if missing_dependencies:
-        error_message += f" Missing optional dependencies: {', '.join(missing_dependencies)}."
         error_message += (
-            " Please install the missing dependencies or select a backend that is available in your environment."
+            f" Missing optional dependencies: {', '.join(missing_dependencies)}. "
+            "Please install the missing dependencies or select a backend that is available in your environment."
         )
 
     return error_message
