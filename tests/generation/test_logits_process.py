@@ -743,6 +743,17 @@ class LogitsProcessorTest(unittest.TestCase):
         filtered_scores = no_bad_words_dist_proc(input_ids, scores)
         torch.testing.assert_close(scores, filtered_scores, rtol=1e-3, atol=1e-3)
 
+    def test_bad_words_and_sequence_bias_reject_empty_token_list(self):
+        # An empty token list (e.g. from `tokenizer("", add_special_tokens=False).input_ids`) must be rejected at
+        # construction with a clear `ValueError`, rather than crashing later with an `IndexError` during generation.
+        eos_token_id = 4
+        with self.assertRaises(ValueError):
+            NoBadWordsLogitsProcessor(bad_words_ids=[[]], eos_token_id=eos_token_id)
+        with self.assertRaises(ValueError):
+            NoBadWordsLogitsProcessor(bad_words_ids=[[], [3]], eos_token_id=eos_token_id)
+        with self.assertRaises(ValueError):
+            SequenceBiasLogitsProcessor(sequence_bias=[[[], 1.0]])
+
     def test_bias_dist_processor(self):
         vocab_size = 5
         batch_size = 2
