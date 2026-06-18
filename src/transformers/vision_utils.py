@@ -215,3 +215,59 @@ def get_vision_bilinear_indices_and_weights(
     bilinear_indices = torch.stack([torch.cat(p) for p in idx_parts])
     bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts])
     return bilinear_indices, bilinear_weights
+
+
+def get_vision_nearest_position_ids(
+    target_sizes: torch.Tensor, num_patches_per_side: int, kwargs: dict | None = None
+) -> torch.Tensor:
+    """Get nearest-neighbor position IDs into a `num_patches_per_side**2` 2-D table, or pop
+    from `kwargs` if precomputed.
+
+    For each image of size `(h, w)`, maps fractional grid coordinates `i/h` to the nearest
+    bucket on a `num_patches_per_side` grid (via `bucketize`) and flattens to 1-D embedding
+    indices, concatenated across all images. Used by NaViT-style packers (e.g. MiniCPM-V).
+
+    Args:
+        target_sizes: `(num_images, 2)` int — `(h, w)` per image.
+        num_patches_per_side: side length of the learned 2-D position-embedding grid.
+        kwargs: optional caller kwargs — if it contains `"position_ids"` it is popped and returned.
+
+    Returns:
+        `position_ids`: `(sum(h_i * w_i),)` long — flat indices into a `num_patches_per_side**2` table.
+    """
+    if kwargs is not None and (pos_ids := kwargs.pop("position_ids", None)) is not None:
+        return pos_ids
+    device = target_sizes.device
+    boundaries = torch.arange(1 / num_patches_per_side, 1.0, 1 / num_patches_per_side, device=device)
+    pos_ids_list = []
+    for height, width in target_sizes.tolist():
+        height, width = int(height), int(width)
+        h_coords = torch.arange(height, device=device) / height
+        w_coords = torch.arange(width, device=device) / width
+        bucket_h = torch.bucketize(h_coords, boundaries, right=True)
+        bucket_w = torch.bucketize(w_coords, boundaries, right=True)
+        pos_ids_list.append((bucket_h[:, None] * num_patches_per_side + bucket_w).flatten())
+    return torch.cat(pos_ids_list)
+
+
+def get_vision_merged_shape(
+    target_sizes: torch.Tensor, window_kernel_size: tuple[int, int], kwargs: dict | None = None
+) -> tuple[int, int]:
+    """Get post-window-merge `(merged_h, merged_w)` Python ints, or pop from `kwargs` if precomputed.
+
+    `.view()` needs Python ints, but `target_sizes[0].item()` is non-traceable. Callers must pop
+    the precomputed value from `kwargs` when running under `torch.export`. Assumes uniform
+    `target_sizes` across the batch (standard NaViT preprocessing output).
+
+    Args:
+        target_sizes: `(num_images, 2)` int — `(h, w)` per image.
+        window_kernel_size: `(window_h, window_w)` window-attention kernel.
+        kwargs: optional caller kwargs — if it contains `"merged_shape"` it is popped and returned.
+
+    Returns:
+        `(merged_h, merged_w)`: per-image grid size after window merging, as Python ints.
+    """
+    if kwargs is not None and (merged := kwargs.pop("merged_shape", None)) is not None:
+        return merged
+    window_h, window_w = window_kernel_size
+    return int(target_sizes[0, 0].item()) // window_h, int(target_sizes[0, 1].item()) // window_w
