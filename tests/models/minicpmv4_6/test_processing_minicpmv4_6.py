@@ -345,7 +345,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         result = processor.apply_chat_template(messages, tokenize=True)
         self.assertIsInstance(result, torch.Tensor)
 
-    @unittest.skip("MiniCPM can't sample already decoded videos, have to turn off sampling!")
     @parameterized.expand([(1, "pt")])
+    @unittest.skip("MiniCPM can't sample already decoded videos, have to turn off sampling!")
     def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
         pass
