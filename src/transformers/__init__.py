@@ -46,6 +46,7 @@ from . import (
     quantization_utils,
     quantizers,
     safetensors,
+    testing_utils,
     tf_utils,
     time_series_utils,
     tokenization_utils,

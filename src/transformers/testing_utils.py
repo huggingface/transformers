@@ -51,7 +51,7 @@ import httpx
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
-from .utils import logging as transformers_logging
+from transformers import logging as transformers_logging
 
 
 if TYPE_CHECKING:
