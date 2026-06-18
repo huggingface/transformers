@@ -92,12 +92,18 @@ def main() -> None:
     )
     print(f"      logits shape: {out_ie.logits.shape}  ✓")
 
-    print("\nAll forward passes OK.")
+    torch.save(
+        {
+            "text_logits": out.logits,
+            "pv_logits": out_pv.logits,
+            "ie_logits": out_ie.logits,
+        },
+        Path(args.debug_path) / "logits.pt",
+    )
+    print(f"\nAll forward passes OK.")
+    print(f"Saved logits → {args.debug_path}/logits.pt")
 
 
 if __name__ == "__main__":
     main()
 
-#PYTHONPATH=src python utils/modular_model_converter.py --files src/transformers/models/step_3_7_flash/modular_step3p7.py
-#PYTHONPATH=src python scripts/step_3_7_flash/demo.py --model-dir ./mini-step-3-7-flash --debug-path ./debug_step_3_7_flash
-#PYTHONPATH=src python scripts/step_3_7_flash/compare_outputs.py --original ./scripts/step_3_7_flash/debug_output --modified ./debug_step_3_7_flash
