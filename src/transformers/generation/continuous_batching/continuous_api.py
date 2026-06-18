@@ -753,7 +753,10 @@ class ContinuousBatchingManager:
         max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
         eos_token_id = self.generation_config.eos_token_id if eos_token_id is None else eos_token_id
 
-        # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
+        # Safeguard against adding ambiguous "multimodal" request that have in fact no multimodal inputs
+        if multimodal_inputs is not None and len(multimodal_inputs) == 0:
+            multimodal_inputs = None
+
         state = RequestState(
             request_id=request_id,
             initial_tokens=list(input_ids),

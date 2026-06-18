@@ -329,6 +329,11 @@ class RequestState:
         created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
         the _true_initial_tokens attribute. The logprobs of the generated tokens are kept in the new request."""
 
+        # If this is a request that had multimodal inputs AND they were consumed, since they cannot be retrieved, it's
+        # impossible to create an equivalent request: raise an error
+        if self.multimodal_inputs is not None and len(self.multimodal_inputs) == 0:
+            raise RuntimeError(f"Cannot soft reset a request that consumed its multimodal inputs: {self.request_id}")
+
         request_config = self.get_request_config()
         # If there is a number of max new tokens, we update it to account for the already generated tokens
         if self.max_new_tokens is not None:
@@ -339,6 +344,7 @@ class RequestState:
             initial_tokens=self.initial_tokens + self.generated_tokens,
             logprobs=self.logprobs[:],
             _true_initial_tokens=self._true_initial_tokens + len(self.initial_tokens),
+            multimodal_inputs=self.multimodal_inputs,
             **request_config,
         )
         # If the request has been soft reset once already, this stays the same
