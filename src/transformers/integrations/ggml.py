@@ -23,7 +23,7 @@ import numpy as np
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram
 
-from .. import AddedToken
+from ..tokenization_utils_base import AddedToken
 from ..convert_slow_tokenizer import GemmaConverter, GPT2Converter, LlamaConverter, Qwen2Converter, T5Converter
 from ..utils import logging
 from ..utils.logging import tqdm
