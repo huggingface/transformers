@@ -51,7 +51,14 @@ from transformers.models.auto.feature_extraction_auto import get_feature_extract
 from transformers.models.auto.image_processing_auto import get_image_processor_config
 from transformers.models.auto.tokenization_auto import REGISTERED_TOKENIZER_CLASSES
 from transformers.models.auto.video_processing_auto import get_video_processor_config
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test, require_scipy, require_tokenizers
+from transformers.testing_utils import (
+    TOKEN,
+    TemporaryHubRepo,
+    get_tests_dir,
+    is_staging_test,
+    require_scipy,
+    require_tokenizers,
+)
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
     FEATURE_EXTRACTOR_NAME,
