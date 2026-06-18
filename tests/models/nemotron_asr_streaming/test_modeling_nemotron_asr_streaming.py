@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch NemotronAsr model."""
+"""Testing suite for the PyTorch NemotronAsrStreaming model."""
 
 import json
 import unittest
@@ -39,20 +39,20 @@ if is_torch_available():
 
     from transformers import (
         AutoProcessor,
-        NemotronAsrConfig,
-        NemotronAsrEncoder,
-        NemotronAsrEncoderConfig,
-        NemotronAsrForRNNT,
+        NemotronAsrStreamingConfig,
+        NemotronAsrStreamingEncoder,
+        NemotronAsrStreamingEncoderConfig,
+        NemotronAsrStreamingForRNNT,
         TextIteratorStreamer,
     )
     from transformers.audio_utils import load_audio
 
 
-# NemotronAsr's modeling/config inherit from Parakeet (see `modular_nemotron_asr.py`), so the tests inherit
-# from the Parakeet testers/tests too and override only the NemotronAsr-specific classes and behaviours.
-class NemotronAsrEncoderModelTester(ParakeetEncoderModelTester):
+# NemotronAsrStreaming's modeling/config inherit from Parakeet (see `modular_nemotron_asr_streaming.py`), so the tests inherit
+# from the Parakeet testers/tests too and override only the NemotronAsrStreaming-specific classes and behaviours.
+class NemotronAsrStreamingEncoderModelTester(ParakeetEncoderModelTester):
     def get_config(self):
-        return NemotronAsrEncoderConfig(
+        return NemotronAsrStreamingEncoderConfig(
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -72,7 +72,7 @@ class NemotronAsrEncoderModelTester(ParakeetEncoderModelTester):
         )
 
     def create_and_check_model(self, config, input_features, attention_mask):
-        model = NemotronAsrEncoder(config=config)
+        model = NemotronAsrStreamingEncoder(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -84,24 +84,24 @@ class NemotronAsrEncoderModelTester(ParakeetEncoderModelTester):
 
 
 @require_torch
-class NemotronAsrEncoderModelTest(ParakeetEncoderModelTest):
-    all_model_classes = (NemotronAsrEncoder,) if is_torch_available() else ()
+class NemotronAsrStreamingEncoderModelTest(ParakeetEncoderModelTest):
+    all_model_classes = (NemotronAsrStreamingEncoder,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = NemotronAsrEncoderModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NemotronAsrEncoderConfig, has_text_modality=False)
+        self.model_tester = NemotronAsrStreamingEncoderModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=NemotronAsrStreamingEncoderConfig, has_text_modality=False)
 
 
-class NemotronAsrForRNNTModelTester(ParakeetForRNNTModelTester):
+class NemotronAsrStreamingForRNNTModelTester(ParakeetForRNNTModelTester):
     def __init__(self, parent, encoder_kwargs=None, vocab_size=128, joint_hidden_size=32, **kwargs):
         super().__init__(parent, encoder_kwargs=encoder_kwargs, vocab_size=vocab_size, **kwargs)
-        # NemotronAsr uses its own encoder tester (Parakeet's `__init__` wired the Parakeet one). The two share
+        # NemotronAsrStreaming uses its own encoder tester (Parakeet's `__init__` wired the Parakeet one). The two share
         # identical settings, so the encoder-derived attributes set by `super().__init__` stay valid.
-        self.encoder_model_tester = NemotronAsrEncoderModelTester(parent, **(encoder_kwargs or {}))
+        self.encoder_model_tester = NemotronAsrStreamingEncoderModelTester(parent, **(encoder_kwargs or {}))
         self.joint_hidden_size = joint_hidden_size
 
     def get_config(self):
-        return NemotronAsrConfig(
+        return NemotronAsrStreamingConfig(
             vocab_size=self.vocab_size,
             decoder_hidden_size=self.decoder_hidden_size,
             joint_hidden_size=self.joint_hidden_size,
@@ -114,7 +114,7 @@ class NemotronAsrForRNNTModelTester(ParakeetForRNNTModelTester):
         )
 
     def create_and_check_model(self, config, inputs_dict):
-        model = NemotronAsrForRNNT(config=config)
+        model = NemotronAsrStreamingForRNNT(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -131,7 +131,7 @@ class NemotronAsrForRNNTModelTester(ParakeetForRNNTModelTester):
         cache-aware context here so the code path is actually exercised rather than skipped.
         """
         config.encoder_config.att_context_size = [3, 1]
-        model = NemotronAsrForRNNT(config=config)
+        model = NemotronAsrStreamingForRNNT(config=config)
         model.to(torch_device).eval()
         state = model.get_initial_streaming_state(batch_size=self.batch_size, device=torch_device, dtype=torch.float32)
         self.parent.assertIn("cache_last_channel", state)
@@ -146,20 +146,20 @@ class NemotronAsrForRNNTModelTester(ParakeetForRNNTModelTester):
 
 
 @require_torch
-class NemotronAsrForRNNTModelTest(ParakeetForRNNTModelTest):
-    all_model_classes = (NemotronAsrForRNNT,) if is_torch_available() else ()
+class NemotronAsrStreamingForRNNTModelTest(ParakeetForRNNTModelTest):
+    all_model_classes = (NemotronAsrStreamingForRNNT,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": NemotronAsrEncoder,
-            "automatic-speech-recognition": NemotronAsrForRNNT,
+            "feature-extraction": NemotronAsrStreamingEncoder,
+            "automatic-speech-recognition": NemotronAsrStreamingForRNNT,
         }
         if is_torch_available()
         else {}
     )
 
     def setUp(self):
-        self.model_tester = NemotronAsrForRNNTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NemotronAsrConfig)
+        self.model_tester = NemotronAsrStreamingForRNNTModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=NemotronAsrStreamingConfig)
 
     def test_streaming_state_init(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -172,7 +172,7 @@ class NemotronAsrForRNNTModelTest(ParakeetForRNNTModelTest):
         the processor produced and corrupt the transcript. The guard raises before the generator is consumed.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = NemotronAsrForRNNT(config=config).to(torch_device).eval()
+        model = NemotronAsrStreamingForRNNT(config=config).to(torch_device).eval()
 
         consumed = False
 
@@ -190,19 +190,19 @@ class NemotronAsrForRNNTModelTest(ParakeetForRNNTModelTest):
 
 # HF-format conversion of the original NeMo `nvidia/nemotron-speech-streaming-en-0.6b` checkpoint, published as a
 # PR on the Hub until it is merged into the main revision.
-NEMOTRON_ASR_CHECKPOINT = "nvidia/nemotron-speech-streaming-en-0.6b"
-NEMOTRON_ASR_REVISION = "refs/pr/17"
+NEMOTRON_ASR_STREAMING_CHECKPOINT = "nvidia/nemotron-speech-streaming-en-0.6b"
+NEMOTRON_ASR_STREAMING_REVISION = "refs/pr/17"
 # Long, single-speaker sample (~16 min of Obama's farewell address), used to exercise chunked streaming.
 OBAMA_AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3"
 
 
 @require_torch
-class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
-    """Integration tests for NemotronAsrForRNNT.
+class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
+    """Integration tests for NemotronAsrStreamingForRNNT.
 
     Expected transcriptions are the outputs of the original NeMo cache-aware streaming model
     `nvidia/nemotron-speech-streaming-en-0.6b` on the same audio, loaded from the
-    `fixtures/nemotron_asr/expected_results_*.json` fixtures. The reproducers that regenerate these reference
+    `fixtures/nemotron_asr_streaming/expected_results_*.json` fixtures. The reproducers that regenerate these reference
     values live at https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb (run `run_reproducers.sh`).
     Inference runs in float32 to track the NeMo reference as closely as possible.
 
@@ -220,8 +220,8 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUp(cls):
-        cls.checkpoint_name = NEMOTRON_ASR_CHECKPOINT
-        cls.revision = NEMOTRON_ASR_REVISION
+        cls.checkpoint_name = NEMOTRON_ASR_STREAMING_CHECKPOINT
+        cls.revision = NEMOTRON_ASR_STREAMING_REVISION
         cls.dtype = torch.float32
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
 
@@ -292,12 +292,12 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
     def test_rnnt_model_integration(self):
         # NeMo `nvidia/nemotron-speech-streaming-en-0.6b` reference; HF matches it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_single_rnnt-py
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr/expected_results_single.json"
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr_streaming/expected_results_single.json"
         with open(RESULTS_PATH) as f:
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = NemotronAsrForRNNT.from_pretrained(
+        model = NemotronAsrStreamingForRNNT.from_pretrained(
             self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
         )
 
@@ -311,12 +311,12 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
     def test_rnnt_model_integration_batched(self):
         # NeMo reference; all five HF transcripts match it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_batch_rnnt-py
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr/expected_results_batch.json"
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr_streaming/expected_results_batch.json"
         with open(RESULTS_PATH) as f:
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = NemotronAsrForRNNT.from_pretrained(
+        model = NemotronAsrStreamingForRNNT.from_pretrained(
             self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
         )
 
@@ -343,12 +343,12 @@ class NemotronAsrForRNNTIntegrationTest(unittest.TestCase):
         # emission flipped by ~1e-3 numerical drift in the re-implemented FastConformer encoder (WER-neutral).
         # We assert against the NeMo reference, so this test is expected to fail on that one sub-word until the
         # encoder drift is closed.
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr/expected_results_streaming.json"
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr_streaming/expected_results_streaming.json"
         with open(RESULTS_PATH) as f:
             EXPECTED_TRANSCRIPTION = json.load(f)["transcription"]
 
         audio = load_audio(OBAMA_AUDIO_URL, sampling_rate=self.processor.feature_extractor.sampling_rate)
-        model = NemotronAsrForRNNT.from_pretrained(
+        model = NemotronAsrStreamingForRNNT.from_pretrained(
             self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
         )
 

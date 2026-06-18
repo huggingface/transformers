@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Convert a NeMo cache-aware streaming RNN-T checkpoint (e.g. `nvidia/nemotron-speech-streaming-en-0.6b`)
-to the HuggingFace `NemotronAsr` format.
+to the HuggingFace `NemotronAsrStreaming` format.
 
 Adapted from `src/transformers/models/parakeet/convert_nemo_to_hf.py`. The encoder/decoder/joint module
 layout is shared with Parakeet, so the weight key mappings are identical; the differences are:
-  * the target classes are `NemotronAsr*` instead of `Parakeet*`,
-  * the feature extractor is `NemotronAsrFeatureExtractor`, which removes per-feature normalization
+  * the target classes are `NemotronAsrStreaming*` instead of `Parakeet*`,
+  * the feature extractor is `NemotronAsrStreamingFeatureExtractor`, which removes per-feature normalization
     entirely (NeMo's `preprocessor.normalize` is therefore dropped, not translated to `do_normalize`),
   * only RNN-T is supported (the streaming Nemotron checkpoints are transducers).
 """
@@ -34,11 +34,11 @@ import yaml
 from tokenizers import AddedToken
 
 from transformers import (
-    NemotronAsrConfig,
-    NemotronAsrEncoderConfig,
-    NemotronAsrFeatureExtractor,
-    NemotronAsrForRNNT,
-    NemotronAsrProcessor,
+    NemotronAsrStreamingConfig,
+    NemotronAsrStreamingEncoderConfig,
+    NemotronAsrStreamingFeatureExtractor,
+    NemotronAsrStreamingForRNNT,
+    NemotronAsrStreamingProcessor,
     ParakeetTokenizer,
 )
 from transformers.convert_slow_tokenizer import ParakeetConverter
@@ -175,7 +175,7 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
         }
     )
 
-    # NemotronAsrFeatureExtractor only supports these constructor arguments. Unlike Parakeet, it has no
+    # NemotronAsrStreamingFeatureExtractor only supports these constructor arguments. Unlike Parakeet, it has no
     # normalization step at all, so NeMo's `preprocessor.normalize` is dropped rather than translated.
     feature_extractor_config_keys_mapping = {
         "sample_rate": "sampling_rate",
@@ -186,7 +186,7 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
         "pad_value": "padding_value",
         "preemphasis": "preemphasis",
     }
-    # Everything else in NeMo's preprocessor block has no counterpart in NemotronAsrFeatureExtractor.
+    # Everything else in NeMo's preprocessor block has no counterpart in NemotronAsrStreamingFeatureExtractor.
     feature_extractor_keys_to_ignore = [
         "_target_",
         "normalize",
@@ -210,7 +210,7 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
         else:
             raise ValueError(f"Key {key} not found in feature_extractor_config_keys_mapping")
 
-    feature_extractor = NemotronAsrFeatureExtractor(**converted_feature_extractor_config)
+    feature_extractor = NemotronAsrStreamingFeatureExtractor(**converted_feature_extractor_config)
     # Carry the model's supported right attention contexts onto the processor — the single source of truth for
     # the supported set, which `set_num_lookahead_tokens` validates against and which `__call__` emits as
     # `num_lookahead_tokens`. NeMo stores a single [left, right] pair, a list of pairs (multi-lookahead), or
@@ -221,7 +221,7 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
         pairs = att_context_size if isinstance(att_context_size[0], (list, tuple)) else [att_context_size]
         supported_num_lookahead_tokens = [right for _, right in pairs]
         default_num_lookahead_tokens = pairs[0][1]
-    processor = NemotronAsrProcessor(
+    processor = NemotronAsrStreamingProcessor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer_converted_fast,
         supported_num_lookahead_tokens=supported_num_lookahead_tokens,
@@ -239,7 +239,7 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
 
 
 def convert_encoder_config(nemo_config):
-    """Convert NeMo encoder config to a `NemotronAsrEncoderConfig`."""
+    """Convert NeMo encoder config to a `NemotronAsrStreamingEncoderConfig`."""
     encoder_keys_to_ignore = [
         "stochastic_depth_start_layer",
         "feat_out",
@@ -255,7 +255,7 @@ def convert_encoder_config(nemo_config):
         "reduction_position",
         # Multi-lookahead training-only sampling probs; inference uses the first context only.
         "att_context_probs",
-        # These are inherent to the NemotronAsr cache-aware architecture and are not represented in the HF
+        # These are inherent to the NemotronAsrStreaming cache-aware architecture and are not represented in the HF
         # config: the conv module is always layer-norm + fully causal, and the subsampling is always causal.
         "att_context_style",
         "conv_norm_type",
@@ -311,7 +311,7 @@ def convert_encoder_config(nemo_config):
         else:
             raise ValueError(f"Key {key} not found in encoder_config_keys_mapping")
 
-    return NemotronAsrEncoderConfig(**converted_encoder_config)
+    return NemotronAsrStreamingEncoderConfig(**converted_encoder_config)
 
 
 def _resolve_transducer_labels(nemo_config: dict) -> tuple[list, int]:
@@ -333,7 +333,7 @@ def _resolve_transducer_labels(nemo_config: dict) -> tuple[list, int]:
 
 
 def convert_rnnt_config(nemo_config, encoder_config):
-    """Convert NeMo RNN-T config to a `NemotronAsrConfig`."""
+    """Convert NeMo RNN-T config to a `NemotronAsrStreamingConfig`."""
     decoder_config = nemo_config["decoder"]
     joint_config = nemo_config["joint"]
     labels, pad_token_id = _resolve_transducer_labels(nemo_config)
@@ -354,7 +354,7 @@ def convert_rnnt_config(nemo_config, encoder_config):
         f"decoder_layers={num_decoder_layers}, max_symbols_per_step={max_symbols_per_step}"
     )
 
-    return NemotronAsrConfig(
+    return NemotronAsrStreamingConfig(
         vocab_size=vocab_size,
         decoder_hidden_size=decoder_hidden_size,
         joint_hidden_size=joint_hidden_size,
@@ -394,9 +394,9 @@ def write_rnnt_model(nemo_config, encoder_config, model_files, output_dir, push_
 
     converted_state_dict = load_and_convert_rnnt_state_dict(model_files)
 
-    print("Loading the checkpoint in a NemotronAsr RNN-T model.")
+    print("Loading the checkpoint in a NemotronAsrStreaming RNN-T model.")
     with torch.device("meta"):
-        model = NemotronAsrForRNNT(model_config)
+        model = NemotronAsrStreamingForRNNT(model_config)
 
     missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False, assign=True)
 
@@ -421,7 +421,7 @@ def write_rnnt_model(nemo_config, encoder_config, model_files, output_dir, push_
 
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    NemotronAsrForRNNT.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
+    NemotronAsrStreamingForRNNT.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
 
@@ -463,14 +463,14 @@ def main(
 """
 Conversion example (Hub):
 ```bash
-python src/transformers/models/nemotron_asr/convert_nemotron_asr_to_hf.py \
+python src/transformers/models/nemotron_asr_streaming/convert_nemotron_asr_streaming_to_hf.py \
     --hf_repo_id nvidia/nemotron-speech-streaming-en-0.6b \
     --output_dir OUTPUT_DIR
 ```
 
 Conversion example (local .nemo file):
 ```bash
-python src/transformers/models/nemotron_asr/convert_nemotron_asr_to_hf.py \
+python src/transformers/models/nemotron_asr_streaming/convert_nemotron_asr_streaming_to_hf.py \
     --nemo_file /path/to/nemotron-speech-streaming-en-0.6b.nemo \
     --hf_repo_id nvidia/nemotron-speech-streaming-en-0.6b \
     --output_dir OUTPUT_DIR

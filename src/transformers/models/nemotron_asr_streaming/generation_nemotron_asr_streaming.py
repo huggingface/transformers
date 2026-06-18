@@ -25,14 +25,14 @@ from ...models.parakeet.generation_parakeet import (
 )
 
 
-class NemotronAsrRNNTDecoderCache(ParakeetRNNTDecoderCache): ...
+class NemotronAsrStreamingRNNTDecoderCache(ParakeetRNNTDecoderCache): ...
 
 
-class NemotronAsrGenerateOutput(ParakeetRNNTGenerateOutput): ...
+class NemotronAsrStreamingGenerateOutput(ParakeetRNNTGenerateOutput): ...
 
 
-class NemotronAsrGenerationMixin(ParakeetRNNTGenerationMixin):
-    """Generation mixin for NemotronAsr RNN-T models.
+class NemotronAsrStreamingGenerationMixin(ParakeetRNNTGenerationMixin):
+    """Generation mixin for NemotronAsrStreaming RNN-T models.
 
     Inherits the shared transducer machinery from [`ParakeetRNNTGenerationMixin`] (encoder frame tracking,
     decoder cache preparation, encoder-exhaustion stopping, per-step durations and output-buffer sizing) and
@@ -160,7 +160,7 @@ class NemotronAsrGenerationMixin(ParakeetRNNTGenerationMixin):
     def _prepare_encoder_decoder_kwargs_for_generation(
         self, inputs_tensor, model_kwargs, model_input_name, generation_config
     ):
-        from .modeling_nemotron_asr import NemotronAsrEncoderModelOutput
+        from .modeling_nemotron_asr_streaming import NemotronAsrStreamingEncoderModelOutput
 
         if not getattr(self, "_streaming", False):
             return super()._prepare_encoder_decoder_kwargs_for_generation(
@@ -179,7 +179,7 @@ class NemotronAsrGenerationMixin(ParakeetRNNTGenerationMixin):
 
         model_kwargs["encoder_past_key_values"] = outputs.encoder_past_key_values
         model_kwargs["padding_cache"] = outputs.padding_cache
-        model_kwargs["encoder_outputs"] = NemotronAsrEncoderModelOutput(pooler_output=outputs.pooler_output)
+        model_kwargs["encoder_outputs"] = NemotronAsrStreamingEncoderModelOutput(pooler_output=outputs.pooler_output)
         model_kwargs["encoder_valid_lengths"] = torch.full(
             (batch_size,), outputs.pooler_output.shape[1], dtype=torch.long, device=self.device
         )
@@ -187,15 +187,15 @@ class NemotronAsrGenerationMixin(ParakeetRNNTGenerationMixin):
         return model_kwargs
 
     def _prepare_cache_for_generation(self, generation_config, model_kwargs, *args, **kwargs):
-        model_kwargs["decoder_cache"] = NemotronAsrRNNTDecoderCache(self.config)
+        model_kwargs["decoder_cache"] = NemotronAsrStreamingRNNTDecoderCache(self.config)
 
     def prepare_inputs_for_generation(self, input_ids, *args, **kwargs):
-        from .modeling_nemotron_asr import NemotronAsrEncoderModelOutput
+        from .modeling_nemotron_asr_streaming import NemotronAsrStreamingEncoderModelOutput
 
         # Bypass ParakeetRNNTGenerationMixin's `prepare_inputs_for_generation` (it would build a
-        # `ParakeetEncoderModelOutput`, which `NemotronAsrForRNNT.forward` does not recognize via isinstance
+        # `ParakeetEncoderModelOutput`, which `NemotronAsrStreamingForRNNT.forward` does not recognize via isinstance
         # and would mangle into `pooler_output=None`). Go straight to the base GenerationMixin and select the
-        # current encoder frame into a `NemotronAsrEncoderModelOutput`.
+        # current encoder frame into a `NemotronAsrStreamingEncoderModelOutput`.
         model_inputs = GenerationMixin.prepare_inputs_for_generation(self, input_ids, *args, **kwargs)
         encoder_frame_idxs = model_inputs.pop("encoder_frame_idxs").to(
             model_inputs["encoder_outputs"].pooler_output.device
@@ -204,7 +204,7 @@ class NemotronAsrGenerationMixin(ParakeetRNNTGenerationMixin):
         pooler_output = model_inputs["encoder_outputs"].pooler_output
         batch_size, max_encoder_len = pooler_output.shape[0], pooler_output.shape[1]
         encoder_frame_idxs = encoder_frame_idxs.clamp(max=max_encoder_len - 1)
-        model_inputs["encoder_outputs"] = NemotronAsrEncoderModelOutput(
+        model_inputs["encoder_outputs"] = NemotronAsrStreamingEncoderModelOutput(
             pooler_output=pooler_output[torch.arange(batch_size), encoder_frame_idxs, None],
         )
 
@@ -233,5 +233,5 @@ class NemotronAsrGenerationMixin(ParakeetRNNTGenerationMixin):
                     delattr(self, attr)
 
         if isinstance(outputs, ParakeetRNNTGenerateOutput):
-            return NemotronAsrGenerateOutput(sequences=outputs.sequences, durations=outputs.durations)
-        return NemotronAsrGenerateOutput(sequences=outputs)
+            return NemotronAsrStreamingGenerateOutput(sequences=outputs.sequences, durations=outputs.durations)
+        return NemotronAsrStreamingGenerateOutput(sequences=outputs)

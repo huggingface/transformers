@@ -15,11 +15,11 @@ rendered properly in your Markdown viewer.
 -->
 *This model was published in HF papers on 2023-05-08 and contributed to Hugging Face Transformers on 2026-06-02.*
 
-# NemotronAsr
+# NemotronAsrStreaming
 
 ## Overview
 
-TODO
+Nemotron-ASR-Streaming is a 600M-parameter English speech recognition model from NVIDIA, built for high-quality transcription in both low-latency streaming and…Nemotron-ASR-Streaming is a 600M-parameter English speech recognition model from NVIDIA, built for high-quality transcription in both low-latency streaming and high-throughput batch settings, with native punctuation and capitalization. For streaming, it offers configurable chunk sizes—80ms, 160ms, 560ms, and 1120ms—letting users trade off latency against accuracy to suit their application. Its Cache-Aware FastConformer-RNNT architecture is central to this capability: unlike traditional buffered streaming, which repeatedly reprocesses overlapping audio windows, the model processes only each new incoming chunk while reusing cached encoder context from prior chunks. This eliminates redundant computation, significantly improves efficiency, and minimizes end-to-end delay without sacrificing accuracy, making it well suited to real-time transcription workloads.
 
 ## Usage
 
@@ -163,39 +163,39 @@ print(processor.streaming_latency_ms)
 
 `set_num_lookahead_tokens` sizes the chunks the processor emits, and the matching `num_lookahead_tokens` must reach `generate` (in the snippet above it travels through `**inputs`/`**first_chunk_inputs`, which carries `num_lookahead_tokens`). Streaming `generate` raises if it is omitted.
 
-## NemotronAsrConfig
+## NemotronAsrStreamingConfig
 
-[[autodoc]] NemotronAsrConfig
+[[autodoc]] NemotronAsrStreamingConfig
 
-## NemotronAsrEncoderConfig
+## NemotronAsrStreamingEncoderConfig
 
-[[autodoc]] NemotronAsrEncoderConfig
+[[autodoc]] NemotronAsrStreamingEncoderConfig
 
-## NemotronAsrFeatureExtractor
+## NemotronAsrStreamingFeatureExtractor
 
-[[autodoc]] NemotronAsrFeatureExtractor
+[[autodoc]] NemotronAsrStreamingFeatureExtractor
 
-## NemotronAsrProcessor
+## NemotronAsrStreamingProcessor
 
-[[autodoc]] NemotronAsrProcessor
+[[autodoc]] NemotronAsrStreamingProcessor
     - __call__
     - decode
 
-## NemotronAsrEncoderModelOutput
+## NemotronAsrStreamingEncoderModelOutput
 
-[[autodoc]] NemotronAsrEncoderModelOutput
+[[autodoc]] NemotronAsrStreamingEncoderModelOutput
 
-## NemotronAsrRNNTOutput
+## NemotronAsrStreamingRNNTOutput
 
-[[autodoc]] NemotronAsrRNNTOutput
+[[autodoc]] NemotronAsrStreamingRNNTOutput
 
-## NemotronAsrEncoder
+## NemotronAsrStreamingEncoder
 
-[[autodoc]] NemotronAsrEncoder
+[[autodoc]] NemotronAsrStreamingEncoder
     - forward
 
-## NemotronAsrForRNNT
+## NemotronAsrStreamingForRNNT
 
-[[autodoc]] NemotronAsrForRNNT
+[[autodoc]] NemotronAsrStreamingForRNNT
     - forward
     - generate

@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_nemotron_asr import *
-    from .feature_extraction_nemotron_asr import *
-    from .modeling_nemotron_asr import *
-    from .processing_nemotron_asr import *
+    from .configuration_nemotron_asr_streaming import *
+    from .feature_extraction_nemotron_asr_streaming import *
+    from .modeling_nemotron_asr_streaming import *
+    from .processing_nemotron_asr_streaming import *
 else:
     import sys
 
