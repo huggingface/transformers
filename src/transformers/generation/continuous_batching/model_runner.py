@@ -234,12 +234,6 @@ class ModelRunner:
             dummy_dim, num_logits, vocab_size = logits.shape
             logits_2d = logits.view(dummy_dim * num_logits, vocab_size)
             sliced_input_ids_2d = batch_data["input_ids"][0, logits_indices]  # shape [num_logits]
-
-            # TODO: FIXME: rebase change, check if can be deleted
-            # dummy_dim, num_tokens, vocab_size = logits.shape
-            # logits_2d = logits.view(dummy_dim * num_tokens, vocab_size)
-            # input_ids_2d = input_ids.view(dummy_dim * num_tokens)
-
             # Process with 2D tensors
             logits_2d = self.logit_processor(sliced_input_ids_2d, logits_2d, batch_data["logits_processor_args"])
             # Reshape back to 3D
