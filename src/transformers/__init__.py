@@ -861,3 +861,13 @@ if not is_torch_available():
     logger.warning_advice(
         "PyTorch was not found. Models won't be available and only tokenizers, configuration and file/data utilities can be used."
     )
+
+# Phi-optimized generation
+from .generation.phi_utils import (
+    PhiRecursiveGenerator,
+    phi_temperature,
+    phi_top_p,
+    phi_top_k,
+    phi_repetition_penalty,
+    phi_max_tokens,
+)
