@@ -1135,11 +1135,12 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                     # remove remaining candidate ids if an "eos" token is found, otherwise the target model may
                     # accept eos and the rest as valid, thus not stopping generation after "eos"
                     # NOTE: below code is written based on the fact that assisted decoding supports only bs=1
-                    mask = torch.isin(chosen_ids, self.eos_token_id)
-                    match_indices_eos = torch.nonzero(mask)
-                    if match_indices_eos.numel() > 0:
-                        first_eos_index = match_indices_eos[0].item()
-                        chosen_ids = chosen_ids[:first_eos_index]
+                    if self.eos_token_id is not None:
+                        mask = torch.isin(chosen_ids, self.eos_token_id)
+                        match_indices_eos = torch.nonzero(mask)
+                        if match_indices_eos.numel() > 0:
+                            first_eos_index = match_indices_eos[0].item()
+                            chosen_ids = chosen_ids[:first_eos_index]
                     break
             if match_found:
                 break
