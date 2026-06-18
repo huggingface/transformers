@@ -1,5 +1,4 @@
 import copy
-from collections.abc import Sequence
 from typing import Any
 
 from transformers.configuration_utils import PretrainedConfig
@@ -95,54 +94,11 @@ class Step3p7TextConfig(PretrainedConfig):
         swiglu_limits_shared: list[float | None] | None = None,
         use_rope_layers: list[bool] | None = None,
         yarn_only_types: list[str] | None = None,
-        moe_layers_enum: tuple[int] = (
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23,
-            24,
-            25,
-            26,
-            27,
-            28,
-            29,
-            30,
-            31,
-            32,
-            33,
-            34,
-            35,
-            36,
-            37,
-            38,
-            39,
-            40,
-            41,
-            42,
-            43,
-            44,
-        ),
+        mlp_layer_types: list[str] | None = None,
+        moe_layers_enum: tuple[int] | str | None = None,
         **kwargs,
     ) -> None:
         torch_dtype = kwargs.get("torch_dtype")
-        trim_layer_types = _normalize_per_layer_values(layer_types, num_hidden_layers)
         if isinstance(rope_scaling, dict):
             rope_scaling = dict(rope_scaling)
         if share_expert_dim is None:
@@ -164,8 +120,15 @@ class Step3p7TextConfig(PretrainedConfig):
         self.share_expert_dim = share_expert_dim
         self.head_dim = head_dim
         self.norm_expert_weight = norm_expert_weight
-        self.moe_layers_enum = moe_layers_enum
-        self.layer_types = trim_layer_types
+        if mlp_layer_types is None:
+            if moe_layers_enum is not None:
+                items = moe_layers_enum.split(",") if isinstance(moe_layers_enum, str) else moe_layers_enum
+                moe_set = {int(i) for i in items if str(i).strip()}
+            else:
+                moe_set = set(range(3, num_hidden_layers))
+            mlp_layer_types = ["sparse" if i in moe_set else "dense" for i in range(num_hidden_layers)]
+        self.mlp_layer_types = mlp_layer_types
+        self.layer_types = layer_types
         self.sliding_window = sliding_window
         self.pad_token_id = pad_token_id
         self.attention_dropout = attention_dropout
@@ -185,7 +148,6 @@ class Step3p7TextConfig(PretrainedConfig):
         super().__init__(**kwargs)
         if torch_dtype is not None:
             self.torch_dtype = torch_dtype
-        self.layer_types = layer_types
 
     @property
     def num_key_value_heads(self):
@@ -197,23 +159,6 @@ class Step3p7TextConfig(PretrainedConfig):
         if torch_dtype is not None:
             output["torch_dtype"] = torch_dtype
         return output
-
-
-def _normalize_per_layer_values(
-    values: Sequence[Any] | None,
-    num_hidden_layers: int,
-) -> list[Any] | None:
-    if values is None:
-        return None
-    normalized = list(values)
-    if not normalized:
-        return normalized
-    if len(normalized) < num_hidden_layers:
-        normalized.extend([normalized[-1]] * (num_hidden_layers - len(normalized)))
-    # Some checkpoints keep MTP/spec layer entries after the decoder layers.
-    # This config only builds num_hidden_layers decoder layers, and HF strict
-    # validation requires per-layer fields to match that decoder count.
-    return normalized[:num_hidden_layers]
 
 
 class Step3p7Config(PretrainedConfig):

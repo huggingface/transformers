@@ -443,8 +443,22 @@ class Step3p7Experts(DeepseekV4Experts):
 
 
 class Step3p7SparseMoeBlock(MiniMaxM3VLSparseMoeBlock):
-    def __init__(self, config, swiglu_limit=None, swiglu_limit_shared=None):
+    def __init__(self, config, layer_idx):
         nn.Module.__init__(self)
+        swiglu_limit = (
+            config.swiglu_limits[layer_idx]
+            if config.swiglu_limits
+            and config.swiglu_limits[layer_idx] is not None
+            and config.swiglu_limits[layer_idx] != 0
+            else None
+        )
+        swiglu_limit_shared = (
+            config.swiglu_limits_shared[layer_idx]
+            if config.swiglu_limits_shared
+            and config.swiglu_limits_shared[layer_idx] is not None
+            and config.swiglu_limits_shared[layer_idx] != 0
+            else None
+        )
         self.gate = Step3p7TopKRouter(config)
         self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
         self.shared_experts = Step3p7SharedExpert(config, swiglu_limit=swiglu_limit_shared)
@@ -474,12 +488,11 @@ class Step3p7Attention(MiniMaxM3VLAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
-        past_key_value: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -487,20 +500,18 @@ class Step3p7Attention(MiniMaxM3VLAttention):
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # per-head scalar gate_states (afmoe per-token, more fine-grained)
         gate_states = self.g_proj(hidden_states)
-        cos, sin = self.rotary_emb(hidden_states, position_ids)
-
+        if position_embeddings is None:
+            position_embeddings = self.rotary_emb(hidden_states, kwargs.get("position_ids"))
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -518,7 +529,6 @@ class Step3p7Attention(MiniMaxM3VLAttention):
             * gate_states.unsqueeze(-1).sigmoid()
         ).view(*attn_output.shape)
         attn_output = self.o_proj(attn_output)
-
         return attn_output, attn_weights
 
 
@@ -530,16 +540,6 @@ class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):
         self.self_attn = Step3p7Attention(config, layer_idx)
         self.attention_type = config.layer_types[layer_idx]
 
-        moe_layers_enum = getattr(config, "moe_layers_enum", None)
-        if moe_layers_enum is not None:
-            if isinstance(moe_layers_enum, str):
-                moe_layers_idx = [int(i) for i in moe_layers_enum.split(",") if i.strip()]
-            else:
-                moe_layers_idx = [int(i) for i in moe_layers_enum]
-        else:
-            moe_layers_idx = [i for i in range(1, config.num_hidden_layers)]
-        self.is_moe_layer = layer_idx in moe_layers_idx
-
         swiglu_limit_shared = (
             config.swiglu_limits_shared[layer_idx]
             if config.swiglu_limits_shared
@@ -547,47 +547,14 @@ class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):
             and config.swiglu_limits_shared[layer_idx] != 0
             else None
         )
-        swiglu_limit = (
-            config.swiglu_limits[layer_idx]
-            if config.swiglu_limits
-            and config.swiglu_limits[layer_idx] is not None
-            and config.swiglu_limits[layer_idx] != 0
-            else None
+        self.mlp = (
+            Step3p7SparseMoeBlock(config, layer_idx)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else Step3p7MLP(config, swiglu_limit=swiglu_limit_shared)
         )
-        if self.is_moe_layer:
-            self.mlp = Step3p7SparseMoeBlock(config, swiglu_limit=swiglu_limit, swiglu_limit_shared=swiglu_limit_shared)
-        else:
-            self.mlp = Step3p7MLP(config, swiglu_limit=swiglu_limit_shared)
 
         self.input_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_value: tuple[torch.Tensor] | None = None,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> torch.FloatTensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            cache_position=cache_position,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = residual + self.mlp(hidden_states)
-        return hidden_states
 
 
 class Step3p7TextPreTrainedModel(Step3p7PreTrainedModel):
@@ -693,10 +660,9 @@ class Step3p7TextModel(Step3p7TextPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
