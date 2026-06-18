@@ -24,7 +24,13 @@ from ..conversion_mapping import get_checkpoint_conversion_mapping, register_che
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.generic import is_flash_attention_requested
-from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION, is_kernels_available, is_torch_available
+from ..utils.import_utils import (
+    KERNELS_MAX_VERSION,
+    KERNELS_MIN_VERSION,
+    is_kernels_available,
+    is_rocm_platform,
+    is_torch_available,
+)
 from .flash_attention import flash_attention_forward
 
 
@@ -56,9 +62,13 @@ if is_kernels_available():
         Mode,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
+        use_kernel_mapping,
     )
     from kernels import (
         get_kernel as get_kernel_hub,
+    )
+    from kernels import (
+        kernelize as _kernels_kernelize,
     )
     from kernels import (
         use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
@@ -510,6 +520,51 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
+def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
+    """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
+    if not is_kernels_available():
+        raise ValueError(
+            "Kernels are not available. To use kernels, please install kernels using `pip install -U kernels`"
+        )
+
+    def attach_hidden_kernels(module):
+        for name, fn in getattr(module, "_hidden_kernels", {}).items():
+            if name not in dict(module.named_children()):
+                if not isinstance(fn, nn.Module):
+                    raise ValueError(
+                        f"Attempted to register a kernel for {name}, but it was not a `torch.nn.Module`. "
+                        "This means the underlying function needs to be decorated with `@use_kernel_func_from_hub`. "
+                        "Please submit and issue to the transformers repo: `https://github.com/huggingface/transformers/issues`."
+                    )
+                module.register_module(name, fn)
+
+    def detach_hidden_kernels(module):
+        for name in getattr(module, "_hidden_kernels", {}):
+            # Skip deregistering if it failed to properly register,
+            # i.e. `ValueError` will be raised afterwards
+            if hasattr(module, name):
+                delattr(module, name)
+
+    try:
+        model.apply(attach_hidden_kernels)
+
+        mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
+        device_type = model.device.type
+        if device_type == "cuda" and is_rocm_platform():
+            device_type = "rocm"
+        device = Device(type=device_type)
+        if model.kernel_config is not None:
+            inherit_mapping = not model.kernel_config.use_local_kernel
+            with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+                _kernels_kernelize(model, device=device, mode=mode)
+        else:
+            _kernels_kernelize(model, device=device, mode=mode)
+
+        model._use_kernels = True
+    finally:
+        model.apply(detach_hidden_kernels)
+
+
 def get_kernel(
     kernel_name: str,
     revision: str | None = None,
@@ -762,6 +817,7 @@ def register_kernel_replacements_and_fusions(
 __all__ = [
     "LayerRepository",
     "get_kernel",
+    "kernelize",
     "lazy_load_kernel",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
