@@ -400,7 +400,7 @@ if __name__ == "__main__":
         results.add_benchmark(
             data=gsm8k_data,
             max_new_tokens=256,
-            cb_config=ContinuousBatchingConfig(use_default_compile_configs=True),
+            cb_config=ContinuousBatchingConfig(default_compile_level=1),
             gen_config=GenerationConfig(eos_token_id=-1),
             label="gsm8k_compile",
             score_fn=gsm8k_score_fn,
@@ -463,7 +463,7 @@ if __name__ == "__main__":
         results.add_benchmark(
             data=get_random_data(batch_size=32, num_tokens=256),
             max_new_tokens=length,
-            cb_config=ContinuousBatchingConfig(use_default_compile_configs=True),
+            cb_config=ContinuousBatchingConfig(default_compile_level=1),
             gen_config=GenerationConfig(eos_token_id=-1),
             label=f"rollouts_{length}",
         )

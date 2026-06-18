@@ -62,10 +62,11 @@ When a new request's prompt exceeds the available token budget (set by `max_batc
 
 ## Scheduler
 
-The scheduler decides which requests join each forward pass based on two budgets.
+The scheduler decides which requests join each forward pass based on two budgets and a request cap.
 
 - Token budget — the maximum number of query tokens processed in a single forward pass, set by `max_batch_tokens` in [`ContinuousBatchingConfig`].
 - Cache budget — the total number of KV pages that can be read in a single pass, which is bounded by the total cache size.
+- Request cap — the maximum number of requests in a single forward pass, set by `max_requests_per_batch`. The logits tensor scales with the vocabulary size, so this cap bounds peak memory for large-vocabulary models.
 
 ### FIFO
 
@@ -116,7 +117,7 @@ cb_config = ContinuousBatchingConfig(
 
 Before a request joins the batch, the scheduler checks that enough free blocks exist for every layer group. If any group would fall short, the request is rejected and nothing is allocated.
 
-To avoid filling the cache until [offloading](#offloading) is the only option, the default FIFO scheduler enforces a safety margin. Once free blocks fall below 20% of the total, new prefills are held back and only active decodes continue.
+To avoid filling the cache until [offloading](#offloading) is the only option, the scheduler enforces a `safety_margin`. Once free blocks fall below `safety_margin * num_blocks`, new prefills are held back and only active decodes continue. The FIFO scheduler defaults to `0.15` (15% of blocks held in reserve), while `prefill_first` defaults to `0.0`. Set `safety_margin` in [`ContinuousBatchingConfig`] to tune it, where `0` disables the margin.
 
 ### Prefix caching
 
