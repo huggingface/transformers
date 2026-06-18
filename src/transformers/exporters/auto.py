@@ -50,9 +50,7 @@ class AutoExportConfig:
         export_format = export_config_dict.get("export_format")
 
         if export_format is None:
-            raise ValueError(
-                "export_config_dict must contain key 'export_format' (preferred) or 'exporter' set to exporter name"
-            )
+            raise ValueError("export_config_dict must contain key 'export_format' set to exporter name")
 
         # Allow passing an ExportFormat enum value or a plain string
         if isinstance(export_format, ExportFormat):
@@ -97,11 +95,8 @@ class AutoHfExporter:
 
     @staticmethod
     def supports_export_format(export_config_dict: dict) -> bool:
-        """Return True if the provided dict describes a supported export_format.
-
-        Accepts both `export_format` and legacy `exporter` keys, and ExportFormat enum values.
-        """
-        export_fmt = export_config_dict.get("export_format", export_config_dict.get("exporter"))
+        """Return True if the provided dict describes a supported export_format."""
+        export_fmt = export_config_dict.get("export_format")
         if export_fmt is None:
             return False
 
