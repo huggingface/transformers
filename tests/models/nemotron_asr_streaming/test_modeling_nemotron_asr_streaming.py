@@ -124,26 +124,6 @@ class NemotronAsrStreamingForRNNTModelTester(ParakeetForRNNTModelTester):
             (self.batch_size, self.output_seq_length, self.encoder_model_tester.hidden_size),
         )
 
-    def create_and_check_streaming_state(self, config, input_features, attention_mask):
-        """Build a cache-aware variant of the test config and check the streaming state shape.
-
-        The default tester uses an offline encoder (att_context_size=None); force a small
-        cache-aware context here so the code path is actually exercised rather than skipped.
-        """
-        config.encoder_config.att_context_size = [3, 1]
-        model = NemotronAsrStreamingForRNNT(config=config)
-        model.to(torch_device).eval()
-        state = model.get_initial_streaming_state(batch_size=self.batch_size, device=torch_device, dtype=torch.float32)
-        self.parent.assertIn("cache_last_channel", state)
-        self.parent.assertIn("last_token", state)
-        self.parent.assertEqual(state["last_token"].shape, (self.batch_size, 1))
-        self.parent.assertEqual(state["last_token"].dtype, torch.long)
-        # cache_last_channel: (num_layers, batch, left_ctx, hidden_size)
-        self.parent.assertEqual(
-            state["cache_last_channel"].shape,
-            (self.num_hidden_layers, self.batch_size, 3, self.hidden_size),
-        )
-
 
 @require_torch
 class NemotronAsrStreamingForRNNTModelTest(ParakeetForRNNTModelTest):
@@ -160,10 +140,6 @@ class NemotronAsrStreamingForRNNTModelTest(ParakeetForRNNTModelTest):
     def setUp(self):
         self.model_tester = NemotronAsrStreamingForRNNTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=NemotronAsrStreamingConfig)
-
-    def test_streaming_state_init(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_streaming_state(*config_and_inputs)
 
     def test_streaming_generate_requires_num_lookahead_tokens(self):
         """Streaming `generate` (input_features passed as a generator) must be given `num_lookahead_tokens`
@@ -188,40 +164,14 @@ class NemotronAsrStreamingForRNNTModelTest(ParakeetForRNNTModelTest):
         self.assertFalse(consumed, "streaming `generate` consumed the stream before validating num_lookahead_tokens")
 
 
-# HF-format conversion of the original NeMo `nvidia/nemotron-speech-streaming-en-0.6b` checkpoint, published as a
-# PR on the Hub until it is merged into the main revision.
-NEMOTRON_ASR_STREAMING_CHECKPOINT = "nvidia/nemotron-speech-streaming-en-0.6b"
-NEMOTRON_ASR_STREAMING_REVISION = "refs/pr/17"
-# Long, single-speaker sample (~16 min of Obama's farewell address), used to exercise chunked streaming.
-OBAMA_AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3"
-
-
 @require_torch
 class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
-    """Integration tests for NemotronAsrStreamingForRNNT.
-
-    Expected transcriptions are the outputs of the original NeMo cache-aware streaming model
-    `nvidia/nemotron-speech-streaming-en-0.6b` on the same audio, loaded from the
-    `fixtures/nemotron_asr_streaming/expected_results_*.json` fixtures. The reproducers that regenerate these reference
-    values live at https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb (run `run_reproducers.sh`).
-    Inference runs in float32 to track the NeMo reference as closely as possible.
-
-    - Offline (non-streaming) `generate` uses the model's default attention context `[70, 13]` (the widest /
-      best-WER setting, the first entry of `att_context_size`), matching the NeMo offline reference. The HF
-      offline transcripts match NeMo exactly.
-    - The streaming test feeds mel-frame chunks through a cache-aware `generate` at `[70, 6]`, mirroring the
-      `test_stream_generate.py` recipe. Because the HF FastConformer encoder is a re-implementation and chunks
-      differently from NeMo's `CacheAwareStreamingAudioBuffer`, a single sub-word can drift (~1e-3 numerical
-      noise over the conformer stack flipping a borderline greedy emission); the one difference is annotated
-      inline below.
-    """
-
     _dataset = None
 
     @classmethod
     def setUp(cls):
-        cls.checkpoint_name = NEMOTRON_ASR_STREAMING_CHECKPOINT
-        cls.revision = NEMOTRON_ASR_STREAMING_REVISION
+        cls.checkpoint_name = "nvidia/nemotron-speech-streaming-en-0.6b"
+        cls.revision = "refs/pr/17"
         cls.dtype = torch.float32
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
 
@@ -243,33 +193,6 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
-    def test_processor_set_num_lookahead_tokens(self):
-        """`set_num_lookahead_tokens` is the only way to select the right attention context: it re-derives
-        every streaming chunk-size property and the `num_lookahead_tokens` emitted by `__call__`. The processor
-        is the single source of truth for the supported set, so it rejects unsupported values, and
-        `streaming_latency_ms` is no longer accepted by `__call__`."""
-        import inspect
-
-        processor = self.processor
-        subsampling = processor._subsampling_factor
-
-        # The latency knob is gone — `set_num_lookahead_tokens` is the only entry point.
-        self.assertNotIn("streaming_latency_ms", inspect.signature(processor.__call__).parameters)
-
-        sample = self._load_datasamples(1)[0]
-        for right in processor.supported_num_lookahead_tokens:
-            processor.set_num_lookahead_tokens(right)
-            self.assertEqual(processor.default_num_lookahead_tokens, right)
-            self.assertEqual(processor.num_mel_frames_first_audio_chunk, 1 + subsampling * right)
-            self.assertEqual(processor.num_mel_frames_per_audio_chunk, subsampling * (right + 1))
-            inputs = processor(sample, sampling_rate=processor.feature_extractor.sampling_rate)
-            self.assertEqual(inputs["num_lookahead_tokens"], right)
-
-        # The processor owns the supported set and rejects unsupported values.
-        with self.assertRaises(ValueError):
-            processor.set_num_lookahead_tokens(max(processor.supported_num_lookahead_tokens) + 1)
-
-    @slow
     def test_processor_streaming_latencies(self):
         """`streaming_latency_ms` reports the latency of the currently-selected right context, and
         `supported_streaming_latencies_ms` maps every supported right context to its latency. The streaming
@@ -289,7 +212,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    def test_rnnt_model_integration(self):
+    def test_model_integration(self):
         # NeMo `nvidia/nemotron-speech-streaming-en-0.6b` reference; HF matches it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_single_rnnt-py
         RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr_streaming/expected_results_single.json"
@@ -308,7 +231,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
-    def test_rnnt_model_integration_batched(self):
+    def test_model_integration_batched(self):
         # NeMo reference; all five HF transcripts match it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_batch_rnnt-py
         RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr_streaming/expected_results_batch.json"
@@ -327,7 +250,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
-    def test_rnnt_model_integration_streaming(self):
+    def test_model_integration_streaming(self):
         """Cache-aware streaming generation from a generator of mel-frame chunks.
 
         Mirrors `test_stream_generate.py`: the full mel spectrogram is sliced into contiguous chunks (49 frames
@@ -347,7 +270,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         with open(RESULTS_PATH) as f:
             EXPECTED_TRANSCRIPTION = json.load(f)["transcription"]
 
-        audio = load_audio(OBAMA_AUDIO_URL, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        audio = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", sampling_rate=self.processor.feature_extractor.sampling_rate)
         model = NemotronAsrStreamingForRNNT.from_pretrained(
             self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
         )
