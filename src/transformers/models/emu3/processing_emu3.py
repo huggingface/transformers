@@ -15,7 +15,7 @@
 
 
 from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_vision_available
 from ...utils.import_utils import requires
@@ -45,6 +45,10 @@ class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
             "return_for_image_generation": False,
             "return_mm_token_type_ids": False,
         },
+        "images_kwargs": {
+            "ratio": "1:1",
+            "image_area": 518400,
+        },
     }
 
 
@@ -70,8 +74,38 @@ class Emu3Processor(ProcessorMixin):
         self.downsample_ratio = 8
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[Emu3ProcessorKwargs],
+    ):
+        output_kwargs = self._merge_kwargs(
+            Emu3ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        return_for_image_generation = output_kwargs["text_kwargs"].pop("return_for_image_generation", False)
+        ratio = output_kwargs["images_kwargs"].pop("ratio", None)
+        image_area = output_kwargs["images_kwargs"].pop("image_area", None)
+
+        # take different processing path when generarating images cond on text
+        if return_for_image_generation:
+            if images is not None:
+                raise ValueError("You should not provide `images` when `return_for_image_generation=True`")
+            height, width = self.calculate_generate_size(ratio, image_area, self.downsample_ratio)
+            image_prompt = f"{self.image_start_token}{height}*{width}{self.fake_token_around_image}"
+            if isinstance(text, str):
+                text = [text]
+            text = [f"{self.bos_token}{sample}{image_prompt}" for sample in text]
+
+        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        if return_for_image_generation:
+            model_inputs["image_sizes"] = [[height, width]] * len(text)
+        return model_inputs
+
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        images, text, videos, audio = super().prepare_inputs_layout(
+        images, text, *_ = super().prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
         if images is not None and text is not None:
@@ -90,31 +124,6 @@ class Emu3Processor(ProcessorMixin):
             f"{self.image_token * image_seq_length}"
             f"{self.eof_token}{self.image_end_token}"
         )
-
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs,
-    ):
-        return_for_image_generation = kwargs.pop("return_for_image_generation", False)
-        # pop here so they don't reach the image processor via _merge_kwargs
-        ratio = kwargs.pop("ratio", "1:1")
-        image_area = kwargs.pop("image_area", 518400)
-
-        if return_for_image_generation:
-            if images is not None:
-                raise ValueError("You should not provide `images` when `return_for_image_generation=True`")
-            height, width = self.calculate_generate_size(ratio, image_area, self.downsample_ratio)
-            image_prompt = f"{self.image_start_token}{height}*{width}{self.fake_token_around_image}"
-            if isinstance(text, str):
-                text = [text]
-            text = [f"{self.bos_token}{sample}{image_prompt}" for sample in text]
-            return_data = super().__call__(text=text, **kwargs)
-            return_data["image_sizes"] = [[height, width]] * len(text)
-            return return_data
-
-        return super().__call__(images=images, text=text, **kwargs)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

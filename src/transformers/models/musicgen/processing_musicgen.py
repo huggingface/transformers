@@ -19,18 +19,12 @@ from typing import Any
 
 import numpy as np
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring, to_numpy
-
-
-class MusicgenProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
 
 
 @auto_docstring
 class MusicgenProcessor(ProcessorMixin):
-    valid_processor_kwargs = MusicgenProcessorKwargs
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 

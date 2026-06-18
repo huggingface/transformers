@@ -74,6 +74,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[InstructBlipVideoProcessorKwargs],
     ) -> BatchFeature:
+        kwargs["add_special_tokens"] = False
         output_kwargs = self._merge_kwargs(
             InstructBlipVideoProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -115,6 +116,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
 
     def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
         # InstructBLIP video uses 4 frames, each with num_query_tokens video tokens
+        # TODO: Add bos if needed, asked Arthur how to make it robust for any tok backend
         return self.video_token * self.num_query_tokens * 4
 
     @property

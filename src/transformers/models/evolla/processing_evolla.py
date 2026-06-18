@@ -118,13 +118,41 @@ class EvollaProcessor(ProcessorMixin):
 
         protein_max_length = protein_max_length if protein_max_length is not None else self.protein_max_length
         text_max_length = text_max_length if text_max_length is not None else self.text_max_length
+        proteins, messages_list = self.prepare_inputs_layout(proteins, messages_list)
+        self.validate_inputs(proteins, messages_list)
 
+        sa_tokens = self.process_proteins(proteins, protein_max_length)
+        text_tokens = self.process_text(messages_list, text_max_length)
+
+        return BatchFeature(
+            data={
+                "protein_input_ids": sa_tokens["input_ids"],
+                "protein_attention_mask": sa_tokens["attention_mask"],
+                "input_ids": text_tokens["input_ids"],
+                "attention_mask": text_tokens["attention_mask"],
+            }
+        )
+
+    def prepare_inputs_layout(
+        self,
+        proteins: list[dict] | dict | None = None,
+        messages_list: list[list[dict]] | list[dict] | None = None,
+        **kwargs,
+    ):
         # proteins should be List[dict]
         if isinstance(proteins, dict):
             proteins = [proteins]
         # messages_list should be List[List[dict]]
         if isinstance(messages_list, (list, tuple)) and not isinstance(messages_list[0], (list, tuple)):
             messages_list = [messages_list]
+        return proteins, messages_list
+
+    def validate_inputs(
+        self,
+        proteins: list[dict] | dict | None = None,
+        messages_list: list[list[dict]] | list[dict] | None = None,
+        **kwargs,
+    ):
         # Check if batched proteins are in the correct format
         if isinstance(proteins, (list, tuple)) and not all(isinstance(p, dict) for p in proteins):
             raise ValueError("The proteins should be a list of dictionaries, but not all elements are dictionaries.")
@@ -156,18 +184,6 @@ class EvollaProcessor(ProcessorMixin):
             raise ValueError(
                 f"The messages_list should be a list of lists of dictionaries, but it's {type(messages_list)}."
             )
-        sa_tokens = self.process_proteins(proteins, protein_max_length)
-
-        text_tokens = self.process_text(messages_list, text_max_length)
-
-        return BatchFeature(
-            data={
-                "protein_input_ids": sa_tokens["input_ids"],
-                "protein_attention_mask": sa_tokens["attention_mask"],
-                "input_ids": text_tokens["input_ids"],
-                "attention_mask": text_tokens["attention_mask"],
-            }
-        )
 
     def protein_batch_decode(self, *args, **kwargs):
         return self.protein_tokenizer.batch_decode(*args, **kwargs)

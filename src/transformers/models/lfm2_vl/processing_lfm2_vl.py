@@ -13,19 +13,22 @@
 # limitations under the License.
 import math
 
-from ...image_utils import make_nested_list_of_images
+from ...image_utils import ImageInput, make_flat_list_of_images, make_nested_list_of_images
 from ...processing_utils import (
-    ImagesKwargs,
+    BatchFeature,
     ProcessingKwargs,
     ProcessorMixin,
+    TextKwargs,
+    Unpack,
 )
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Lfm2VlImagesKwargs(ImagesKwargs, total=False):
+class Lfm2VlTextKwargs(TextKwargs, total=False):
     """
     use_image_special_tokens (`bool`, *optional*, defaults to `True`):
         Whether to use special image tokens (`<|image_start|>` and `<|image_end|>`) to delimit image sequences
@@ -37,13 +40,13 @@ class Lfm2VlImagesKwargs(ImagesKwargs, total=False):
 
 
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Lfm2VlImagesKwargs
+    text_kwargs: Lfm2VlTextKwargs
     _defaults = {
         "images_kwargs": {
             "return_row_col_info": True,
-            "use_image_special_tokens": True,
         },
         "text_kwargs": {
+            "use_image_special_tokens": True,
             "add_special_tokens": False,
             "padding": False,
             "is_split_into_words": False,
@@ -54,7 +57,7 @@ class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Lfm2VlProcessor(ProcessorMixin):
     valid_processor_kwargs = Lfm2VlProcessorKwargs
-    unused_input_names = ["image_rows", "image_cols", "image_sizes"]
+    unused_input_names = ["image_rows", "image_cols", "image_sizes", "token_type_ids"]
 
     def __init__(
         self,
@@ -74,20 +77,89 @@ class Lfm2VlProcessor(ProcessorMixin):
         self.image_thumbnail_token = getattr(tokenizer, "image_thumbnail_token", "<|img_thumbnail|>")
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
-    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        images, text, videos, audio = super().prepare_inputs_layout(
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        images, text, *_ = self.prepare_inputs_layout(images=images, text=text, **kwargs)
+        self.validate_inputs(images=images, text=text, **kwargs)
+
+        merged_kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
+            **kwargs,
+        )
+        merged_kwargs["images_kwargs"]["use_image_special_tokens"] = merged_kwargs["text_kwargs"].pop(
+            "use_image_special_tokens"
+        )
+
+        processed_images = {}
+        images_replacements = []
+        if images is not None:
+            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
+
+        text_inputs = {}
+        return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
+        if text is not None:
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
+                "return_text_replacement_offsets", False
+            )
+
+            text, text_replacement_offsets = self.get_text_with_replacements(text, images_replacements)
+            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+            if return_text_replacement_offsets:
+                text_inputs["text_replacement_offsets"] = text_replacement_offsets
+
+            if return_mm_token_type_ids:
+                text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
+        # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
+        data = {**text_inputs, **processed_images}
+        data = {k: v for k, v in data.items() if k not in self.unused_input_names}
+        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
+
+    def prepare_inputs_layout(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos=None,
+        audio=None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        images, text, *_ = super().prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
         return images, text, videos, audio
 
-    def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images=images, text=text, **kwargs)
+        if text is None and images is None:
+            raise ValueError("You must provide one of `text` or `images`.")
+
+        if images is not None and text is None:
+            raise ValueError(
+                "You must provide `text` when `images` is provided. Minimal text consists of a single image token."
+            )
+
         if text is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
             if sum(n_images_in_text) > 0 and images is None:
                 raise ValueError(f"We detected {sum(n_images_in_text)} tokens in the text but no images were passed")
+
             if images is not None:
                 n_images_in_images = [len(sublist) for sublist in images]
                 if n_images_in_images != n_images_in_text:
@@ -95,20 +167,30 @@ class Lfm2VlProcessor(ProcessorMixin):
                         f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                     )
 
-    def _process_images(self, images, **kwargs):
-        self._use_image_special_tokens = kwargs.pop("use_image_special_tokens", True)
-        self._current_images_kwargs = kwargs.copy()
-        return super()._process_images(images, **kwargs)
+    def _process_images(self, images: ImageInput, **kwargs):
+        use_image_special_tokens = kwargs.pop("use_image_special_tokens")
+        processed_images = self.image_processor(images, **kwargs)
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        image_replacements = []
+        images = make_flat_list_of_images(images)
+        for idx in range(len(images)):
+            replacement_text = self.replace_image_token(
+                processed_images, image_idx=idx, use_image_special_tokens=use_image_special_tokens, **kwargs
+            )
+            image_replacements.append(replacement_text)
+        return processed_images, image_replacements
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         rows = image_inputs["image_rows"][image_idx]
         cols = image_inputs["image_cols"][image_idx]
         image_size = image_inputs["image_sizes"][image_idx]
-        tokens_per_tile, tokens_for_image = self._get_image_num_tokens(image_size, **self._current_images_kwargs)
-        use_thumbnail = self._current_images_kwargs.get("use_thumbnail", self.image_processor.use_thumbnail)
-        return self._build_image_tokens(
-            rows, cols, tokens_per_tile, tokens_for_image, use_thumbnail, self._use_image_special_tokens
+
+        use_thumbnail = kwargs.get("use_thumbnail", self.image_processor.use_thumbnail)
+        tokens_per_tile, tokens_for_image = self._get_image_num_tokens(image_size, **kwargs)
+        placeholder_tokens = self._build_image_tokens(
+            rows, cols, tokens_per_tile, tokens_for_image, use_thumbnail, kwargs.get("use_image_special_tokens")
         )
+        return placeholder_tokens
 
     def _build_image_tokens(
         self,
@@ -175,15 +257,6 @@ class Lfm2VlProcessor(ProcessorMixin):
         tokens_for_image = self._compute_tokens_for_image(image_size, encoder_patch_size, downsample_factor)
 
         return tokens_per_tile, tokens_for_image
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-
-        # LFM2-VL has no dedicated tokenizer class and uses the Base class with default model input names
-        tokenizer_input_names = [name for name in tokenizer_input_names if name != "token_type_ids"]
-        return list(tokenizer_input_names + image_processor_input_names)
 
 
 __all__ = ["Lfm2VlProcessor"]

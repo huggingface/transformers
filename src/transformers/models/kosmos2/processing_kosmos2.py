@@ -19,7 +19,7 @@ import re
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_python import AddedToken
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import auto_docstring
@@ -141,7 +141,7 @@ class Kosmos2Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | list[TextInput] = None,
-        **kwargs,
+        **kwargs: Unpack[Kosmos2ProcessorKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")

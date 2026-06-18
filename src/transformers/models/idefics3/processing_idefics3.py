@@ -23,7 +23,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import auto_docstring, logging
 
@@ -95,7 +95,7 @@ class Idefics3Processor(ProcessorMixin):
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         image_seq_len: int | None = None,
-        **kwargs,
+        **kwargs: Unpack[Idefics3ProcessorKwargs],
     ) -> BatchEncoding:
         r"""
         image_seq_len (`int`, *optional*):
@@ -158,7 +158,7 @@ class Idefics3Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs,
+        **kwargs: Unpack[Idefics3ProcessorKwargs],
     ):
         if text is not None:
             if isinstance(text, str):
@@ -192,7 +192,7 @@ class Idefics3Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs,
+        **kwargs: Unpack[Idefics3ProcessorKwargs],
     ):
         super().validate_inputs(images, text, **kwargs)
 

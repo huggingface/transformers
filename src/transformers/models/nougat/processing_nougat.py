@@ -20,7 +20,17 @@ from ...utils import auto_docstring
 
 
 class NougatProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "is_split_into_words": False,
+            "verbose": True,
+        },
+        "images_kwargs": {
+            "data_format": "channels_first",
+        },
+    }
 
 
 @auto_docstring
@@ -32,10 +42,10 @@ class NougatProcessor(ProcessorMixin):
 
     @auto_docstring
     def __call__(self, images=None, text=None, **kwargs):
-        result = super().__call__(images=images, text=text, **kwargs)
-        if text is not None and images is not None and "input_ids" in result:
-            result["labels"] = result.pop("input_ids")
-        return result
+        model_inputs = super().__call__(images=images, text=text, **kwargs)
+        if text is not None:
+            model_inputs["labels"] = model_inputs["input_ids"]
+        return model_inputs
 
     def post_process_generation(self, *args, **kwargs):
         """

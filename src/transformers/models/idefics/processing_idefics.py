@@ -23,6 +23,7 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     TextKwargs,
+    Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
@@ -179,7 +180,7 @@ class IdeficsProcessor(ProcessorMixin):
         | list[PreTokenizedInput]
         | list[list[TextInput]]
         | list[list[PreTokenizedInput]] = None,
-        **kwargs,
+        **kwargs: Unpack[IdeficsProcessorKwargs],
     ) -> BatchFeature:
         r"""
         Returns:

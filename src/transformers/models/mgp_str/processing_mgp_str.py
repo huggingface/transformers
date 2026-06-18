@@ -17,7 +17,7 @@ from transformers import AutoTokenizer
 from transformers.utils import is_torch_available
 from transformers.utils.generic import ExplicitEnum
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring
 from ...utils.import_utils import requires
 
@@ -35,15 +35,9 @@ class DecodeType(ExplicitEnum):
 SUPPORTED_ANNOTATION_FORMATS = (DecodeType.CHARACTER, DecodeType.BPE, DecodeType.WORDPIECE)
 
 
-class MgpstrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
-
-
 @requires(backends=("sentencepiece",))
 @auto_docstring
 class MgpstrProcessor(ProcessorMixin):
-    valid_processor_kwargs = MgpstrProcessorKwargs
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         self.char_tokenizer = tokenizer
         self.bpe_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -55,8 +49,8 @@ class MgpstrProcessor(ProcessorMixin):
     def __call__(self, text=None, images=None, **kwargs):
         model_inputs = super().__call__(images=images, text=text, **kwargs)
         model_inputs.pop("attention_mask", None)
-        if text is not None and images is not None and "input_ids" in model_inputs:
-            model_inputs["labels"] = model_inputs.pop("input_ids")
+        if text is not None:
+            model_inputs["labels"] = model_inputs["input_ids"]
         return model_inputs
 
     def batch_decode(self, sequences):

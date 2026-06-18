@@ -131,6 +131,7 @@ class Llama4Processor(ProcessorMixin):
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
         if text is None:
             raise ValueError("You have to specify text.")
+
         if images is not None and text is not None:
             total_placeholders = sum(prompt.count(self.fake_image_token) for prompt in text)
             if total_placeholders != len(images):

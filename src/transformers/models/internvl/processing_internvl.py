@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...image_utils import ImageInput, concatenate_list
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput
@@ -71,77 +72,13 @@ class InternVLProcessor(ProcessorMixin):
     def image_token_ids(self) -> list[int]:
         return [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
 
-    def _insert_media_placeholders(
-        self,
-        text: list[str],
-        image_pixel_values,
-        video_pixel_values,
-        image_num_patches: list[int],
-        video_num_patches: list[int],
-        image_num_patches_indices: np.ndarray,
-        video_num_patches_indices: np.ndarray,
-        video_patch_indices: np.ndarray,
-    ):
-        """
-        Processes interleaved text with <image> and <video> placeholders, replacing them with appropriate
-        image and video tokens while keeping track of the patches used.
-        """
-        image_index = 0
-        video_index = 0
-        processed_text = []
-        image_video_patches = []
-        replace_strings = []
-        # Support interleaved image and video in prompts:
-        # Processed patches of images and videos are inserted in `image_video_patches` in the order they appear in the prompts
-        for prompt in text:
-            new_prompt = prompt
-            while self.image_token in new_prompt or self.video_token in new_prompt:
-                if self.image_token in new_prompt and (
-                    self.video_token not in new_prompt
-                    or new_prompt.index(self.image_token) < new_prompt.index(self.video_token)
-                ):
-                    # Get the slice of patches corresponding to the current image
-                    start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
-                    end_index = image_num_patches_indices[image_index]
-                    image_video_patches.append(image_pixel_values[start_index:end_index])
-                    # Replace the corresponding image placeholder with the correct number of image tokens
-                    new_prompt = new_prompt.replace(self.image_token, "<placeholder>", 1)
-                    replace_strings.append(
-                        f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_index]}{self.end_image_token}"
-                    )
-                    image_index += 1
-                else:
-                    # Get the slice of patches corresponding to the current video
-                    # Here we need to account for both the multiple video frames and the potential multiple patches per frame
-                    # As of now, InternVL only supports one patch per frame, but we keep the code flexible for future updates
-                    current_patch_index = video_patch_indices[video_index]
-                    end_patch_index = video_patch_indices[video_index + 1]
-                    start_index = video_num_patches_indices[current_patch_index]
-                    end_index = video_num_patches_indices[end_patch_index]
-                    image_video_patches.append(video_pixel_values[start_index:end_index])
-                    # Get the number of patches per frame and replace the video placeholder with the correct number of image tokens
-                    num_patches = list(video_num_patches[current_patch_index:end_patch_index])
-                    video_prompt = "\n".join(
-                        f"Frame{i + 1}: {self.start_image_token}{self.image_token * self.image_seq_length * num_patches[i]}{self.end_image_token}"
-                        for i in range(len(num_patches))
-                    )
-                    replace_strings.append(video_prompt)
-                    new_prompt = new_prompt.replace(self.video_token, "<placeholder>", 1)
-                    video_index += 1
-            while "<placeholder>" in new_prompt:
-                replace_str = replace_strings.pop(0)
-                new_prompt = new_prompt.replace("<placeholder>", replace_str, 1)
-            processed_text.append(new_prompt)
-
-        return processed_text, image_video_patches, image_index, video_index
-
     @auto_docstring
     def __call__(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs,
+        **kwargs: Unpack[InternVLProcessorKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -153,79 +90,67 @@ class InternVLProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        if text is None:
-            raise ValueError("You have to specify text.")
-
         output_kwargs = self._merge_kwargs(
             InternVLProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        return_tensors = output_kwargs["text_kwargs"].get("return_tensors")
 
-        if not isinstance(text, (list, tuple)):
-            text = [text]
+        # Keep track of how many image/videos per sample we have, and in which order
+        text = [text] if isinstance(text, str) else text
+        pattern = re.compile(f"(?P<image>{re.escape(self.image_token)})|(?P<video>{re.escape(self.video_token)})")
+        visuals_order = [match.lastgroup for sample in text for match in re.finditer(pattern, sample)]
+        model_inputs = super().__call__(images=images, text=text, videos=videos, **output_kwargs)
 
-        # Process images and videos separately, as videos don't support crop_to_patches
-        image_num_patches = []
-        image_pixel_values = None
-        image_num_patches_indices = np.array([0])
+        # Merge image and video pixel into a single array, as model expects only `pixel_values` as arg
         if images is not None:
-            images = self.image_processor.fetch_images(images)
-            images = make_flat_list_of_images(images)
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_num_patches = image_inputs.pop("num_patches")
-            image_pixel_values = image_inputs.pop("pixel_values")
-            image_num_patches_indices = np.cumsum(image_num_patches)
-
-        video_num_patches = []  # per frame
-        video_pixel_values = None
-        video_patch_indices = np.array([0])
-        video_num_patches_indices = np.array([0])
+            image_num_patches_indices = np.cumsum(model_inputs.pop("num_patches"))
         if videos is not None:
-            video_kwargs = output_kwargs["videos_kwargs"]
-            video_inputs = self.video_processor(videos=videos, **video_kwargs)
-            video_pixel_values = video_inputs.pop("pixel_values_videos")
-
+            video_pixel_values = model_inputs.pop("pixel_values_videos")
             batch_size, num_frames, *_ = video_pixel_values.shape
-            num_frames_per_video = np.full(batch_size, num_frames)
-            num_frames = sum(num_frames_per_video)  # total
-            video_patch_indices = np.empty(batch_size + 1, int)
-            video_patch_indices[0] = 0
-            video_patch_indices[1:] = np.cumsum(num_frames_per_video)
-            video_num_patches = [1] * num_frames
-            video_num_patches_indices = np.empty(num_frames + 1, int)
-            video_num_patches_indices[0] = 0
-            video_num_patches_indices[1:] = np.cumsum(video_num_patches)
             video_pixel_values = video_pixel_values.flatten(0, 1)
+            video_patch_indices = np.arange(num_frames * batch_size + 1, step=num_frames)
 
-        image_videos_inputs = {}
-        if images is not None or videos is not None:
-            text, image_video_patches, image_index, video_index = self._insert_media_placeholders(
-                text,
-                image_pixel_values,
-                video_pixel_values,
-                image_num_patches,
-                video_num_patches,
-                image_num_patches_indices,
-                video_num_patches_indices,
-                video_patch_indices,
-            )
-            if images is not None and image_index != len(images):
-                raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
-            if videos is not None and video_index != len(num_frames_per_video):
-                raise ValueError("Number of video placeholders in the prompt does not match the number of videos.")
+        image_index = video_index = 0
+        image_video_patches = []
+        for vision_type in visuals_order:
+            if vision_type == "image":
+                start_index = image_num_patches_indices[image_index] if image_index > 0 else 0
+                end_index = image_num_patches_indices[image_index]
+                image_video_patches.append(model_inputs["pixel_values"][start_index:end_index])
+                image_index += 1
+            else:
+                start_index = video_patch_indices[video_index]
+                end_index = video_patch_indices[video_index + 1]
+                image_video_patches.append(video_pixel_values[start_index:end_index])
+                video_index += 1
 
-            # Concatenate the interleaved image and video patches (function agnostic to the patches type (list, numpy array, torch tensor))
-            image_videos_inputs = {"pixel_values": concatenate_list(image_video_patches)}
+        if image_video_patches:
+            model_inputs["pixel_values"] = concatenate_list(image_video_patches)
+        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
 
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos: VideoInput | None = None,
+        **kwargs: Unpack[InternVLProcessorKwargs],
+    ):
+        super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
+        if text is None:
+            raise ValueError("You have to specify text.")
 
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_videos_inputs}, tensor_type=return_tensors)
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        image_num_patches = image_inputs["num_patches"]
+        return f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_idx]}{self.end_image_token}"
+
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        num_frames = video_inputs["pixel_values_videos"][video_idx].shape[0]
+        return "\n".join(
+            f"Frame{i + 1}: {self.start_image_token}{self.image_token * self.image_seq_length}{self.end_image_token}"
+            for i in range(num_frames)
+        )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

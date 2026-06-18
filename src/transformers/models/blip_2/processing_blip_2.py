@@ -65,6 +65,17 @@ class Blip2Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[Blip2ProcessorKwargs],
+    ):
+        kwargs["add_special_tokens"] = False
+        model_inputs = super().__call__(images=images, text=text, **kwargs)
+        return model_inputs
+
     def validate_inputs(
         self,
         images: ImageInput | None = None,
@@ -85,6 +96,8 @@ class Blip2Processor(ProcessorMixin):
         return images, text, videos, audio
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        # TODO: add BOS token manualy after adding placeholders
+        # since they have to be added after placeholders
         return self.image_token * self.num_query_tokens
 
 

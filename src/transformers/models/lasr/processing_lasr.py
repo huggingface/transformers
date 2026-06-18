@@ -19,8 +19,8 @@
 # limitations under the License.
 
 
-from ...audio_utils import AudioInput, make_list_of_audio
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...audio_utils import AudioInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 
@@ -39,7 +39,6 @@ class LasrProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
             "padding_side": "right",
             "add_special_tokens": False,
-            "return_attention_mask": False,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
@@ -52,18 +51,13 @@ class LasrProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        if audio is not None:
-            audio = make_list_of_audio(audio)
-        return super().prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio, **kwargs)
-
     @auto_docstring
     def __call__(
         self,
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        **kwargs,
+        **kwargs: Unpack[LasrProcessorKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -87,10 +81,10 @@ class LasrProcessor(ProcessorMixin):
                 f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
             )
 
-        result = super().__call__(audio=audio, text=text, **output_kwargs)
-        if "input_ids" in result:
-            result["labels"] = result.pop("input_ids")
-        return result
+        model_inputs = super().__call__(audio=audio, text=text, **output_kwargs)
+        if text is not None:
+            model_inputs["labels"] = model_inputs["input_ids"]
+        return model_inputs
 
     @property
     def model_input_names(self):

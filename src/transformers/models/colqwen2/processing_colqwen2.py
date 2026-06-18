@@ -19,8 +19,8 @@
 # limitations under the License.
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...image_utils import ImageInput, make_flat_list_of_images
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
 
@@ -73,49 +73,75 @@ class ColQwen2Processor(ProcessorMixin):
         self.query_prefix = query_prefix or "Query: "
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
 
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        **kwargs: Unpack[ColQwen2ProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `suffix`
+              is provided, the `input_ids` will also contain the suffix input ids.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **labels** -- Labels compatible with training if `suffix` is not None
+        """
+        output_kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+        output_kwargs["text_kwargs"]["return_token_type_ids"] = suffix is not None
+
+        if text is not None:
+            # Query mode: augment text before base class tokenizes it
+            if suffix is None:
+                suffix = self.query_augmentation_token * 10
+
+            text = [f"{self.query_prefix}{sample}{suffix}\n" for sample in text]
+            output_kwargs["text_kwargs"].setdefault("max_length", 50)
+
+        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+
+        if images is not None and suffix is not None:
+            # DDP-aware pixel_values re-padding
+            offsets = model_inputs["image_grid_thw"][:, 1] * model_inputs["image_grid_thw"][:, 2]
+            pixel_values = list(torch.split(model_inputs["pixel_values"], offsets.tolist()))
+            model_inputs["pixel_values"] = torch.nn.utils.rnn.pad_sequence(pixel_values, batch_first=True)
+
+            # add labels for training if needed
+            model_inputs["labels"] = model_inputs["input_ids"].masked_fill(model_inputs["token_type_ids"] == 0, -100)
+        return model_inputs
+
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
         if images is not None:
-            if is_valid_image(images):
-                images = [images]
-            elif not (
-                isinstance(images, list)
-                and (is_valid_image(images[0]) or (isinstance(images[0], list) and is_valid_image(images[0][0])))
-            ):
-                raise ValueError("images must be an image, list of images or list of list of images")
-            images, _, videos, audio = super().prepare_inputs_layout(images=images, **kwargs)
+            images = make_flat_list_of_images(images)
             text = [self.visual_prompt_prefix] * len(images)
-            return images, text, videos, audio
-        return super().prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        return images, text, videos, audio
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         merge_length = self.image_processor.merge_size**2
         return self.image_token * (int(image_inputs["image_grid_thw"][image_idx].prod()) // merge_length)
 
-    def __call__(
+    def validate_inputs(
         self,
         images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs,
-    ) -> BatchFeature:
-        if images is not None and text is not None:
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images=images, text=text)
+        if text is None and images is None:
+            raise ValueError("Either text or images must be provided")
+        if text is not None and images is not None:
             raise ValueError("Only one of text or images can be processed at a time")
-        suffix = kwargs.pop("suffix", None)
-        if images is None:
-            # Query mode: augment text before base class tokenizes it
-            return_token_type_ids = suffix is not None
-            if suffix is None:
-                suffix = self.query_augmentation_token * 10
-            if isinstance(text, str):
-                text = [text]
-            text = [f"{self.query_prefix}{q}{suffix}" for q in text]
-            kwargs["return_token_type_ids"] = return_token_type_ids
-        return_data = super().__call__(images=images, text=text, **kwargs)
-        if images is not None:
-            # DDP-aware pixel_values re-padding
-            offsets = return_data["image_grid_thw"][:, 1] * return_data["image_grid_thw"][:, 2]
-            pixel_values = list(torch.split(return_data["pixel_values"], offsets.tolist()))
-            return_data["pixel_values"] = torch.nn.utils.rnn.pad_sequence(pixel_values, batch_first=True)
-        return return_data
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

@@ -18,9 +18,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
 
@@ -89,47 +90,67 @@ class ColPaliProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        if images is not None:
-            images, _, videos, audio = super().prepare_inputs_layout(images=images, **kwargs)
-            text = [
-                f"{self.image_token}{self.tokenizer.bos_token}{self.visual_prompt_prefix}\n"
-                for _ in make_flat_list_of_images(images)
-            ]
-            return images, text, videos, audio
-        return super().prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio, **kwargs)
-
-    def _process_images(self, images, **kwargs):
-        images = [self.image_processor.process_image(img) for img in make_flat_list_of_images(images)]
-        return super()._process_images(images, **kwargs)
-
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
-        return self.image_token * self.image_seq_length
-
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs,
+        **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
-        if images is not None and text is not None:
-            raise ValueError("Only one of text or images can be processed at a time")
-        suffix = kwargs.pop("suffix", None)
-        if images is not None:
-            kwargs["return_token_type_ids"] = True
-        else:
+        r"""
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `suffix`
+              is provided, the `input_ids` will also contain the suffix input ids.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **labels** -- Labels compatible with training if `suffix` is not None
+        """
+        kwargs["return_token_type_ids"] = True
+        output_kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+
+        if text is not None:
             # Query mode: augment text before base class tokenizes it
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
-            if isinstance(text, str):
-                text = [text]
-            text = [f"{self.tokenizer.bos_token}{self.query_prefix}{q}{suffix}\n" for q in text]
-            kwargs.setdefault("max_length", 50)
-            kwargs["return_token_type_ids"] = True
-        return_data = super().__call__(images=images, text=text, **kwargs)
-        if "token_type_ids" in return_data:
-            return_data["labels"] = return_data["input_ids"].masked_fill(return_data["token_type_ids"] == 0, -100)
-        return return_data
+
+            text = [f"{self.tokenizer.bos_token}{self.query_prefix}{sample}{suffix}\n" for sample in text]
+            output_kwargs["text_kwargs"].setdefault("max_length", 50)
+
+        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        if images is not None:
+            model_inputs["labels"] = model_inputs["input_ids"].masked_fill(model_inputs["token_type_ids"] == 0, -100)
+        return model_inputs
+
+    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
+        if images is not None:
+            images = make_flat_list_of_images(images)
+            text = [f"{self.image_token}{self.tokenizer.bos_token}{self.visual_prompt_prefix}\n" for _ in len(images)]
+        return images, text, videos, audio
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        return self.image_token * self.image_seq_length
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images=images, text=text)
+        if text is None and images is None:
+            raise ValueError("Either text or images must be provided")
+        if text is not None and images is not None:
+            raise ValueError("Only one of text or images can be processed at a time")
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

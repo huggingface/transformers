@@ -15,7 +15,6 @@
 Processor class for InstructBLIP. Largely copy of Blip2Processor with addition of a tokenizer for the Q-Former.
 """
 
-from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import (
     ProcessingKwargs,
@@ -69,7 +68,13 @@ class InstructBlipProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, qformer_tokenizer)
 
     @auto_docstring
-    def __call__(self, images=None, text=None, **kwargs) -> BatchFeature:
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[InstructBlipProcessorKwargs],
+    ):
+        kwargs["add_special_tokens"] = False
         output_kwargs = self._merge_kwargs(
             InstructBlipProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -110,6 +115,8 @@ class InstructBlipProcessor(ProcessorMixin):
         return images, text, videos, audio
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        # TODO: add BOS token manualy after adding placeholders
+        # since they have to be added after placeholders
         return self.image_token * self.num_query_tokens
 
     @property

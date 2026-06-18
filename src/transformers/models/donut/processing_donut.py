@@ -17,8 +17,10 @@ Processor class for Donut.
 
 import re
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import auto_docstring, logging
+from .tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class DonutProcessorKwargs(ProcessingKwargs, total=False):
@@ -40,13 +42,20 @@ class DonutProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
-    def __call__(self, images=None, text=None, **kwargs):
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[DonutProcessorKwargs],
+    ):
         if images is not None and text is not None:
             kwargs.setdefault("add_special_tokens", False)
-        return_data = super().__call__(images=images, text=text, **kwargs)
+
+        model_inputs = super().__call__(images=images, text=text, **kwargs)
         if text is not None and images is not None:
-            return_data["labels"] = return_data["input_ids"]
-        return return_data
+            model_inputs["labels"] = model_inputs["input_ids"]
+        return model_inputs
 
     @property
     def model_input_names(self):

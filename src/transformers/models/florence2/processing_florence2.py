@@ -149,7 +149,7 @@ class Florence2Processor(ProcessorMixin):
             text = self._construct_prompts(text)
 
         if images is not None and text is not None:
-            text = [self.image_token + self.tokenizer.bos_token + t + self.tokenizer.eos_token for t in text]
+            text = [self.image_token + self.tokenizer.bos_token + sample + self.tokenizer.eos_token for sample in text]
 
         return images, text, videos, audio
 

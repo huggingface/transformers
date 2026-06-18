@@ -26,6 +26,7 @@ from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
+    Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging, requires_backends
@@ -234,7 +235,7 @@ def _tokenize_prompts_with_image_and_batch(
     scale_factors: list[list["torch.Tensor"]] | None,
     max_tokens_to_generate: int,
     max_position_embeddings: int,
-    add_BOS: bool,
+    add_BOS: bool,  # Same issue with types as above
     add_beginning_of_answer_token: bool,
 ) -> tuple["torch.Tensor", "torch.Tensor"]:
     """
@@ -488,7 +489,7 @@ class FuyuProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: str | list[str] | TextInput | PreTokenizedInput | None = None,
-        **kwargs,
+        **kwargs: Unpack[FuyuProcessorKwargs],
     ) -> "BatchFeature":
         r"""
         Returns:
