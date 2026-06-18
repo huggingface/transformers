@@ -20,7 +20,7 @@ from functools import cached_property
 
 from parameterized import parameterized
 
-from transformers import AutoConfig, Tipsv2Config, Tipsv2TextConfig, Tipsv2VisionConfig
+from transformers import Tipsv2Config, Tipsv2TextConfig, Tipsv2VisionConfig
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
@@ -50,7 +50,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        AutoModel,
         Tipsv2Model,
         Tipsv2Processor,
         Tipsv2TextModel,

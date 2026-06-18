@@ -18,17 +18,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Sized
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto import AutoConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -80,47 +75,6 @@ class Tipsv2DptConfig(PreTrainedConfig):
     semantic_loss_ignore_index: int = 255
 
     def __post_init__(self, **kwargs):
-        # Backwards compatibility: the original remote configs use different field names. Map them to the
-        # field names used here. Each of these fields is optional and may be absent from a given config.
-        REMOTE_TO_CONFIG_KEYS = {
-            "channels": "fusion_hidden_size",
-            "post_process_channels": "neck_hidden_sizes",
-        }
-        for remote_key, config_key in REMOTE_TO_CONFIG_KEYS.items():
-            if remote_key in kwargs:
-                setattr(self, config_key, kwargs.pop(remote_key))
-
-        # `block_indices` map to the backbone `out_indices` (1-based indices that include the embedding
-        # output, hence the +1 offset).
-        block_indices = kwargs.pop("block_indices", [2, 5, 8, 11])
-        out_indices = [block_index + 1 for block_index in block_indices]
-
-        # Use num_labels and label2id when set. Otherwise fall back to num_labels=num_seg_classes which
-        # is set in the original configs.
-        num_labels = kwargs.get("num_labels")
-        label2id = kwargs.get("label2id")
-        num_seg_classes = kwargs.pop("num_seg_classes", None)
-        if num_labels is not None and num_seg_classes is not None and num_labels != num_seg_classes:
-            logger.info(
-                f"`num_labels` ({num_labels}) and `num_seg_classes` ({num_seg_classes}) are both set in"
-                "the config and are not equal. The value from `num_labels` will be used."
-            )
-        elif (
-            label2id is not None
-            and num_seg_classes is not None
-            and isinstance(label2id, Sized)
-            and len(label2id) != num_seg_classes
-        ):
-            logger.info(
-                f"`label2id` (len={len(label2id)}) and `num_seg_classes` ({num_seg_classes}) are both set in"
-                "the config and are not equal. The value from `label2id` will be used."
-            )
-        if num_labels is None and label2id is None and num_seg_classes is not None:
-            kwargs["num_labels"] = num_seg_classes
-
-        for unused_key in ("readout_type", "backbone_repo", "embed_dim"):
-            kwargs.pop(unused_key, None)
-
         if self.neck_hidden_sizes is None:
             self.neck_hidden_sizes = [96, 192, 384, 768]
         if self.reassemble_factors is None:
@@ -130,7 +84,7 @@ class Tipsv2DptConfig(PreTrainedConfig):
             backbone_config=self.backbone_config,
             default_config_type="tipsv2_vision_model",
             default_config_kwargs={
-                "out_indices": out_indices,
+                "out_indices": [3, 6, 9, 12],
                 "apply_layernorm": True,
                 "reshape_hidden_states": False,
             },

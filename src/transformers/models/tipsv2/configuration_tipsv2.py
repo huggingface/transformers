@@ -22,10 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/tipsv2-b14")
@@ -182,75 +179,16 @@ class Tipsv2Config(PreTrainedConfig):
     temperature_init_value: float = 0.005065968260169029
 
     def __post_init__(self, **kwargs):
-        text_config_kwargs = {}
         if isinstance(self.text_config, dict):
-            text_config_kwargs.update(self.text_config)
-        elif isinstance(self.text_config, Tipsv2TextConfig):
-            text_config_kwargs.update(self.text_config.to_dict())
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = self.sub_configs["text_config"]()
 
-        vision_config_kwargs = {}
         if isinstance(self.vision_config, dict):
-            vision_config_kwargs.update(self.vision_config)
-        elif isinstance(self.vision_config, Tipsv2VisionConfig):
-            vision_config_kwargs.update(self.vision_config.to_dict())
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
 
-        # Backwards compatibility: convert flat config (old format) to nested config.
-        # Old configs stored all parameters at the top level with different key names.
-        FLAT_TO_VISION_CONFIG_KEYS = {
-            "embed_dim": "hidden_size",
-            "img_size": "image_size",
-            "init_values": "layerscale_value",
-            "num_register_tokens": "num_register_tokens",
-            "patch_size": "patch_size",
-        }
-        FLAT_TO_TEXT_CONFIG_KEYS = {
-            "text_hidden_size": "hidden_size",
-            "text_mlp_dim": "intermediate_size",
-            "max_len": "max_position_embeddings",
-            "text_num_heads": "num_attention_heads",
-            "text_num_layers": "num_hidden_layers",
-            "vocab_size": "vocab_size",
-        }
-        VISION_FUNCTION_TO_KWARGS = {
-            "vit_base": {"num_hidden_layers": 12, "num_attention_heads": 12},
-            "vit_large": {"num_hidden_layers": 24, "num_attention_heads": 16},
-            "vit_so400m": {"num_hidden_layers": 27, "num_attention_heads": 16},
-            "vit_giant2": {"num_hidden_layers": 40, "num_attention_heads": 24},
-        }
-        FLAT_KEYS = set(FLAT_TO_VISION_CONFIG_KEYS) | set(FLAT_TO_TEXT_CONFIG_KEYS) | {"ffn_layer", "vision_fn"}
-        if any(key in kwargs for key in FLAT_KEYS):
-            vision_kwargs = {new: kwargs.pop(old) for old, new in FLAT_TO_VISION_CONFIG_KEYS.items() if old in kwargs}
-            if "ffn_layer" in kwargs:
-                vision_kwargs["use_swiglu_ffn"] = kwargs.pop("ffn_layer") == "swiglu"
-            if "vision_fn" in kwargs:
-                vision_kwargs.update(VISION_FUNCTION_TO_KWARGS.get(kwargs.pop("vision_fn"), {}))
-
-            text_kwargs = {new: kwargs.pop(old) for old, new in FLAT_TO_TEXT_CONFIG_KEYS.items() if old in kwargs}
-
-            # The vision MLP intermediate size equals text_mlp_dim; derive mlp_ratio for non-integer cases (e.g. so400m).
-            if "intermediate_size" in text_kwargs and "hidden_size" in vision_kwargs:
-                vision_kwargs.setdefault("mlp_ratio", text_kwargs["intermediate_size"] / vision_kwargs["hidden_size"])
-
-            for key, value in vision_kwargs.items():
-                if key in vision_config_kwargs and value != vision_config_kwargs[key]:
-                    logger.info(
-                        f"`{key}` is found in both the main config and `vision_config` but with different "
-                        f"values. The value from the main config (`{value}`) will be used instead."
-                    )
-            vision_config_kwargs.update(vision_kwargs)
-
-            for key, value in text_kwargs.items():
-                if key in text_config_kwargs and value != text_config_kwargs[key]:
-                    logger.info(
-                        f"`{key}` is found in both the main config and `text_config` but with different "
-                        f"values. The value from the main config (`{value}`) will be used instead."
-                    )
-            text_config_kwargs.update(text_kwargs)
-
-        self.text_config = Tipsv2TextConfig(**text_config_kwargs)
-        self.vision_config = Tipsv2VisionConfig(**vision_config_kwargs)
-        if "temperature" in kwargs:
-            self.temperature_init_value = kwargs["temperature"]
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
