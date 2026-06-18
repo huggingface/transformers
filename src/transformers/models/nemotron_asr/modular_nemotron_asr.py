@@ -54,6 +54,8 @@ from ..parakeet.modeling_parakeet import (
     ParakeetEncoderRelPositionalEncoding,
     ParakeetForRNNT,
     ParakeetPreTrainedModel,
+    ParakeetRNNTDecoder,
+    ParakeetRNNTJointNetwork,
     ParakeetRNNTOutput,
 )
 from ..parakeet.processing_parakeet import ParakeetProcessor
@@ -125,55 +127,14 @@ class NemotronAsrEncoderConfig(ParakeetEncoderConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class NemotronAsrRNNTConfig(ParakeetRNNTConfig):
-    r"""
-    This is the base NemotronAsr transducer configuration. A conventional RNN-T (RNN Transducer) joint network
-    emits token logits only (so the joint head outputs just `vocab_size` logits), and during greedy decoding
-    the encoder frame pointer advances by exactly one frame on each blank emission. The duration-aware
-    [`NemotronAsrRNNTConfig`] extends this configuration with a `durations` field.
-
-    decoder_hidden_size (`int`, *optional*, defaults to 640):
-        Hidden size of the LSTM prediction network and joint network.
-    num_decoder_layers (`int`, *optional*, defaults to 2):
-        Number of LSTM layers in the prediction network.
-    max_symbols_per_step (`int`, *optional*, defaults to 10):
-        Maximum number of symbols to emit per encoder time step during greedy decoding.
-    encoder_config (`Union[dict, NemotronAsrEncoderConfig]`, *optional*):
-        The config object or dictionary of the encoder.
-    blank_token_id (`int`, *optional*, defaults to 8192):
-        Blank token id. Different from `pad_token_id` for RNN-T.
-
-    Example:
-    ```python
-    >>> from transformers import NemotronAsrForRNNT, NemotronAsrRNNTConfig
-
-    >>> # Initializing a NemotronAsr RNN-T configuration
-    >>> configuration = NemotronAsrRNNTConfig()
-
-    >>> # Initializing a model from the configuration
-    >>> model = NemotronAsrForRNNT(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
-    model_type = "nemotron_asr_rnnt"
-    sub_configs = {"encoder_config": NemotronAsrEncoderConfig}
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = NemotronAsrEncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = NemotronAsrEncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
-        super().__post_init__(**kwargs)
-
-
 @auto_docstring(checkpoint="nvidia/nemotron-speech-streaming-en-0.6b")
 @strict
-class NemotronAsrConfig(NemotronAsrRNNTConfig):
+class NemotronAsrConfig(ParakeetRNNTConfig):
     r"""
+    This is the NemotronAsr transducer configuration. The RNN-T (RNN Transducer) joint network emits token
+    logits only (so the joint head outputs just `vocab_size` logits), and during greedy decoding the encoder
+    frame pointer advances by exactly one frame on each blank emission.
+
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`).
     joint_hidden_size (`int`, *optional*, defaults to 640):
@@ -1246,12 +1207,27 @@ class NemotronAsrRNNTOutput(ParakeetRNNTOutput):
     padding_cache: NemotronAsrEncoderCausalConvPaddingCache | None = None
 
 
+class NemotronAsrRNNTDecoder(ParakeetRNNTDecoder):
+    def __init__(self, config: NemotronAsrConfig):
+        super().__init__(config)
+
+
+class NemotronAsrRNNTJointNetwork(ParakeetRNNTJointNetwork):
+    def __init__(self, config: NemotronAsrConfig):
+        super().__init__(config)
+
+
 @auto_docstring(
     custom_intro="""
     NemotronAsr Encoder with an RNN-T (Recurrent Neural Network Transducer) head.
     """
 )
 class NemotronAsrForRNNT(ParakeetForRNNT, NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin):
+    config: NemotronAsrConfig
+
+    def __init__(self, config: NemotronAsrConfig):
+        super().__init__(config)
+
     @auto_docstring
     @can_return_tuple
     def forward(

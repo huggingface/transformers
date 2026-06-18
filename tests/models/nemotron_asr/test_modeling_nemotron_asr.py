@@ -39,7 +39,7 @@ if is_torch_available():
 
     from transformers import (
         AutoProcessor,
-        NemotronAsrRNNTConfig,
+        NemotronAsrConfig,
         NemotronAsrEncoder,
         NemotronAsrEncoderConfig,
         NemotronAsrForRNNT,
@@ -101,7 +101,7 @@ class NemotronAsrForRNNTModelTester(ParakeetForRNNTModelTester):
         self.joint_hidden_size = joint_hidden_size
 
     def get_config(self):
-        return NemotronAsrRNNTConfig(
+        return NemotronAsrConfig(
             vocab_size=self.vocab_size,
             decoder_hidden_size=self.decoder_hidden_size,
             joint_hidden_size=self.joint_hidden_size,
@@ -159,7 +159,7 @@ class NemotronAsrForRNNTModelTest(ParakeetForRNNTModelTest):
 
     def setUp(self):
         self.model_tester = NemotronAsrForRNNTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NemotronAsrRNNTConfig)
+        self.config_tester = ConfigTester(self, config_class=NemotronAsrConfig)
 
     def test_streaming_state_init(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

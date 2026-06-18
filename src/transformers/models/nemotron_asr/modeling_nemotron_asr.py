@@ -47,7 +47,7 @@ from ...utils import (
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_nemotron_asr import NemotronAsrConfig, NemotronAsrEncoderConfig, NemotronAsrRNNTConfig
+from .configuration_nemotron_asr import NemotronAsrConfig, NemotronAsrEncoderConfig
 from .generation_nemotron_asr import NemotronAsrGenerationMixin, NemotronAsrRNNTDecoderCache
 
 
@@ -1066,7 +1066,7 @@ class NemotronAsrRNNTOutput(BaseModelOutputWithPooling):
 class NemotronAsrRNNTDecoder(nn.Module):
     """LSTM-based prediction network For RNN-T"""
 
-    def __init__(self, config: NemotronAsrRNNTConfig):
+    def __init__(self, config: NemotronAsrConfig):
         super().__init__()
         self.blank_token_id = config.blank_token_id
         self.embedding = nn.Embedding(config.vocab_size, config.decoder_hidden_size)
@@ -1114,7 +1114,7 @@ class NemotronAsrRNNTDecoder(nn.Module):
 class NemotronAsrRNNTJointNetwork(nn.Module):
     """Joint network that combines encoder and decoder outputs to predict token logits."""
 
-    def __init__(self, config: NemotronAsrRNNTConfig):
+    def __init__(self, config: NemotronAsrConfig):
         super().__init__()
         self.activation = ACT2FN[config.hidden_act]
         self.head = nn.Linear(config.decoder_hidden_size, config.vocab_size)
@@ -1135,11 +1135,11 @@ class NemotronAsrRNNTJointNetwork(nn.Module):
     """
 )
 class NemotronAsrForRNNT(NemotronAsrPreTrainedModel, NemotronAsrGenerationMixin):
-    config: NemotronAsrRNNTConfig
+    config: NemotronAsrConfig
     _no_split_modules = ["NemotronAsrRNNTDecoder"]
     _supported_generation_modes = [GenerationMode.GREEDY_SEARCH]
 
-    def __init__(self, config: NemotronAsrRNNTConfig):
+    def __init__(self, config: NemotronAsrConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
