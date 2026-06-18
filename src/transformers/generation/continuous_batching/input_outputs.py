@@ -104,7 +104,8 @@ class ContinuousBatchingIOs:
         - continuous_batching_config: The continuous batching configuration.
         - device: The device to allocate tensors on. If the device is CPU, then the memory is pinned.
         - logit_processor: The [`ContinuousBatchingLogitsProcessorList`] object used to process the logits.
-        - _use_inputs_embeds: Whether to use an input embeddings tensor. If None, auto-inferred.
+        - _use_inputs_embeds: Whether to create an input embeddings tensor. This is private so that synchronous
+            batching can infer it from the cache and asynchronous batching can turn it on only on the device side.
         """
         # Memoize attributes
         self.cache = cache
@@ -244,13 +245,14 @@ class ContinuousBatchingIOs:
         self, other: "ContinuousBatchingIOs", stream: torch.cuda.Stream, non_blocking: bool = False
     ) -> None:
         # Transfer accumulators
+        other.true_read_sizes = self.true_read_sizes[:]
+        other.true_write_sizes = self.true_write_sizes[:]
+        # Transfer scalars
         other.num_q_tokens = self.num_q_tokens
         other.max_kv_read = self.max_kv_read
         other.num_request_in_batch = self.num_request_in_batch
-        other.true_read_sizes = self.true_read_sizes[:]
-        other.true_write_sizes = self.true_write_sizes[:]
         other.use_block_table = self.use_block_table
-        # Transfer scalar attributes
+        other.encoder_cache_read = self.encoder_cache_read
         other.total_seqlen_q = self.total_seqlen_q
         other.total_seqlen_k = dict(self.total_seqlen_k)
         other.max_seqlen_q = self.max_seqlen_q
@@ -638,7 +640,7 @@ class HostDeviceIOPair:
             continuous_batching_config=continuous_batching_config,
             device=device,
             logit_processor=logit_processor,
-            _use_inputs_embeds=True,
+            _use_inputs_embeds=cache.encoder_cache is not None,  # only needed for multimodal models
         )
         # Create events only on CUDA devices
         self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None
