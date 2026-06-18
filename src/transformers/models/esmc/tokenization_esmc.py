@@ -121,7 +121,6 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
         eos_token = self._ensure_str(eos_token)
         chain_break_token = self._ensure_str(chain_break_token)
 
-        # A character-level tokenizer is equivalent to BPE with no merges.
         bpe = BPE(token_to_id, merges=[], unk_token=unk_token)
         tokenizer = Tokenizer(bpe)
 
