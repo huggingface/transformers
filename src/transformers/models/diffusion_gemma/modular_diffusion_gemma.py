@@ -25,9 +25,8 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import (
+    ALL_MASK_ATTENTION_FUNCTIONS,
     bidirectional_mask_function,
-    create_bidirectional_mask,
-    create_bidirectional_sliding_window_mask,
     create_causal_mask,
     create_masks_for_generate,
     create_sliding_window_causal_mask,
@@ -1127,29 +1126,37 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             )
 
         # Shortcut: not compiling for sure AND no padding -> delegate mask creation to the inner functions by returning None
-        if decoder_attention_mask is None or (not past_key_values.is_compileable and decoder_attention_mask.all()):
+        if (
+            decoder_attention_mask is None
+            or (not past_key_values.is_compileable and decoder_attention_mask.all())
+            or config._attn_implementation not in ALL_MASK_ATTENTION_FUNCTIONS._global_mapping
+        ):
             return {"full_attention": None, "sliding_attention": None}
+
+        # Already a 4D mask, skip and early exit
+        if isinstance(decoder_attention_mask, dict) and all(
+            mask.ndim == 4 for mask in decoder_attention_mask.values()
+        ):
+            return decoder_attention_mask
+
+        text_config = config.get_text_config()
+        q_length = inputs_embeds.shape[1]
+        q_offset = past_key_values.get_seq_length()
+        q_offset = q_offset.to(inputs_embeds.device) if isinstance(q_offset, torch.Tensor) else q_offset
+        additional_kv_length = config.canvas_length if past_key_values.is_compileable else 0
 
         # DiT module doesn't need a sliding mask and has to attend fully to prev context and itself
         # To enforce a full mask we pass `or_mask_function`, while keeping the functionality of
         # `create_bidirectional_sliding_window_mask` to get correct the mask shape and offsets
-        LAYER_TYPE_TO_MASK_MAPPING = {
-            "full_attention": create_bidirectional_mask,
-            "sliding_attention": create_bidirectional_sliding_window_mask,
-        }
-        additional_kv_length = config.canvas_length if past_key_values.is_compileable else 0
-        mask_kwargs = {
-            "config": config.get_text_config(),
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": decoder_attention_mask,
-            "past_key_values": past_key_values,
-            "or_mask_function": bidirectional_mask_function,
-        }
         mask_mapping = {}
-        for layer_pattern in set(config.get_text_config().layer_types):
-            # DiffusionGemma decoder doesn't calls `append` on cache and always expects
-            # `max-len + query` length, and passes `additional_kv_length` to account for it
-            mask_kwargs["additional_kv_length"] = additional_kv_length
+        for layer_pattern in set(text_config.layer_types):
+            if layer_pattern == "sliding_attention":
+                layer_idx = past_key_values.is_sliding.index(True)
+            else:
+                layer_idx = past_key_values.is_sliding.index(False)
+
+            kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, layer_idx)
+            kv_length += additional_kv_length  # Add current canvas length
 
             # `StaticSlidingLayer` concatenates new key with cache when cache is full instead
             # of rolling back. Thus the final length is `window+query-1`, not fixed-length
@@ -1159,9 +1166,26 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
                 layer_idx = past_key_values.is_sliding.index(True)
                 sliding_layer = past_key_values.layers[layer_idx]
                 if sliding_layer.cumulative_length_int >= sliding_layer.max_cache_len:
-                    mask_kwargs["additional_kv_length"] = 1
+                    kv_length = kv_length - additional_kv_length + 1
 
-            mask_mapping[layer_pattern] = LAYER_TYPE_TO_MASK_MAPPING[layer_pattern](**mask_kwargs)
+            mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
+            attention_mask = mask_interface(
+                batch_size=inputs_embeds.shape[0],
+                q_length=q_length,
+                kv_length=kv_length,
+                q_offset=q_offset,
+                kv_offset=kv_offset,
+                mask_function=bidirectional_mask_function,
+                attention_mask=decoder_attention_mask,
+                allow_is_causal_skip=False,
+                allow_is_bidirectional_skip=True,
+                local_size=getattr(text_config, "sliding_window", None),
+                dtype=inputs_embeds.dtype,
+                config=text_config,
+                use_vmap=False,
+                device=inputs_embeds.device,
+            )
+            mask_mapping[layer_pattern] = attention_mask
 
         return mask_mapping
 
