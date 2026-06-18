@@ -271,6 +271,7 @@ class ContinuousBatchProcessor:
             cpu_offload_space_gib=continuous_batching_config.cpu_offload_space,
             safety_threshold=continuous_batching_config.cpu_offload_space_safety_threshold,
             compute_stream=self.inputs_and_outputs.compute_stream,
+            distributed_helper=self.distributed_helper,
         )
 
         # Setup the model runner
@@ -375,26 +376,36 @@ class ContinuousBatchProcessor:
         requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
             self.max_batch_tokens, self.cache.num_pages
         )
-        # If requests_in_batch is None, it means we need to offload some requests if possible
-        if requests_in_batch is None:
-            if len(self.scheduler.active_requests) > 1:
-                self.offloading_manager.offload_one_request()
-                return False
-            else:
-                raise RuntimeError("No requests can be scheduled and no request can be offloaded.")
-        # If it's an empty list, it means we have no requests to process
+
+        # If requests_in_batch is None, it means the cache is full and no requests can be scheduled. We loop over active
+        # requests and offload enough so that the remaining ones can all be scheduled. The loop is necessary because of
+        # prefix sharing: offloading a fully shared request has 0 impact. Its termination is guaranteed.
+        while requests_in_batch is None:
+            # Stop case: no request can be offloaded.
+            if self.offloading_manager.offload_requests() == 0:
+                raise RuntimeError("No requests can be scheduled and no requests can be offloaded.")
+            # Otherwise, the loop has offloaded at least one request, and we try scheduling again.
+            requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
+                self.max_batch_tokens, self.cache.num_pages
+            )
+
+        # If requests_in_batch is an empty list, it means we have no requests to process anymore
         if not requests_in_batch:
             return False
+        # If some active requests could not get new blocks, offload enough of them so it won't happen again next batch
+        if self.scheduler.starved_requests:
+            self.offloading_manager.offload_requests()  # NOTE: this only offload non-scheduled requests
 
         # Restore any CPU-offloaded requests that were just scheduled
         self.offloading_manager.restore_scheduled_requests(requests_in_batch)
 
         # Otherwise, we can continue with the non-empty batch and log in the dimensions before padding
-        logger.debug(
-            f"Scheduled: {len(requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
-            f"Active: {len(self.scheduler.active_requests)}. cum Q: {num_q_tokens}. "
-            f"cum KV: {max_kv_read}, free blocks: {self.cache.get_num_free_blocks()}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"Scheduled: {len(requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
+                f"Active: {len(self.scheduler.active_requests)}. cum Q: {num_q_tokens}. "
+                f"cum KV: {max_kv_read}, free blocks: {self.cache.get_num_free_blocks()}"
+            )
 
         # If inputs are static sized, eg. for compile, we find the padded sizes of the queries and keys/values
         num_q_tokens, max_kv_read = self.model_runner.maybe_pad_inputs(num_q_tokens, max_kv_read, use_decode_fast_path)

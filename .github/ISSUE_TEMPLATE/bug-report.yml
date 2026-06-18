@@ -36,7 +36,7 @@ body:
 
         Models:
 
-          - text models: @ArthurZucker @Cyrilvallez
+          - text models: @ArthurZucker @Cyrilvallez @vasqu
           - vision models: @yonigozlan @molbap
           - audio models: @eustlb @ebezzam @vasqu
           - multimodal models: @zucchini-nlp
@@ -44,7 +44,7 @@ body:
 
         Library:
 
-          - generate: @zucchini-nlp (visual-language models) or @cyrilvallez (all others)
+          - generate: @zucchini-nlp (visual-language models) or @Cyrilvallez (all others)
           - continuous batching: @remi-or @ArthurZucker @McPatate
           - pipelines: @Rocketknight1
           - tokenizers: @ArthurZucker and @itazap
@@ -59,7 +59,7 @@ body:
           - ray/raytune: @richardliaw, @amogkam
           - Big Model Inference: @SunMarc
           - quantization: @SunMarc @MekkCyber
-          - kernels: @MekkCyber @drbh
+          - kernels: @vasqu @drbh
           - peft: @BenjaminBossan @githubnemo
         
         Devices/Backends:

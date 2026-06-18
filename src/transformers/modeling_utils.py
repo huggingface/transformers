@@ -124,8 +124,11 @@ from .utils import (
 from .utils.generic import GeneralInterface, is_flash_attention_requested, split_attention_implementation
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files, hf_api
 from .utils.import_utils import (
+    KERNELS_MAX_VERSION,
+    KERNELS_MIN_VERSION,
     is_flash_attn_greater_or_equal,
     is_huggingface_hub_greater_or_equal,
+    is_rocm_platform,
     is_sagemaker_mp_enabled,
     is_torch_cuda_available,
     is_tracing,
@@ -140,6 +143,8 @@ if is_accelerate_available():
     from accelerate.utils import extract_model_from_parallel
 
 if TYPE_CHECKING:
+    from kernels.layer.mode import Mode
+
     from ._typing import DeviceMeshLike
 
 
@@ -3796,7 +3801,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return dtype_plan
 
-    def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None):
+    def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None, mode: "Mode | None" = None):
         """
         Set whether or not to use the `kernels` library to kernelize some layers of the model.
         Args:
@@ -3804,17 +3809,27 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Whether or not to use the `kernels` library to kernelize some layers of the model.
             kernel_config (`KernelConfig`, *optional*):
                 The kernel configuration to use to kernelize the model. If `None`, the default kernel mapping will be used.
+            mode (`Mode`, *optional*):
+                The mode that should be applied during `kernelize`. Optional, defaults to either training or inference mode
+                based on the internal `training` flag.
         """
         if use_kernels:
             if not is_kernels_available():
                 raise ValueError(
-                    "`use_kernels=True` requires kernels>=0.9.0. Please install the latest version with `pip install -U kernels`"
+                    "Kernels are not available. "
+                    f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                    f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
                 )
             from .integrations.hub_kernels import register_kernel_mapping_transformers
 
             register_kernel_mapping_transformers()
 
-            if kernel_config is not None and isinstance(kernel_config, KernelConfig):
+            if kernel_config is not None:
+                if not isinstance(kernel_config, KernelConfig):
+                    raise ValueError(
+                        f"Expeced `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}"
+                    )
+
                 # Since kernel_config is a correct value, set it as an attribute of the model so it can be used.
                 self.kernel_config = kernel_config
 
@@ -3823,14 +3838,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 # This will create a compatible mapping for the model with the kernels library
                 kernel_config.create_compatible_mapping(self)
-                self.use_kernels = True
-            # We use the default kernel mapping in .integrations.hub_kernels
-            else:
-                self.use_kernels = True
-                self.kernel_config = None
+
+            self.kernelize(mode=mode)
+            self._use_kernels = True
         else:
-            self.use_kernels = False
-            self.kernel_config = None
+            self._use_kernels = False
 
     @classmethod
     def from_pretrained(
@@ -4274,7 +4286,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if kernel_config is not None and use_kernels:
             from .integrations.hub_kernels import register_kernel_replacements_and_fusions
 
-            register_kernel_replacements_and_fusions(cls, config, kernel_config)
+            # For remote kernels, we need to apply the context manager
+            allow_all_kernels_context = [allow_all_hub_kernels()] if allow_all_kernels else []
+            with ContextManagers(allow_all_kernels_context):
+                register_kernel_replacements_and_fusions(cls, config, kernel_config)
 
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, allow_all_kernels)
 
@@ -4305,6 +4320,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
+            if len(devices := list(device_map.values())) == 1 and devices[0] == "disk":
+                raise ValueError("Trying to load everything on `disk` which means the model doesn't fit in memory.")
 
         # Finalize model weight initialization
         load_config = LoadStateDictConfig(
@@ -4442,7 +4459,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         with open(file, "rb") as _fh:
                             merged_state_dict.update(_safe_load_bytes(_fh.read()))
                         continue
-                    file_pointer = safe_open(file, framework="pt", device="cpu")
+                    is_mps = load_config.device_map is not None and any(
+                        (d.type if isinstance(d, torch.device) else d) == "mps"
+                        for d in load_config.device_map.values()
+                    )
+                    backend, device = ("pread", "mps") if is_mps else ("mmap", "cpu")
+                    file_pointer = safe_open(file, framework="pt", device=device, backend=backend)
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
                         merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
@@ -4645,13 +4667,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def loss_function(self, value):
         self._loss_function = value
 
-    def kernelize(self, mode=None):
+    def kernelize(self, mode: "Mode | None" = None):
         """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
         if not is_kernels_available():
             raise ValueError(
-                "Kernels are not available. To use kernels, please install kernels using `pip install -U kernels`"
+                "Kernels are not available. "
+                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
             )
         from kernels import Device, Mode, kernelize
+
+        def resolve_kernel_device_type(torch_device_type: str) -> str:
+            """Map torch's device.type to the kernels library's device key (refines `"cuda"` → `"rocm"` on ROCm)."""
+            if torch_device_type == "cuda" and is_rocm_platform():
+                return "rocm"
+            return torch_device_type
 
         def attach_hidden_kernels(module):
             for name, fn in getattr(module, "_hidden_kernels", {}).items():
@@ -4674,15 +4704,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         try:
             self.apply(attach_hidden_kernels)
 
-            mode = Mode.INFERENCE if not self.training else Mode.TRAINING if mode is None else mode
+            mode = (Mode.TRAINING if self.training else Mode.INFERENCE) if mode is None else mode
+            device = Device(type=resolve_kernel_device_type(self.device.type))
             if self.kernel_config is not None:
                 from kernels import use_kernel_mapping
 
                 inherit_mapping = not self.kernel_config.use_local_kernel
                 with use_kernel_mapping(self.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-                    kernelize(self, device=Device(type=self.device.type), mode=mode)
+                    kernelize(self, device=device, mode=mode)
             else:
-                kernelize(self, device=Device(type=self.device.type), mode=mode)
+                kernelize(self, device=device, mode=mode)
+
             self._use_kernels = True
 
         finally:
@@ -4699,7 +4731,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         if value:
-            self.kernelize()
+            self.set_use_kernels(True)
         else:
             if getattr(self, "_use_kernels", False):
                 logger.warning_once(
@@ -4925,9 +4957,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 yield name, tensor
 
     def train(self, mode: bool = True):
+        changed_mode = self.training != mode
         out = super().train(mode)
-        if self.use_kernels:
-            self.kernelize()
+        # Avoid recasting kernels if not necessary
+        if self.use_kernels and changed_mode:
+            self.set_use_kernels(True)
         return out
 
     def eval(self):
