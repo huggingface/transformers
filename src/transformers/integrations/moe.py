@@ -277,21 +277,20 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
-    if (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16) or (
-        weight.device.type == "cpu"
-        # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
+    # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
+    if (
+        (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16)
+        or weight.device.type == "cpu"
         and is_torch_less_or_equal("2.10.0", accept_dev=True)
-        and (
-            not is_torch_greater_or_equal("2.9", accept_dev=True)
-            or weight.data_ptr() % 16 != 0
-            or input.data_ptr() % 16 != 0
-        )
+        and (weight.data_ptr() % 16 != 0 or input.data_ptr() % 16 != 0)
+        or weight.device.type == "cpu"
+        and is_torch_less_or_equal("2.8.0", accept_dev=True)
     ):
-        # Under the following conditions we cannot use torch.grouped_mm and have to fall back:
+        # We cannot use torch.grouped_mm and have to fall back when:
         # 1. torch.grouped_mm is not supported in torch.compile / inductor with dtypes other than bf16
-        # 2. torch._grouped_mm has no CPU kernel before 2.9 (torch 2.8 raises NotImplementedError on CPU),
-        #    and on 2.9/2.10 the CPU kernel requires 16 bytes alignment, which is not guaranteed for tensors
-        #    loaded using memmap (e.g. safetensors lazy loading). In both cases fall back to the for-loop.
+        # 2. on CPU with torch <= 2.10, the kernel requires 16 bytes alignment, which is not guaranteed for
+        #    tensors loaded using memmap (e.g. safetensors lazy loading)
+        # 3. on CPU with torch <= 2.8, torch._grouped_mm has no CPU kernel at all (raises NotImplementedError)
         #    issue: https://github.com/pytorch/pytorch/issues/172440
         return False
 
