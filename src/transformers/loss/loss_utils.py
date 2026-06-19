@@ -26,6 +26,7 @@ from .loss_lw_detr import LwDetrForObjectDetectionLoss
 from .loss_omdet_turbo import OmDetTurboForObjectDetectionLoss
 from .loss_owlvit import OwlViTForObjectDetectionLoss
 from .loss_rf_detr import RfDetrForSegmentationLoss
+from .loss_rnnt import ParakeetForRNNTLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 from .loss_tdt import ParakeetForTDTLoss
 
@@ -198,6 +199,7 @@ LOSS_MAPPING = {
     "Deimv2ForObjectDetection": Deimv2ForObjectDetectionLoss,
     "CsmForConditionalGeneration": ForCausalLMLoss,
     "LwDetrForObjectDetection": LwDetrForObjectDetectionLoss,
+    "ParakeetForRNNT": ParakeetForRNNTLoss,
     "ParakeetForTDT": ParakeetForTDTLoss,
     "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
     "RfDetrForInstanceSegmentation": RfDetrForSegmentationLoss,
