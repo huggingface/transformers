@@ -129,14 +129,6 @@ class LocateAnythingModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(
-        "The vision weight conversion splits the fused `wqkv` and applies a per-head RoPE permutation while also "
-        "changing the prefix, which is load-correct and round-trips through the Transformers layout but is not "
-        "reversible to the original `vision_model.*.wqkv` checkpoint layout in a single composite-level converter."
-    )
-    def test_reverse_loading_mapping(self):
-        pass
-
     def test_mismatching_num_image_tokens(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
