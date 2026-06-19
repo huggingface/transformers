@@ -547,7 +547,11 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class NemotronAsrStreamingEncoderAttention(nn.Module):
-    """Multi-head attention with relative positional encoding. See section 3.3 of https://huggingface.co/papers/1901.02860."""
+    """
+    Multi-head attention with relative positional encoding.
+    The only difference with `ParakeetEncoderAttention` is the addition of the `past_key_values`.
+    See `ParakeetEncoderAttention`, and https://huggingface.co/papers/2312.17279 for more details
+    """
 
     def __init__(self, config: NemotronAsrStreamingEncoderConfig, layer_idx: int):
         super().__init__()

@@ -786,7 +786,11 @@ class NemotronAsrStreamingEncoderConvolutionModule(FastSpeech2ConformerConvoluti
 
 
 class NemotronAsrStreamingEncoderAttention(ParakeetEncoderAttention):
-    """Multi-head attention with relative positional encoding. See section 3.3 of https://huggingface.co/papers/1901.02860."""
+    """
+    Multi-head attention with relative positional encoding.
+    The only difference with `ParakeetEncoderAttention` is the addition of the `past_key_values`.
+    See `ParakeetEncoderAttention`, and https://huggingface.co/papers/2312.17279 for more details
+    """
 
     def forward(
         self,
