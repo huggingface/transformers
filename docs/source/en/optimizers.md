@@ -48,7 +48,7 @@ An optimizer updates model weights during training. The scheduler wraps the opti
   │                          ▼            .param_groups['lr']         │
   │              model.zero_grad()                                    │
   │                                                                   │
-  └───────────────────────────────────────────────────────────────────┘
+  └ ──────────────────────┘
 ```
 
 Configure optimizer and scheduler behavior, like [`~TrainingArguments.lr_scheduler_type`] and [`~TrainingArguments.optim`], in [`TrainingArguments`]. The defaults (`adamw_torch` optimizer and `linear` warmup scheduler) are a good starting point for most fine-tuning runs.

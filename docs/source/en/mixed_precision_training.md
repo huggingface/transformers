@@ -18,7 +18,7 @@ limitations under the License.
 Full precision (fp32) training stores and computes everything in 32 bits. Mixed precision uses fp16 or bf16 for the compute-intensive forward and backward passes, while keeping an fp32 copy of the weights for the optimizer update. Compute is faster, weight and activation memory are reduced, and training stability is preserved.
 
 ```text
-┌─────────────────────────────────────────────────────┐
+┌ ────────┐
 │           MIXED PRECISION TRAINING LOOP             │
 │                                                     │
 │  fp32 master weights ──cast──▶ fp16/bf16            │
@@ -36,7 +36,7 @@ Full precision (fp32) training stores and computes everything in 32 bits. Mixed 
 │         │                    check inf/nan          │
 │         │                    cast grads → fp32      │
 │         └────────────────────────── optimizer.step  │
-└─────────────────────────────────────────────────────┘
+└ ────────┘
 ```
 
 Set [`~TrainingArguments.bf16`] or [`~TrainingArguments.fp16`] to `True` to enable mixed precision training. Both are 16-bit types, but bf16 has the same exponent range as fp32 so it almost never overflows. Use bf16 on Ampere or newer GPUs (A100, H100) and fall back to fp16 on older hardware like V100 or T4.
