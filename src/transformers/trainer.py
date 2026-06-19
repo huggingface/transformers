@@ -1639,6 +1639,21 @@ class Trainer:
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
             train_dataloader = self.accelerator.deepspeed_ulysses_dl_adapter(train_dataloader, model)
+        elif pc is not None and pc.sp_backend == "accelerate" and pc.sp_enabled:
+            # Native Ulysses SP: `accelerate.prepare()` already wrapped the DataLoader in a
+            # `SequenceShardingDataLoader`, but it ran before the model was prepared so the Ulysses
+            # attention handler (which pushes the GLOBAL packed/varlen cu_seqlens onto the attention)
+            # was still None. Now that the model is prepared, attach the handler so packed batches take
+            # the flash-varlen path (no-op for non-packed sequences).
+            from accelerate.utils.sequence_parallel import SequenceShardingDataLoader
+
+            if isinstance(train_dataloader, SequenceShardingDataLoader):
+                train_dataloader.attention = getattr(self.accelerator, "_sp_attention", None)
+            else:
+                shard_group = self.accelerator.torch_device_mesh["sp"].get_group()
+                train_dataloader = SequenceShardingDataLoader(
+                    train_dataloader, shard_group, attention=getattr(self.accelerator, "_sp_attention", None)
+                )
 
         # load checkpoint
         if resume_from_checkpoint is not None:
