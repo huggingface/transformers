@@ -35,8 +35,8 @@ if is_torch_available():
     from transformers import (
         AutoProcessor,
         Nemotron3_5AsrConfig,
-        Nemotron3_5AsrEncoderConfig,
         Nemotron3_5AsrForRNNT,
+        NemotronAsrStreamingEncoderConfig,
         TextIteratorStreamer,
     )
     from transformers.audio_utils import load_audio
@@ -93,7 +93,7 @@ class Nemotron3_5AsrForRNNTModelTester:
         self.encoder_seq_length = self.output_seq_length
 
     def get_config(self):
-        encoder_config = Nemotron3_5AsrEncoderConfig(
+        encoder_config = NemotronAsrStreamingEncoderConfig(
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,

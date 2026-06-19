@@ -39,9 +39,9 @@ from tokenizers import AddedToken
 
 from transformers import (
     Nemotron3_5AsrConfig,
-    Nemotron3_5AsrEncoderConfig,
     Nemotron3_5AsrForRNNT,
     Nemotron3_5AsrProcessor,
+    NemotronAsrStreamingEncoderConfig,
     NemotronAsrStreamingFeatureExtractor,
     ParakeetTokenizer,
 )
@@ -279,7 +279,7 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
 
 
 def convert_encoder_config(nemo_config):
-    """Convert NeMo encoder config to a `Nemotron3_5AsrEncoderConfig`."""
+    """Convert NeMo encoder config to a `NemotronAsrStreamingEncoderConfig`."""
     encoder_keys_to_ignore = [
         "stochastic_depth_start_layer",
         "feat_out",
@@ -351,7 +351,7 @@ def convert_encoder_config(nemo_config):
         else:
             raise ValueError(f"Key {key} not found in encoder_config_keys_mapping")
 
-    return Nemotron3_5AsrEncoderConfig(**converted_encoder_config)
+    return NemotronAsrStreamingEncoderConfig(**converted_encoder_config)
 
 
 def _resolve_transducer_labels(nemo_config: dict) -> tuple[list, int]:

@@ -202,7 +202,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
             is inferred automatically for backward compatibility.
         supported_num_lookahead_tokens (`list[int]`, *optional*):
             Supported right attention contexts (lookaheads, in subsampled encoder frames), mirroring
-            `Nemotron3_5AsrEncoderConfig.supported_num_lookahead_tokens`. Used to validate
+            `NemotronAsrStreamingEncoderConfig.supported_num_lookahead_tokens`. Used to validate
             `streaming_latency_ms` and to derive the returned `num_lookahead_tokens`.
         default_num_lookahead_tokens (`int`, *optional*):
             The right context used when `streaming_latency_ms` is not provided. Defaults to the first
