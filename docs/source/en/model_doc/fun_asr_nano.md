@@ -30,39 +30,118 @@ Fun-ASR-Nano consists of four components:
 
 3. **Language Model** (Qwen3-0.6B): A 28-layer causal language model that generates transcription text autoregressively.
 
-4. **CTC Decoder** (optional): A 5-layer Transformer for character-level timestamp prediction via CTC forced alignment.
-
 ### Key Features
 
 - **31 languages**: Chinese (including 7 dialects and 26 regional accents), English, Japanese, and 20+ European languages
-- **Character-level timestamps** via CTC forced alignment
 - **Hotword customization** for domain-specific vocabulary
 - **Native punctuation** output (no separate punctuation model needed)
 - **Streaming support** for chunk-by-chunk inference
 
 ## Usage
 
+### Single inference
+
 ```python
-from transformers import FunAsrNanoForConditionalGeneration, FunAsrNanoProcessor
 import torch
 import librosa
+from transformers import AutoProcessor, FunAsrNanoForConditionalGeneration
 
-# Load model and processor
-model = FunAsrNanoForConditionalGeneration.from_pretrained("FunAudioLLM/Fun-ASR-Nano-2512-hf")
-processor = FunAsrNanoProcessor.from_pretrained("FunAudioLLM/Fun-ASR-Nano-2512-hf")
+model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
-# Load audio
-audio, sr = librosa.load("audio.wav", sr=16000)
+audio, _ = librosa.load("audio.wav", sr=16000)
 
-# Prepare inputs
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Transcribe the audio:"},
+            {"type": "audio"},
+        ],
+    },
+]
+text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
+inputs = processor(text=text, audio=audio, sampling_rate=16000, return_tensors="pt").to(model.device)
 
-# Generate
-with torch.no_grad():
-    generated_ids = model.generate(**inputs, max_new_tokens=200)
+generated_ids = model.generate(**inputs, max_new_tokens=200)
+generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
+print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
+```
 
-# Decode
-text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-print(text)
+### Batch inference
+
+```python
+import torch
+import librosa
+from transformers import AutoProcessor, FunAsrNanoForConditionalGeneration
+
+model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+processor.tokenizer.padding_side = "left"
+model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+
+audio_zh, _ = librosa.load("zh.wav", sr=16000)
+audio_en, _ = librosa.load("en.wav", sr=16000)
+
+conversations = [
+    [{"role": "user", "content": [{"type": "text", "text": "语音转写成中文："}, {"type": "audio"}]}],
+    [{"role": "user", "content": [{"type": "text", "text": "Transcribe the audio:"}, {"type": "audio"}]}],
+]
+texts = [processor.apply_chat_template(c, add_generation_prompt=True, tokenize=False) for c in conversations]
+inputs = processor(text=texts, audio=[audio_zh, audio_en], sampling_rate=16000, return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(**inputs, max_new_tokens=200)
+generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
+print(processor.batch_decode(generated_ids, skip_special_tokens=True))
+```
+
+### Training
+
+```python
+import torch
+import librosa
+from transformers import AutoProcessor, FunAsrNanoForConditionalGeneration
+
+model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model.train()
+
+audio, _ = librosa.load("audio.wav", sr=16000)
+conversation = [
+    {"role": "user", "content": [{"type": "text", "text": "Transcribe the audio:"}, {"type": "audio"}]},
+    {"role": "assistant", "content": "The transcription of the audio."},
+]
+text = processor.apply_chat_template(conversation, tokenize=False)
+inputs = processor(text=text, audio=audio, sampling_rate=16000, return_tensors="pt").to(model.device)
+# Build labels from the input ids (mask out the prompt positions with -100 in your data pipeline).
+inputs["labels"] = inputs["input_ids"].clone()
+
+loss = model(**inputs).loss
+loss.backward()
+```
+
+### Inference with `torch.compile`
+
+```python
+import torch
+import librosa
+from transformers import AutoProcessor, FunAsrNanoForConditionalGeneration
+
+model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model.forward = torch.compile(model.forward)
+
+audio, _ = librosa.load("audio.wav", sr=16000)
+conversation = [{"role": "user", "content": [{"type": "text", "text": "Transcribe the audio:"}, {"type": "audio"}]}]
+text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
+inputs = processor(text=text, audio=audio, sampling_rate=16000, return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(**inputs, max_new_tokens=200)
+generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
+print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 ```
 
 ## FunAsrNanoConfig
@@ -72,14 +151,6 @@ print(text)
 ## FunAsrNanoEncoderConfig
 
 [[autodoc]] FunAsrNanoEncoderConfig
-
-## FunAsrNanoAdaptorConfig
-
-[[autodoc]] FunAsrNanoAdaptorConfig
-
-## FunAsrNanoCtcConfig
-
-[[autodoc]] FunAsrNanoCtcConfig
 
 ## FunAsrNanoFeatureExtractor
 

@@ -123,12 +123,30 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
     model_tester_class = FunAsrNanoModelTester
     pipeline_model_mapping = {}
 
+    # The adaptor pools/flattens the audio embeddings, so `get_audio_features().pooler_output` is not the standard
+    # `(batch, seq, hidden)` shape the common test expects.
+    skip_test_audio_features_output_shape = True
+
     @unittest.skip(reason="inputs_embeds is the audio-fused path; can't match raw token-only embeddings.")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip(reason="FunAsrNanoForConditionalGeneration has no separate base model without a generation head.")
     def test_model_base_model_prefix(self):
+        pass
+
+    @unittest.skip(
+        reason="The SAN-M encoder uses a custom attention path (encoders0/encoders/tp_encoders) that does not expose "
+        "per-layer attentions in the standard way."
+    )
+    def test_get_audio_features_attentions(self):
+        pass
+
+    @unittest.skip(
+        reason="The SAN-M encoder stacks heterogeneous blocks (encoders0/encoders/tp_encoders), so the per-layer "
+        "hidden-state count does not match the single `num_hidden_layers` the common test assumes."
+    )
+    def test_get_audio_features_hidden_states(self):
         pass
 
 

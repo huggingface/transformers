@@ -27,12 +27,40 @@ from transformers import (
 )
 
 from .configuration_fun_asr_nano import (
-    FunAsrNanoAdaptorConfig,
     FunAsrNanoConfig,
-    FunAsrNanoCtcConfig,
     FunAsrNanoEncoderConfig,
 )
 from .modeling_fun_asr_nano import FunAsrNanoForConditionalGeneration
+
+
+# Chat template stored in the checkpoint so that `processor.apply_chat_template` works without any
+# Python-side default. Audio elements are replaced with the `<|object_ref_start|>` placeholder token,
+# which the processor later expands to the right number of audio tokens.
+# fmt: off
+CHAT_TEMPLATE = (
+    "{% for message in messages %}"
+        "{% if loop.first and message['role'] != 'system' %}"
+            "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
+        "{% endif %}"
+        "<|im_start|>{{ message['role'] }}\n"
+        "{% if message['content'] is string %}"
+            "{{ message['content'] }}<|im_end|>\n"
+        "{% else %}"
+            "{% for content in message['content'] %}"
+                "{% if content['type'] == 'audio' %}"
+                    "<|object_ref_start|>"
+                "{% elif content['type'] == 'text' %}"
+                    "{{ content['text'] }}"
+                "{% endif %}"
+            "{% endfor %}"
+            "<|im_end|>\n"
+        "{% endif %}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}"
+        "<|im_start|>assistant\n"
+    "{% endif %}"
+)
+# fmt: on
 
 
 def load_original_checkpoint(checkpoint_path: str) -> dict:
@@ -44,37 +72,16 @@ def load_original_checkpoint(checkpoint_path: str) -> dict:
 
 
 def convert_encoder_key(key: str) -> str | None:
-    """Convert original encoder key to HF format.
-
-    Original: audio_encoder.encoders0.0.self_attn.linear_q_k_v.weight
-    Target:   audio_encoder.encoders0.0.self_attn.linear_q_k_v.weight
-    """
+    """Convert original encoder key to HF format (keys already match)."""
     if key.startswith("audio_encoder."):
         return key
     return None
 
 
 def convert_adaptor_key(key: str) -> str | None:
-    """Convert original adaptor key to HF format.
-
-    Original: audio_adaptor.linear1.weight
-    Target:   audio_adaptor.linear1.weight
-    """
+    """Convert original adaptor key to HF format (keys already match)."""
     if key.startswith("audio_adaptor."):
         return key
-    return None
-
-
-def convert_ctc_key(key: str) -> str | None:
-    """Convert original CTC decoder key to HF format.
-
-    Original: ctc_decoder.linear1.weight -> ctc_decoder.linear1.weight
-    Original: ctc.ctc_lo.weight -> ctc_decoder.ctc_lo.weight
-    """
-    if key.startswith("ctc_decoder."):
-        return key
-    if key.startswith("ctc."):
-        return "ctc_decoder." + key[4:]
     return None
 
 
@@ -94,7 +101,7 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
     with open(config_yaml_path, "r") as f:
         cfg = yaml.safe_load(f)
 
-    # Audio encoder config
+    # Audio encoder config (standalone encoder model -> standalone config, Parakeet-style).
     enc_conf = cfg.get("audio_encoder_conf", {})
     audio_encoder_config = FunAsrNanoEncoderConfig(
         input_size=enc_conf.get("input_layer_size", 560),  # 80 * 7 (lfr_m)
@@ -109,30 +116,8 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
         sanm_shift=enc_conf.get("sanm_shfit", 0),
     )
 
-    # Adaptor config
+    # Adaptor params live directly on the main config (the adaptor is not a standalone model).
     adp_conf = cfg.get("audio_adaptor_conf", {})
-    adaptor_config = FunAsrNanoAdaptorConfig(
-        downsample_rate=adp_conf.get("downsample_rate", 1),
-        encoder_dim=adp_conf.get("encoder_dim", 512),
-        llm_dim=adp_conf.get("llm_dim", 1024),
-        ffn_dim=adp_conf.get("ffn_dim", 2048),
-        num_layers=adp_conf.get("n_layer", 2),
-        attention_heads=8,
-        dropout_rate=0.0,
-        use_low_frame_rate=adp_conf.get("use_low_frame_rate", True),
-    )
-
-    # CTC config
-    ctc_conf = cfg.get("ctc_decoder_conf", {})
-    ctc_config = FunAsrNanoCtcConfig(
-        vocab_size=cfg.get("ctc_vocab_size", 60515),
-        encoder_dim=ctc_conf.get("encoder_dim", 512),
-        decoder_dim=ctc_conf.get("llm_dim", 512),
-        ffn_dim=ctc_conf.get("ffn_dim", 2048),
-        num_layers=ctc_conf.get("n_layer", 5),
-        downsample_rate=ctc_conf.get("downsample_rate", 1),
-        blank_id=cfg.get("ctc_conf", {}).get("blank_id", 60514),
-    )
 
     # Text (LLM) config
     with open(os.path.join(qwen3_config_path, "config.json"), "r") as f:
@@ -141,9 +126,12 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
 
     config = FunAsrNanoConfig(
         audio_encoder_config=audio_encoder_config,
-        adaptor_config=adaptor_config,
         text_config=text_config,
-        ctc_config=ctc_config,
+        adaptor_downsample_rate=adp_conf.get("downsample_rate", 1),
+        adaptor_ffn_dim=adp_conf.get("ffn_dim", 2048),
+        adaptor_num_layers=adp_conf.get("n_layer", 2),
+        adaptor_attention_heads=8,
+        adaptor_dropout_rate=0.0,
     )
 
     return config
@@ -178,24 +166,20 @@ def convert_checkpoint(
     unconverted_keys = []
 
     for key, value in original_state_dict.items():
-        new_key = None
-
-        # Try each converter
         new_key = convert_encoder_key(key)
         if new_key is None:
             new_key = convert_adaptor_key(key)
-        if new_key is None:
-            new_key = convert_ctc_key(key)
         if new_key is None:
             new_key = convert_llm_key(key)
 
         if new_key is not None:
             converted_state_dict[new_key] = value
         else:
+            # CTC / timestamp branch is not used for the generation path and is intentionally dropped.
             unconverted_keys.append(key)
 
     if unconverted_keys:
-        print(f"Warning: {len(unconverted_keys)} keys were not converted:")
+        print(f"Skipping {len(unconverted_keys)} keys not used by the HF model (e.g. CTC branch):")
         for k in unconverted_keys[:20]:
             print(f"  - {k}")
         if len(unconverted_keys) > 20:
@@ -222,19 +206,28 @@ def convert_checkpoint(
     model.save_pretrained(output_path)
     config.save_pretrained(output_path)
 
-    # Copy tokenizer
-    print("Copying tokenizer...")
+    # Build and save the processor; this also writes the chat template to its own file in the checkpoint
+    # (`chat_template.jinja`), so `processor.apply_chat_template` works without any Python-side default.
+    print("Building processor (with chat template)...")
+    from .feature_extraction_fun_asr_nano import FunAsrNanoFeatureExtractor
+    from .processing_fun_asr_nano import FunAsrNanoProcessor
+
     tokenizer = AutoTokenizer.from_pretrained(qwen3_path)
-    if tokenizer is not None:
-        tokenizer.save_pretrained(output_path)
+    feature_extractor = FunAsrNanoFeatureExtractor()
+    processor = FunAsrNanoProcessor(
+        feature_extractor=feature_extractor,
+        tokenizer=tokenizer,
+        chat_template=CHAT_TEMPLATE,
+        audio_downsample_rate=config.adaptor_downsample_rate,
+    )
+    processor.save_pretrained(output_path)
 
     print("Done!")
 
     if push_to_hub and hub_model_id:
         print(f"Pushing to hub: {hub_model_id}")
         model.push_to_hub(hub_model_id)
-        if tokenizer is not None:
-            tokenizer.push_to_hub(hub_model_id)
+        processor.push_to_hub(hub_model_id)
 
 
 if __name__ == "__main__":

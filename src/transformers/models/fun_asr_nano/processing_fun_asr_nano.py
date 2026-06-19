@@ -43,19 +43,8 @@ class FunAsrNanoProcessor(ProcessorMixin):
         audio_downsample_rate (`int`, *optional*, defaults to 1):
             Downsampling ratio applied by the audio adaptor, used to expand audio placeholder tokens.
         """
-        if chat_template is None:
-            chat_template = self.default_chat_template
-
         if tokenizer is not None and tokenizer.convert_tokens_to_ids(audio_token) is None:
-            fallback_audio_token = "<|object_ref_start|>"
-            if tokenizer.convert_tokens_to_ids(fallback_audio_token) is None:
-                raise ValueError(f"Audio token {audio_token!r} is not present in the tokenizer vocabulary.")
-            logger.warning_once(
-                f"Audio token {audio_token!r} is not present in the tokenizer vocabulary. "
-                f"Using {fallback_audio_token!r} instead."
-            )
-            chat_template = chat_template.replace(audio_token, fallback_audio_token)
-            audio_token = fallback_audio_token
+            raise ValueError(f"Audio token {audio_token!r} is not present in the tokenizer vocabulary.")
 
         self.audio_token = audio_token
         self.audio_downsample_rate = audio_downsample_rate
@@ -123,60 +112,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
 
         return BatchFeature(data=dict(text_inputs))
 
-    def batch_decode(self, *args, **kwargs):
-        """Forward to tokenizer's batch_decode."""
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """Forward to tokenizer's decode."""
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def default_chat_template(self):
-        """
-        Default chat template for Fun-ASR-Nano. Formats messages with audio placeholders.
-
-        Content can be a string or a list of dicts with "type" field ("audio" or "text").
-        Audio elements are replaced with the <|object_ref_start|> token placeholder.
-
-        Example:
-
-        ```python
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": [
-                {"type": "text", "text": "语音转写成中文："},
-                {"type": "audio"},
-            ]},
-        ]
-        text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        ```
-        """
-        # fmt: off
-        return (
-            "{% for message in messages %}"
-                "{% if loop.first and message['role'] != 'system' %}"
-                    "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
-                "{% endif %}"
-                "<|im_start|>{{ message['role'] }}\n"
-                "{% if message['content'] is string %}"
-                    "{{ message['content'] }}<|im_end|>\n"
-                "{% else %}"
-                    "{% for content in message['content'] %}"
-                        "{% if content['type'] == 'audio' %}"
-                            "<|object_ref_start|>"
-                        "{% elif content['type'] == 'text' %}"
-                            "{{ content['text'] }}"
-                        "{% endif %}"
-                    "{% endfor %}"
-                    "<|im_end|>\n"
-                "{% endif %}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}"
-                "<|im_start|>assistant\n"
-            "{% endif %}"
-        )
-        # fmt: on
+    # `decode` / `batch_decode` are inherited from `ProcessorMixin` and forward to the tokenizer.
 
     @property
     def model_input_names(self):

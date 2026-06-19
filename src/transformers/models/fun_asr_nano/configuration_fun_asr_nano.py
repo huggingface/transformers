@@ -24,6 +24,11 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class FunAsrNanoEncoderConfig(PreTrainedConfig):
     r"""
+    This is the configuration class to store the configuration of a [`FunAsrNanoEncoder`]. It is used to instantiate a
+    Fun-ASR-Nano audio encoder (a SenseVoice SAN-M encoder) according to the specified arguments, defining the model
+    architecture. Like [`ParakeetEncoderConfig`], this is a standalone encoder configuration since the encoder is a
+    standalone model registered in the auto mappings.
+
     input_size (`int`, *optional*, defaults to 560):
         Input feature dimension (after LFR: 80 mel bins * 7 frames = 560).
     output_size (`int`, *optional*, defaults to 512):
@@ -38,7 +43,6 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
         Number of timestamp prediction encoder blocks.
     dropout_rate (`float`, *optional*, defaults to 0.1):
         Dropout rate.
-        Positional encoding dropout rate.
     attention_dropout_rate (`float`, *optional*, defaults to 0.0):
         Attention dropout rate.
     kernel_size (`int`, *optional*, defaults to 11):
@@ -76,90 +80,30 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
-class FunAsrNanoAdaptorConfig(PreTrainedConfig):
-    r"""
-    Configuration for the Fun-ASR-Nano audio adaptor.
-
-    downsample_rate (`int`, *optional*, defaults to 1):
-        Downsampling factor applied to the encoder sequence before projecting to the language model.
-    encoder_dim (`int`, *optional*, defaults to 512):
-        Hidden size of the audio encoder output.
-    llm_dim (`int`, *optional*, defaults to 1024):
-        Hidden size of the language model input embeddings.
-    ffn_dim (`int`, *optional*, defaults to 2048):
-        Hidden size of the adaptor feed-forward projection.
-    num_layers (`int`, *optional*, defaults to 2):
-        Number of adaptor transformer layers.
-    attention_heads (`int`, *optional*, defaults to 8):
-        Number of attention heads in adaptor transformer layers.
-    dropout_rate (`float`, *optional*, defaults to 0.0):
-        Dropout probability used in the adaptor.
-    use_low_frame_rate (`bool`, *optional*, defaults to `True`):
-        Whether the adaptor expects low-frame-rate audio features.
-    """
-
-    model_type = "fun_asr_nano_adaptor"
-
-    downsample_rate: int = 1
-    encoder_dim: int = 512
-    llm_dim: int = 1024
-    ffn_dim: int = 2048
-    num_layers: int = 2
-    attention_heads: int = 8
-    dropout_rate: float = 0.0
-    use_low_frame_rate: bool = True
-
-
-@auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
-@strict
-class FunAsrNanoCtcConfig(PreTrainedConfig):
-    r"""
-    Configuration for the Fun-ASR-Nano CTC decoder.
-
-    vocab_size (`int`, *optional*, defaults to 60515):
-        Size of the CTC decoder vocabulary.
-    encoder_dim (`int`, *optional*, defaults to 512):
-        Hidden size of the audio encoder output.
-    decoder_dim (`int`, *optional*, defaults to 512):
-        Hidden size of the CTC decoder.
-    ffn_dim (`int`, *optional*, defaults to 2048):
-        Hidden size of the CTC decoder feed-forward projection.
-    num_layers (`int`, *optional*, defaults to 5):
-        Number of CTC decoder transformer layers.
-    downsample_rate (`int`, *optional*, defaults to 1):
-        Downsampling factor applied before the CTC decoder projection.
-    blank_id (`int`, *optional*, defaults to 60514):
-        Token ID used as the CTC blank label.
-    dropout_rate (`float`, *optional*, defaults to 0.0):
-        Dropout probability used in the CTC decoder.
-    """
-
-    model_type = "fun_asr_nano_ctc"
-
-    vocab_size: int = 60515
-    encoder_dim: int = 512
-    decoder_dim: int = 512
-    ffn_dim: int = 2048
-    num_layers: int = 5
-    downsample_rate: int = 1
-    blank_id: int = 60514
-    dropout_rate: float = 0.0
-
-
-@auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
-@strict
 class FunAsrNanoConfig(PreTrainedConfig):
     r"""
+    This is the configuration class to store the configuration of a [`FunAsrNanoForConditionalGeneration`]. It is used
+    to instantiate a Fun-ASR-Nano model according to the specified arguments, defining the model architecture.
+
+    The adaptor (audio projector) is *not* a standalone model, so following the [`VoxtralConfig`] pattern its
+    parameters live directly on this config rather than in a nested sub-config.
+
     audio_encoder_config (`dict` or `FunAsrNanoEncoderConfig`, *optional*):
         Configuration for the audio encoder.
-    adaptor_config (`dict` or `FunAsrNanoAdaptorConfig`, *optional*):
-        Configuration for the audio adaptor.
     text_config (`dict` or `PreTrainedConfig`, *optional*):
         Configuration for the language model (Qwen3).
-    ctc_config (`dict` or `FunAsrNanoCtcConfig`, *optional*):
-        Configuration for the CTC decoder.
     audio_token_index (`int`, *optional*, defaults to 151646):
         Token ID used as placeholder for audio features.
+    adaptor_downsample_rate (`int`, *optional*, defaults to 1):
+        Downsampling factor applied to the encoder sequence before projecting to the language model.
+    adaptor_ffn_dim (`int`, *optional*, defaults to 2048):
+        Hidden size of the adaptor feed-forward projection.
+    adaptor_num_layers (`int`, *optional*, defaults to 2):
+        Number of adaptor transformer layers.
+    adaptor_attention_heads (`int`, *optional*, defaults to 8):
+        Number of attention heads in the adaptor transformer layers.
+    adaptor_dropout_rate (`float`, *optional*, defaults to 0.0):
+        Dropout probability used in the adaptor.
     initializer_range (`float`, *optional*, defaults to 0.02):
         Standard deviation for weight initialization.
 
@@ -175,30 +119,30 @@ class FunAsrNanoConfig(PreTrainedConfig):
     """
 
     model_type = "fun_asr_nano"
+    attribute_map = {"audio_token_id": "audio_token_index"}
     sub_configs = {
         "text_config": AutoConfig,
         "audio_encoder_config": FunAsrNanoEncoderConfig,
-        "adaptor_config": FunAsrNanoAdaptorConfig,
-        "ctc_config": FunAsrNanoCtcConfig,
     }
 
     audio_encoder_config: dict | FunAsrNanoEncoderConfig | None = None
-    adaptor_config: dict | FunAsrNanoAdaptorConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    ctc_config: dict | FunAsrNanoCtcConfig | None = None
     audio_token_index: int = 151646
+    adaptor_downsample_rate: int = 1
+    adaptor_ffn_dim: int = 2048
+    adaptor_num_layers: int = 2
+    adaptor_attention_heads: int = 8
+    adaptor_dropout_rate: float = 0.0
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_encoder_config, dict):
+            self.audio_encoder_config["model_type"] = self.audio_encoder_config.get(
+                "model_type", "fun_asr_nano_encoder"
+            )
             self.audio_encoder_config = FunAsrNanoEncoderConfig(**self.audio_encoder_config)
         elif self.audio_encoder_config is None:
             self.audio_encoder_config = FunAsrNanoEncoderConfig()
-
-        if isinstance(self.adaptor_config, dict):
-            self.adaptor_config = FunAsrNanoAdaptorConfig(**self.adaptor_config)
-        elif self.adaptor_config is None:
-            self.adaptor_config = FunAsrNanoAdaptorConfig()
 
         if isinstance(self.text_config, dict):
             text_config_model_type = self.text_config.get("model_type", "qwen3")
@@ -206,17 +150,10 @@ class FunAsrNanoConfig(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"]()
 
-        if isinstance(self.ctc_config, dict):
-            self.ctc_config = FunAsrNanoCtcConfig(**self.ctc_config)
-        elif self.ctc_config is None:
-            self.ctc_config = FunAsrNanoCtcConfig()
-
         super().__post_init__(**kwargs)
 
 
 __all__ = [
     "FunAsrNanoConfig",
     "FunAsrNanoEncoderConfig",
-    "FunAsrNanoAdaptorConfig",
-    "FunAsrNanoCtcConfig",
 ]
