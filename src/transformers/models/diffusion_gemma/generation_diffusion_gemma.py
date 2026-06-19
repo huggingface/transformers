@@ -121,6 +121,9 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
         self.max_new_tokens: int | None = kwargs.pop("max_new_tokens", None)
         self.max_length: int | None = kwargs.pop("max_length", None)
 
+        # Parameter that controls the format of generate
+        self.return_dict_in_generate: bool = kwargs.pop("return_dict_in_generate", False)
+
         # Diffusion parameters
         # There can be only one sampler at a time, but multiple logits processors and/or stopping criteria.
         self.max_denoising_steps: int = kwargs.pop("max_denoising_steps", None)
