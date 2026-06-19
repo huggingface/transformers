@@ -179,31 +179,33 @@ class GraniteSpeechConformerAttention(nn.Module):
         query_states = self.to_q(hidden_states)
         key_states, value_states = self.to_kv(hidden_states).chunk(2, dim=-1)
 
-        query_states = query_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
-        key_states = key_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
-        value_states = value_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
+        flat_bsz = bsz * num_blocks
+        query_states = query_states.reshape(flat_bsz, self.context_size, self.num_heads, -1).transpose(1, 2)
+        key_states = key_states.reshape(flat_bsz, self.context_size, self.num_heads, -1).transpose(1, 2)
+        value_states = value_states.reshape(flat_bsz, self.context_size, self.num_heads, -1).transpose(1, 2)
 
         # shaw's relative positional embedding
         rel_pos_emb = self.rel_pos_emb(attention_dists)
         # alternative computation of `pos_attn` - for readability
-        # rel_pos_emb_expanded = rel_pos_emb.view([1, 1, 1] + list(rel_pos_emb.shape))
+        # rel_pos_emb_expanded = rel_pos_emb.view([1, 1] + list(rel_pos_emb.shape))
         # pos_attn = torch.sum(query_states.unsqueeze(-2) * rel_pos_emb_expanded, dim=-1) * self.scale
         # einsum implementation of pos_attn - gives x30 speedup over the alternative
         # TODO (@avihu111) find a fast alternative to einsum
-        pos_attn = torch.einsum("b m h c d, c r d -> b m h c r", query_states, rel_pos_emb) * self.scale
+        pos_attn = torch.einsum("b h c d, c r d -> b h c r", query_states, rel_pos_emb) * self.scale
 
         if remainder > 0:
             # masked attention in the extended block
             mask = torch.ones(self.context_size, self.context_size, dtype=bool, device=hidden_states.device)
             mask[:remainder, :remainder] = 0
             mask_value = -torch.finfo(pos_attn.dtype).max
-            pos_attn[:, -1, :].masked_fill_(mask, mask_value)
+            pos_attn[num_blocks - 1 :: num_blocks].masked_fill_(mask, mask_value)
 
         with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
             out = F.scaled_dot_product_attention(
                 query_states, key_states, value_states, attn_mask=pos_attn, scale=self.scale
             )
-        out = out.transpose(2, 3).reshape(bsz, hidden_states.shape[1], -1)
+        out = out.transpose(1, 2).contiguous()
+        out = out.reshape(bsz, hidden_states.shape[1], -1)
         out = self.to_out(out[:, :num_features, :])
         return self.dropout(out)
 
