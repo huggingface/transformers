@@ -345,14 +345,13 @@ class GraniteSpeechPlusConformerAttention(nn.Module):
             mask = torch.ones(self.context_size, self.context_size, dtype=bool, device=hidden_states.device)
             mask[:remainder, :remainder] = 0
             mask_value = -torch.finfo(pos_attn.dtype).max
-            pos_attn[num_blocks - 1 :: num_blocks].masked_fill_(mask, mask_value)
+            pos_attn[num_blocks - 1 : pos_attn.shape[0] : num_blocks].masked_fill_(mask, mask_value)
 
         with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
             out = F.scaled_dot_product_attention(
                 query_states, key_states, value_states, attn_mask=pos_attn, scale=self.scale
             )
-        out = out.transpose(1, 2).contiguous()
-        out = out.reshape(bsz, hidden_states.shape[1], -1)
+        out = out.transpose(1, 2).reshape(bsz, hidden_states.shape[1], -1)
         out = self.to_out(out[:, :num_features, :])
         return self.dropout(out)
 
