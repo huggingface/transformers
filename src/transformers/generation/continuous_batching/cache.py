@@ -116,6 +116,8 @@ class PagedAttentionCache:
     for the sliding-attention group, although it is not needed.
     """
 
+    _min_block_size = 4
+
     def __init__(
         self,
         config: PreTrainedConfig,
@@ -148,8 +150,8 @@ class PagedAttentionCache:
 
         # Extract cache dimensions. Default used to be 32, now it's 256 to be compatible with flash_with_kvcache.
         self.block_size = continuous_batching_config.block_size
-        if self.block_size <= 0:
-            raise ValueError(f"Block size must be positive, but got {self.block_size}")
+        if self.block_size < self._min_block_size:
+            raise ValueError(f"Block size must be at least {self._min_block_size}, but got {self.block_size}")
 
         # Group layers depending on the attention mix
         layer_groups, group_types = group_layers_by_attn_type(config)
@@ -257,7 +259,7 @@ class PagedAttentionCache:
 
         self.cache_shape = ((num_blocks + 2) * self.block_size, self.num_key_value_heads, self.head_dim)
         self.read_trash_index = num_blocks * self.block_size
-        self.sentinel_index = num_blocks * self.block_size + 1  # since block size >= 4, this is safe
+        self.sentinel_index = num_blocks * self.block_size + 1  # since block size >= 4 >= 2, this is safe
         self.write_trash_index = (num_blocks + 1) * self.block_size
         for _ in range(group_size):
             new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
@@ -269,7 +271,7 @@ class PagedAttentionCache:
             # Write 0s in the read trash block so that the padding tokens read always 0-valued KV cache
             new_layer_key_cache.view(block_based_shape)[num_blocks].fill_(0)
             new_layer_value_cache.view(block_based_shape)[num_blocks].fill_(0)
-            # Make sure the sentinel index block holds zeros
+            # Make sure the read trash index block holds zeros
             read_trash_slice = slice(self.read_trash_index, self.read_trash_index + self.block_size)
             keys_are_zero = new_layer_key_cache[read_trash_slice].eq(0).all()
             values_are_zero = new_layer_value_cache[read_trash_slice].eq(0).all()
@@ -585,7 +587,6 @@ class PagedAttentionMemoryHandler:
     _input_dtype = torch.int32
     _upper_bound_max_batch_tokens = 1024
     _upper_bound_num_blocks = 4096
-    _min_block_size = 4
 
     def __init__(
         self,
@@ -612,9 +613,6 @@ class PagedAttentionMemoryHandler:
         self.num_output_rows = 2 if continuous_batching_config.return_logprobs else 1
         # This account for the set of 2 IOs if async batching is used
         self.io_multiplier = 2 if continuous_batching_config.use_async_batching else 1
-        # This is to ensure efficient cache + enough space for the special indices
-        if self.block_size < self._min_block_size:
-            raise ValueError(f"Block size must be at least {self._min_block_size}, got {self.block_size}")
 
     @staticmethod
     def get_available_memory(max_memory_percent: float = 1.0) -> int:

@@ -461,7 +461,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
     ) -> None:
         """Initializes the cache manager for a group of sliding window attention layers, with two special indices:
         - ``sentinel_index`` marks the spot of a new token in the read indices
-        - ``write_trash_index`` is used for when padding write to the KV cache
+        - ``write_trash_index`` is used by padding tokens to write their KV cache
         """
         self._index = index
         self.uses_block_sharing = False
