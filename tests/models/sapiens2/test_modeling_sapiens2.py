@@ -199,7 +199,6 @@ class Sapiens2ModelTester:
             (self.batch_size, config.num_labels, expected_h, expected_h),
         )
 
-        
         pose_labels = torch.randn_like(result.heatmaps)
 
         with torch.no_grad():
@@ -210,7 +209,6 @@ class Sapiens2ModelTester:
 
         self.parent.assertIsNotNone(result_with_loss.loss)
 
-        
         target_weights = torch.ones(
             self.batch_size,
             config.num_labels,
