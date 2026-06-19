@@ -1383,7 +1383,8 @@ def replace_unprotected_image_processing_imports(files: dict, all_imports: list)
         if isinstance(import_node, cst.SimpleStatementLine) and isinstance(import_node.body[0], cst.ImportFrom):
             import_node = import_node.body[0]
             full_name = get_full_attribute_name(import_node.module)
-            if re.search(r"^image_processing_(?!(?:backends)|(?:utils))", full_name):
+            # modules from which to import directly without duplicating nodes
+            if re.search(r"^image_processing_(?!(?:backends)|(?:utils)|(?:outputs))", full_name):
                 import_from_image_processing = import_node
                 break
 

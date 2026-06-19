@@ -20,7 +20,11 @@ from datasets import load_dataset
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
@@ -46,6 +50,7 @@ class SegGptImageProcessingTester:
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
+        num_labels=5,
     ):
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
@@ -59,6 +64,7 @@ class SegGptImageProcessingTester:
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
         return {
@@ -92,6 +98,21 @@ class SegGptImageProcessingTester:
             torchify=torchify,
         )
 
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {
+            "outputs": SegGptImageSegmentationOutput(
+                pred_masks=torch.randn(self.batch_size, self.num_channels, self.size["height"], self.size["width"])
+            ),
+            "num_labels": self.num_labels,
+        }
+        expected_shape = {
+            # extra background class
+            "num_labels": self.num_labels + 1,
+            "height": self.size["height"] // 2,
+            "width": self.size["width"],
+        }
+        return inputs, expected_shape
+
 
 def prepare_mask():
     ds = load_dataset("EduardoPacheco/seggpt-example-data")["train"]
@@ -107,7 +128,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = SegGptImageProcessingTester(self)

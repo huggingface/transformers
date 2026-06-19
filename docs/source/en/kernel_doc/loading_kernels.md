@@ -115,19 +115,20 @@ loss = model(input_ids, labels=labels).loss
 loss.backward()
 ```
 
-Explicitly enable training and inference modes with the `mode` argument in the [`~kernels.kernelize`] function. Training mode also supports an additional torch.compile mode.
+Explicitly enable training and inference modes with the `mode` argument in the [`~transformers.kernelize`] function. Training mode also supports an additional torch.compile mode.
 
 ```py
 from kernels import Mode
+from transformers import kernelize
 
 # inference optimized kernels
-model.kernelize(mode=Mode.INFERENCE)
+kernelize(model, mode=Mode.INFERENCE)
 
 # training optimized kernels
-model.kernelize(mode=Mode.TRAINING)
+kernelize(model, mode=Mode.TRAINING)
 
 # training and torch-compile friendly kernels
-model.kernelize(mode=Mode.TRAINING | Mode.TORCH_COMPILE)
+kernelize(model, mode=Mode.TRAINING | Mode.TORCH_COMPILE)
 ```
 
 ## KernelConfig
