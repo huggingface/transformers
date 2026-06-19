@@ -13,6 +13,8 @@
 # limitations under the License.
 """Image processor class for Aria."""
 
+import math
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -219,8 +221,6 @@ class AriaImageProcessorPil(PilBackend):
         Returns:
             `int`: Number of patches per image.
         """
-        import math
-
         split_image = images_kwargs.get("split_image", self.split_image)
         max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
         split_resolutions = images_kwargs.get("split_resolutions", self.split_resolutions)
