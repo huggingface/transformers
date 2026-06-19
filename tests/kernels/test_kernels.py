@@ -46,7 +46,6 @@ from transformers.utils.import_utils import is_kernels_available
 
 
 if is_kernels_available():
-    import kernels as kernels_pkg
     from kernels import Device, Mode, kernelize
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
@@ -597,7 +596,7 @@ class TestUseKernelsLifecycle(TestCasePlus):
         def spy_kernelize(*args, **kwargs):
             call_count["n"] += 1
 
-        with patch.object(kernels_pkg, "kernelize", side_effect=spy_kernelize):
+        with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):
             self.model.use_kernels = True
             self.assertTrue(self.model.use_kernels)
             self.assertEqual(call_count["n"], 1)
@@ -610,7 +609,7 @@ class TestUseKernelsLifecycle(TestCasePlus):
         def spy_kernelize(model, device=None, mode=None):
             last_modes.append(mode)
 
-        with patch.object(kernels_pkg, "kernelize", side_effect=spy_kernelize):
+        with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):
             self.model.use_kernels = True
             self.model.train(True)
             self.assertTrue(any(m == Mode.TRAINING for m in last_modes))
