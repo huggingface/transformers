@@ -70,7 +70,7 @@ from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
+from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -128,7 +128,6 @@ from .utils.import_utils import (
     KERNELS_MIN_VERSION,
     is_flash_attn_greater_or_equal,
     is_huggingface_hub_greater_or_equal,
-    is_rocm_platform,
     is_sagemaker_mp_enabled,
     is_torch_cuda_available,
     is_tracing,
@@ -3839,8 +3838,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # This will create a compatible mapping for the model with the kernels library
                 kernel_config.create_compatible_mapping(self)
 
-            self.kernelize(mode=mode)
-            self._use_kernels = True
+            kernelize(self, mode=mode)
         else:
             self._use_kernels = False
 
@@ -4667,59 +4665,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def loss_function(self, value):
         self._loss_function = value
 
-    def kernelize(self, mode: "Mode | None" = None):
-        """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
-        if not is_kernels_available():
-            raise ValueError(
-                "Kernels are not available. "
-                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
-            )
-        from kernels import Device, Mode, kernelize
-
-        def resolve_kernel_device_type(torch_device_type: str) -> str:
-            """Map torch's device.type to the kernels library's device key (refines `"cuda"` → `"rocm"` on ROCm)."""
-            if torch_device_type == "cuda" and is_rocm_platform():
-                return "rocm"
-            return torch_device_type
-
-        def attach_hidden_kernels(module):
-            for name, fn in getattr(module, "_hidden_kernels", {}).items():
-                if name not in dict(module.named_children()):
-                    if not isinstance(fn, nn.Module):
-                        raise ValueError(
-                            f"Attempted to register a kernel for {name}, but it was not a `torch.nn.Module`. "
-                            "This means the underlying function needs to be decorated with `@use_kernel_func_from_hub`. "
-                            "Please submit and issue to the transformers repo: `https://github.com/huggingface/transformers/issues`."
-                        )
-                    module.register_module(name, fn)
-
-        def detach_hidden_kernels(module):
-            for name in getattr(module, "_hidden_kernels", {}):
-                # Skip deregistering if it failed to properly register,
-                # i.e. `ValueError` will be raised afterwards
-                if hasattr(module, name):
-                    delattr(module, name)
-
-        try:
-            self.apply(attach_hidden_kernels)
-
-            mode = (Mode.TRAINING if self.training else Mode.INFERENCE) if mode is None else mode
-            device = Device(type=resolve_kernel_device_type(self.device.type))
-            if self.kernel_config is not None:
-                from kernels import use_kernel_mapping
-
-                inherit_mapping = not self.kernel_config.use_local_kernel
-                with use_kernel_mapping(self.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-                    kernelize(self, device=device, mode=mode)
-            else:
-                kernelize(self, device=device, mode=mode)
-
-            self._use_kernels = True
-
-        finally:
-            self.apply(detach_hidden_kernels)
-
     @property
     def use_kernels(self) -> bool:
         return getattr(self, "_use_kernels", False)
@@ -4731,7 +4676,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         if value:
-            self.set_use_kernels(True)
+            kernelize(self)
         else:
             if getattr(self, "_use_kernels", False):
                 logger.warning_once(
