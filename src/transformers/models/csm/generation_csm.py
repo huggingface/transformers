@@ -191,14 +191,12 @@ class CsmGenerationMixin(GenerationMixin):
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
 
         # *************** Csm specific ***************
-        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
         if input_ids.ndim == 2 and model_kwargs.get("inputs_embeds") is None:
             # in the case where the passed input_ids correspond to text tokens, i.e. don't have a third dimension for codebook ids,
             # we need to remove the input length from the MaxLengthCriteria stopping criteria as such input are not returned
             for criterion in stopping_criteria:
                 if isinstance(criterion, MaxLengthCriteria):
                     criterion.max_length -= cur_len
-        model_kwargs.update({"output_hidden_states": True})
         # ============================================
 
         model_forward = (
@@ -229,6 +227,8 @@ class CsmGenerationMixin(GenerationMixin):
                 # ============================================
                 outputs = model_forward(**model_inputs, return_dict=True)
             prefill_consumed = True
+
+            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
                 model_kwargs,
