@@ -110,7 +110,6 @@ class MyTaskPostProcessorOutput(BatchFeature):
     scores: torch.Tensor
 ```
 
-
 ## Video processor
 
 Add a video processor when the model consumes videos or sampled video frames.
