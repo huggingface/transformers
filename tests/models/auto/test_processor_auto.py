@@ -14,6 +14,7 @@
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -556,6 +557,60 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # Verify they are different types
             self.assertIsInstance(loaded_processor.image_processor, SiglipImageProcessor)
             self.assertIsInstance(loaded_processor.encoder_image_processor, CLIPImageProcessor)
+
+    def test_non_primary_tokenizer_root_fallback(self):
+        """
+        Regression test for v5 tokenizer subfolder inference.
+        Non-primary tokenizer attributes used to load successfully even when
+        tokenizer assets lived at repo root.
+
+        v5 introduced unconditional subfolder loading for non-primary
+        tokenizers, which broke older/custom repos that stored tokenizer
+        files at the root instead of inside the inferred tokenizer subfolder.
+        """
+
+        class CustomProcessor(ProcessorMixin):
+            """Processor with a non-primary tokenizer attribute."""
+
+            def __init__(self, bpe_tokenizer, image_processor):
+                super().__init__(bpe_tokenizer, image_processor)
+
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+        image_processor = SiglipImageProcessor()
+
+        processor = CustomProcessor(
+            bpe_tokenizer=tokenizer,
+            image_processor=image_processor,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+
+            # Verify tokenizer initially saved in subfolder
+            tokenizer_dir = os.path.join(tmp_dir, "bpe_tokenizer")
+
+            self.assertTrue(os.path.isdir(tokenizer_dir))
+
+            # move tokenizer assets from inferred subfolder to repo root
+            for file_name in os.listdir(tokenizer_dir):
+                src = os.path.join(tokenizer_dir, file_name)
+                dst = os.path.join(tmp_dir, file_name)
+
+                if os.path.isfile(src):
+                    copyfile(src, dst)
+
+            shutil.rmtree(tokenizer_dir)
+
+            # Loading should fallback to root and still succeed
+            loaded_processor = CustomProcessor.from_pretrained(tmp_dir)
+
+            self.assertTrue(hasattr(loaded_processor, "bpe_tokenizer"))
+
+            self.assertEqual(
+                loaded_processor.bpe_tokenizer.vocab_size,
+                tokenizer.vocab_size,
+            )
 
 
 @is_staging_test
