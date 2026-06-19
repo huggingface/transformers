@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch NemotronAsrStreaming model."""
 
 import json
+import math
 import unittest
 from pathlib import Path
 from threading import Thread
@@ -54,6 +55,21 @@ FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr_stre
 # NemotronAsrStreaming's modeling/config inherit from Parakeet (see `modular_nemotron_asr_streaming.py`), so the tests inherit
 # from the Parakeet testers/tests too and override only the NemotronAsrStreaming-specific classes and behaviours.
 class NemotronAsrStreamingEncoderModelTester(ParakeetEncoderModelTester):
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+        # Unlike Parakeet, NemotronAsrStreaming's subsampling convs are causal: each stride-2 layer pads
+        # `(kernel - 1, stride - 1)` on the time axis, yielding `floor(L / stride) + 1` frames per layer
+        # instead of Parakeet's exact halving. Recompute the expected encoder output length (and the
+        # attention key length) so the shape assertions match the model's actual output.
+        config = self.get_config()
+        total_pad = (config.subsampling_conv_kernel_size - 1) + (config.subsampling_conv_stride - 1)
+        length = self.seq_length
+        for _ in range(int(math.log2(config.subsampling_factor))):
+            length = (length + total_pad - config.subsampling_conv_kernel_size) // config.subsampling_conv_stride + 1
+        self.output_seq_length = length
+        self.encoder_seq_length = length
+        self.key_length = length
+
     def get_config(self):
         return NemotronAsrStreamingEncoderConfig(
             hidden_size=self.hidden_size,
@@ -103,6 +119,11 @@ class NemotronAsrStreamingForRNNTModelTester(ParakeetForRNNTModelTester):
         # NemotronAsrStreaming uses its own encoder tester (Parakeet's `__init__` wired the Parakeet one). The two share
         # identical settings, so the encoder-derived attributes set by `super().__init__` stay valid.
         self.encoder_model_tester = NemotronAsrStreamingEncoderModelTester(parent, **(encoder_kwargs or {}))
+        # Parakeet's `__init__` derived these from the (now-replaced) Parakeet encoder tester; resync them to
+        # NemotronAsrStreaming's causal-subsampling output length.
+        self.output_seq_length = self.encoder_model_tester.output_seq_length
+        self.seq_length = self.encoder_model_tester.output_seq_length
+        self.encoder_seq_length = self.encoder_model_tester.output_seq_length
 
     def get_config(self):
         return NemotronAsrStreamingConfig(

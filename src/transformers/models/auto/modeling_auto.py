@@ -337,6 +337,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mvp", "MvpModel"),
         ("nanochat", "NanoChatModel"),
         ("nemotron", "NemotronModel"),
+        ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingEncoder"),
         ("nemotron_h", "NemotronHModel"),
         ("nllb-moe", "NllbMoeModel"),
