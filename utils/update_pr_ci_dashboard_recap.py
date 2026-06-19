@@ -30,6 +30,8 @@ DASHBOARD_URL = (
     "https://transformers-ci.lor-e.huggingface.cool/d/pytest-observability-by-pr/pytest-observability-branch"
 )
 BADGE_URL = "https://transformers-ci.lor-e.huggingface.cool/exporter/badge/pr"
+BADGE_START = "<!-- ci-dashboard-badge:start -->"
+BADGE_END = "<!-- ci-dashboard-badge:end -->"
 RECAP_START = "<!-- ci-dashboard-recap:start -->"
 RECAP_END = "<!-- ci-dashboard-recap:end -->"
 OLD_DASHBOARD_COMMENT_MARKERS = (
@@ -185,16 +187,24 @@ def format_duration(seconds):
     return f"{remaining_seconds}s"
 
 
-def render_ci_recap(pr_number, dashboard_url, recap, workflow_run, quality_failed):
+def render_ci_badge(pr_number, dashboard_url):
     badge_url = f"{BADGE_URL}?pr={pr_number}"
+    return "\n".join(
+        [
+            BADGE_START,
+            f"[![CI]({badge_url})]({dashboard_url})",
+            BADGE_END,
+        ]
+    )
+
+
+def render_ci_recap(dashboard_url, recap, workflow_run, quality_failed):
     lines = [
         RECAP_START,
         "",
         "---",
         "",
         "### CI recap",
-        "",
-        f"[![CI]({badge_url})]({dashboard_url})",
         "",
         f"**Dashboard:** [View test results in Grafana]({dashboard_url})",
     ]
@@ -233,12 +243,28 @@ def render_ci_recap(pr_number, dashboard_url, recap, workflow_run, quality_faile
     return "\n".join(lines)
 
 
-def inject_ci_recap(body, recap):
+def replace_marked_block(body, start_marker, end_marker, replacement):
     existing_body = body or ""
-    recap_pattern = re.compile(f"{re.escape(RECAP_START)}[\\s\\S]*?{re.escape(RECAP_END)}")
-    if recap_pattern.search(existing_body):
-        return recap_pattern.sub(recap, existing_body)
+    pattern = re.compile(f"{re.escape(start_marker)}[\\s\\S]*?{re.escape(end_marker)}")
+    if pattern.search(existing_body):
+        return pattern.sub(replacement, existing_body)
+    return None
+
+
+def inject_ci_recap(body, recap):
+    replaced = replace_marked_block(body, RECAP_START, RECAP_END, recap)
+    if replaced is not None:
+        return replaced
+    existing_body = body or ""
     return f"{existing_body.rstrip()}\n\n{recap}".lstrip()
+
+
+def inject_ci_badge(body, badge):
+    replaced = replace_marked_block(body, BADGE_START, BADGE_END, badge)
+    if replaced is not None:
+        return replaced
+    existing_body = body or ""
+    return f"{badge}\n\n{existing_body.lstrip()}".rstrip()
 
 
 def find_open_pr_for_sha(repo, token, head_sha):
@@ -292,18 +318,17 @@ def main():
         print(f"Could not collect Grafana recap metrics: {error}")
         recap = {"metrics_available": False}
 
+    badge_body = render_ci_badge(pr["number"], dashboard_url)
     recap_body = render_ci_recap(
-        pr["number"],
-        dashboard_url,
-        recap,
-        workflow_run,
-        quality_job_failed(repo, token, workflow_run["id"]),
+        dashboard_url, recap, workflow_run, quality_job_failed(repo, token, workflow_run["id"])
     )
+    updated_body = inject_ci_badge(pr.get("body"), badge_body)
+    updated_body = inject_ci_recap(updated_body, recap_body)
     request_json(
         f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr['number']}",
         token=token,
         method="PATCH",
-        payload={"body": inject_ci_recap(pr.get("body"), recap_body)},
+        payload={"body": updated_body},
     )
 
 
