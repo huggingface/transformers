@@ -24,6 +24,7 @@ from .requests import RequestState
 
 
 # TODO: add block-based indexing
+# TODO: add hash-based indexing for multimodal inputs
 class EncoderCache:
     cache: torch.Tensor
     REQUEST_ID_KEY: str = "_cb_request_id"
@@ -157,6 +158,11 @@ class EncoderCache:
         allocated_blocks = allocated_blocks_mask[mask].to(self.cache.device)
         # Store the multimodal embeddings in the cache
         self.cache[allocated_blocks] = image_features
+
+    def maybe_outgoing(self, request_id: str) -> None:
+        """If the request has data stored in the encoder cache, add it to the set of outgoing requests."""
+        if request_id in self.allocated_blocks_masks:
+            self.outgoing_requests.add(request_id)
 
     def release_outgoing_requests(self) -> None:
         """Releases the outgoing requests from the encoder cache."""

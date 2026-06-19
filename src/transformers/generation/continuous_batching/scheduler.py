@@ -110,6 +110,9 @@ class Scheduler(ABC):
                 if request_id in self.waiting_requests_order:
                     self.waiting_requests_order.remove(request_id)
                 self.cache.free_blocks(request_id)
+                # If there is an encoder cache, it might also need to free blocks for the cancelled request
+                if self.cache.encoder_cache is not None:
+                    self.cache.encoder_cache.maybe_outgoing(request_id)
             self._requests_to_cancel = set()
         return cancelled_states
 

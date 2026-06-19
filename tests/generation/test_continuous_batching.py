@@ -270,11 +270,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         """A multimodal request whose inputs have been consumed (the dict was emptied once the embeddings were
         computed) cannot be soft reset: the embeddings cannot be recomputed without the original inputs."""
         mm_inputs = {"pixel_values": torch.zeros(1)} if not consumed else {}
-        state = RequestState(
-            request_id="r",
-            initial_tokens=[10, 11],
-            multimodal_inputs=mm_inputs
-        )
+        state = RequestState(request_id="r", initial_tokens=[10, 11], multimodal_inputs=mm_inputs)
         state._status = RequestStatus.DECODING
         state.update_and_check_completion(101, None)
         # The equivalent request creation should fail if and only if the mm data has been consumed
@@ -647,6 +643,220 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 os.environ["WORLD_SIZE"] = original_ws
 
 
+class EncoderCacheTest(unittest.TestCase):
+    """Unit tests for the multimodal EncoderCache. All run on CPU and exercise the underlying methods directly,
+    without spinning up a model."""
+
+    # Real models per modality: only their config is loaded (no weights), so size does not matter here
+    MODEL_IDS = {
+        "image": "llava-hf/llava-interleave-qwen-0.5b-hf",
+        "audio": "Qwen/Qwen2-Audio-7B-Instruct",
+    }
+
+    def load_config(self, modality: str = "image") -> PretrainedConfig:
+        """Loads a real config for the given modality so the EncoderCache is exercised against actual model metadata
+        (its special-token id and text hidden size) rather than a hand-built dummy. A fresh object is returned on each
+        call so tests can safely mutate it."""
+        return AutoConfig.from_pretrained(self.MODEL_IDS[modality])
+
+    def get_config_and_encoder_cache(
+        self,
+        modality: str = "image",
+        max_batch_tokens: int = 8,
+        use_async_batching: bool = False,
+        config: PretrainedConfig | None = None,
+    ) -> tuple[PretrainedConfig, EncoderCache]:
+        """Builds a CPU-resident EncoderCache (and returns the config it was built from) for unit testing the
+        underlying methods. A config can be passed in to override the default real one for the modality."""
+        config = self.load_config(modality) if config is None else config
+        encoder_cache = EncoderCache(
+            config=config,
+            modality=modality,
+            max_batch_tokens=max_batch_tokens,
+            use_async_batching=use_async_batching,
+            model_dtype=torch.float32,
+            device=torch.device("cpu"),
+        )
+        return config, encoder_cache
+
+    @parameterized.expand(
+        [
+            ("image", "image_token_id", "get_image_features"),
+            ("audio", "audio_token_id", "get_audio_features"),
+        ]
+    )
+    def test_specialize_on_modality(self, modality: str, token_attr: str, expected_fn: str) -> None:
+        config, cache = self.get_config_and_encoder_cache(modality=modality)
+        # Check that the modality resolves the right token and function
+        self.assertEqual(cache.special_token_id, getattr(config, token_attr))
+        self.assertEqual(cache.encoding_fn_name, expected_fn)
+        # Check that the cache detects an invalid modality
+        wrong_modality = {"image": "audio", "audio": "image"}
+        with self.assertRaises(ValueError):
+            self.get_config_and_encoder_cache(modality=wrong_modality, config=config)
+        # Check that the specialized token is present
+        with self.assertRaises(ValueError):
+            self.get_config_and_encoder_cache(modality=wrong_modality, config=config)
+
+    @parameterized.expand([("zero", 0), ("negative", -1)])
+    def test_specialize_on_modality_non_positive_token_id_raises(self, _name: str, token_id: int) -> None:
+        """A non-positive special-token id is rejected at construction."""
+        config = self.load_config()
+        config.image_token_index = token_id  # image_token_id reads through this on the real config
+        with self.assertRaises(ValueError):
+            self.get_config_and_encoder_cache(modality="image", config=config)
+
+    def test_extract_mm_embeddings(self) -> None:
+        _, cache = self.get_config_and_encoder_cache()
+        # from pooler_output
+        feats = torch.randn(3, 8)
+        torch.testing.assert_close(cache.extract_mm_embeddings(SimpleNamespace(pooler_output=feats)), feats)
+        # from tensor
+        feats = torch.randn(2, 8)
+        torch.testing.assert_close(cache.extract_mm_embeddings(feats), feats)
+        # from a concatenated tuple
+        a, b = torch.randn(2, 8), torch.randn(3, 8)
+        torch.testing.assert_close(cache.extract_mm_embeddings((a, b)), torch.cat([a, b], dim=0))
+        # from an invalid type
+        with self.assertRaises(ValueError):
+            cache.extract_mm_embeddings(12345)
+
+    def test_can_store_counts_and_caches_embeddings_length(self) -> None:
+        """can_store_mm_embeddings counts the special tokens once and memoizes the length per request."""
+        config, cache = self.get_config_and_encoder_cache()
+        img = config.image_token_id
+        state = RequestState(request_id="r", initial_tokens=[1, img, 1, img, img])  # 3 image tokens
+        self.assertTrue(cache.can_store_mm_embeddings(state))
+        self.assertEqual(cache.embeddings_lengths["r"], 3)
+        # The count is memoized: changing the tokens afterwards does not recompute it
+        state.initial_tokens = [1, 1, 1]
+        self.assertTrue(cache.can_store_mm_embeddings(state))
+        self.assertEqual(cache.embeddings_lengths["r"], 3)
+
+    def test_can_store_returns_false_when_not_enough_free_blocks(self) -> None:
+        config, cache = self.get_config_and_encoder_cache()
+        img = config.image_token_id
+        state = RequestState(request_id="r", initial_tokens=[img, img, img])  # 3 image tokens
+        cache.free_blocks = deque([0, 1])  # fewer free blocks than demand
+        self.assertFalse(cache.can_store_mm_embeddings(state))
+
+    def test_allocate_blocks_builds_mask_and_consumes_free_blocks(self) -> None:
+        """allocate_blocks maps each special-token position to a freshly popped block and -1 elsewhere."""
+        config, cache = self.get_config_and_encoder_cache()
+        img = config.image_token_id
+        state = RequestState(request_id="r", initial_tokens=[1, img, img, 1])  # image tokens at index 1, 2
+        cache.can_store_mm_embeddings(state)  # populates embeddings_lengths
+        free_before = len(cache.free_blocks)
+
+        cache.allocate_blocks(state)
+
+        expected_mask = torch.tensor([-1, 0, 1, -1], dtype=torch.int32)  # fresh deque pops 0 then 1
+        torch.testing.assert_close(cache.allocated_blocks_masks["r"], expected_mask)
+        self.assertEqual(len(cache.free_blocks), free_before - 2)
+        self.assertNotIn("r", cache.embeddings_lengths)  # popped, never used again
+
+    def test_extend_read_indices_documented_example(self) -> None:
+        """Reproduces the example from the extend_read_indices docstring."""
+        _, cache = self.get_config_and_encoder_cache()
+        cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
+        read_indices: list[int] = []
+        cache_read = cache.extend_read_indices("r", past_length=3, query_length=5, read_indices=read_indices)
+        self.assertEqual(read_indices, [0, 1, 3, -1, -1])
+        self.assertTrue(cache_read)
+        self.assertIn("r", cache.outgoing_requests)  # 3 + 5 >= 7, all embeddings consumed
+
+    def test_extend_read_indices_text_only_window_returns_false(self) -> None:
+        _, cache = self.get_config_and_encoder_cache()
+        cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
+        read_indices: list[int] = []
+        cache_read = cache.extend_read_indices("r", past_length=0, query_length=3, read_indices=read_indices)
+        self.assertEqual(read_indices, [-1, -1, -1])
+        self.assertFalse(cache_read)
+        self.assertNotIn("r", cache.outgoing_requests)  # 0 + 3 < 7, not done yet
+
+    def test_extend_read_indices_no_allocated_blocks_pads_with_minus_one(self) -> None:
+        """A request with no encoder blocks (text-only) extends the existing indices with -1 and reports no read."""
+        _, cache = self.get_config_and_encoder_cache()
+        read_indices = [42]  # pre-existing content must be preserved (extend, not overwrite)
+        cache_read = cache.extend_read_indices("unknown", past_length=0, query_length=4, read_indices=read_indices)
+        self.assertEqual(read_indices, [42, -1, -1, -1, -1])
+        self.assertFalse(cache_read)
+
+    def test_extend_read_indices_marks_outgoing_when_reading_past_end(self) -> None:
+        """When the query window runs past the end of the block table, the missing positions are padded with -1 and
+        the request is marked outgoing."""
+        _, cache = self.get_config_and_encoder_cache()
+        cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
+        read_indices: list[int] = []
+        cache_read = cache.extend_read_indices("r", past_length=5, query_length=5, read_indices=read_indices)
+        self.assertEqual(read_indices, [3, -1, -1, -1, -1])
+        self.assertTrue(cache_read)
+        self.assertIn("r", cache.outgoing_requests)
+
+    def test_store_mm_embeddings_writes_at_allocated_blocks(self) -> None:
+        config, cache = self.get_config_and_encoder_cache()
+        cache.allocated_blocks_masks["r"] = torch.tensor([-1, 0, 2, -1], dtype=torch.int32)
+        feats = torch.randn(2, config.text_config.hidden_size)
+        cache.store_mm_embeddings("r", feats)
+        torch.testing.assert_close(cache.cache[0], feats[0])
+        torch.testing.assert_close(cache.cache[2], feats[1])
+
+    def test_store_mm_embeddings_unknown_request_raises(self) -> None:
+        config, cache = self.get_config_and_encoder_cache()
+        with self.assertRaises(ValueError):
+            cache.store_mm_embeddings("ghost", torch.randn(1, config.text_config.hidden_size))
+
+    def test_release_outgoing_requests_frees_blocks(self) -> None:
+        config, cache = self.get_config_and_encoder_cache()
+        img = config.image_token_id
+        state = RequestState(request_id="r", initial_tokens=[1, img, img, 1])  # 2 image tokens
+        cache.can_store_mm_embeddings(state)
+        cache.allocate_blocks(state)
+        free_after_alloc = len(cache.free_blocks)
+        cache.outgoing_requests.add("r")
+
+        cache.release_outgoing_requests()
+
+        self.assertEqual(len(cache.free_blocks), free_after_alloc + 2)
+        self.assertNotIn("r", cache.allocated_blocks_masks)
+        self.assertEqual(len(cache.outgoing_requests), 0)
+
+    def test_release_outgoing_requests_missing_mask_raises_in_sync_mode(self) -> None:
+        _, cache = self.get_config_and_encoder_cache(use_async_batching=False)
+        cache.outgoing_requests.add("ghost")  # no allocated mask registered
+        with self.assertRaises(ValueError):
+            cache.release_outgoing_requests()
+
+    def test_release_outgoing_requests_missing_mask_skipped_in_async_mode(self) -> None:
+        """In async mode a missing mask is tolerated (the request may have been released already on the other IO
+        pair), so release is a no-op rather than an error."""
+        _, cache = self.get_config_and_encoder_cache(use_async_batching=True)
+        cache.outgoing_requests.add("ghost")
+        cache.release_outgoing_requests()  # must not raise
+        self.assertEqual(len(cache.outgoing_requests), 0)
+
+    def test_allocate_store_read_release_round_trip_conserves_blocks(self) -> None:
+        """End-to-end of the cache lifecycle: every block allocated for a request is returned to the free pool once
+        the request is released."""
+        config, cache = self.get_config_and_encoder_cache()
+        img = config.image_token_id
+        total_blocks = len(cache.free_blocks)
+        state = RequestState(request_id="r", initial_tokens=[1, img, img, img, 1])  # 3 image tokens
+
+        self.assertTrue(cache.can_store_mm_embeddings(state))
+        cache.allocate_blocks(state)
+        cache.store_mm_embeddings("r", torch.randn(3, config.text_config.hidden_size))
+        self.assertEqual(len(cache.free_blocks), total_blocks - 3)
+
+        read_indices: list[int] = []
+        cache.extend_read_indices("r", past_length=0, query_length=5, read_indices=read_indices)
+        self.assertIn("r", cache.outgoing_requests)
+
+        cache.release_outgoing_requests()
+        self.assertEqual(len(cache.free_blocks), total_blocks)
+        self.assertEqual(len(cache.allocated_blocks_masks), 0)
+
+
 @require_torch_accelerator
 class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # -----------------------------------------------Parity tests----------------------------------------------- #
@@ -802,6 +1012,210 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             continuous_batching_config=continuous_batching_config,
             attn_implementation=attn_implementation,
         )
+
+    # ------------------------------------------Multimodal parity tests------------------------------------------ #
+    #     Ensure CB matches plain generate for image+text requests, including mixed batches and async batching    #
+    # ----------------------------------------------------------------------------------------------------------- #
+    MULTIMODAL_MODEL_ID = "llava-hf/llava-interleave-qwen-0.5b-hf"
+
+    def _load_multimodal_model(self, attn_implementation: str) -> tuple[Any, GenerationMixin]:
+        """Loads the small image-text model and its processor on the test device, in fp32 for exact parity (CB uses an
+        attention mask while plain generate does not)."""
+        processor = AutoProcessor.from_pretrained(self.MULTIMODAL_MODEL_ID)
+        model = AutoModelForImageTextToText.from_pretrained(
+            self.MULTIMODAL_MODEL_ID, dtype=torch.float32, attn_implementation=attn_implementation
+        )
+        return processor, model.to(torch_device).eval()
+
+    def _build_multimodal_request(
+        self, processor: Any, text: str, image_seeds: list[int] | None = None
+    ) -> tuple[list[int], dict | None]:
+        """Builds one request and returns its input ids and multimodal inputs. `image_seeds` is a list of RNG seeds,
+        one per image in the prompt; None or empty means a text-only request. Images are deterministic random arrays,
+        since parity does not depend on the image being meaningful."""
+        from PIL import Image
+
+        if image_seeds:
+            images = [
+                Image.fromarray((np.random.RandomState(seed).rand(48, 48, 3) * 255).astype("uint8"))
+                for seed in image_seeds
+            ]
+            content = [{"type": "image"} for _ in images] + [{"type": "text", "text": text}]
+        else:
+            content = [{"type": "text", "text": text}]
+        prompt = processor.apply_chat_template(
+            [{"role": "user", "content": content}], add_generation_prompt=True, tokenize=False
+        )
+        if not image_seeds:
+            inputs = processor(text=prompt, return_tensors="pt").to(torch_device)
+            return inputs["input_ids"][0].tolist(), None
+        inputs = processor(images=images, text=prompt, return_tensors="pt").to(torch_device)
+        inputs["pixel_values"] = inputs["pixel_values"].to(torch.float32)
+        # Multimodal inputs are everything the processor returned except the text tensors, passed device-side
+        multimodal_inputs = {k: v for k, v in inputs.items() if k not in ("input_ids", "attention_mask")}
+        return inputs["input_ids"][0].tolist(), multimodal_inputs
+
+    def _greedy_reference(
+        self, model: GenerationMixin, input_ids: list[int], multimodal_inputs: dict | None, max_new_tokens: int
+    ) -> list[int]:
+        """Greedy generate for a single request, returning only the generated token ids."""
+        generate_kwargs = {"input_ids": torch.tensor([input_ids], device=torch_device)}
+        if multimodal_inputs is not None:
+            generate_kwargs.update(multimodal_inputs)
+        generated = model.generate(**generate_kwargs, do_sample=False, max_new_tokens=max_new_tokens)
+        return generated[0, len(input_ids) :].tolist()
+
+    def _assert_cb_matches_generate(
+        self,
+        model: GenerationMixin,
+        requests: list[tuple[list[int], dict | None]],
+        cb_config: ContinuousBatchingConfig,
+        max_new_tokens: int = 15,
+    ) -> None:
+        """Asserts continuous batching matches plain greedy generate for a batch of requests with distinct prompts.
+        The reference is generated one request at a time to avoid padding the (variable) image token spans."""
+        references = {
+            tuple(input_ids): self._greedy_reference(model, input_ids, mm, max_new_tokens)
+            for input_ids, mm in requests
+        }
+        outputs = model.generate_batch(
+            inputs=[input_ids for input_ids, _ in requests],
+            multimodal_inputs=[mm for _, mm in requests],
+            continuous_batching_config=cb_config,
+            max_new_tokens=max_new_tokens,
+            progress_bar=False,
+        )
+        self.assertEqual(len(outputs), len(requests))
+        cb_by_prompt = {tuple(state.prompt_ids): state.generated_tokens for state in outputs.values()}
+        for input_ids, _ in requests:
+            self.assertEqual(
+                cb_by_prompt.get(tuple(input_ids)),
+                references[tuple(input_ids)],
+                f"Parity failed for request with prompt length {len(input_ids)}",
+            )
+
+    @require_vision
+    @with_flush_memory
+    def _test_multimodal_parity(
+        self, use_async: bool, use_cuda_graph: bool, request_specs: list[list[int] | None], max_new_tokens: int = 15
+    ) -> None:
+        """Parity between continuous batching and plain generate for a batch of requests. Each entry of `request_specs`
+        is the list of image seeds for one request (None for a text-only request)."""
+        if (use_async or use_cuda_graph) and torch_device != "cuda":
+            self.skipTest("Asynchronous batching and CUDA graphs require CUDA. Skipping test.")
+        processor, model = self._load_multimodal_model("sdpa")
+        requests = [
+            self._build_multimodal_request(processor, f"Describe item {i}.", seeds)
+            for i, seeds in enumerate(request_specs)
+        ]
+        cb_config = ContinuousBatchingConfig(
+            use_cuda_graph=use_cuda_graph, use_async_batching=use_async, default_compile_level=0
+        )
+        self._assert_cb_matches_generate(model, requests, cb_config, max_new_tokens)
+
+    # The (use_async, use_cuda_graph) combinations are split across the two tests so that all four are covered
+    # without running the full cross-product on each: the cheap single-image test carries the CUDA-graph matrix,
+    # the mixed batch covers the async encoder-cache transfer across IO pairs.
+    @slow
+    @parameterized.expand([(False, False), (False, True), (True, True)])
+    def test_multimodal_parity_single_image(self, use_async: bool, use_cuda_graph: bool) -> None:
+        """A single image+text request matches plain generate, across sync/async and with/without CUDA graphs."""
+        self._test_multimodal_parity(use_async=use_async, use_cuda_graph=use_cuda_graph, request_specs=[[0]])
+
+    @slow
+    @parameterized.expand([(False, False), (True, False)])
+    def test_multimodal_parity_mixed_batch(self, use_async: bool, use_cuda_graph: bool) -> None:
+        """A batch mixing two image requests and one text-only request matches plain generate, in both sync and async
+        batching. Exercises interleaving multimodal and text requests with concurrent encoder-cache entries."""
+        self._test_multimodal_parity(
+            use_async=use_async, use_cuda_graph=use_cuda_graph, request_specs=[[0], [1], None]
+        )
+
+    @slow
+    @require_vision
+    def test_multimodal_parity_multiple_images_per_request(self) -> None:
+        """A single request carrying two images (the encoder features for both are concatenated in order) matches plain
+        generate."""
+        self._test_multimodal_parity(use_async=False, use_cuda_graph=False, request_specs=[[0, 1]])
+
+    @slow
+    @require_vision
+    @with_flush_memory
+    def test_multimodal_parity_chunked_prefill(self) -> None:
+        """A small `max_batch_tokens` splits the (long) image-token span across several prefill chunks; the output must
+        still match plain generate. The encoder runs once on the first chunk while later chunks read its embeddings."""
+        processor, model = self._load_multimodal_model("sdpa")
+        request = self._build_multimodal_request(processor, "Describe this.", [0])
+        cb_config = ContinuousBatchingConfig(
+            use_cuda_graph=False, use_async_batching=False, max_batch_tokens=128, default_compile_level=0
+        )
+        self._assert_cb_matches_generate(model, [request], cb_config)
+
+    @slow
+    @require_vision
+    @with_flush_memory
+    def test_multimodal_prefix_sharing_identical_requests(self) -> None:
+        """Two identical image requests with block sharing enabled both match the single-request greedy output."""
+        processor, model = self._load_multimodal_model("sdpa")
+        input_ids, mm = self._build_multimodal_request(processor, "Describe this.", [0])
+        reference = self._greedy_reference(model, input_ids, mm, max_new_tokens=15)
+        cb_config = ContinuousBatchingConfig(
+            use_cuda_graph=False, use_async_batching=False, allow_block_sharing=True, default_compile_level=0
+        )
+        outputs = model.generate_batch(
+            inputs=[input_ids, list(input_ids)],
+            multimodal_inputs=[mm, dict(mm)],
+            continuous_batching_config=cb_config,
+            max_new_tokens=15,
+            progress_bar=False,
+        )
+        self.assertEqual(len(outputs), 2)
+        for state in outputs.values():
+            self.assertEqual(state.generated_tokens, reference)
+
+    @slow
+    @require_vision
+    @with_flush_memory
+    def test_multimodal_shared_inputs_dict_across_requests(self) -> None:
+        """Passing the same `multimodal_inputs` dict object to two requests (e.g. the same image for two prompts) must
+        work: the encoder must not mutate the caller's dict. Regression test for a crash where the request id was
+        written into and popped from the shared dict, raising `KeyError('_cb_request_id')` on the second request."""
+        processor, model = self._load_multimodal_model("sdpa")
+        input_ids, mm = self._build_multimodal_request(processor, "Describe this.", [0])
+        reference = self._greedy_reference(model, input_ids, mm, max_new_tokens=10)
+        cb_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False, default_compile_level=0)
+        outputs = model.generate_batch(
+            inputs=[input_ids, list(input_ids)],
+            multimodal_inputs=[mm, mm],  # same dict object for both requests
+            continuous_batching_config=cb_config,
+            max_new_tokens=10,
+            progress_bar=False,
+        )
+        self.assertEqual(len(outputs), 2)
+        for state in outputs.values():
+            self.assertEqual(state.generated_tokens, reference)
+
+    @slow
+    @require_vision
+    @with_flush_memory
+    def test_multimodal_with_logits_processor_does_not_crash(self) -> None:
+        """Generation from a multimodal model with an active logits processor (here sampling) must not crash. Regression
+        test for a `KeyError('input_ids')`: multimodal models run the inputs_embeds path, which pops `input_ids` from
+        the forward kwargs, while the logits-processor branch must read it from the argument it is passed instead."""
+        processor, model = self._load_multimodal_model("sdpa")
+        input_ids, mm = self._build_multimodal_request(processor, "Describe this.", [0])
+        generation_config = GenerationConfig(do_sample=True, temperature=0.7, max_new_tokens=10)
+        cb_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False, default_compile_level=0)
+        outputs = model.generate_batch(
+            inputs=[input_ids],
+            multimodal_inputs=[mm],
+            continuous_batching_config=cb_config,
+            generation_config=generation_config,
+            max_new_tokens=10,
+            progress_bar=False,
+        )
+        self.assertEqual(len(outputs), 1)
+        self.assertGreater(len(next(iter(outputs.values())).generated_tokens), 0)
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
     # TODO: replace gemma2 with a tiny version of GPT-OSS? That way we can test sliding window AND attention sink

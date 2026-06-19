@@ -447,9 +447,9 @@ class ContinuousBatchingIOs:
 
             # If the request is an encoder request, we accumulate the encoder arguments
             if state.multimodal_inputs:
-                mm_data = state.multimodal_inputs
-                mm_data[self.cache.encoder_cache.REQUEST_ID_KEY] = state.request_id  # type: ignore (was already checked)
-                self.encoder_kwargs.append(mm_data)
+                # Build a shallow copy of the dict in case it's shared between requests
+                request_id_key = self.cache.encoder_cache.REQUEST_ID_KEY  # type: ignore (was already checked)
+                self.encoder_kwargs.append({**state.multimodal_inputs, request_id_key: state.request_id})
                 state.multimodal_inputs = {}  # means there was multimodal data and it has already been processed
 
             self.requests_in_batch.append(future_state)
