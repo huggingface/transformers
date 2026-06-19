@@ -1429,6 +1429,10 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
+                    # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
+                    # distributed op selects whole experts. The signal is a `MergeModulelist`
+                    # in the chain; it isn't always `operations[0]` (e.g. an FP8 quantizer
+                    # prepends a scale-decode op), so scan the whole chain rather than just the head.
                     shard_index = (
                         len(mapping.collected_tensors.get(source_pattern, []))
                         if isinstance(mapping, WeightConverter)

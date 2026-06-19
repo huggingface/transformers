@@ -246,6 +246,10 @@ The following auto classes are available for the following audio tasks.
 
 [[autodoc]] AutoModelForTDT
 
+### AutoModelForRNNT
+
+[[autodoc]] AutoModelForRNNT
+
 ### AutoModelForSpeechSeq2Seq
 
 [[autodoc]] AutoModelForSpeechSeq2Seq

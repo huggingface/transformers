@@ -97,6 +97,7 @@ if TYPE_CHECKING:
     from .deepseek_v2 import *
     from .deepseek_v3 import *
     from .deepseek_v4 import *
+    from .deepseek_v32 import *
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
@@ -266,6 +267,7 @@ if TYPE_CHECKING:
     from .minicpmv4_6 import *
     from .minimax import *
     from .minimax_m2 import *
+    from .minimax_m3_vl import *
     from .ministral import *
     from .ministral3 import *
     from .mistral import *

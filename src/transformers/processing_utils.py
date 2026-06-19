@@ -873,11 +873,15 @@ class ProcessorMixin(PushToHubMixin):
         batch_replacement_offsets = []
         for batch_idx in range(len(text)):
             last = 0
+            offset = 0
             replacement_offsets = []
             expanded_sample = []
             for m in re.finditer(regex_special_mm_tokens, text[batch_idx]):
                 start, end = m.span()
                 expanded_sample.append(text[batch_idx][last:start])
+
+                # adjust spans using running offset if one sample has several MM data associated
+                start_with_offset = start + offset
 
                 mm_type = m.lastgroup
                 replacement_text = next(replacements_iters[mm_type])
@@ -885,12 +889,14 @@ class ProcessorMixin(PushToHubMixin):
                     {
                         "type": mm_type,
                         "span": (start, end),
-                        "new_span": (start, start + len(replacement_text)),
+                        "new_span": (start_with_offset, start_with_offset + len(replacement_text)),
                         "text": m.group(),
                         "replacement": replacement_text,
                     }
                 )
                 expanded_sample.append(replacement_text)
+                # update the offsets and the last position
+                offset += len(replacement_text) - (end - start)
                 last = end
 
             expanded_sample.append(text[batch_idx][last:])
@@ -1773,9 +1779,20 @@ class ProcessorMixin(PushToHubMixin):
         else:
             # Additional tokenizer: load from subfolder (e.g., "decoder_tokenizer")
             tokenizer_subfolder = os.path.join(subfolder, sub_processor_type) if subfolder else sub_processor_type
-            tokenizer = auto_processor_class.from_pretrained(
-                pretrained_model_name_or_path, subfolder=tokenizer_subfolder, **kwargs
-            )
+            try:
+                tokenizer = auto_processor_class.from_pretrained(
+                    pretrained_model_name_or_path, subfolder=tokenizer_subfolder, **kwargs
+                )
+            except (OSError, ValueError):
+                fallback_folder = "the root directory" if not subfolder else f"subfolder `{subfolder}`"
+                logger.warning(
+                    f"Could not load tokenizer from subfolder `{tokenizer_subfolder}`. "
+                    f"Falling back to loading from {fallback_folder}. "
+                    f"This behavior is deprecated and will be removed in a future version."
+                )
+                tokenizer = auto_processor_class.from_pretrained(
+                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                )
         return tokenizer
 
     @classmethod

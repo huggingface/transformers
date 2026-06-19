@@ -17,6 +17,9 @@ This script downloads files from the HuggingFace Hub to be used for CI tests.
 
 import os
 import re
+import shutil
+import time
+from pathlib import Path
 
 
 # Ensure we always download from the public HuggingFace Hub, not the CI staging endpoint.
@@ -176,15 +179,17 @@ def download_test_file(url):
         # Use hf_hub_download for HF URLs - handles auth automatically via HF_TOKEN env var
         print(f"Downloading {filename} from HuggingFace Hub...")
         try:
-            hf_hub_download(**hf_parts, local_dir=".")
+            downloaded = hf_hub_download(**hf_parts, local_dir=".")
+            try:
+                shutil.copy(downloaded, Path(downloaded).name)
+            except shutil.SameFileError:
+                pass
             print(f"Successfully downloaded: {filename}")
         except Exception as e:
             print(f"Error downloading {filename} from HuggingFace Hub: {e}")
             raise
     else:
         # Use httpx for non-HF URLs (COCO, Britannica, etc.)
-        import time
-
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -283,7 +288,6 @@ if __name__ == "__main__":
             filename="GUWR5TyiY-M_000012_000022.mp4",
             repo_type="dataset",
         )
-        repo_id = "nielsr/image-segmentation-toy-data"
         hf_hub_download(
             repo_id="nielsr/image-segmentation-toy-data",
             filename="instance_segmentation_image_1.png",
