@@ -336,10 +336,8 @@ class LocateAnythingVisionEncoder(nn.Module):
         self, hidden_states: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutput:
         r"""
-        cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
-            The cumulative sequence lengths of each image or video feature.
-        position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
-            The cosine and sine position embeddings for vision attention.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            Temporal, height and width of each image's patch grid.
         """
         position_ids = get_vision_position_ids(image_grid_thw, 1)
         cu_seqlens = get_vision_cu_seqlens(image_grid_thw)

@@ -132,6 +132,7 @@ class LocateAnythingConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+
 class LocateAnythingVisionRotaryEmbedding(VisionRotaryEmbedding):
     pass
 
@@ -180,6 +181,10 @@ class LocateAnythingVisionEncoder(VideoLlama3VisionEncoder):
     def forward(
         self, hidden_states: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutput:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            Temporal, height and width of each image's patch grid.
+        """
         position_ids = get_vision_position_ids(image_grid_thw, 1)
         cu_seqlens = get_vision_cu_seqlens(image_grid_thw)
         rotary = self.rotary_emb(position_ids).repeat(1, 2)
