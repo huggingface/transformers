@@ -17,20 +17,26 @@ import gc
 import itertools
 import os
 import unittest
+from collections import deque
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
+import numpy as np
 import torch
 from parameterized import parameterized
 
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
+    AutoProcessor,
     AutoTokenizer,
     CompileConfig,
     ContinuousBatchingConfig,
     GenerationConfig,
     GenerationMixin,
+    PretrainedConfig,
     StaticCache,
 )
 from transformers.generation.continuous_batching.cache import (
@@ -42,6 +48,7 @@ from transformers.generation.continuous_batching.cache import (
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
 from transformers.generation.continuous_batching.continuous_api import OutputRouter
 from transformers.generation.continuous_batching.distributed import DistributedHelper
+from transformers.generation.continuous_batching.encoder_cache import EncoderCache
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
 from transformers.generation.continuous_batching.requests import GenerationOutput, RequestState, RequestStatus
@@ -53,6 +60,7 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_multi_accelerator,
+    require_vision,
     slow,
     torch_device,
 )
@@ -256,6 +264,30 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertEqual(streamed_tokens, [[101, 102, 103], [101, 102, 103, 104], [101, 102, 103, 104, 105]])
         self.assertEqual(reset_state.generated_tokens, [103, 104, 105])
         self.assertEqual(reset_state.initial_tokens, [10, 11, 101, 102])
+
+    @parameterized.expand([(True,), (False,)])
+    def test_soft_reset_for_multimodal_request(self, consumed: bool):
+        """A multimodal request whose inputs have been consumed (the dict was emptied once the embeddings were
+        computed) cannot be soft reset: the embeddings cannot be recomputed without the original inputs."""
+        mm_inputs = {"pixel_values": torch.zeros(1)} if not consumed else {}
+        state = RequestState(
+            request_id="r",
+            initial_tokens=[10, 11],
+            multimodal_inputs=mm_inputs
+        )
+        state._status = RequestStatus.DECODING
+        state.update_and_check_completion(101, None)
+        # The equivalent request creation should fail if and only if the mm data has been consumed
+        try:
+            reset_state = state.create_equivalent_initial_request()
+            # This point should only be reached if the mm data has not been consumed
+            self.assertFalse(consumed)
+            self.assertIs(reset_state.multimodal_inputs, mm_inputs)
+            self.assertEqual(reset_state.initial_tokens, [10, 11, 101])
+        except RuntimeError as e:
+            # This point should only be reached if the mm data has been consumed
+            if not consumed:
+                raise e
 
     @parameterized.expand(
         [
