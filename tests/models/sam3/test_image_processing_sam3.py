@@ -19,11 +19,17 @@ from datasets import load_dataset
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
     import torch
+
+    from transformers.models.sam3.modeling_sam3 import Sam3ImageSegmentationOutput
 
 if is_vision_available():
     pass
@@ -82,6 +88,19 @@ class Sam3ImageProcessingTester:
             torchify=torchify,
         )
 
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {
+            "outputs": Sam3ImageSegmentationOutput(
+                semantic_seg=torch.randn(self.batch_size, 1, self.mask_size["height"], self.mask_size["width"])
+            )
+        }
+        expected_shape = {
+            "num_labels": 1,
+            "height": self.mask_size["height"],
+            "width": self.mask_size["width"],
+        }
+        return inputs, expected_shape
+
 
 def prepare_semantic_single_inputs():
     ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
@@ -96,7 +115,7 @@ def prepare_semantic_batch_inputs():
 
 @require_torch
 @require_vision
-class Sam3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class Sam3ImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = Sam3ImageProcessingTester(self)

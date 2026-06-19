@@ -21,12 +21,18 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+    prepare_image_inputs,
+)
 from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
+
+    from transformers.modeling_outputs import SemanticSegmenterOutput
 
 
 class MobileNetV2ImageProcessingTester:
@@ -43,6 +49,7 @@ class MobileNetV2ImageProcessingTester:
         do_center_crop=True,
         crop_size=None,
         do_reduce_labels=False,
+        num_labels=5,
     ):
         size = size if size is not None else {"shortest_edge": 20}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
@@ -57,6 +64,7 @@ class MobileNetV2ImageProcessingTester:
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
         self.do_reduce_labels = do_reduce_labels
+        self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
         return {
@@ -81,6 +89,24 @@ class MobileNetV2ImageProcessingTester:
             torchify=torchify,
         )
 
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {
+            "outputs": SemanticSegmenterOutput(
+                logits=torch.randn(
+                    self.batch_size,
+                    self.num_labels,
+                    self.crop_size["height"],
+                    self.crop_size["width"],
+                )
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.crop_size["height"],
+            "width": self.crop_size["width"],
+        }
+        return inputs, expected_shape
+
 
 def prepare_semantic_single_inputs():
     ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
@@ -95,7 +121,9 @@ def prepare_semantic_batch_inputs():
 
 @require_torch
 @require_vision
-class MobileNetV2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class MobileNetV2ImageProcessingTest(
+    ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
+):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = MobileNetV2ImageProcessingTester(self)

@@ -21,11 +21,17 @@ from datasets import load_dataset
 from transformers.file_utils import is_torch_available
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
     import torch
+
+    from transformers.modeling_outputs import SemanticSegmenterOutput
 
 
 class DPTImageProcessingTester:
@@ -43,6 +49,7 @@ class DPTImageProcessingTester:
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         do_reduce_labels=False,
+        num_labels=5,
     ):
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
@@ -57,6 +64,7 @@ class DPTImageProcessingTester:
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_reduce_labels = do_reduce_labels
+        self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
         return {
@@ -82,6 +90,24 @@ class DPTImageProcessingTester:
             torchify=torchify,
         )
 
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {
+            "outputs": SemanticSegmenterOutput(
+                logits=torch.randn(
+                    self.batch_size,
+                    self.num_labels,
+                    self.size["height"],
+                    self.size["width"],
+                )
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.size["height"],
+            "width": self.size["width"],
+        }
+        return inputs, expected_shape
+
 
 # Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
 def prepare_semantic_single_inputs():
@@ -98,7 +124,7 @@ def prepare_semantic_batch_inputs():
 
 @require_torch
 @require_vision
-class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class DPTImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = DPTImageProcessingTester(self)
