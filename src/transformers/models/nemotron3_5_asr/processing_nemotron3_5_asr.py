@@ -248,7 +248,6 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        streaming_latency_ms: int | None = None,
         is_streaming: bool = False,
         is_first_audio_chunk: bool | None = True,
         language: "str | list[str] | None" = None,
@@ -258,10 +257,6 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         sampling_rate (`int`, *optional*):
             The sampling rate of the input audio in Hz. Validated against the feature extractor's
             expected sampling rate (defaults to 16000 Hz) when provided.
-        streaming_latency_ms (`int`, *optional*):
-            Target streaming latency in milliseconds. Must equal one of the latencies supported by the
-            model; selects the `num_lookahead_tokens` returned in the output. If omitted,
-            `default_num_lookahead_tokens` is used and a warning is issued.
         is_streaming (`bool`, *optional*, defaults to `False`):
             Whether to process audio in streaming mode (chunked), using `is_first_audio_chunk` to
             distinguish the first chunk from subsequent ones.
@@ -277,7 +272,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
             `"auto"` with a warning.
 
         Returns:
-            [`BatchFeature`]: the [`NemotronAsrProcessor`] outputs, augmented with:
+            [`BatchFeature`]: the [`NemotronAsrStreamingProcessor`] outputs, augmented with:
 
             - **prompt_ids** -- A `(batch_size,)` `torch.LongTensor` of language-prompt indices. Pass it
               to the model/`generate`; the model turns it into the broadcast one-hot used by
@@ -312,9 +307,9 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-        # The right attention context (akin to Voxtral Realtime's `num_delay_tokens`) selected by the
-        # requested streaming latency; pass it to the model/encoder forward or `generate`.
-        inputs["num_lookahead_tokens"] = self._resolve_num_lookahead_tokens(streaming_latency_ms)
+        # The right attention context (akin to Voxtral Realtime's `num_delay_tokens`), selected via
+        # `set_num_lookahead_tokens`; pass it to the model/encoder forward or `generate`.
+        inputs["num_lookahead_tokens"] = self.default_num_lookahead_tokens
         # The language-prompt indices used for language-ID prompt conditioning.
         inputs["prompt_ids"] = self._resolve_prompt_ids(language, len(audio))
 
@@ -407,43 +402,94 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
 
         return char_offsets
 
+    def set_num_lookahead_tokens(self, num_lookahead_tokens: int):
+        """
+        Select the right attention context (lookahead, in subsampled encoder frames) used for streaming.
+
+        Sets `default_num_lookahead_tokens`, so every derived streaming property
+        (`num_mel_frames_first_audio_chunk`, `num_mel_frames_per_audio_chunk`, `num_samples_first_audio_chunk`,
+        `num_samples_per_audio_chunk`) re-derives from the new value. `num_lookahead_tokens` must be one of
+        `supported_num_lookahead_tokens`.
+
+        Pass the same `num_lookahead_tokens` to `model.generate` so the attention right context used in the
+        forward matches the chunk sizes produced here; otherwise streaming `generate` raises.
+        """
+        if num_lookahead_tokens not in self.supported_num_lookahead_tokens:
+            raise ValueError(
+                f"`num_lookahead_tokens={num_lookahead_tokens}` is not supported by this model. Supported "
+                f"values: {list(self.supported_num_lookahead_tokens)}."
+            )
+        self.default_num_lookahead_tokens = num_lookahead_tokens
+
     @property
-    def encoder_frame_ms(self) -> float:
-        """Duration in milliseconds of one subsampled encoder frame (`subsampling_factor * hop_length / sampling_rate`)."""
+    def _subsampling_factor(self) -> int:
         output_kwargs = self._merge_kwargs(
             Nemotron3_5AsrProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs
         )
-        subsampling_factor = output_kwargs["audio_kwargs"]["subsampling_factor"]
-        return subsampling_factor * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate * 1000
+        return output_kwargs["audio_kwargs"]["subsampling_factor"]
+
+    @property
+    def _encoder_frame_ms(self) -> float:
+        """Duration in milliseconds of one subsampled encoder frame (`subsampling_factor * hop_length / sampling_rate`)."""
+        return (
+            self._subsampling_factor * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate * 1000
+        )
+
+    @property
+    def streaming_latency_ms(self) -> int:
+        """
+        Streaming latency (ms) of the currently-selected right attention context
+        (`default_num_lookahead_tokens`, settable via [`~Nemotron3_5AsrProcessor.set_num_lookahead_tokens`]).
+
+        The model emits a chunk only once its last frame has its full lookahead, so the delay of a right
+        context `r` is `(r + 1)` encoder frames, i.e. `(r + 1) * encoder_frame_ms`.
+        """
+        return round((self.default_num_lookahead_tokens + 1) * self._encoder_frame_ms)
 
     @property
     def supported_streaming_latencies_ms(self) -> dict[int, int]:
         """
-        Mapping from each supported streaming latency (ms) to its right attention context (encoder frames).
-
-        The streaming delay of a right context `r` is `(r + 1)` encoder frames (the model emits a chunk only
-        once the chunk's last frame has its full lookahead), so the latency is `(r + 1) * encoder_frame_ms`.
+        Mapping from each supported right attention context (`supported_num_lookahead_tokens`) to its streaming
+        latency in milliseconds (`(num_lookahead_tokens + 1) * encoder_frame_ms`).
         """
-        frame_ms = self.encoder_frame_ms
-        return {round((right + 1) * frame_ms): right for right in self.supported_num_lookahead_tokens}
+        frame_ms = self._encoder_frame_ms
+        return {right: round((right + 1) * frame_ms) for right in self.supported_num_lookahead_tokens}
 
-    def _resolve_num_lookahead_tokens(self, streaming_latency_ms: int | None) -> int:
-        latencies = self.supported_streaming_latencies_ms
-        if streaming_latency_ms is None:
-            logger.warning_once(
-                f"`streaming_latency_ms` was not provided. Falling back to the model's default right attention "
-                f"context of {self.default_num_lookahead_tokens} frame(s) "
-                f"(~{round((self.default_num_lookahead_tokens + 1) * self.encoder_frame_ms)} ms). Supported "
-                f"streaming latencies (ms): {sorted(latencies)}. Pass `streaming_latency_ms` explicitly to "
-                f"select the latency/quality trade-off."
-            )
-            return self.default_num_lookahead_tokens
-        if streaming_latency_ms not in latencies:
-            raise ValueError(
-                f"`streaming_latency_ms={streaming_latency_ms}` is not supported by this model. Supported "
-                f"streaming latencies (ms): {sorted(latencies)}."
-            )
-        return latencies[streaming_latency_ms]
+    @property
+    def num_mel_frames_first_audio_chunk(self) -> int:
+        """
+        Number of mel frames the first cache-aware streaming chunk must carry, for the model's
+        `default_num_lookahead_tokens`: `1 + subsampling_factor * num_lookahead_tokens`.
+        """
+        return 1 + self._subsampling_factor * self.default_num_lookahead_tokens
+
+    @property
+    def num_mel_frames_per_audio_chunk(self) -> int:
+        """
+        Number of mel frames each subsequent cache-aware streaming chunk must carry, for the model's
+        `default_num_lookahead_tokens`: `subsampling_factor * (num_lookahead_tokens + 1)`.
+        """
+        return self._subsampling_factor * (self.default_num_lookahead_tokens + 1)
+
+    @property
+    def num_samples_first_audio_chunk(self) -> int:
+        """
+        Number of raw audio samples to feed the processor (with `is_first_audio_chunk=True`, i.e. `center=True`)
+        so it returns exactly `num_mel_frames_first_audio_chunk` frames.
+        """
+        return (
+            self.num_mel_frames_first_audio_chunk - 1
+        ) * self.feature_extractor.hop_length + self.feature_extractor.win_length // 2
+
+    @property
+    def num_samples_per_audio_chunk(self) -> int:
+        """
+        Number of raw audio samples to feed the processor (with `is_first_audio_chunk=False`, i.e. `center=False`)
+        so it returns exactly `num_mel_frames_per_audio_chunk` frames.
+        """
+        return (
+            self.num_mel_frames_per_audio_chunk * self.feature_extractor.hop_length + self.feature_extractor.win_length
+        )
 
     def _resolve_prompt_ids(self, language: "str | list[str] | None", batch_size: int) -> torch.LongTensor:
         if language is None:

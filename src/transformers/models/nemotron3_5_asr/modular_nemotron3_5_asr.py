@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch Nemotron3_5Asr model.
 
-Nemotron3_5Asr is the multilingual extension of [`NemotronAsr`]. It reuses the entire cache-aware
+Nemotron3_5Asr is the multilingual extension of [`NemotronAsrStreaming`]. It reuses the entire cache-aware
 streaming FastConformer encoder, RNN-T decoder, joint network, feature extraction, and streaming
 generation machinery unchanged, and adds **language-ID prompt conditioning**: the target language is
 turned into a one-hot vector, broadcast across the encoder time axis, concatenated with the encoder
@@ -29,19 +29,25 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...audio_utils import AudioInput, make_list_of_audio
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ..nemotron_asr.configuration_nemotron_asr import NemotronAsrConfig, NemotronAsrEncoderConfig
-from ..nemotron_asr.feature_extraction_nemotron_asr import NemotronAsrFeatureExtractor
-from ..nemotron_asr.modeling_nemotron_asr import (
-    NemotronAsrForRNNT,
-    NemotronAsrPreTrainedModel,
-    NemotronAsrRNNTOutput,
+from ..nemotron_asr_streaming.configuration_nemotron_asr_streaming import (
+    NemotronAsrStreamingConfig,
+    NemotronAsrStreamingEncoderConfig,
 )
-from ..nemotron_asr.processing_nemotron_asr import NemotronAsrProcessor, NemotronAsrProcessorKwargs
+from ..nemotron_asr_streaming.feature_extraction_nemotron_asr_streaming import NemotronAsrStreamingFeatureExtractor
+from ..nemotron_asr_streaming.modeling_nemotron_asr_streaming import (
+    NemotronAsrStreamingForRNNT,
+    NemotronAsrStreamingPreTrainedModel,
+)
+from ..nemotron_asr_streaming.processing_nemotron_asr_streaming import (
+    NemotronAsrStreamingProcessor,
+    NemotronAsrStreamingProcessorKwargs,
+)
 from .generation_nemotron3_5_asr import Nemotron3_5AsrGenerationMixin, Nemotron3_5AsrRNNTDecoderCache
 
 
@@ -178,16 +184,16 @@ DEFAULT_PROMPT_DICTIONARY = {
 
 @auto_docstring(checkpoint="nvidia/nemotron-3.5-asr-streaming-0.6b")
 @strict
-class Nemotron3_5AsrEncoderConfig(NemotronAsrEncoderConfig):
+class Nemotron3_5AsrEncoderConfig(NemotronAsrStreamingEncoderConfig):
     model_type = "nemotron3_5_asr_encoder"
 
 
 @auto_docstring(checkpoint="nvidia/nemotron-3.5-asr-streaming-0.6b")
 @strict
-class Nemotron3_5AsrConfig(NemotronAsrConfig):
+class Nemotron3_5AsrConfig(NemotronAsrStreamingConfig):
     r"""
     This is the configuration of the multilingual, prompt-conditioned Nemotron3_5Asr RNN-T model. It
-    extends [`NemotronAsrConfig`] with the language-ID prompt-conditioning fields.
+    extends [`NemotronAsrStreamingConfig`] with the language-ID prompt-conditioning fields.
 
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`).
@@ -253,16 +259,16 @@ class Nemotron3_5AsrConfig(NemotronAsrConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class Nemotron3_5AsrFeatureExtractor(NemotronAsrFeatureExtractor):
+class Nemotron3_5AsrFeatureExtractor(NemotronAsrStreamingFeatureExtractor):
     pass
 
 
-class Nemotron3_5AsrProcessorKwargs(NemotronAsrProcessorKwargs, total=False):
+class Nemotron3_5AsrProcessorKwargs(NemotronAsrStreamingProcessorKwargs, total=False):
     pass
 
 
 @auto_docstring
-class Nemotron3_5AsrProcessor(NemotronAsrProcessor):
+class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
     def __init__(
         self,
         feature_extractor,
@@ -332,7 +338,6 @@ class Nemotron3_5AsrProcessor(NemotronAsrProcessor):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        streaming_latency_ms: int | None = None,
         is_streaming: bool = False,
         is_first_audio_chunk: bool | None = True,
         language: "str | list[str] | None" = None,
@@ -342,10 +347,6 @@ class Nemotron3_5AsrProcessor(NemotronAsrProcessor):
         sampling_rate (`int`, *optional*):
             The sampling rate of the input audio in Hz. Validated against the feature extractor's
             expected sampling rate (defaults to 16000 Hz) when provided.
-        streaming_latency_ms (`int`, *optional*):
-            Target streaming latency in milliseconds. Must equal one of the latencies supported by the
-            model; selects the `num_lookahead_tokens` returned in the output. If omitted,
-            `default_num_lookahead_tokens` is used and a warning is issued.
         is_streaming (`bool`, *optional*, defaults to `False`):
             Whether to process audio in streaming mode (chunked), using `is_first_audio_chunk` to
             distinguish the first chunk from subsequent ones.
@@ -361,7 +362,7 @@ class Nemotron3_5AsrProcessor(NemotronAsrProcessor):
             `"auto"` with a warning.
 
         Returns:
-            [`BatchFeature`]: the [`NemotronAsrProcessor`] outputs, augmented with:
+            [`BatchFeature`]: the [`NemotronAsrStreamingProcessor`] outputs, augmented with:
 
             - **prompt_ids** -- A `(batch_size,)` `torch.LongTensor` of language-prompt indices. Pass it
               to the model/`generate`; the model turns it into the broadcast one-hot used by
@@ -396,9 +397,9 @@ class Nemotron3_5AsrProcessor(NemotronAsrProcessor):
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-        # The right attention context (akin to Voxtral Realtime's `num_delay_tokens`) selected by the
-        # requested streaming latency; pass it to the model/encoder forward or `generate`.
-        inputs["num_lookahead_tokens"] = self._resolve_num_lookahead_tokens(streaming_latency_ms)
+        # The right attention context (akin to Voxtral Realtime's `num_delay_tokens`), selected via
+        # `set_num_lookahead_tokens`; pass it to the model/encoder forward or `generate`.
+        inputs["num_lookahead_tokens"] = self.default_num_lookahead_tokens
         # The language-prompt indices used for language-ID prompt conditioning.
         inputs["prompt_ids"] = self._resolve_prompt_ids(language, len(audio))
 
@@ -420,14 +421,31 @@ class Nemotron3_5AsrProcessor(NemotronAsrProcessor):
         return feature_extractor_input_names + ["labels", "decoder_input_ids", "prompt_ids"]
 
 
-class Nemotron3_5AsrPreTrainedModel(NemotronAsrPreTrainedModel):
+@dataclass
+class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
+    r"""
+    loss (`torch.FloatTensor`, *optional*): RNN-T loss, returned when `labels` are provided.
+    logits (`torch.FloatTensor`): Joint network token logits.
+    decoder_cache (`Nemotron3_5AsrRNNTDecoderCache`, *optional*): Decoder LSTM cache.
+    encoder_past_key_values (`Cache`, *optional*): Encoder sliding-window K/V cache (streaming).
+    padding_cache (`Cache`, *optional*): Encoder convolution padding cache (streaming).
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
+    encoder_past_key_values: Cache | None = None
+    padding_cache: Cache | None = None
+
+
+class Nemotron3_5AsrPreTrainedModel(NemotronAsrStreamingPreTrainedModel):
     config: Nemotron3_5AsrConfig
-    # The cache-aware FastConformer encoder is reused as-is from `NemotronAsr` (instantiated via
+    # The cache-aware FastConformer encoder is reused as-is from `NemotronAsrStreaming` (instantiated via
     # `AutoModel`), so it carries its own weight init via its own pre-trained model. This subclass only
     # adds the `prompt_kernel` MLP, whose `nn.Linear` layers are covered by the generic initialization,
     # so no encoder-specific init is referenced here (which would otherwise pull the whole encoder stack
     # into this file).
-    _no_split_modules = ["NemotronAsrEncoderBlock"]
+    _no_split_modules = ["NemotronAsrStreamingEncoderBlock"]
     _can_record_outputs = {}
 
     @torch.no_grad()
@@ -437,18 +455,13 @@ class Nemotron3_5AsrPreTrainedModel(NemotronAsrPreTrainedModel):
         super()._init_weights(module)
 
 
-@dataclass
-class Nemotron3_5AsrRNNTOutput(NemotronAsrRNNTOutput):
-    pass
-
-
 @auto_docstring(
     custom_intro="""
     Nemotron3_5Asr Encoder with an RNN-T (Recurrent Neural Network Transducer) head and language-ID
     prompt conditioning.
     """
 )
-class Nemotron3_5AsrForRNNT(NemotronAsrForRNNT, Nemotron3_5AsrGenerationMixin):
+class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGenerationMixin):
     def __init__(self, config: Nemotron3_5AsrConfig):
         super().__init__(config)
         # Language-ID prompt fusion: [encoder_output ; one_hot(language)] -> MLP -> encoder hidden size.
@@ -551,7 +564,7 @@ class Nemotron3_5AsrForRNNT(NemotronAsrForRNNT, Nemotron3_5AsrGenerationMixin):
             )
 
         if use_decoder_cache and decoder_cache is None:
-            decoder_cache = Nemotron3_5AsrRNNTDecoderCache(self.config)
+            decoder_cache = Nemotron3_5AsrRNNTDecoderCache()
 
         decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
         logits = self.joint(
@@ -571,6 +584,8 @@ class Nemotron3_5AsrForRNNT(NemotronAsrForRNNT, Nemotron3_5AsrGenerationMixin):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
+            encoder_past_key_values=encoder_outputs.past_key_values,
+            padding_cache=encoder_outputs.padding_cache,
         )
 
 

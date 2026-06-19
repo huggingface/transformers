@@ -18,6 +18,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -50,13 +52,9 @@ class Nemotron3_5AsrEncoderConfig(PreTrainedConfig):
         Size of the K/V attention sliding window (in subsampled encoder frames). It equals
         `left_context + 1` (the current frame plus the left context), so the left attention context is
         `sliding_window - 1` — the same across all supported lookaheads.
-    supported_num_lookahead_tokens (`list[int]`, *optional*, defaults to `(13, 6, 1, 0)`):
-        Supported right attention contexts (lookaheads, in subsampled encoder frames) the model was
-        trained with — a multi-lookahead cache-aware model. The streaming delay of a right context `r` is
-        `(r + 1)` encoder frames.
     default_num_lookahead_tokens (`int`, *optional*, defaults to 13):
-        The right attention context used when none is passed to the forward. Must be one of
-        `supported_num_lookahead_tokens`.
+        The right attention context (lookahead, in subsampled encoder frames) used when none is passed to the
+        forward. The supported set the model was trained with lives on [`Nemotron3_5AsrProcessor`].
 
     Example:
     ```python
@@ -99,90 +97,30 @@ class Nemotron3_5AsrEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     sliding_window: int = 71
-    supported_num_lookahead_tokens: list[int] | tuple[int, ...] = (13, 6, 1, 0)
     default_num_lookahead_tokens: int = 13
 
     def __post_init__(self, **kwargs):
         self.num_key_value_heads = self.num_attention_heads
-        # The left attention context is carried by `sliding_window` (== left_context + 1); the right
-        # contexts are the supported lookaheads, and the default must be one of them.
-        if self.default_num_lookahead_tokens not in self.supported_num_lookahead_tokens:
-            raise ValueError(
-                f"default_num_lookahead_tokens ({self.default_num_lookahead_tokens}) must be one of "
-                f"supported_num_lookahead_tokens ({self.supported_num_lookahead_tokens})."
-            )
         super().__post_init__(**kwargs)
 
-
-@auto_docstring(checkpoint="nvidia/nemotron3_5_asr-rnnt-0.6b")
-@strict
-class Nemotron3_5AsrRNNTConfig(PreTrainedConfig):
-    r"""
-    This is the base Nemotron3_5Asr transducer configuration. A conventional RNN-T (RNN Transducer) joint network
-    emits token logits only (so the joint head outputs just `vocab_size` logits), and during greedy decoding
-    the encoder frame pointer advances by exactly one frame on each blank emission. The duration-aware
-    [`Nemotron3_5AsrRNNTConfig`] extends this configuration with a `durations` field.
-
-    decoder_hidden_size (`int`, *optional*, defaults to 640):
-        Hidden size of the LSTM prediction network and joint network.
-    num_decoder_layers (`int`, *optional*, defaults to 2):
-        Number of LSTM layers in the prediction network.
-    max_symbols_per_step (`int`, *optional*, defaults to 10):
-        Maximum number of symbols to emit per encoder time step during greedy decoding.
-    encoder_config (`Union[dict, Nemotron3_5AsrEncoderConfig]`, *optional*):
-        The config object or dictionary of the encoder.
-    blank_token_id (`int`, *optional*, defaults to 8192):
-        Blank token id. Different from `pad_token_id` for RNN-T.
-
-    Example:
-    ```python
-    >>> from transformers import Nemotron3_5AsrForRNNT, Nemotron3_5AsrRNNTConfig
-
-    >>> # Initializing a Nemotron3_5Asr RNN-T configuration
-    >>> configuration = Nemotron3_5AsrRNNTConfig()
-
-    >>> # Initializing a model from the configuration
-    >>> model = Nemotron3_5AsrForRNNT(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
-    model_type = "nemotron3_5_asr_rnnt"
-    sub_configs = {"encoder_config": Nemotron3_5AsrEncoderConfig}
-
-    vocab_size: int = 8193
-    decoder_hidden_size: int = 640
-    num_decoder_layers: int = 2
-    hidden_act: str = "relu"
-    max_symbols_per_step: int = 10
-    encoder_config: dict | PreTrainedConfig | None = None
-    pad_token_id: int = 2
-    blank_token_id: int = 8192
-    loss_reduction: str = "mean_volume"
-    is_encoder_decoder: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = Nemotron3_5AsrEncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = Nemotron3_5AsrEncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = Nemotron3_5AsrEncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = Nemotron3_5AsrEncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
-        super().__post_init__(**kwargs)
+    @property
+    def subsampling_out_hidden_size(self) -> int:
+        """Flattened feature size out of the subsampling stack (`channels * remaining freq bins`); the encoder projection input dim."""
+        total_pad = (self.subsampling_conv_kernel_size - 1) + (self.subsampling_conv_stride - 1)
+        out_length = self.num_mel_bins
+        for _ in range(int(math.log2(self.subsampling_factor))):
+            out_length = (
+                out_length + total_pad - self.subsampling_conv_kernel_size
+            ) // self.subsampling_conv_stride + 1
+        return self.subsampling_conv_channels * out_length
 
 
 @auto_docstring(checkpoint="nvidia/nemotron-3.5-asr-streaming-0.6b")
 @strict
-class Nemotron3_5AsrConfig(Nemotron3_5AsrRNNTConfig):
+class Nemotron3_5AsrConfig(PreTrainedConfig):
     r"""
     This is the configuration of the multilingual, prompt-conditioned Nemotron3_5Asr RNN-T model. It
-    extends [`NemotronAsrConfig`] with the language-ID prompt-conditioning fields.
+    extends [`NemotronAsrStreamingConfig`] with the language-ID prompt-conditioning fields.
 
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`).
@@ -225,10 +163,16 @@ class Nemotron3_5AsrConfig(Nemotron3_5AsrRNNTConfig):
     sub_configs = {"encoder_config": Nemotron3_5AsrEncoderConfig}
 
     vocab_size: int = 13088
-    joint_hidden_size: int = 640
-    durations: list[int] | tuple[int, ...] = ()
+    decoder_hidden_size: int = 640
+    num_decoder_layers: int = 2
+    hidden_act: str = "relu"
+    max_symbols_per_step: int = 10
+    encoder_config: dict | PreTrainedConfig | None = None
     pad_token_id: int = 0
     blank_token_id: int = 13087
+    is_encoder_decoder: bool = True
+    joint_hidden_size: int = 640
+    durations: list[int] | tuple[int, ...] = ()
     num_prompts: int = 128
     prompt_intermediate_size: int = 2048
 
@@ -245,7 +189,7 @@ class Nemotron3_5AsrConfig(Nemotron3_5AsrRNNTConfig):
         elif self.encoder_config is None:
             self.encoder_config = Nemotron3_5AsrEncoderConfig()
         self.initializer_range = self.encoder_config.initializer_range
-        PreTrainedConfig.__post_init__(self, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Nemotron3_5AsrConfig", "Nemotron3_5AsrEncoderConfig"]

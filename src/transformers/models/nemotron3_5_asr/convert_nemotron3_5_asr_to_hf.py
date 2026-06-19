@@ -52,7 +52,13 @@ from transformers.utils.hub import cached_file
 # Encoder / decoder / joint submodule layout matches NemotronAsr (and Parakeet), so these mappings are
 # reused verbatim. The new `prompt_kernel.*` keys are not matched by any pattern and pass through as-is.
 NEMO_TO_HF_WEIGHT_MAPPING = {
-    r"encoder\.pre_encode\.conv\.": r"encoder.subsampling.layers.",
+    # NeMo's `pre_encode.conv` is a flat Sequential (conv, relu, dwconv, pwconv, relu, dwconv, pwconv, relu).
+    # HF splits it into a stem (`conv_in`) plus depthwise-separable `layers`.
+    r"encoder\.pre_encode\.conv\.0\.": r"encoder.subsampling.conv_in.",
+    r"encoder\.pre_encode\.conv\.2\.": r"encoder.subsampling.layers.0.depthwise_conv.",
+    r"encoder\.pre_encode\.conv\.3\.": r"encoder.subsampling.layers.0.pointwise_conv.",
+    r"encoder\.pre_encode\.conv\.5\.": r"encoder.subsampling.layers.1.depthwise_conv.",
+    r"encoder\.pre_encode\.conv\.6\.": r"encoder.subsampling.layers.1.pointwise_conv.",
     r"encoder\.pre_encode\.out\.": r"encoder.subsampling.linear.",
     r"encoder\.pos_enc\.": r"encoder.encode_positions.",
     # NeMo stores the conformer conv norm under `conv.batch_norm` regardless of whether it is a

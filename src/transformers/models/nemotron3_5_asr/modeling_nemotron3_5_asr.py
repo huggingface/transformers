@@ -37,11 +37,28 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
 from ..auto import AutoModel
-from .configuration_nemotron3_5_asr import Nemotron3_5AsrConfig, Nemotron3_5AsrEncoderConfig, Nemotron3_5AsrRNNTConfig
+from .configuration_nemotron3_5_asr import Nemotron3_5AsrConfig, Nemotron3_5AsrEncoderConfig
 from .generation_nemotron3_5_asr import Nemotron3_5AsrGenerationMixin, Nemotron3_5AsrRNNTDecoderCache
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
+    r"""
+    loss (`torch.FloatTensor`, *optional*): RNN-T loss, returned when `labels` are provided.
+    logits (`torch.FloatTensor`): Joint network token logits.
+    decoder_cache (`Nemotron3_5AsrRNNTDecoderCache`, *optional*): Decoder LSTM cache.
+    encoder_past_key_values (`Cache`, *optional*): Encoder sliding-window K/V cache (streaming).
+    padding_cache (`Cache`, *optional*): Encoder convolution padding cache (streaming).
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
+    encoder_past_key_values: Cache | None = None
+    padding_cache: Cache | None = None
 
 
 class Nemotron3_5AsrEncoderRelPositionalEncoding(nn.Module):
@@ -174,7 +191,11 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class Nemotron3_5AsrEncoderAttention(nn.Module):
-    """Multi-head attention with relative positional encoding. See section 3.3 of https://huggingface.co/papers/1901.02860."""
+    """
+    Multi-head attention with relative positional encoding.
+    The only difference with `ParakeetEncoderAttention` is the addition of the `past_key_values`.
+    See `ParakeetEncoderAttention`, and https://huggingface.co/papers/2312.17279 for more details
+    """
 
     def __init__(self, config: Nemotron3_5AsrEncoderConfig, layer_idx: int):
         super().__init__()
@@ -284,12 +305,12 @@ class Nemotron3_5AsrPreTrainedModel(PreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
-    # The cache-aware FastConformer encoder is reused as-is from `NemotronAsr` (instantiated via
+    # The cache-aware FastConformer encoder is reused as-is from `NemotronAsrStreaming` (instantiated via
     # `AutoModel`), so it carries its own weight init via its own pre-trained model. This subclass only
     # adds the `prompt_kernel` MLP, whose `nn.Linear` layers are covered by the generic initialization,
     # so no encoder-specific init is referenced here (which would otherwise pull the whole encoder stack
     # into this file).
-    _no_split_modules = ["NemotronAsrEncoderBlock"]
+    _no_split_modules = ["NemotronAsrStreamingEncoderBlock"]
     _supports_flat_attention_mask = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -343,30 +364,10 @@ class Nemotron3_5AsrPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-@dataclass
-class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
-    """
-    Output of the Nemotron3_5Asr RNN-T forward pass.
-
-    Args:
-        loss (`torch.FloatTensor`, *optional*):
-            RNN-T loss, returned when `labels` are provided.
-        logits (`torch.FloatTensor`):
-            Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
-            or `(batch, 1, 1, vocab)` for single-step inference.
-        decoder_cache (`Nemotron3_5AsrRNNTDecoderCache`, *optional*):
-            Decoder LSTM cache containing hidden state, cell state, and last output.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
-
-
 class Nemotron3_5AsrRNNTDecoder(nn.Module):
     """LSTM-based prediction network For RNN-T"""
 
-    def __init__(self, config: Nemotron3_5AsrRNNTConfig):
+    def __init__(self, config: Nemotron3_5AsrConfig):
         super().__init__()
         self.blank_token_id = config.blank_token_id
         self.embedding = nn.Embedding(config.vocab_size, config.decoder_hidden_size)
@@ -414,7 +415,7 @@ class Nemotron3_5AsrRNNTDecoder(nn.Module):
 class Nemotron3_5AsrRNNTJointNetwork(nn.Module):
     """Joint network that combines encoder and decoder outputs to predict token logits."""
 
-    def __init__(self, config: Nemotron3_5AsrRNNTConfig):
+    def __init__(self, config: Nemotron3_5AsrConfig):
         super().__init__()
         self.activation = ACT2FN[config.hidden_act]
         self.head = nn.Linear(config.decoder_hidden_size, config.vocab_size)
@@ -436,7 +437,7 @@ class Nemotron3_5AsrRNNTJointNetwork(nn.Module):
     """
 )
 class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerationMixin):
-    config: Nemotron3_5AsrRNNTConfig
+    config: Nemotron3_5AsrConfig
     _no_split_modules = ["Nemotron3_5AsrRNNTDecoder"]
     _supported_generation_modes = [GenerationMode.GREEDY_SEARCH]
 
@@ -548,7 +549,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
             )
 
         if use_decoder_cache and decoder_cache is None:
-            decoder_cache = Nemotron3_5AsrRNNTDecoderCache(self.config)
+            decoder_cache = Nemotron3_5AsrRNNTDecoderCache()
 
         decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
         logits = self.joint(
@@ -568,18 +569,8 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
-        )
-
-    def loss_function(self, logits, labels, encoder_outputs, **kwargs):
-        logit_lengths = encoder_outputs.attention_mask.sum(-1)
-        logits = logits[:, : int(logit_lengths.max())]
-        return super().loss_function(
-            logits=logits,
-            labels=labels,
-            logit_lengths=logit_lengths,
-            label_lengths=(labels != self.config.blank_token_id).sum(-1),
-            blank_token_id=self.config.blank_token_id,
-            reduction=self.config.loss_reduction,
+            encoder_past_key_values=encoder_outputs.past_key_values,
+            padding_cache=encoder_outputs.padding_cache,
         )
 
 
