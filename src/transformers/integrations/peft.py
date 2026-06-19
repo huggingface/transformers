@@ -567,7 +567,8 @@ class PeftAdapterMixin:
                 **load_config.download_kwargs,
             )
 
-        weight_conversions = get_model_conversion_mapping(self)
+        # Reuse `from_pretrained`'s `weight_mapping` as recomputing here would drop any user-supplied `key_mapping`.
+        weight_conversions = load_config.weight_mapping or get_model_conversion_mapping(self)
 
         # TODO: remove once PEFT < 0.19 is dropped, use peft.utils.transformers_weight_conversion
         peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
