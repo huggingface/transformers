@@ -20,7 +20,7 @@ import torch
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, SizeDict
-from ...image_utils import ImageInput, PILImageResampling
+from ...image_utils import PILImageResampling
 from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, auto_docstring
 
@@ -88,9 +88,7 @@ class LocateAnythingImageProcessor(TorchvisionBackend):
             target_h, target_w = self._target_size(height, width, patch_size, merge_kernel_size, in_token_limit)
             if (target_h, target_w) != (height, width):
                 image = self.resize(image, SizeDict(height=target_h, width=target_w), resample=resample)
-            image = self.rescale_and_normalize(
-                image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
             channels, height, width = image.shape
             grid_h, grid_w = height // patch_size, width // patch_size

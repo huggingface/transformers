@@ -451,7 +451,7 @@ class SplitQkvDeinterleaveRope(ConversionOps):
         )
 
     @property
-    def reverse_op(self) -> "ConversionOps":
+    def reverse_op(self) -> ConversionOps:
         return FuseQkvReinterleaveRope()
 
 
@@ -475,7 +475,7 @@ class FuseQkvReinterleaveRope(ConversionOps):
         return {target_patterns[0]: fused}
 
     @property
-    def reverse_op(self) -> "ConversionOps":
+    def reverse_op(self) -> ConversionOps:
         return SplitQkvDeinterleaveRope()
 
 
