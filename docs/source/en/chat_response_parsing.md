@@ -205,6 +205,21 @@ In addition to `fields`, the template supports two top-level keys:
   bleed: pass the prompt as `prefix=`. For ChatML-style models the anchor is typically `"<|im_start|>assistant\n"`.
   Exactly one of `start_anchor` or `start_anchor_pattern` must be set.
 
+For example, given this multi-turn prefix (note the **two** assistant turns):
+
+```txt
+<|im_start|>user
+Hi<|im_end|>
+<|im_start|>assistant
+Hello!<|im_end|>
+<|im_start|>user
+Again?<|im_end|>
+<|im_start|>assistant
+```
+
+the parser truncates everything up to the **last** `<|im_start|>assistant\n`, discarding the earlier
+`"Hello!"` turn. The rule is that _everything but the final assistant turn is always dropped._
+
 As with chat templates, response templates are stored as tokenizer attributes and saved with the tokenizer. Unlike
 chat templates, we save them inside `tokenizer_config.json` and not as a separate file, because their format fits
 naturally in JSON, unlike a chat template Jinja script.
@@ -235,10 +250,15 @@ does not have special token tags, it's just written as plaintext after the other
 
 In addition to opening and closing delimiters, you can also specify `repeats`, which indicates that the field is a list
 and the delimiters can match multiple times. This is most common for parallel tool calling, when a model emits
-multiple tool calls simultaneously.
+multiple tool calls simultaneously:
 
-Finally, you can specify `optional: false` for fields that must be present. If parsing finishes and a non optional field
-was never opened, we raise an error instead of silently omitting the field.
+```python
+'<tool_call>{"name": "a", ...}</tool_call><tool_call>{"name": "b", ...}</tool_call>'
+# Returns `"tool_calls": [{... "a" ...}, {... "b" ...}]` in a template with repeats: true
+```
+
+Finally, you can specify `optional: false` for fields that must be present. If an optional field is missing,
+we raise an error instead of just returning a message dict without it.
 
 The end of generation will close and finalize any open regions, even if their closing delimiter was not seen.
 
@@ -264,6 +284,12 @@ We'll take a look at each type of parser and its arguments in turn.
 type conversion if required. They do not have any `content_args`, except for `text` which supports the arg `strip`,
 which strips whitespace from the start and end of the captured text, and defaults to `true`.
 
+```python
+field = {"count": {"open": "<n>", "close": "</n>", "content": "int"}}
+input = "<n> 42 </n>"
+# Returns: {"count": 42}
+```
+
 #### json
 
 The `json` parser parses the captured text as JSON. It's the workhorse for tool-call arguments and
@@ -282,6 +308,12 @@ various ways models mangle JSON in the wild:
 
 The model authors responsible for the existence of `unquoted_keys` and `string_delims` know who
 they are and should feel an appropriate amount of shame.
+
+```python
+field = {"args": {"open": "<args>", "close": "</args>", "content": "json", "content_args": {"unquoted_keys": True}}}
+input = '<args>{city: "London"}</args>'
+# Returns: {"args": {"city": "London"}}
+```
 
 #### xml-inline
 
@@ -315,7 +347,12 @@ like this:
 ```
 
 Note the nested `value_parser`: each parameter value is itself run through the `json` parser (with
-`allow_non_json` so plain strings still pass through).
+`allow_non_json` so plain strings still pass through). Feeding the `tool_calls` field above this input:
+
+```python
+input = "<tool_call><function=get_weather><parameter=city>London</parameter><parameter=units>celsius</parameter></function></tool_call>"
+# Returns: {"tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {"city": "London", "units": "celsius"}}}]}
+```
 
 #### kv-lines
 
@@ -331,6 +368,14 @@ files). Each line becomes one entry in the resulting dict. All arguments are opt
 
 Lines that are empty or do not contain `kv_sep` are silently skipped, so stray blank lines in the
 captured region are tolerated.
+
+```python
+field = {"metadata": {"open": "<meta>", "close": "</meta>", "content": "kv-lines"}}
+input = "<meta>name: alice\nage: 30</meta>"
+# Returns: {"metadata": {"name": "alice", "age": "30"}}
+```
+
+Note `age` keeps `"30"` as a string; add a `value_parser` of `{"name": "int"}` to parse it to `30`.
 
 
 ### Transform
@@ -354,6 +399,18 @@ call dict in an outer dict with a `function` key, as these are part of our stand
 },
 ```
 
+So this raw output:
+
+```txt
+<tool_call>{"name": "greet_user", "arguments": {"greeting": "Hi!"}}</tool_call>
+```
+
+becomes (note `repeats: True` makes `tool_calls` a list):
+
+```json
+[{"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}]
+```
+
 A whole-string placeholder like `"{content}"` returns the looked-up value with its type preserved — so above, the
 parsed JSON dict slots in directly as the value of `function`. A placeholder must be the entire string: mixing
 text and placeholders (`"abc {name} def"`) is not permitted. They're not f-strings!
@@ -371,6 +428,18 @@ transform. All named groups in `open_pattern` and `close_pattern` become availab
     "content": "json",
     "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
 },
+```
+
+The function name lives in the channel header, not the JSON body, so this:
+
+```txt
+<|channel|>commentary to=functions.get_current_weather <|constrain|>json<|message|>{"location": "San Francisco, CA"}<|call|>
+```
+
+becomes:
+
+```json
+[{"type": "function", "function": {"name": "get_current_weather", "arguments": {"location": "San Francisco, CA"}}}]
 ```
 
 Sometimes a field's parsed content is *itself* a list of records and you want to reshape each one. The Cohere
