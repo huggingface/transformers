@@ -213,7 +213,6 @@ class MyModelImageProcessingTest(ImageProcessingTestMixin, MyTaskPostProcessTest
 
 The tests automatically verify that the correct mixins are used for your model. Mixins for new tasks must be added to `tests/test_image_processing_common.py`.
 
-
 ### Video processor tests
 
 Video processor tests usually live in `tests/models/<model_name>/test_video_processing_<model_name>.py` and inherit from [`VideoProcessingTestMixin`]. Set `fast_video_processing_class`, define `video_processor_dict`, and override `input_name` if the model uses a key other than `pixel_values_videos`.
