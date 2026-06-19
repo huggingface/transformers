@@ -628,7 +628,8 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
         # force `eos_token_id = None` to not stop before reaching `max_new_tokens`
-        generation_config = DiffusionGemmaGenerationConfig(eos_token_id=None, max_new_tokens=16, max_denoising_steps=2, return_dict_in_generate=True)
+        generation_config = DiffusionGemmaGenerationConfig(eos_token_id=None, max_new_tokens=16,
+                                                           max_denoising_steps=2, return_dict_in_generate=True)
         generation_outputs = model.generate(**model_inputs, generation_config=generation_config, max_new_tokens=32)
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 32)
