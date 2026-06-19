@@ -771,7 +771,7 @@ class NemotronAsrStreamingEncoderConvolutionModule(FastSpeech2ConformerConvoluti
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor = None,
+        all_masked_rows: torch.Tensor | None = None,
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
     ):
         hidden_states = hidden_states.transpose(1, 2)  # (B, C, T)
@@ -780,13 +780,9 @@ class NemotronAsrStreamingEncoderConvolutionModule(FastSpeech2ConformerConvoluti
         hidden_states = self.pointwise_conv1(hidden_states)
         hidden_states = nn.functional.glu(hidden_states, dim=1)
 
-        # Apply padding mask before convolution. The mask may be 3D (B, T_q, T_k) for offline or
-        # streaming use; reduce over the key dim to get a per-query padding indicator.
-        if attention_mask is not None:
-            if attention_mask.dtype == torch.bool:
-                all_masked_rows = torch.all(~attention_mask, dim=-1)
-            else:
-                all_masked_rows = torch.all(attention_mask == 0.0, dim=-1)
+        # Zero out fully-masked (padding) frames before convolution so they don't leak into valid frames.
+        # `all_masked_rows` is derived from the attention mask once in the encoder and shared across layers.
+        if all_masked_rows is not None:
             hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
 
         # Causal depthwise conv: left context from `padding_cache` when streaming, else left-padded.
@@ -966,6 +962,7 @@ class NemotronAsrStreamingEncoderBlock(ParakeetEncoderBlock):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        all_masked_rows: torch.Tensor | None = None,
         position_embeddings: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
@@ -986,7 +983,7 @@ class NemotronAsrStreamingEncoderBlock(ParakeetEncoderBlock):
         hidden_states = hidden_states + attn_output
 
         conv_output = self.conv(
-            self.norm_conv(hidden_states), attention_mask=attention_mask, padding_cache=padding_cache
+            self.norm_conv(hidden_states), all_masked_rows=all_masked_rows, padding_cache=padding_cache
         )
         hidden_states = hidden_states + conv_output
 
@@ -1120,6 +1117,13 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
             and_mask_function=chunked_limited_mask_function(*self._resolve_attn_context(num_lookahead_tokens)),
         )
 
+        all_masked_rows = None
+        if attention_mask is not None:
+            if attention_mask.dtype == torch.bool:
+                all_masked_rows = torch.all(~attention_mask, dim=-1)
+            else:
+                all_masked_rows = torch.all(attention_mask == 0.0, dim=-1)
+
         cached_frames = (
             past_key_values.get_mask_sizes(seq_length, 0)[0] - seq_length if past_key_values is not None else 0
         )
@@ -1144,6 +1148,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
                 hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
+                    all_masked_rows=all_masked_rows,
                     position_embeddings=position_embeddings,
                     past_key_values=past_key_values,
                     padding_cache=padding_cache,
