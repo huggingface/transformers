@@ -19,8 +19,8 @@ import re
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
-from .tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class DonutProcessorKwargs(ProcessingKwargs, total=False):

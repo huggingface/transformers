@@ -57,7 +57,6 @@ class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Lfm2VlProcessor(ProcessorMixin):
     valid_processor_kwargs = Lfm2VlProcessorKwargs
-    unused_input_names = ["image_rows", "image_cols", "image_sizes", "token_type_ids"]
 
     def __init__(
         self,
@@ -257,6 +256,10 @@ class Lfm2VlProcessor(ProcessorMixin):
         tokens_for_image = self._compute_tokens_for_image(image_size, encoder_patch_size, downsample_factor)
 
         return tokens_per_tile, tokens_for_image
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["image_rows", "image_cols", "image_sizes", "token_type_ids"]
 
 
 __all__ = ["Lfm2VlProcessor"]

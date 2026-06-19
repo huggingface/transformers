@@ -29,7 +29,6 @@ class Ovis2ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Ovis2Processor(ProcessorMixin):
     valid_processor_kwargs = Ovis2ProcessorKwargs
-    unused_input_names = ["grids"]
 
     def __init__(
         self,
@@ -69,6 +68,10 @@ class Ovis2Processor(ProcessorMixin):
                     placeholder += "<IMG_ROW>"
         placeholder += "<IMG_END>"
         return placeholder
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["grids"]
 
 
 __all__ = ["Ovis2Processor"]

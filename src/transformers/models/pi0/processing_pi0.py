@@ -155,7 +155,7 @@ class PI0Processor(ProcessorMixin):
             pixel_attention_mask[batch, :num_cameras] = True
             padded_pixel_values[batch, :num_cameras] = processed["pixel_values"]
 
-        return_data = {
+        model_inputs = {
             **text_inputs,
             "pixel_values": padded_pixel_values,
             "pixel_attention_mask": pixel_attention_mask,
@@ -165,15 +165,15 @@ class PI0Processor(ProcessorMixin):
             actions = (torch.tensor(actions) - self.actions_mean) / (self.actions_std + 1e-08)
             if actions.shape[-1] < self.max_state_dim:
                 actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
-            return_data["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
+            model_inputs["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
 
         if state is not None:
             state = (torch.tensor(state) - self.state_mean) / (self.state_std + 1e-08)
             if state.shape[-1] < self.max_state_dim:
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
-            return_data["state"] = state.view(-1, self.max_state_dim)
+            model_inputs["state"] = state.view(-1, self.max_state_dim)
 
-        return BatchFeature(data=return_data, tensor_type=return_tensors)
+        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

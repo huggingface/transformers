@@ -127,7 +127,6 @@ class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
 
 class LightOnOcrProcessor(ProcessorMixin):
     valid_processor_kwargs = LightOnOcrProcessorKwargs
-    unused_input_names = ["image_sizes"]
 
     def __init__(
         self,
@@ -200,6 +199,10 @@ class LightOnOcrProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["image_sizes"]
 
 
 class LightOnOcrMultiModalProjector(Mistral3MultiModalProjector):

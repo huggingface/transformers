@@ -6,7 +6,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
+# Unless required by apost_processorlicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
@@ -14,6 +14,8 @@
 """
 Processor class for BLIP-2.
 """
+
+import json
 
 from ...image_utils import ImageInput
 from ...processing_utils import (
@@ -36,12 +38,32 @@ class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
             "stride": 0,
             "return_overflowing_tokens": False,
             "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
+            "return_offsets_mapost_processoring": False,
             "return_token_type_ids": False,
             "return_length": False,
             "verbose": True,
         },
     }
+
+
+def detect_special_tokens(post_processor, single_key="single"):
+    if post_processor is None:
+        return {"bos": None, "eos": None}
+    if post_processor["type"] == "TemplateProcessing":
+        seq = post_processor[single_key]
+        first = seq[0].get("SpecialToken", {}).get("id") if seq else None
+        last = seq[-1].get("SpecialToken", {}).get("id") if seq else None
+        return {"bos": first, "eos": last}
+    if post_processor["type"] == "Sequence":
+        # nested processors, e.g. ByteLevel + TemplateProcessing
+        for sub in post_processor["processors"]:
+            output = detect_special_tokens(sub)
+            if output:
+                return output
+    # BertProcessing has explicit "sep"/"cls" fields
+    if post_processor["type"] == "BertProcessing":
+        return {"bos": post_processor["cls"][0], "eos": post_processor["sep"][0]}
+    return {"bos": None, "eos": None}
 
 
 @auto_docstring
@@ -63,6 +85,13 @@ class Blip2Processor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.num_query_tokens = num_query_tokens
 
+        # We'll need to add BOS/EOS tokens manually after processing
+        tok_json = json.loads(tokenizer._tokenizer.to_str())
+        post_processor = tok_json.get("post_processor")
+        special_tokens_added = detect_special_tokens(post_processor)
+        self.added_bos_token = special_tokens_added["bos"]
+        self.added_eos_token = special_tokens_added["eos"]
+
         super().__init__(image_processor, tokenizer)
 
     @auto_docstring
@@ -73,6 +102,9 @@ class Blip2Processor(ProcessorMixin):
         **kwargs: Unpack[Blip2ProcessorKwargs],
     ):
         kwargs["add_special_tokens"] = False
+        if text and self.added_eos_token:
+            text = [text] if isinstance(text, str) else text
+            text = [f"{sample}{self.tokenizer.eos_token}" for sample in text]
         model_inputs = super().__call__(images=images, text=text, **kwargs)
         return model_inputs
 
@@ -96,9 +128,10 @@ class Blip2Processor(ProcessorMixin):
         return images, text, videos, audio
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
-        # TODO: add BOS token manualy after adding placeholders
-        # since they have to be added after placeholders
-        return self.image_token * self.num_query_tokens
+        replacement = self.image_token * self.num_query_tokens
+        if self.added_bos_token:
+            replacement += self.added_bos_token
+        return replacement
 
 
 __all__ = ["Blip2Processor"]

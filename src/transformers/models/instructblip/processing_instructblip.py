@@ -15,6 +15,8 @@
 Processor class for InstructBLIP. Largely copy of Blip2Processor with addition of a tokenizer for the Q-Former.
 """
 
+import json
+
 from ...image_utils import ImageInput
 from ...processing_utils import (
     ProcessingKwargs,
@@ -44,6 +46,26 @@ class InstructBlipProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+def detect_special_tokens(post_processor, single_key="single"):
+    if post_processor is None:
+        return {"bos": None, "eos": None}
+    if post_processor["type"] == "TemplateProcessing":
+        seq = post_processor[single_key]
+        first = seq[0].get("SpecialToken", {}).get("id") if seq else None
+        last = seq[-1].get("SpecialToken", {}).get("id") if seq else None
+        return {"bos": first, "eos": last}
+    if post_processor["type"] == "Sequence":
+        # nested processors, e.g. ByteLevel + TemplateProcessing
+        for sub in post_processor["processors"]:
+            output = detect_special_tokens(sub)
+            if output:
+                return output
+    # BertProcessing has explicit "sep"/"cls" fields
+    if post_processor["type"] == "BertProcessing":
+        return {"bos": post_processor["cls"][0], "eos": post_processor["sep"][0]}
+    return {"bos": None, "eos": None}
+
+
 @auto_docstring
 class InstructBlipProcessor(ProcessorMixin):
     valid_processor_kwargs = InstructBlipProcessorKwargs
@@ -65,6 +87,13 @@ class InstructBlipProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.num_query_tokens = num_query_tokens
 
+        # We'll need to add BOS/EOS tokens manually after processing
+        tok_json = json.loads(tokenizer._tokenizer.to_str())
+        post_processor = tok_json.get("post_processor")
+        special_tokens_added = detect_special_tokens(post_processor)
+        self.added_bos_token = special_tokens_added["bos"]
+        self.added_eos_token = special_tokens_added["eos"]
+
         super().__init__(image_processor, tokenizer, qformer_tokenizer)
 
     @auto_docstring
@@ -80,6 +109,10 @@ class InstructBlipProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
+        if text and self.added_eos_token:
+            text = [text] if isinstance(text, str) else text
+            text = [f"{sample}{self.tokenizer.eos_token}" for sample in text]
 
         # Tokenize original text with qformer BEFORE image token insertion; qformer needs BOS/EOS
         qformer_encoding = {}
@@ -115,9 +148,10 @@ class InstructBlipProcessor(ProcessorMixin):
         return images, text, videos, audio
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
-        # TODO: add BOS token manualy after adding placeholders
-        # since they have to be added after placeholders
-        return self.image_token * self.num_query_tokens
+        replacement = self.image_token * self.num_query_tokens
+        if self.added_bos_token:
+            replacement += self.added_bos_token
+        return replacement
 
     @property
     def model_input_names(self):

@@ -33,7 +33,6 @@ chat_template = "{{- bos_token }}\n{%- if custom_tools is defined %}\n    {%- se
 @auto_docstring
 class Llama4Processor(ProcessorMixin):
     valid_processor_kwargs = Llama4ProcessorKwargs
-    unused_input_names = ["aspect_ratios"]
 
     def __init__(
         self,
@@ -146,6 +145,10 @@ class Llama4Processor(ProcessorMixin):
             (image_height // self.patch_size) * (image_width // self.patch_size) // self.downsample_ratio
         )
         return self._prompt_split_image(image_inputs["aspect_ratios"][image_idx], num_patches_per_chunk)
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["aspect_ratios"]
 
 
 __all__ = ["Llama4Processor"]

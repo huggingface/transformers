@@ -41,7 +41,6 @@ class MiniCPMV4_6ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class MiniCPMV4_6Processor(ProcessorMixin):
     valid_processor_kwargs = MiniCPMV4_6ProcessorKwargs
-    unused_input_names = ["num_patches_per_image", "grids"]
 
     def __init__(self, image_processor=None, video_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs)
@@ -230,6 +229,10 @@ class MiniCPMV4_6Processor(ProcessorMixin):
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         texts = self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
         return [t.strip() for t in texts]
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["num_patches_per_image", "grids"]
 
 
 __all__ = ["MiniCPMV4_6Processor"]

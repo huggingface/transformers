@@ -109,7 +109,6 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class SmolVLMProcessor(ProcessorMixin):
     valid_processor_kwargs = SmolVLMProcessorKwargs
-    unused_input_names = ["rows", "cols", "video_metadata"]
 
     def __init__(
         self,
@@ -267,6 +266,10 @@ class SmolVLMProcessor(ProcessorMixin):
             kwargs.setdefault("fps", self.video_processor.fps)
 
         return super().apply_chat_template(conversation, chat_template, processor_kwargs=processor_kwargs, **kwargs)
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["rows", "cols", "video_metadata"]
 
 
 __all__ = ["SmolVLMProcessor"]
