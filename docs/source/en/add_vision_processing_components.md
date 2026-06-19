@@ -90,7 +90,7 @@ class MyModelImageProcessorPil(PilBackend):
 > [!TIP]
 > See [`LlavaOnevisionImageProcessorPil`] for reference.
 
-### Post-processing
+### Add post-processing methods
 
 Add post-processing methods directly to the processor class. Post-processing methods are called with the model outputs (`outputs`) and any additional arguments required for the specific post-processing method.
 
