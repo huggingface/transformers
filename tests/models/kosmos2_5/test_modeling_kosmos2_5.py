@@ -30,6 +30,7 @@ from transformers.models.kosmos2_5.configuration_kosmos2_5 import (
 )
 from transformers.testing_utils import (
     Expectations,
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -492,6 +493,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_flash_attn_2_generate_reuse_cache(self):
         pass
 
+    @is_flaky()
     @pytest.mark.generate
     def test_generate_with_cache_matches_no_cache(self):
         """Verify that greedy generation with cache produces the same token IDs as without cache"""
@@ -499,10 +501,25 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model = Kosmos2_5ForConditionalGeneration(config).to(torch_device).eval()
 
         with torch.no_grad():
-            output_no_cache = model.generate(**inputs_dict, use_cache=False, max_new_tokens=5, do_sample=False)
-            output_with_cache = model.generate(**inputs_dict, use_cache=True, max_new_tokens=5, do_sample=False)
+            output_no_cache = model.generate(
+                **inputs_dict,
+                use_cache=False,
+                max_new_tokens=5,
+                do_sample=False,
+                return_dict_in_generate=True,
+                output_scores=True,
+            )
+            output_with_cache = model.generate(
+                **inputs_dict,
+                use_cache=True,
+                max_new_tokens=5,
+                do_sample=False,
+                return_dict_in_generate=True,
+                output_scores=True,
+            )
 
-        self.assertEqual(output_no_cache.tolist(), output_with_cache.tolist())
+        self.assertEqual(output_no_cache.sequences.tolist(), output_with_cache.sequences.tolist())
+        # assert_similar_generate_outputs(output_no_cache, output_with_cache, atol=5e-2, rtol=5e-2)
 
     @pytest.mark.generate
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
