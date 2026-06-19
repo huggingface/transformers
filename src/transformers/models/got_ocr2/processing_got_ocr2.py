@@ -17,7 +17,7 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_vision_available, logging
 
@@ -151,7 +151,7 @@ class GotOcr2Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs,
+        **kwargs: Unpack[GotOcr2ProcessorKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
