@@ -121,7 +121,7 @@ if is_kernels_available():
             ): LayerRepository(
                 repo_id="Atlas-Inference/gdn",
                 layer_name="Qwen3_5GatedDeltaNet",
-                revision="v0",
+                revision="ef12347fc77d6ddf1cb72c0bd0af1c7d6cc69172",
                 # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
                 trust_remote_code=True,
             ),
