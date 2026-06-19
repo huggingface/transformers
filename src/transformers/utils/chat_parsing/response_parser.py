@@ -27,7 +27,7 @@ def parse_response(text: str, response_template: dict | ResponseTemplate, *, pre
     response_template = load_response_template(response_template)
     stream = ResponseParser(response_template, prefix=prefix)
     stream.feed(text)
-    message, _events = stream.finalize()
+    message, _ = stream.finalize()
     return message
 
 
@@ -209,8 +209,8 @@ class ResponseParser:
         best: tuple[str, ResponseTemplateField, Any] | None = None
         hold_start = len(self._buffer)
         for kind, field in watch:
+            # The watchlist only includes fields whose delimiter regex is set, so pattern is never None here.
             pattern = field.open_re if kind == "open" else field.close_re
-            assert pattern is not None  # watched delimiters always carry a regex
             if eos:
                 m = pattern.search(self._buffer, self._pos)
             else:

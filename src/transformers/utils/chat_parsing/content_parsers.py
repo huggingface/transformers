@@ -80,7 +80,7 @@ def _json(text: str, args: dict) -> Any:
         return json.loads(working)
     except json.JSONDecodeError as e:
         if args.get("allow_non_json"):
-            return text.strip()
+            return _text(text, args)
         if working == text:
             raise ValueError(f"json parser could not parse region as JSON.\nContent: {text!r}\nError: {e}") from e
         raise ValueError(
