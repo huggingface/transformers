@@ -102,7 +102,7 @@ def main() -> None:
         text_config=text_cfg.to_dict(),
         vision_config=vis_cfg.to_dict(),
         projector_bias=False,
-        image_token_id=128001,
+        image_token_id=511,  # must be < vocab_size (512)
     )
 
     torch.manual_seed(args.seed)
@@ -118,7 +118,21 @@ def main() -> None:
         if p.exists():
             p.unlink()
     torch.save(hub_sd, args.out / "pytorch_model.bin")
+
+    # Save config via save_pretrained first (captures all fields), then
+    # post-process the JSON to restore original-checkpoint format: swap the
+    # expanded mlp_layer_types list back to moe_layers_enum (the raw form that
+    # real checkpoints ship with, before convert_config.py normalises it).
+    import json
     cfg.save_pretrained(args.out)
+    config_path = args.out / "config.json"
+    saved = json.loads(config_path.read_text())
+    text = saved.get("text_config", saved)
+    mlp_layer_types = text.pop("mlp_layer_types", None)
+    if mlp_layer_types:
+        text["moe_layers_enum"] = [i for i, t in enumerate(mlp_layer_types) if t == "sparse"]
+    config_path.write_text(json.dumps(saved, indent=2) + "\n")
+
     print(f"Saved {len(hub_sd)} keys → {args.out.resolve()}/")
 
 

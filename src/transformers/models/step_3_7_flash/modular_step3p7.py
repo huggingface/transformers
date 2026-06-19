@@ -40,8 +40,7 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
 from transformers.utils import TransformersKwargs, can_return_tuple, logging, no_inherit_decorator
 
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MLP
-from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
+from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, StepRoboticsVisionEncoderConfig
 from ..mimi.modeling_mimi import MimiLayerScale
 from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention, MiniMaxM3VLModel, MiniMaxM3VLTextModel, MiniMaxM3VLDecoderLayer, MiniMaxM3VLRotaryEmbedding, MiniMaxM3VLCausalLMOutputWithPast, MiniMaxM3VLDenseMLP, MiniMaxM3VLRMSNorm, MiniMaxM3VLSparseMoeBlock, MiniMaxM3VLTopKRouter, MiniMaxM3VLVisionMLP, MiniMaxM3VLVisionAttention, MiniMaxM3VLVisionEncoderLayer, rotate_half, apply_rotary_pos_emb, repeat_kv, eager_attention_forward
@@ -56,14 +55,7 @@ __all__ = [
     "Step3p7Model",
 ]
 
-
-
-
-
-
 #  Vision encoder
-
-
 class Step3p7VisionRope2D(nn.Module):
     """Cacheable 2D rotary positional embedding for the vision encoder.
 
@@ -296,8 +288,6 @@ class StepRoboticsVisionEncoder(nn.Module):
 
 
 # Text model
-
-
 class Step3p7PreTrainedModel(PreTrainedModel):
     config_class = Step3p7Config
     supports_gradient_checkpointing = True
@@ -325,6 +315,13 @@ class Step3p7PreTrainedModel(PreTrainedModel):
             operations=[Chunk(dim=0)],
         ),
     ]
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        # issues from _move_missing_keys_from_meta_to_device, this runs after that migration step, so the correct values are restored.
+        if hasattr(module, "_compute_2d_freqs") and hasattr(module, "freqs_cache"):
+            cache = module._compute_2d_freqs()
+            module.register_buffer("freqs_cache", cache, persistent=False)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -383,19 +380,16 @@ class Step3p7RMSNorm(MiniMaxM3VLRMSNorm):
     pass
 
 
-class Step3p7MLP(DeepseekV3MLP):
+class Step3p7MLP(DeepseekV4MLP):
     def __init__(self, config, swiglu_limit=None):
+        config = copy.copy(config)
+        config.swiglu_limit = float("inf") if swiglu_limit is None else swiglu_limit
         super().__init__(config)
-        self.intermediate_size = config.intermediate_size
-        self.act_fn = ACT2FN["silu"]
-        self.limit = swiglu_limit
 
     def forward(self, x):
-        gate = self.act_fn(self.gate_proj(x))
-        up = self.up_proj(x)
-        if self.limit is not None:
-            gate = gate.clamp(min=None, max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
+        # silu-then-clamp (Step3p7 order); DeepseekV4MLP clamps before act_fn
+        gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
+        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
         return self.down_proj(gate * up)
 
 
@@ -411,59 +405,38 @@ class Step3p7SharedExpert(Step3p7MLP):
 class Step3p7TopKRouter(MiniMaxM3VLTopKRouter):
     def __init__(self, config):
         nn.Module.__init__(self)
-        self.top_k = config.moe_top_k
-        self.num_experts = config.moe_num_experts
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.n_routed_experts
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts, dtype=torch.float32))
-    # forward() inherited from MiniMaxM3VLTopKRouter
 
 
 @no_inherit_decorator
 class Step3p7Experts(DeepseekV4Experts):
     def __init__(self, config, swiglu_limit=None):
-        nn.Module.__init__(self)
-        self.num_experts = config.moe_num_experts
-        self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.moe_intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN["silu"]
-        self.limit = swiglu_limit
+        config = copy.copy(config)
+        config.intermediate_size = config.moe_intermediate_size
+        config.swiglu_limit = float("inf") if swiglu_limit is None else swiglu_limit
+        super().__init__(config)
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        # silu-then-clamp (Step3p7 order), vs DeepseekV4's clamp-then-silu
+        # silu-then-clamp (Step3p7 order); DeepseekV4 clamps before act_fn
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = self.act_fn(gate)
-        if self.limit is not None:
-            gate = gate.clamp(min=None, max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
+        gate = self.act_fn(gate).clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
         return gate * up
-    # forward() inherited from DeepseekV4Experts
 
 
 class Step3p7SparseMoeBlock(MiniMaxM3VLSparseMoeBlock):
     def __init__(self, config, layer_idx):
         nn.Module.__init__(self)
-        swiglu_limit = (
-            config.swiglu_limits[layer_idx]
-            if config.swiglu_limits
-            and config.swiglu_limits[layer_idx] is not None
-            and config.swiglu_limits[layer_idx] != 0
-            else None
-        )
-        swiglu_limit_shared = (
-            config.swiglu_limits_shared[layer_idx]
-            if config.swiglu_limits_shared
-            and config.swiglu_limits_shared[layer_idx] is not None
-            and config.swiglu_limits_shared[layer_idx] != 0
-            else None
-        )
+        swiglu_limit = (config.swiglu_limits[layer_idx] or None) if config.swiglu_limits else None
+        swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
         self.gate = Step3p7TopKRouter(config)
         self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
         self.shared_experts = Step3p7SharedExpert(config, swiglu_limit=swiglu_limit_shared)
         self.routed_scaling_factor = getattr(config, "moe_router_scaling_factor", 1.0)
-    # forward() inherited from MiniMaxM3VLSparseMoeBlock
 
 
 class Step3p7Attention(MiniMaxM3VLAttention):
@@ -532,7 +505,7 @@ class Step3p7Attention(MiniMaxM3VLAttention):
         return attn_output, attn_weights
 
 
-class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):
+class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer): #TODO: switch to llama
     def __init__(self, config, layer_idx):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
@@ -540,13 +513,7 @@ class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):
         self.self_attn = Step3p7Attention(config, layer_idx)
         self.attention_type = config.layer_types[layer_idx]
 
-        swiglu_limit_shared = (
-            config.swiglu_limits_shared[layer_idx]
-            if config.swiglu_limits_shared
-            and config.swiglu_limits_shared[layer_idx] is not None
-            and config.swiglu_limits_shared[layer_idx] != 0
-            else None
-        )
+        swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
         self.mlp = (
             Step3p7SparseMoeBlock(config, layer_idx)
             if config.mlp_layer_types[layer_idx] == "sparse"
