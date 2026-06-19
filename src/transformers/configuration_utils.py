@@ -77,6 +77,7 @@ ALLOWED_LAYER_TYPES = (
     "linear_attention_mamba",
     "linear_attention_mamba2",
     "linear_attention_gated_delta_net",
+    "linear_attention_lightning",
 )
 
 # Legacy ``layer_types`` strings → current ``linear_attention_{backbone}`` / ``full_attention``
@@ -86,6 +87,7 @@ LEGACY_LAYER_TYPE_REMAP = {
     "mamba": {"mamba": "linear_attention_mamba", "attention": "full_attention"},
     "mamba2": {"mamba": "linear_attention_mamba2", "attention": "full_attention"},
     "gated_delta_net": {"linear_attention": "linear_attention_gated_delta_net"},
+    "lightning": {"linear_attention": "linear_attention_lightning"},
 }
 
 

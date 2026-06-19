@@ -1038,6 +1038,7 @@ LAYER_TYPE_CACHE_MAPPING.update(
         "linear_attention_mamba": LinearAttentionLayer,
         "linear_attention_mamba2": LinearAttentionLayer,
         "linear_attention_gated_delta_net": LinearAttentionLayer,
+        "linear_attention_lightning": LinearAttentionLayer,
         # Hybrid layers (e.g. zamba / zamba2) carry both a linear-attention state and a dynamic-attention state.
         "hybrid": LinearAttentionAndFullAttentionLayer,
     }
@@ -1604,6 +1605,7 @@ class StaticCache(Cache):
                 "linear_attention_mamba",
                 "linear_attention_mamba2",
                 "linear_attention_gated_delta_net",
+                "linear_attention_lightning",
             ):
                 layer = LinearAttentionLayer()
             # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
