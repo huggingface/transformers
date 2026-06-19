@@ -326,6 +326,10 @@ def _patch_broadcast_mask_expansion(_original):
 def _patch_scaled_dot_product_attention(original):
     """Manual matmul+softmax fallback for cases unsupported by the ExecuTorch CUDA backend.
 
+    Matches PyTorch's eager SDPA math backend (``_scaled_dot_product_attention_math`` in
+    ``aten/src/ATen/native/transformers/attention.cpp``) — notably, the softmax stays in the input
+    dtype (``half_to_float=false`` there) rather than promoting to fp32.
+
     Falls back to eager attention when:
     - enable_gqa=True
     - D_q != D_v (asymmetric head dims, e.g. MLA attention)
