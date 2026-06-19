@@ -187,14 +187,44 @@ class Sapiens2ModelTester:
         model = Sapiens2ForPoseEstimation(config)
         model.to(torch_device)
         model.eval()
+
         with torch.no_grad():
             result = model(pixel_values)
+
         patch_height = self.image_size // self.patch_size
         expected_h = patch_height * (2 ** len(config.head_config.upsample_out_channels))
+
         self.parent.assertEqual(
             result.heatmaps.shape,
             (self.batch_size, config.num_labels, expected_h, expected_h),
         )
+
+        
+        pose_labels = torch.randn_like(result.heatmaps)
+
+        with torch.no_grad():
+            result_with_loss = model(
+                pixel_values,
+                labels=pose_labels,
+            )
+
+        self.parent.assertIsNotNone(result_with_loss.loss)
+
+        
+        target_weights = torch.ones(
+            self.batch_size,
+            config.num_labels,
+            device=pixel_values.device,
+        )
+
+        with torch.no_grad():
+            result_with_weights = model(
+                pixel_values,
+                labels=pose_labels,
+                target_weights=target_weights,
+            )
+
+        self.parent.assertIsNotNone(result_with_weights.loss)
 
     def create_and_check_for_normal_estimation(self, config, pixel_values, labels):
         model = Sapiens2ForNormalEstimation(config)
