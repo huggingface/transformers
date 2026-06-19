@@ -687,10 +687,6 @@ print(f"\n✓ Speedup: {speedup:.2f}x faster")
 
 [[autodoc]] VibeVoiceModel
 
-## VibeVoiceSemanticTokenizerConfig
-
-[[autodoc]] VibeVoiceSemanticTokenizerConfig
-
 ## VibeVoiceSemanticTokenizerModel
 
 [[autodoc]] VibeVoiceSemanticTokenizerModel
