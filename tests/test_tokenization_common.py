@@ -1011,6 +1011,15 @@ Hey how are you doing"""  # noqa: W293
         new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
     @require_jinja
+    def test_chat_template_empty_conversation_raises(self):
+        # An empty list/tuple used to crash with an unhandled IndexError when probing conversation[0]
+        # to detect batched input. It should raise a clear ValueError instead.
+        tokenizer = self.get_tokenizer()
+        for empty_conversation in ([], ()):
+            with self.assertRaisesRegex(ValueError, "empty conversation"):
+                tokenizer.apply_chat_template(empty_conversation, tokenize=False)
+
+    @require_jinja
     def test_chat_template_save_loading(self):
         tokenizer = self.get_tokenizer()
         signature = inspect.signature(tokenizer.__init__)
