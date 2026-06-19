@@ -251,7 +251,7 @@ class PagedAttentionCache:
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
         # We add two extra blocks to the cache as a padding zone that no BlockManager ever allocates from.
-        # The first one is zeroed and then never written to. Its first index is the trash read, from which padding
+        # The first one is zeroed and then never written to. Its first index is the read trash, from which padding
         # tokens read their KV cache, and its second index is the sentinel index, to indicate where to store the new key
         # or values indices for sliding window attention groups.
         # The second is the write trash, where padding tokens can safely write their KV cache (it's never read from).

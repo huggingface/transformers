@@ -478,6 +478,91 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         expected_write = reference_indices(past_length, past_length + query_length)
         self.assertEqual(allocator.get_write_indices("req", past_length, query_length), expected_write)
 
+    @parameterized.expand(
+        [
+            # (block_size, sliding_window, block_table, past_length, query_length)
+            # Prefill from empty: no cache read, only sentinels in the read indices
+            (4, 8, [0, 1], 0, 3),
+            # Decode within the window
+            (4, 8, [0, 1], 5, 1),
+            # Chunked prefill in the middle of the window
+            (4, 8, [0, 1], 2, 4),
+            # Past length beyond the window: rolling-buffer wrap-around
+            (4, 8, [0, 1], 10, 1),
+            (4, 8, [0, 1], 14, 3),
+            # Non-contiguous blocks
+            (4, 8, [3, 5], 6, 2),
+            # Query longer than the window: write indices get left-padded with the write trash index
+            (4, 8, [0, 1], 0, 10),
+            # Single-block window (block_size == sliding_window)
+            (4, 4, [7], 3, 1),
+            # Larger block size
+            (16, 32, [0, 1], 20, 4),
+        ]
+    )
+    def test_sliding_attention_get_indices(
+        self,
+        block_size: int,
+        sliding_window: int,
+        block_table: list[int],
+        past_length: int,
+        query_length: int,
+    ) -> None:
+        """Test SlidingAttentionCacheAllocator.get_read_indices and get_write_indices place the cache, sentinel and
+        write trash indices correctly, including for small block sizes and rolling-buffer wrap-around."""
+        # The special indices live in the padding zone above the allocatable blocks (see PagedAttentionCache). We pick a
+        # num_blocks larger than any block id used here so they never collide with real cache positions.
+        num_blocks = 64
+        self.assertTrue(all(b < num_blocks for b in block_table))
+        sentinel_index = num_blocks * block_size + 1
+        write_trash_index = (num_blocks + 1) * block_size
+
+        def to_physical(i: int) -> int:
+            """Reference logical-to-physical mapping inside the rolling buffer."""
+            i %= sliding_window
+            return block_table[i // block_size] * block_size + i % block_size
+
+        allocator = SlidingAttentionCacheAllocator(
+            index=0,
+            block_size=block_size,
+            sliding_window=sliding_window,
+            sentinel_index=sentinel_index,
+            write_trash_index=write_trash_index,
+        )
+        allocator.block_table["req"] = block_table
+
+        # Read indices: cache positions followed by one sentinel per query token
+        read_start = 0 if past_length < sliding_window else past_length % sliding_window
+        read_cache_length = min(past_length, sliding_window - 1)
+        expected_read = [to_physical(i) for i in range(read_start, read_start + read_cache_length)]
+        expected_read += [sentinel_index] * query_length
+        read = allocator.get_read_indices("req", past_length, query_length)
+        self.assertEqual(read, expected_read)
+
+        # Structural invariants, independent of the rolling-buffer arithmetic
+        self.assertEqual(len(read), read_cache_length + query_length)
+        self.assertEqual(read[read_cache_length:], [sentinel_index] * query_length)  # sentinels only at the tail
+        self.assertNotIn(sentinel_index, read[:read_cache_length])
+        for idx in read[:read_cache_length]:
+            self.assertIn(idx // block_size, block_table)  # cache reads land in allocated blocks
+
+        # Write indices: one slot per query token, left-padded with the write trash index when the query overflows the
+        # window
+        write_start = past_length % sliding_window
+        write_cache_length = min(query_length, sliding_window)
+        padding_length = query_length - write_cache_length
+        expected_write = [write_trash_index] * padding_length
+        expected_write += [to_physical(i) for i in range(write_start, write_start + write_cache_length)]
+        write = allocator.get_write_indices("req", past_length, query_length)
+        self.assertEqual(write, expected_write)
+
+        # Structural invariants
+        self.assertEqual(len(write), query_length)  # one write slot per query token
+        self.assertEqual(write[:padding_length], [write_trash_index] * padding_length)  # trash only at the front
+        self.assertNotIn(write_trash_index, write[padding_length:])
+        for idx in write[padding_length:]:
+            self.assertIn(idx // block_size, block_table)  # cache writes land in allocated blocks
+
     @slow
     def test_continuous_batching_no_accelerators(self) -> None:
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
