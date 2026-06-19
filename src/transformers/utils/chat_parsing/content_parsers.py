@@ -5,6 +5,12 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """This file contains the parsers used by chat response parsing. Each parser takes a chunk of captured text
 and parses it into a single key in the output message dictionary. Functions are generally boilerplate and as
 a result this is mostly agent-written."""
@@ -205,32 +211,32 @@ def validate_transform_strings(scope: str, transform: Any) -> None:
         )
 
 
-def process_field(body: str, fld, captures: dict) -> Any:
+def process_field(body: str, field, captures: dict) -> Any:
     """Run `body` through the field's content parser, then optionally apply the
     transform template. When `transform_each` is set, the parsed content must
     be a list and the template is applied to each element (with the element's
     keys unpacked into the template scope, alongside any regex captures).
 
-    `fld` is a `spec.Field`; typed via duck-typing to avoid a cyclic import."""
-    value = parse_content(body, fld.content, fld.content_args)
-    if fld.transform is None:
+    `field` is a `spec.Field`; typed via duck-typing to avoid a cyclic import."""
+    value = parse_content(body, field.content, field.content_args)
+    if field.transform is None:
         return value
-    if fld.transform_each:
+    if field.transform_each:
         if not isinstance(value, list):
             raise ValueError(
-                f"Field '{fld.name}': transform_each requires the parsed content to be a list, "
+                f"Field '{field.name}': transform_each requires the parsed content to be a list, "
                 f"got {type(value).__name__}."
             )
         out = []
         for item in value:
             if not isinstance(item, dict):
                 raise ValueError(
-                    f"Field '{fld.name}': transform_each requires each list element to be a dict, "
+                    f"Field '{field.name}': transform_each requires each list element to be a dict, "
                     f"got {type(item).__name__}."
                 )
-            out.append(_apply_transform(fld.transform, {**captures, **item}))
+            out.append(_apply_transform(field.transform, {**captures, **item}))
         return out
-    return _apply_transform(fld.transform, {**captures, "content": value})
+    return _apply_transform(field.transform, {**captures, "content": value})
 
 
 __all__ = [

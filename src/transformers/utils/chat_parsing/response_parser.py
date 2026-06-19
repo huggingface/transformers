@@ -5,6 +5,12 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
@@ -124,13 +130,13 @@ class ResponseParser:
             best, hold_start = self._scan(watch, eos)
 
             if best is not None:
-                kind, fld, m = best
+                kind, field, m = best
                 if m.start() > self._pos:
                     self._accumulate(events, self._buffer[self._pos : m.start()])
                 self._pos = m.end()
                 if kind == "open":
                     self._close_current(events)
-                    self._open_explicit(events, fld, m)
+                    self._open_explicit(events, field, m)
                 else:  # "close" (always the implicit region's close here,
                     #   since explicit regions only expose their own close)
                     had_content = self._opened
@@ -162,12 +168,12 @@ class ResponseParser:
         explicit region, or -- if we're in the implicit/null region -- every
         explicit open plus the implicit's own close (if any)."""
         if self._current is not None and self._current != self._implicit_name:
-            fld = self._spec.fields[self._current]
-            return [("close", fld)] if fld.close_re is not None else []
+            field = self._spec.fields[self._current]
+            return [("close", field)] if field.close_re is not None else []
         watch: list[tuple[str, ResponseTemplateField]] = []
-        for fld in self._spec.fields.values():
-            if fld.open_re is not None:
-                watch.append(("open", fld))
+        for field in self._spec.fields.values():
+            if field.open_re is not None:
+                watch.append(("open", field))
         if self._implicit_name is not None:
             impl = self._spec.fields[self._implicit_name]
             if impl.close_re is not None:
@@ -202,8 +208,8 @@ class ResponseParser:
         best_key: tuple | None = None
         best: tuple[str, ResponseTemplateField, Any] | None = None
         hold_start = len(self._buffer)
-        for kind, fld in watch:
-            pattern = fld.open_re if kind == "open" else fld.close_re
+        for kind, field in watch:
+            pattern = field.open_re if kind == "open" else field.close_re
             assert pattern is not None  # watched delimiters always carry a regex
             if eos:
                 m = pattern.search(self._buffer, self._pos)
@@ -211,20 +217,20 @@ class ResponseParser:
                 m = pattern.search(self._buffer, self._pos, partial=True)
             if m is None:
                 continue
-            if not eos and (m.partial or self._can_grow(kind, fld, m)):
+            if not eos and (m.partial or self._can_grow(kind, field, m)):
                 # Pending: can't commit, and blocks emitting from its start onward.
                 hold_start = min(hold_start, m.start())
                 continue
-            key = (m.start(), -(m.end() - m.start()), 0 if kind == "open" else 1, fld.name)
+            key = (m.start(), -(m.end() - m.start()), 0 if kind == "open" else 1, field.name)
             if best_key is None or key < best_key:
-                best_key, best = key, (kind, fld, m)
+                best_key, best = key, (kind, field, m)
         # A committable match co-located with or after a pending one must wait too:
         # the pending delimiter starts no later and might be the one that fires.
         if best is not None and best[2].start() >= hold_start:
             best = None
         return best, hold_start
 
-    def _can_grow(self, kind: str, fld: ResponseTemplateField, m: Any) -> bool:
+    def _can_grow(self, kind: str, field: ResponseTemplateField, m: Any) -> bool:
         r"""Whether a *complete* match ending at the current buffer edge could still
         change as more input arrives -- in which case we defer rather than commit. A
         match ending before the edge has already seen its terminating byte and is
@@ -236,10 +242,12 @@ class ResponseParser:
             return False
         if m.start() == m.end():
             return True
-        lits, can_extend = (
-            (fld.open_lits, fld.open_lit_can_extend) if kind == "open" else (fld.close_lits, fld.close_lit_can_extend)
+        literals, can_extend = (
+            (field.open_literals, field.open_literal_can_extend)
+            if kind == "open"
+            else (field.close_literals, field.close_literal_can_extend)
         )
-        return lits is None or can_extend
+        return literals is None or can_extend
 
     def _accumulate(self, events: list[dict], text: str) -> None:
         """Route `text` into the currently active region. When the current
@@ -250,20 +258,20 @@ class ResponseParser:
         parsed into the final value on close."""
         if not text or self._current is None:
             return
-        fld = self._spec.fields[self._current]
+        field = self._spec.fields[self._current]
         if not self._opened:
             events.append({"type": "region_open", "field": self._current})
             self._opened = True
         self._body += text
-        dirty = fld.content not in STREAMABLE_PARSERS
+        dirty = field.content not in STREAMABLE_PARSERS
         events.append({"type": "region_chunk", "field": self._current, "text": text, "dirty": dirty})
 
-    def _open_explicit(self, events: list[dict], fld: ResponseTemplateField, m: Any) -> None:
-        self._current = fld.name
+    def _open_explicit(self, events: list[dict], field: ResponseTemplateField, m: Any) -> None:
+        self._current = field.name
         self._captures = {k: v for k, v in m.groupdict().items() if v is not None}
         self._body = ""
         self._opened = True
-        events.append({"type": "region_open", "field": fld.name})
+        events.append({"type": "region_open", "field": field.name})
 
     def _close_current(self, events: list[dict]) -> None:
         """Close the current region and reset to the implicit/null region.
@@ -272,9 +280,9 @@ class ResponseParser:
         if self._current is None or not self._opened:
             self._reset_to_implicit()
             return
-        fld = self._spec.fields[self._current]
-        value = process_field(self._body, fld, self._captures)
-        if fld.repeats:
+        field = self._spec.fields[self._current]
+        value = process_field(self._body, field, self._captures)
+        if field.repeats:
             self._output.setdefault(self._current, []).append(value)
         else:
             self._output[self._current] = value
