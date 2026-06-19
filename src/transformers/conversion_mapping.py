@@ -635,6 +635,16 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^text_model", target_patterns="model.text_model"),
             WeightRenaming(source_patterns=r"^vqmodel", target_patterns="model.vqmodel"),
         ],
+        "locateanything": [
+            WeightRenaming(source_patterns=r"\.wqkv", target_patterns=".attn.wqkv"),
+            WeightRenaming(source_patterns=r"\.wo\.", target_patterns=".attn.wo."),
+            WeightRenaming(source_patterns=r"^mlp1\.0", target_patterns="model.multi_modal_projector.pre_norm"),
+            WeightRenaming(source_patterns=r"^mlp1\.1", target_patterns="model.multi_modal_projector.linear_1"),
+            WeightRenaming(source_patterns=r"^mlp1\.3", target_patterns="model.multi_modal_projector.linear_2"),
+            WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model\.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^vision_model", target_patterns="model.vision_tower"),
+        ],
         "paddleocr_vl": [
             WeightRenaming(source_patterns=r"^mlp_AR", target_patterns="model.projector"),
             WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),

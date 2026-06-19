@@ -243,6 +243,7 @@ if TYPE_CHECKING:
     from .llava_next import *
     from .llava_next_video import *
     from .llava_onevision import *
+    from .locateanything import *
     from .longcat_flash import *
     from .longformer import *
     from .longt5 import *
