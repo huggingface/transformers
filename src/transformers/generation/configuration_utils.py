@@ -173,6 +173,12 @@ class GenerationConfig(PushToHubMixin):
             our [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`.
+        max_cache_len (`int`, *optional*):
+            Only used with static caches (`cache_implementation` set to `"static"` or `"offloaded_static"`).
+            Pre-sizes the cache to this length instead of the current call's `max_length`. Set it once to the
+            largest call you expect so that repeated `generate()` calls with a longer prompt or a larger
+            `max_new_tokens` (up to this ceiling) reuse the same cache instead of triggering a reallocation and a
+            `torch.compile` recompilation.
 
         > Parameters for manipulation of the model output logits
 
@@ -388,6 +394,7 @@ class GenerationConfig(PushToHubMixin):
         self.use_cache = kwargs.pop("use_cache", None)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
+        self.max_cache_len = kwargs.pop("max_cache_len", None)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", None)
@@ -653,6 +660,11 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(
                 f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
                 f"{valid_cache_implementations}"
+            )
+        if self.max_cache_len is not None and self.cache_implementation not in ALL_STATIC_CACHE_IMPLEMENTATIONS:
+            logger.warning_once(
+                f"`max_cache_len` is only used with static caches ({STATIC_CACHE_IMPLEMENTATIONS}); it will be "
+                f"ignored with `cache_implementation={self.cache_implementation!r}`."
             )
         # 1.3. Performance attributes
         if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):
