@@ -155,13 +155,13 @@ class ExecutorchConfig(DynamoConfig):
     `dynamic_shapes`, `prefer_deferred_runtime_asserts_over_guards`).
 
     Args:
-        backend (`str`, *optional*):
+        backend (`str`, *optional*, defaults to `"xnnpack"`):
             Target ExecuTorch backend. Supported values:
 
-            - `"xnnpack"` — CPU inference via the XNNPACK library.
+            - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
-    backend: str | None = None
+    backend: str = "xnnpack"

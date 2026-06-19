@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 # Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 from abc import ABC, abstractmethod
 from collections.abc import MutableMapping
 from typing import TYPE_CHECKING
@@ -53,22 +52,25 @@ class HfExporter(ABC):
 
     def validate_environment(self, *args, **kwargs):
         """Check `required_packages` are installed and warn on version drift from `tested_versions`."""
-
-        missing_dependencies = [pkg for pkg in self.required_packages if importlib.util.find_spec(pkg) is None]
-        if missing_dependencies:
-            raise ImportError(
-                f"To use {self.__class__.__name__}, please install the following dependencies: {', '.join(missing_dependencies)}"
-            )
-
-        # Warn when installed versions diverge from the tested baseline. The local-version
-        # suffix (`+cu126`, `+cpu`) is stripped — patches target the public API, not the build.
-        drift = []
-        for pkg, tested in self.tested_versions.items():
+        # Single pass: ``_is_package_available`` returns both existence and version, so we collect
+        # missing packages and drift in one loop and report them all at the end (rather than failing
+        # on the first miss). The local-version suffix (``+cu126``, ``+cpu``) is stripped — patches
+        # target the public API, not the build.
+        missing, drift = [], []
+        for pkg in self.required_packages:
             exists, installed = _is_package_available(pkg, return_version=True)
-            if not exists or installed == "N/A":
+            if not exists:
+                missing.append(pkg)
                 continue
-            if installed.split("+", 1)[0] != tested.split("+", 1)[0]:
+            tested = self.tested_versions.get(pkg)
+            if tested is not None and installed != "N/A" and installed.split("+", 1)[0] != tested.split("+", 1)[0]:
                 drift.append((pkg, installed, tested))
+
+        if missing:
+            specs = ", ".join(
+                f"{pkg}=={self.tested_versions[pkg]}" if pkg in self.tested_versions else pkg for pkg in missing
+            )
+            raise ImportError(f"To use {type(self).__name__}, please install the following dependencies: {specs}")
 
         if drift:
             details = ", ".join(f"{pkg}: installed {got}, tested {want}" for pkg, got, want in drift)

@@ -258,7 +258,7 @@ def _reshaped_vision_attention_forward(
             value_states = value_states.view(seq_length, self.num_key_value_heads, self.head_dim)
         else:
             query_states, key_states, value_states = (
-                self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+                self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).transpose(0, 1).unbind(0)
             )
     else:
         q_proj = getattr(self, "q_proj", getattr(self, "q", None))

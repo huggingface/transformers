@@ -51,25 +51,31 @@ removals as we follow upstream.
 <hfoption id="Dynamo">
 
 ```bash
-pip install transformers torch
+pip install transformers "torch==2.12.0"
 ```
 
 </hfoption>
 <hfoption id="ONNX">
 
 ```bash
-pip install transformers torch onnxscript onnxruntime
+pip install transformers "torch==2.12.0" "onnx==1.21.0" "onnxscript==0.7.0" onnxruntime
 ```
 
 </hfoption>
 <hfoption id="ExecuTorch">
 
 ```bash
-pip install transformers torch executorch
+pip install transformers "torch==2.12.0" "executorch==1.3.1"
 ```
 
 </hfoption>
 </hfoptions>
+
+<Tip>
+The versions above are the ones the exporter test suite is pinned against — newer / older releases
+often work but the exporter patches target a specific API surface, so for production tooling pin
+these and expect [`HfExporter`] to log a warning when it detects drift.
+</Tip>
 
 ## Quick start
 
@@ -137,6 +143,13 @@ et_program = exporter.export(model, inputs, config=config)
 
 # save for on-device deployment
 et_program.save("model.pte")
+
+# load and run via the ExecuTorch Python runtime
+from executorch.runtime import Runtime
+
+program = Runtime.get().load_program("model.pte")
+method = program.load_method("forward")
+outputs = method.execute(list(inputs.values()))
 ```
 
 </hfoption>
@@ -170,6 +183,9 @@ seq = torch.export.Dim("seq", min=1, max=2048)
 exporter = DynamoExporter()
 config = DynamoConfig(
     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
+    # Defer data-dependent shape checks to runtime asserts instead of trace-time guards — needed
+    # when a model's forward branches on tensor *values* (e.g. ``sum() > 0``), which would
+    # otherwise specialise the export to a single concrete shape.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
 exported = exporter.export(model, inputs, config=config)

@@ -599,7 +599,7 @@ def decompose_prefill_decode(
         `{"prefill": (model, prefill_inputs), "decode": (model, decode_inputs)}`
     """
     try:
-        with _capture_forward(model) as calls, torch.no_grad():
+        with _capture_forward(model) as calls:
             model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2)
     except Exception as e:
         raise RuntimeError(
