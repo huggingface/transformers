@@ -273,16 +273,6 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
         return context_layer, attention_probs
 
-    @staticmethod
-    def torch_bmm_nd(inp_1, inp_2, ndim=None):
-        """nd matrix multiplication — `torch.matmul` handles arbitrary batch dims natively."""
-        return torch.matmul(inp_1, inp_2)
-
-    @staticmethod
-    def torch_bmm_nd_transpose(inp_1, inp_2, ndim=None):
-        """nd matrix multiplication with transpose — single `matmul` instead of reshape/bmm/view."""
-        return torch.matmul(inp_1, inp_2.transpose(-1, -2))
-
     def bigbird_block_sparse_attention(
         self,
         query_layer,
@@ -386,7 +376,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         # q[0] x (k[0], k[1], k[2], k[3], k[4] .... )
 
         # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, to_seq_len]
-        first_product = self.torch_bmm_nd_transpose(blocked_query_matrix[:, :, 0], key_layer, ndim=4)
+        first_product = torch.matmul(blocked_query_matrix[:, :, 0], key_layer.transpose(-1, -2))
 
         first_product = first_product * rsqrt_d
         first_product += (1.0 - to_mask) * attn_mask_penalty
@@ -395,7 +385,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         )  # [bsz, n_heads, from_block_size, to_seq_len]
 
         # [bsz, n_heads, from_block_size, to_seq_len] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, -1]
-        first_context_layer = self.torch_bmm_nd(first_attn_weights, value_layer, ndim=4)
+        first_context_layer = torch.matmul(first_attn_weights, value_layer)
         first_context_layer.unsqueeze_(2)
 
         # 2nd PART
@@ -426,7 +416,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         )  # [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1]
 
         # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
-        second_product = self.torch_bmm_nd_transpose(blocked_query_matrix[:, :, 1], second_key_mat, ndim=4)
+        second_product = torch.matmul(blocked_query_matrix[:, :, 1], second_key_mat.transpose(-1, -2))
         second_seq_pad = torch.cat(
             [
                 to_mask[:, :, :, : 3 * to_block_size],
@@ -449,7 +439,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         )  # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
 
         # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, -1]
-        second_context_layer = self.torch_bmm_nd(second_attn_weights, second_value_mat, ndim=4)
+        second_context_layer = torch.matmul(second_attn_weights, second_value_mat)
 
         second_context_layer.unsqueeze_(2)
 
@@ -471,13 +461,13 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
         # sliding attention scores for q[-2:2]
         # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [b, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
-        inner_band_product = self.torch_bmm_nd_transpose(middle_query_matrix, exp_blocked_key_matrix, ndim=5)
+        inner_band_product = torch.matmul(middle_query_matrix, exp_blocked_key_matrix.transpose(-1, -2))
         #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, 3*to_block_size]
         inner_band_product = inner_band_product * rsqrt_d
 
         # randn attention scores for q[-2:2]
         # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
-        rand_band_product = self.torch_bmm_nd_transpose(middle_query_matrix, gathered_key[:, :, 1:-1], ndim=5)
+        rand_band_product = torch.matmul(middle_query_matrix, gathered_key[:, :, 1:-1].transpose(-1, -2))
         #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size]
         rand_band_product = rand_band_product * rsqrt_d
 
@@ -511,15 +501,15 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
 
         # contribution of sliding keys
         # [bsz, n_heads, m//from_block_size-4, from_block_size, 3*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
-        context_layer = self.torch_bmm_nd(
-            attn_weights[:, :, :, :, to_block_size : 4 * to_block_size], exp_blocked_value_matrix, ndim=5
+        context_layer = torch.matmul(
+            attn_weights[:, :, :, :, to_block_size : 4 * to_block_size], exp_blocked_value_matrix
         )
         #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
 
         # adding contribution of random keys
         # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
-        context_layer += self.torch_bmm_nd(
-            attn_weights[:, :, :, :, 4 * to_block_size : -to_block_size], gathered_value[:, :, 1:-1], ndim=5
+        context_layer += torch.matmul(
+            attn_weights[:, :, :, :, 4 * to_block_size : -to_block_size], gathered_value[:, :, 1:-1]
         )
         #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
 
@@ -560,7 +550,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         )  # [bsz, n_heads, (4+r)*to_block_size, -1]
 
         # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
-        second_last_product = self.torch_bmm_nd_transpose(blocked_query_matrix[:, :, -2], second_last_key_mat, ndim=4)
+        second_last_product = torch.matmul(blocked_query_matrix[:, :, -2], second_last_key_mat.transpose(-1, -2))
         second_last_seq_pad = torch.cat(
             [
                 to_mask[:, :, :, :to_block_size],
@@ -583,7 +573,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         )  # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
 
         # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, -1]
-        second_last_context_layer = self.torch_bmm_nd(second_last_attn_weights, second_last_value_mat, ndim=4)
+        second_last_context_layer = torch.matmul(second_last_attn_weights, second_last_value_mat)
         second_last_context_layer.unsqueeze_(2)
 
         # 5th PART
@@ -591,13 +581,13 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         # q[-1] x (k[0], k[1], k[2], k[3], .... )
 
         # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, to_seq_len]
-        last_product = self.torch_bmm_nd_transpose(blocked_query_matrix[:, :, -1], key_layer, ndim=4)
+        last_product = torch.matmul(blocked_query_matrix[:, :, -1], key_layer.transpose(-1, -2))
         last_product = last_product * rsqrt_d
         last_product += (1.0 - to_mask) * attn_mask_penalty
         last_attn_weights = nn.functional.softmax(last_product, dim=-1)  # [bsz, n_heads, from_block_size, n]
 
         # [bsz, n_heads, from_block_size, to_seq_len] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, -1]
-        last_context_layer = self.torch_bmm_nd(last_attn_weights, value_layer, ndim=4)
+        last_context_layer = torch.matmul(last_attn_weights, value_layer)
         last_context_layer.unsqueeze_(2)
 
         # combining representations of all tokens
