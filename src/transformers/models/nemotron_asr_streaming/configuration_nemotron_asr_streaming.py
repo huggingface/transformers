@@ -99,18 +99,20 @@ class NemotronAsrStreamingEncoderConfig(PreTrainedConfig):
     sliding_window: int = 71
     default_num_lookahead_tokens: int = 13
 
+    def __post_init__(self, **kwargs):
+        self.num_key_value_heads = self.num_attention_heads
+        super().__post_init__(**kwargs)
+
     @property
     def subsampling_out_hidden_size(self) -> int:
         """Flattened feature size out of the subsampling stack (`channels * remaining freq bins`); the encoder projection input dim."""
         total_pad = (self.subsampling_conv_kernel_size - 1) + (self.subsampling_conv_stride - 1)
         out_length = self.num_mel_bins
         for _ in range(int(math.log2(self.subsampling_factor))):
-            out_length = (out_length + total_pad - self.subsampling_conv_kernel_size) // self.subsampling_conv_stride + 1
+            out_length = (
+                out_length + total_pad - self.subsampling_conv_kernel_size
+            ) // self.subsampling_conv_stride + 1
         return self.subsampling_conv_channels * out_length
-
-    def __post_init__(self, **kwargs):
-        self.num_key_value_heads = self.num_attention_heads
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="nvidia/nemotron-speech-streaming-en-0.6b")

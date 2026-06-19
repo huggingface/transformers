@@ -704,7 +704,7 @@ class NemotronAsrStreamingEncoderSubsamplingConv2D(nn.Module):
         channels = config.subsampling_conv_channels
         num_layers = int(math.log2(config.subsampling_factor))
 
-        # Stem: strided causal conv over the single-channel mel spectrogram.
+        # stem: strided causal conv over the single-channel mel spectrogram
         self.conv_in = NemotronAsrStreamingEncoderCausalConv2D(
             1,
             channels,
@@ -712,11 +712,10 @@ class NemotronAsrStreamingEncoderSubsamplingConv2D(nn.Module):
             stride=config.subsampling_conv_stride,
             cache_key="subsampling.0",
         )
-        # Remaining stages are depthwise-separable.
+        # depthwise-separable layers
         self.layers = nn.ModuleList(
             NemotronAsrStreamingEncoderSubsamplingLayer(config, layer_idx=i) for i in range(1, num_layers)
         )
-        # ReLU is applied after each stage's masking (`relu(0) == 0`, so order with masking is irrelevant).
         self.act_fn = nn.ReLU()
         self.linear = nn.Linear(config.subsampling_out_hidden_size, config.hidden_size, bias=True)
 
@@ -729,17 +728,16 @@ class NemotronAsrStreamingEncoderSubsamplingConv2D(nn.Module):
         hidden_states = input_features.unsqueeze(1)
         lengths = attention_mask.sum(-1) if attention_mask is not None else None
 
-        # Stem stage.
+        # stem stage
         hidden_states = self.conv_in(hidden_states, padding_cache=padding_cache)
         lengths = self.conv_in.output_length(lengths, streaming=padding_cache is not None)
         hidden_states = self.act_fn(_mask_subsampled_frames(hidden_states, lengths))
 
-        # Depthwise-separable stages.
+        # depthwise-separable stages
         for layer in self.layers:
             hidden_states, lengths = layer(hidden_states, lengths, padding_cache=padding_cache)
             hidden_states = self.act_fn(hidden_states)
 
-        # Flatten channel + freq, project to hidden size.
         hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states.shape[0], hidden_states.shape[2], -1)
         hidden_states = self.linear(hidden_states)
 
@@ -1179,7 +1177,7 @@ class NemotronAsrStreamingForRNNT(NemotronAsrStreamingPreTrainedModel, NemotronA
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_cache: NemotronAsrStreamingRNNTDecoderCache | None = None,
         use_decoder_cache: bool | None = None,
-        encoder_outputs: NemotronAsrStreamingEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: NemotronAsrStreamingEncoderModelOutput | None = None,
         labels: torch.Tensor | None = None,
         num_lookahead_tokens: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1191,7 +1189,7 @@ class NemotronAsrStreamingForRNNT(NemotronAsrStreamingPreTrainedModel, NemotronA
             Decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
         use_decoder_cache (`bool`, *optional*):
             Whether to allocate and use a decoder cache when none is provided.
-        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`NemotronAsrStreamingEncoderModelOutput`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, ...).
         num_lookahead_tokens (`int`, *optional*):
             Right attention context (lookahead, in subsampled encoder frames) forwarded to the encoder.
@@ -1221,14 +1219,6 @@ class NemotronAsrStreamingForRNNT(NemotronAsrStreamingPreTrainedModel, NemotronA
                 attention_mask=attention_mask,
                 num_lookahead_tokens=num_lookahead_tokens,
                 **kwargs,
-            )
-        elif not isinstance(encoder_outputs, NemotronAsrStreamingEncoderModelOutput):
-            encoder_outputs = NemotronAsrStreamingEncoderModelOutput(
-                last_hidden_state=encoder_outputs[0] if len(encoder_outputs) > 0 else None,
-                pooler_output=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-                attentions=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
-                attention_mask=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
             )
 
         if use_decoder_cache and decoder_cache is None:

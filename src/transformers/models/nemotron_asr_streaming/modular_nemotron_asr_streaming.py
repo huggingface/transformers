@@ -124,7 +124,9 @@ class NemotronAsrStreamingEncoderConfig(ParakeetEncoderConfig):
         total_pad = (self.subsampling_conv_kernel_size - 1) + (self.subsampling_conv_stride - 1)
         out_length = self.num_mel_bins
         for _ in range(int(math.log2(self.subsampling_factor))):
-            out_length = (out_length + total_pad - self.subsampling_conv_kernel_size) // self.subsampling_conv_stride + 1
+            out_length = (
+                out_length + total_pad - self.subsampling_conv_kernel_size
+            ) // self.subsampling_conv_stride + 1
         return self.subsampling_conv_channels * out_length
 
 
@@ -1217,7 +1219,7 @@ class NemotronAsrStreamingForRNNT(
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_cache: NemotronAsrStreamingRNNTDecoderCache | None = None,
         use_decoder_cache: bool | None = None,
-        encoder_outputs: NemotronAsrStreamingEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: NemotronAsrStreamingEncoderModelOutput | None = None,
         labels: torch.Tensor | None = None,
         num_lookahead_tokens: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1229,7 +1231,7 @@ class NemotronAsrStreamingForRNNT(
             Decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
         use_decoder_cache (`bool`, *optional*):
             Whether to allocate and use a decoder cache when none is provided.
-        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`NemotronAsrStreamingEncoderModelOutput`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, ...).
         num_lookahead_tokens (`int`, *optional*):
             Right attention context (lookahead, in subsampled encoder frames) forwarded to the encoder.
@@ -1259,14 +1261,6 @@ class NemotronAsrStreamingForRNNT(
                 attention_mask=attention_mask,
                 num_lookahead_tokens=num_lookahead_tokens,
                 **kwargs,
-            )
-        elif not isinstance(encoder_outputs, NemotronAsrStreamingEncoderModelOutput):
-            encoder_outputs = NemotronAsrStreamingEncoderModelOutput(
-                last_hidden_state=encoder_outputs[0] if len(encoder_outputs) > 0 else None,
-                pooler_output=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-                attentions=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
-                attention_mask=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
             )
 
         if use_decoder_cache and decoder_cache is None:
