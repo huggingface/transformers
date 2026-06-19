@@ -119,9 +119,6 @@ class Nemotron3_5AsrEncoderConfig(PreTrainedConfig):
 @strict
 class Nemotron3_5AsrConfig(PreTrainedConfig):
     r"""
-    This is the configuration of the multilingual, prompt-conditioned Nemotron3_5Asr RNN-T model. It
-    extends [`NemotronAsrStreamingConfig`] with the language-ID prompt-conditioning fields.
-
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`).
     joint_hidden_size (`int`, *optional*, defaults to 640):

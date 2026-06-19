@@ -11,14 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Generation utilities for Nemotron3_5Asr RNN-T models.
-
-Nemotron3_5Asr is the multilingual extension of [`NemotronAsrStreaming`]; the RNN-T generation machinery
-(offline + cache-aware streaming) is identical, so this reuses [`NemotronAsrStreamingGenerationMixin`]
-wholesale and only adds language-ID prompt conditioning: the target language is fixed for a whole
-utterance/stream, so `generate` stashes `prompt_ids` once and `get_audio_features` (in the modeling file)
-reads it for both the offline encode and every streaming chunk.
-"""
 
 from ..nemotron_asr_streaming.generation_nemotron_asr_streaming import (
     NemotronAsrStreamingGenerationMixin,

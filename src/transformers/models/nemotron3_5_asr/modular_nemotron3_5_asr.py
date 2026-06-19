@@ -42,6 +42,7 @@ from ..nemotron_asr_streaming.configuration_nemotron_asr_streaming import (
 from ..nemotron_asr_streaming.feature_extraction_nemotron_asr_streaming import NemotronAsrStreamingFeatureExtractor
 from ..nemotron_asr_streaming.modeling_nemotron_asr_streaming import (
     NemotronAsrStreamingForRNNT,
+    NemotronAsrStreamingRNNTOutput,
     NemotronAsrStreamingPreTrainedModel,
 )
 from ..nemotron_asr_streaming.processing_nemotron_asr_streaming import (
@@ -184,17 +185,13 @@ DEFAULT_PROMPT_DICTIONARY = {
 
 @auto_docstring(checkpoint="nvidia/nemotron-3.5-asr-streaming-0.6b")
 @strict
-class Nemotron3_5AsrEncoderConfig(NemotronAsrStreamingEncoderConfig):
-    model_type = "nemotron3_5_asr_encoder"
+class Nemotron3_5AsrEncoderConfig(NemotronAsrStreamingEncoderConfig): ...
 
 
 @auto_docstring(checkpoint="nvidia/nemotron-3.5-asr-streaming-0.6b")
 @strict
 class Nemotron3_5AsrConfig(NemotronAsrStreamingConfig):
     r"""
-    This is the configuration of the multilingual, prompt-conditioned Nemotron3_5Asr RNN-T model. It
-    extends [`NemotronAsrStreamingConfig`] with the language-ID prompt-conditioning fields.
-
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`).
     joint_hidden_size (`int`, *optional*, defaults to 640):
@@ -422,37 +419,10 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
 
 
 @dataclass
-class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
-    r"""
-    loss (`torch.FloatTensor`, *optional*): RNN-T loss, returned when `labels` are provided.
-    logits (`torch.FloatTensor`): Joint network token logits.
-    decoder_cache (`Nemotron3_5AsrRNNTDecoderCache`, *optional*): Decoder LSTM cache.
-    encoder_past_key_values (`Cache`, *optional*): Encoder sliding-window K/V cache (streaming).
-    padding_cache (`Cache`, *optional*): Encoder convolution padding cache (streaming).
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
-    encoder_past_key_values: Cache | None = None
-    padding_cache: Cache | None = None
+class Nemotron3_5AsrRNNTOutput(NemotronAsrStreamingRNNTOutput): ...
 
 
-class Nemotron3_5AsrPreTrainedModel(NemotronAsrStreamingPreTrainedModel):
-    config: Nemotron3_5AsrConfig
-    # The cache-aware FastConformer encoder is reused as-is from `NemotronAsrStreaming` (instantiated via
-    # `AutoModel`), so it carries its own weight init via its own pre-trained model. This subclass only
-    # adds the `prompt_kernel` MLP, whose `nn.Linear` layers are covered by the generic initialization,
-    # so no encoder-specific init is referenced here (which would otherwise pull the whole encoder stack
-    # into this file).
-    _no_split_modules = ["NemotronAsrStreamingEncoderBlock"]
-    _can_record_outputs = {}
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        # The reused encoder initializes its own (relative-attention bias, positional buffers) weights;
-        # here only the generic init (covering the `prompt_kernel` `nn.Linear` layers) is needed.
-        super()._init_weights(module)
+class Nemotron3_5AsrPreTrainedModel(NemotronAsrStreamingPreTrainedModel): ...
 
 
 @auto_docstring(
