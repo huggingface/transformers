@@ -97,13 +97,9 @@
                     "shape": "torch.Size([1, 16])",
                     "dtype": "torch.int64"
                   },
-                  "past_key_value": "None",
+                  "past_key_values": "None",
                   "output_attentions": "False",
-                  "use_cache": "False",
-                  "cache_position": {
-                    "shape": "torch.Size([16])",
-                    "dtype": "torch.int64"
-                  }
+                  "use_cache": "False"
                 }
               },
               "children": [
@@ -142,16 +138,13 @@
                         "min": "tensor(-5.7376e+00)",
                         "max": "tensor(6.6377e+00)"
                       },
+                      "position_embeddings": "None",
                       "attention_mask": "None",
                       "position_ids": {
                         "shape": "torch.Size([1, 16])",
                         "dtype": "torch.int64"
                       },
-                      "past_key_value": "None",
-                      "cache_position": {
-                        "shape": "torch.Size([16])",
-                        "dtype": "torch.int64"
-                      },
+                      "past_key_values": "None",
                       "output_attentions": "False",
                       "use_cache": "False"
                     }
@@ -510,13 +503,9 @@
                     "shape": "torch.Size([1, 16])",
                     "dtype": "torch.int64"
                   },
-                  "past_key_value": "None",
+                  "past_key_values": "None",
                   "output_attentions": "False",
-                  "use_cache": "False",
-                  "cache_position": {
-                    "shape": "torch.Size([16])",
-                    "dtype": "torch.int64"
-                  }
+                  "use_cache": "False"
                 }
               },
               "children": [
@@ -555,16 +544,13 @@
                         "min": "tensor(-7.3343e+00)",
                         "max": "tensor(7.2796e+00)"
                       },
+                      "position_embeddings": "None",
                       "attention_mask": "None",
                       "position_ids": {
                         "shape": "torch.Size([1, 16])",
                         "dtype": "torch.int64"
                       },
-                      "past_key_value": "None",
-                      "cache_position": {
-                        "shape": "torch.Size([16])",
-                        "dtype": "torch.int64"
-                      },
+                      "past_key_values": "None",
                       "output_attentions": "False",
                       "use_cache": "False"
                     }
@@ -923,13 +909,9 @@
                     "shape": "torch.Size([1, 16])",
                     "dtype": "torch.int64"
                   },
-                  "past_key_value": "None",
+                  "past_key_values": "None",
                   "output_attentions": "False",
-                  "use_cache": "False",
-                  "cache_position": {
-                    "shape": "torch.Size([16])",
-                    "dtype": "torch.int64"
-                  }
+                  "use_cache": "False"
                 }
               },
               "children": [
@@ -968,16 +950,13 @@
                         "min": "tensor(-8.2563e+00)",
                         "max": "tensor(5.9818e+00)"
                       },
+                      "position_embeddings": "None",
                       "attention_mask": "None",
                       "position_ids": {
                         "shape": "torch.Size([1, 16])",
                         "dtype": "torch.int64"
                       },
-                      "past_key_value": "None",
-                      "cache_position": {
-                        "shape": "torch.Size([16])",
-                        "dtype": "torch.int64"
-                      },
+                      "past_key_values": "None",
                       "output_attentions": "False",
                       "use_cache": "False"
                     }
@@ -1511,13 +1490,9 @@
                     "shape": "torch.Size([1, 16])",
                     "dtype": "torch.int64"
                   },
-                  "past_key_value": "None",
+                  "past_key_values": "None",
                   "output_attentions": "False",
-                  "use_cache": "False",
-                  "cache_position": {
-                    "shape": "torch.Size([16])",
-                    "dtype": "torch.int64"
-                  }
+                  "use_cache": "False"
                 }
               },
               "children": [
@@ -1556,16 +1531,13 @@
                         "min": "tensor(-6.4429e+00)",
                         "max": "tensor(6.5786e+00)"
                       },
+                      "position_embeddings": "None",
                       "attention_mask": "None",
                       "position_ids": {
                         "shape": "torch.Size([1, 16])",
                         "dtype": "torch.int64"
                       },
-                      "past_key_value": "None",
-                      "cache_position": {
-                        "shape": "torch.Size([16])",
-                        "dtype": "torch.int64"
-                      },
+                      "past_key_values": "None",
                       "output_attentions": "False",
                       "use_cache": "False"
                     }
