@@ -48,6 +48,9 @@ if is_torch_available():
     from transformers.audio_utils import load_audio
 
 
+FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr_streaming"
+
+
 # NemotronAsrStreaming's modeling/config inherit from Parakeet (see `modular_nemotron_asr_streaming.py`), so the tests inherit
 # from the Parakeet testers/tests too and override only the NemotronAsrStreaming-specific classes and behaviours.
 class NemotronAsrStreamingEncoderModelTester(ParakeetEncoderModelTester):
@@ -89,22 +92,22 @@ class NemotronAsrStreamingEncoderModelTest(ParakeetEncoderModelTest):
 
     def setUp(self):
         self.model_tester = NemotronAsrStreamingEncoderModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NemotronAsrStreamingEncoderConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=NemotronAsrStreamingEncoderConfig, has_text_modality=False
+        )
 
 
 class NemotronAsrStreamingForRNNTModelTester(ParakeetForRNNTModelTester):
-    def __init__(self, parent, encoder_kwargs=None, vocab_size=128, joint_hidden_size=32, **kwargs):
+    def __init__(self, parent, encoder_kwargs=None, vocab_size=128, **kwargs):
         super().__init__(parent, encoder_kwargs=encoder_kwargs, vocab_size=vocab_size, **kwargs)
         # NemotronAsrStreaming uses its own encoder tester (Parakeet's `__init__` wired the Parakeet one). The two share
         # identical settings, so the encoder-derived attributes set by `super().__init__` stay valid.
         self.encoder_model_tester = NemotronAsrStreamingEncoderModelTester(parent, **(encoder_kwargs or {}))
-        self.joint_hidden_size = joint_hidden_size
 
     def get_config(self):
         return NemotronAsrStreamingConfig(
             vocab_size=self.vocab_size,
             decoder_hidden_size=self.decoder_hidden_size,
-            joint_hidden_size=self.joint_hidden_size,
             num_decoder_layers=self.num_decoder_layers,
             hidden_act=self.hidden_act,
             max_symbols_per_step=self.max_symbols_per_step,
@@ -215,7 +218,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
     def test_model_integration(self):
         # NeMo `nvidia/nemotron-speech-streaming-en-0.6b` reference; HF matches it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_single_rnnt-py
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr_streaming/expected_results_single.json"
+        RESULTS_PATH = FIXTURES_DIR / "expected_results_single.json"
         with open(RESULTS_PATH) as f:
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
@@ -234,7 +237,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
     def test_model_integration_batched(self):
         # NeMo reference; all five HF transcripts match it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_batch_rnnt-py
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr_streaming/expected_results_batch.json"
+        RESULTS_PATH = FIXTURES_DIR / "expected_results_batch.json"
         with open(RESULTS_PATH) as f:
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
@@ -266,11 +269,14 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         # emission flipped by ~1e-3 numerical drift in the re-implemented FastConformer encoder (WER-neutral).
         # We assert against the NeMo reference, so this test is expected to fail on that one sub-word until the
         # encoder drift is closed.
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr_streaming/expected_results_streaming.json"
+        RESULTS_PATH = FIXTURES_DIR / "expected_results_streaming.json"
         with open(RESULTS_PATH) as f:
             EXPECTED_TRANSCRIPTION = json.load(f)["transcription"]
 
-        audio = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", sampling_rate=self.processor.feature_extractor.sampling_rate)
+        audio = load_audio(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
+            sampling_rate=self.processor.feature_extractor.sampling_rate,
+        )
         model = NemotronAsrStreamingForRNNT.from_pretrained(
             self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
         )

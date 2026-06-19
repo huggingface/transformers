@@ -46,7 +46,13 @@ from transformers.utils.hub import cached_file
 
 # Encoder / decoder / joint submodule layout matches Parakeet, so these mappings are reused verbatim.
 NEMO_TO_HF_WEIGHT_MAPPING = {
-    r"encoder\.pre_encode\.conv\.": r"encoder.subsampling.layers.",
+    # NeMo's `pre_encode.conv` is a flat Sequential (conv, relu, dwconv, pwconv, relu, dwconv, pwconv, relu).
+    # HF splits it into a stem (`conv_in`) plus depthwise-separable `layers`.
+    r"encoder\.pre_encode\.conv\.0\.": r"encoder.subsampling.conv_in.",
+    r"encoder\.pre_encode\.conv\.2\.": r"encoder.subsampling.layers.0.depthwise_conv.",
+    r"encoder\.pre_encode\.conv\.3\.": r"encoder.subsampling.layers.0.pointwise_conv.",
+    r"encoder\.pre_encode\.conv\.5\.": r"encoder.subsampling.layers.1.depthwise_conv.",
+    r"encoder\.pre_encode\.conv\.6\.": r"encoder.subsampling.layers.1.pointwise_conv.",
     r"encoder\.pre_encode\.out\.": r"encoder.subsampling.linear.",
     r"encoder\.pos_enc\.": r"encoder.encode_positions.",
     # NeMo stores the conformer conv norm under `conv.batch_norm` regardless of whether it is a
@@ -347,6 +353,14 @@ def convert_rnnt_config(nemo_config, encoder_config):
     activation = jointnet.get("activation", "relu")
     max_symbols_per_step = nemo_config.get("decoding", {}).get("greedy", {}).get("max_symbols", 10)
 
+    # The HF joint projects encoder/decoder outputs to `decoder_hidden_size`, so it can only represent
+    # checkpoints where NeMo's `joint_hidden` equals `pred_hidden`. All known checkpoints satisfy this.
+    if joint_hidden_size != decoder_hidden_size:
+        raise ValueError(
+            f"NemotronAsrStreaming requires joint_hidden == pred_hidden (got joint_hidden={joint_hidden_size} "
+            f"and pred_hidden={decoder_hidden_size}). Please open an issue if you have such a checkpoint."
+        )
+
     print(
         f"RNN-T config: vocab_size={vocab_size} (including blank token), "
         f"decoder_hidden={decoder_hidden_size}, joint_hidden={joint_hidden_size}, "
@@ -356,7 +370,6 @@ def convert_rnnt_config(nemo_config, encoder_config):
     return NemotronAsrStreamingConfig(
         vocab_size=vocab_size,
         decoder_hidden_size=decoder_hidden_size,
-        joint_hidden_size=joint_hidden_size,
         num_decoder_layers=num_decoder_layers,
         hidden_act=activation,
         max_symbols_per_step=max_symbols_per_step,

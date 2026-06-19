@@ -277,21 +277,29 @@ class NemotronAsrStreamingEncoderCausalConv2D(nn.Conv2d):
         )
         self.cache_key = cache_key
 
-    @cached_property
+    @property
     def left_pad(self):
         return self.kernel_size[0] - self.stride[0]
 
-    @cached_property
+    @property
     def left_pad_init(self):
         return self.kernel_size[0] - 1
 
-    @cached_property
+    @property
     def time_pad(self):
         return (self.kernel_size[0] - 1, self.stride[0] - 1)
 
-    @cached_property
+    @property
     def freq_pad(self):
         return (self.kernel_size[1] - 1, self.stride[1] - 1)
+
+    def output_length(self, input_lengths: torch.Tensor | None, streaming: bool = False) -> torch.Tensor | None:
+        # Streaming consumes `left_pad` cached frames on the left and no right padding; offline uses the
+        # full causal padding `(kernel - 1, stride - 1)` on the time axis.
+        if input_lengths is None:
+            return None
+        left, right = (self.left_pad, 0) if streaming else self.time_pad
+        return (input_lengths + left + right - self.kernel_size[0]) // self.stride[0] + 1
 
     def forward(
         self,
@@ -431,7 +439,7 @@ class NemotronAsrStreamingEncoderConvolutionModule(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor = None,
+        all_masked_rows: torch.Tensor | None = None,
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
     ):
         """
@@ -451,13 +459,9 @@ class NemotronAsrStreamingEncoderConvolutionModule(nn.Module):
         hidden_states = self.pointwise_conv1(hidden_states)
         hidden_states = nn.functional.glu(hidden_states, dim=1)
 
-        # Apply padding mask before convolution. The mask may be 3D (B, T_q, T_k) for offline or
-        # streaming use; reduce over the key dim to get a per-query padding indicator.
-        if attention_mask is not None:
-            if attention_mask.dtype == torch.bool:
-                all_masked_rows = torch.all(~attention_mask, dim=-1)
-            else:
-                all_masked_rows = torch.all(attention_mask == 0.0, dim=-1)
+        # Zero out fully-masked (padding) frames before convolution so they don't leak into valid frames.
+        # `all_masked_rows` is derived from the attention mask once in the encoder and shared across layers.
+        if all_masked_rows is not None:
             hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
 
         # Causal depthwise conv: left context from `padding_cache` when streaming, else left-padded.
@@ -547,7 +551,11 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class NemotronAsrStreamingEncoderAttention(nn.Module):
-    """Multi-head attention with relative positional encoding. See section 3.3 of https://huggingface.co/papers/1901.02860."""
+    """
+    Multi-head attention with relative positional encoding.
+    The only difference with `ParakeetEncoderAttention` is the addition of the `past_key_values`.
+    See `ParakeetEncoderAttention`, and https://huggingface.co/papers/2312.17279 for more details
+    """
 
     def __init__(self, config: NemotronAsrStreamingEncoderConfig, layer_idx: int):
         super().__init__()
@@ -650,66 +658,62 @@ class NemotronAsrStreamingEncoderAttention(nn.Module):
         return attention_scores
 
 
+def _mask_subsampled_frames(hidden_states: torch.Tensor, lengths: torch.Tensor | None) -> torch.Tensor:
+    """Zero out time frames beyond each sequence's valid length so they don't leak into the next conv."""
+    if lengths is None:
+        return hidden_states
+    time = torch.arange(hidden_states.shape[2], device=hidden_states.device)
+    return hidden_states * (time < lengths[:, None])[:, None, :, None]
+
+
+class NemotronAsrStreamingEncoderSubsamplingLayer(nn.Module):
+    """Depthwise-separable subsampling stage: depthwise strided causal Conv2d + 1x1 pointwise Conv2d."""
+
+    def __init__(self, config: NemotronAsrStreamingEncoderConfig, layer_idx: int):
+        super().__init__()
+        channels = config.subsampling_conv_channels
+        self.depthwise_conv = NemotronAsrStreamingEncoderCausalConv2D(
+            channels,
+            channels,
+            kernel_size=config.subsampling_conv_kernel_size,
+            stride=config.subsampling_conv_stride,
+            groups=channels,
+            cache_key=f"subsampling.{layer_idx}",
+        )
+        self.pointwise_conv = nn.Conv2d(channels, channels, kernel_size=1)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        lengths: torch.Tensor | None,
+        padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        hidden_states = self.depthwise_conv(hidden_states, padding_cache=padding_cache)
+        lengths = self.depthwise_conv.output_length(lengths, streaming=padding_cache is not None)
+        hidden_states = self.pointwise_conv(hidden_states)
+        return _mask_subsampled_frames(hidden_states, lengths), lengths
+
+
 class NemotronAsrStreamingEncoderSubsamplingConv2D(nn.Module):
     def __init__(self, config: NemotronAsrStreamingEncoderConfig):
         super().__init__()
+        channels = config.subsampling_conv_channels
+        num_layers = int(math.log2(config.subsampling_factor))
 
-        self.kernel_size = config.subsampling_conv_kernel_size
-        self.stride = config.subsampling_conv_stride
-        self.channels = config.subsampling_conv_channels
-        self.padding = (self.kernel_size - 1) // 2
-        self.num_layers = int(math.log2(config.subsampling_factor))
-
-        self.layers = nn.ModuleList()
-        self.layers.append(
-            NemotronAsrStreamingEncoderCausalConv2D(
-                1,
-                self.channels,
-                kernel_size=self.kernel_size,
-                stride=self.stride,
-                padding=0,
-                cache_key="subsampling.0",
-            )
+        # stem: strided causal conv over the single-channel mel spectrogram
+        self.conv_in = NemotronAsrStreamingEncoderCausalConv2D(
+            1,
+            channels,
+            kernel_size=config.subsampling_conv_kernel_size,
+            stride=config.subsampling_conv_stride,
+            cache_key="subsampling.0",
         )
-        self.layers.append(nn.ReLU())
-        for idx in range(self.num_layers - 1):
-            # depthwise conv
-            self.layers.append(
-                NemotronAsrStreamingEncoderCausalConv2D(
-                    self.channels,
-                    self.channels,
-                    kernel_size=self.kernel_size,
-                    stride=self.stride,
-                    groups=self.channels,
-                    cache_key=f"subsampling.{idx + 1}",
-                )
-            )
-            # pointwise conv
-            self.layers.append(nn.Conv2d(self.channels, self.channels, kernel_size=1))
-            # activation
-            self.layers.append(nn.ReLU())
-
-        # Compute output freq length by simulating the conv chain with the actual padding applied.
-        pad_left, pad_right = self.kernel_size - 1, self.stride - 1
-        out_length = config.num_mel_bins
-        total_pad = pad_left + pad_right
-        for _ in range(self.num_layers):
-            out_length = (out_length + total_pad - self.kernel_size) // self.stride + 1
-        self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
-
-    def _get_output_length(self, input_lengths: torch.Tensor, conv_layer: nn.Conv2d, streaming: bool = False):
-        if not (hasattr(conv_layer, "stride") and conv_layer.stride != (1, 1)):
-            return input_lengths
-
-        kernel_size = conv_layer.kernel_size[0]
-        stride = conv_layer.stride[0]
-        if isinstance(conv_layer, NemotronAsrStreamingEncoderCausalConv2D):
-            # Streaming consumes `left_pad` cached frames on the left and no right padding; offline uses
-            # the full causal padding `(kernel - 1, stride - 1)` on the time axis.
-            left, right = (conv_layer.left_pad, 0) if streaming else conv_layer.time_pad
-        else:
-            left = right = conv_layer.padding[0]
-        return (input_lengths + left + right - kernel_size) // stride + 1
+        # depthwise-separable layers
+        self.layers = nn.ModuleList(
+            NemotronAsrStreamingEncoderSubsamplingLayer(config, layer_idx=i) for i in range(1, num_layers)
+        )
+        self.act_fn = nn.ReLU()
+        self.linear = nn.Linear(config.subsampling_out_hidden_size, config.hidden_size, bias=True)
 
     def forward(
         self,
@@ -718,23 +722,17 @@ class NemotronAsrStreamingEncoderSubsamplingConv2D(nn.Module):
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
     ):
         hidden_states = input_features.unsqueeze(1)
-        current_lengths = attention_mask.sum(-1) if attention_mask is not None else None
-        streaming = padding_cache is not None
+        lengths = attention_mask.sum(-1) if attention_mask is not None else None
 
+        # stem stage
+        hidden_states = self.conv_in(hidden_states, padding_cache=padding_cache)
+        lengths = self.conv_in.output_length(lengths, streaming=padding_cache is not None)
+        hidden_states = self.act_fn(_mask_subsampled_frames(hidden_states, lengths))
+
+        # depthwise-separable stages
         for layer in self.layers:
-            if isinstance(layer, NemotronAsrStreamingEncoderCausalConv2D):
-                hidden_states = layer(hidden_states, padding_cache=padding_cache)
-            else:
-                hidden_states = layer(hidden_states)
-
-            # mask the hidden states
-            if isinstance(layer, nn.Conv2d) and attention_mask is not None:
-                current_lengths = self._get_output_length(current_lengths, layer, streaming=streaming)
-                current_seq_length = hidden_states.shape[2]
-                channel_mask = (
-                    torch.arange(current_seq_length, device=attention_mask.device) < current_lengths[:, None]
-                )
-                hidden_states *= channel_mask[:, None, :, None]
+            hidden_states, lengths = layer(hidden_states, lengths, padding_cache=padding_cache)
+            hidden_states = self.act_fn(hidden_states)
 
         hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states.shape[0], hidden_states.shape[2], -1)
         hidden_states = self.linear(hidden_states)
@@ -777,6 +775,7 @@ class NemotronAsrStreamingEncoderBlock(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        all_masked_rows: torch.Tensor | None = None,
         position_embeddings: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
@@ -797,7 +796,7 @@ class NemotronAsrStreamingEncoderBlock(GradientCheckpointingLayer):
         hidden_states = hidden_states + attn_output
 
         conv_output = self.conv(
-            self.norm_conv(hidden_states), attention_mask=attention_mask, padding_cache=padding_cache
+            self.norm_conv(hidden_states), all_masked_rows=all_masked_rows, padding_cache=padding_cache
         )
         hidden_states = hidden_states + conv_output
 
@@ -994,6 +993,13 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
             and_mask_function=chunked_limited_mask_function(*self._resolve_attn_context(num_lookahead_tokens)),
         )
 
+        all_masked_rows = None
+        if attention_mask is not None:
+            if attention_mask.dtype == torch.bool:
+                all_masked_rows = torch.all(~attention_mask, dim=-1)
+            else:
+                all_masked_rows = torch.all(attention_mask == 0.0, dim=-1)
+
         cached_frames = (
             past_key_values.get_mask_sizes(seq_length, 0)[0] - seq_length if past_key_values is not None else 0
         )
@@ -1018,6 +1024,7 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
                 hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
+                    all_masked_rows=all_masked_rows,
                     position_embeddings=position_embeddings,
                     past_key_values=past_key_values,
                     padding_cache=padding_cache,
@@ -1175,7 +1182,7 @@ class NemotronAsrStreamingForRNNT(NemotronAsrStreamingPreTrainedModel, NemotronA
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_cache: NemotronAsrStreamingRNNTDecoderCache | None = None,
         use_decoder_cache: bool | None = None,
-        encoder_outputs: NemotronAsrStreamingEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: NemotronAsrStreamingEncoderModelOutput | None = None,
         labels: torch.Tensor | None = None,
         num_lookahead_tokens: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1187,7 +1194,7 @@ class NemotronAsrStreamingForRNNT(NemotronAsrStreamingPreTrainedModel, NemotronA
             Decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
         use_decoder_cache (`bool`, *optional*):
             Whether to allocate and use a decoder cache when none is provided.
-        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`NemotronAsrStreamingEncoderModelOutput`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, ...).
         num_lookahead_tokens (`int`, *optional*):
             Right attention context (lookahead, in subsampled encoder frames) forwarded to the encoder.
@@ -1217,14 +1224,6 @@ class NemotronAsrStreamingForRNNT(NemotronAsrStreamingPreTrainedModel, NemotronA
                 attention_mask=attention_mask,
                 num_lookahead_tokens=num_lookahead_tokens,
                 **kwargs,
-            )
-        elif not isinstance(encoder_outputs, NemotronAsrStreamingEncoderModelOutput):
-            encoder_outputs = NemotronAsrStreamingEncoderModelOutput(
-                last_hidden_state=encoder_outputs[0] if len(encoder_outputs) > 0 else None,
-                pooler_output=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-                attentions=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
-                attention_mask=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
             )
 
         if use_decoder_cache and decoder_cache is None:
