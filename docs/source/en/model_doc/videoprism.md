@@ -24,7 +24,7 @@ The VideoPrism model was proposed in the paper [VideoPrism: A Foundational Visua
 VideoPrism is a general-purpose video encoder that tackles diverse video understanding tasks with a single frozen model. The model is pretrained on a large-scale heterogeneous corpus containing 36M high-quality video-caption pairs and 582M video clips with noisy parallel text (e.g., ASR transcripts). The pretraining approach improves upon masked autoencoding through global-local distillation of semantic video embeddings and a token shuffling scheme, enabling the model to focus primarily on the video modality while leveraging text associated with videos. VideoPrism achieves state-of-the-art performance on 31 out of 33 video understanding benchmarks across four broad task groups, from web video question answering to computer vision for science.
 
 <div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/blob/main/transformers/model_doc/VideoPrism_Overview.jpeg" alt="drawing" width="600"/>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/VideoPrism_Overview.jpeg" alt="drawing" width="600"/>
 </div>
 
 You can find all original VideoPrism checkpoints under the [VideoPrism](https://huggingface.co/collections/google/videoprism) collection.
