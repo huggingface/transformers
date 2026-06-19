@@ -394,10 +394,10 @@ class ContinuousBatchProcessor:
 
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()
+        future_states, new_tokens, logprobs, encoder_cache_to_free = self.inputs_and_outputs.prepare_batch_update()
         current_logits_index = 0
         pending_outputs = []
-        for future_state in requests_in_batch:
+        for future_state in future_states:
             state = future_state.state
             # Early return if the request was finished or offloaded between scheduling and update (async mode)
             if state.status in (RequestStatus.FINISHED, RequestStatus.PENDING):
@@ -433,9 +433,9 @@ class ContinuousBatchProcessor:
         if pending_outputs:
             self.output_router.deliver_batch(pending_outputs)
 
-        # If there are outgoing requests in the encoder cache, we release them now
+        # If there are requests in the encoder cache with cache to free, we release them now
         if self.cache.encoder_cache is not None:
-            self.cache.encoder_cache.release_outgoing_requests()
+            self.cache.encoder_cache.release_cache_for_requests(encoder_cache_to_free)
 
         # If some requests need to be forked, we do it now
         copy_source, copy_destination = [], []

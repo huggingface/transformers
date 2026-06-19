@@ -760,38 +760,41 @@ class EncoderCacheTest(unittest.TestCase):
         _, cache = self.get_config_and_encoder_cache()
         cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
         read_indices: list[int] = []
-        cache_read = cache.extend_read_indices("r", past_length=3, query_length=5, read_indices=read_indices)
+        cache_read, to_free = cache.extend_read_indices("r", past_length=3, query_length=5, read_indices=read_indices)
         self.assertEqual(read_indices, [0, 1, 3, -1, -1])
         self.assertTrue(cache_read)
-        self.assertIn("r", cache.outgoing_requests)  # 3 + 5 >= 7, all embeddings consumed
+        self.assertTrue(to_free)  # 3 + 5 >= 7, all embeddings consumed
 
     def test_extend_read_indices_text_only_window_returns_false(self) -> None:
         _, cache = self.get_config_and_encoder_cache()
         cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
         read_indices: list[int] = []
-        cache_read = cache.extend_read_indices("r", past_length=0, query_length=3, read_indices=read_indices)
+        cache_read, to_free = cache.extend_read_indices("r", past_length=0, query_length=3, read_indices=read_indices)
         self.assertEqual(read_indices, [-1, -1, -1])
         self.assertFalse(cache_read)
-        self.assertNotIn("r", cache.outgoing_requests)  # 0 + 3 < 7, not done yet
+        self.assertFalse(to_free)  # 0 + 3 < 7, not done yet
 
     def test_extend_read_indices_no_allocated_blocks_pads_with_minus_one(self) -> None:
         """A request with no encoder blocks (text-only) extends the existing indices with -1 and reports no read."""
         _, cache = self.get_config_and_encoder_cache()
         read_indices = [42]  # pre-existing content must be preserved (extend, not overwrite)
-        cache_read = cache.extend_read_indices("unknown", past_length=0, query_length=4, read_indices=read_indices)
+        cache_read, to_free = cache.extend_read_indices(
+            "unknown", past_length=0, query_length=4, read_indices=read_indices
+        )
         self.assertEqual(read_indices, [42, -1, -1, -1, -1])
         self.assertFalse(cache_read)
+        self.assertFalse(to_free)
 
-    def test_extend_read_indices_marks_outgoing_when_reading_past_end(self) -> None:
+    def test_extend_read_indices_marks_to_free_when_reading_past_end(self) -> None:
         """When the query window runs past the end of the block table, the missing positions are padded with -1 and
-        the request is marked outgoing."""
+        the request is reported ready to free."""
         _, cache = self.get_config_and_encoder_cache()
         cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
         read_indices: list[int] = []
-        cache_read = cache.extend_read_indices("r", past_length=5, query_length=5, read_indices=read_indices)
+        cache_read, to_free = cache.extend_read_indices("r", past_length=5, query_length=5, read_indices=read_indices)
         self.assertEqual(read_indices, [3, -1, -1, -1, -1])
         self.assertTrue(cache_read)
-        self.assertIn("r", cache.outgoing_requests)
+        self.assertTrue(to_free)
 
     def test_store_mm_embeddings_writes_at_allocated_blocks(self) -> None:
         config, cache = self.get_config_and_encoder_cache()
@@ -806,34 +809,26 @@ class EncoderCacheTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             cache.store_mm_embeddings("ghost", torch.randn(1, config.text_config.hidden_size))
 
-    def test_release_outgoing_requests_frees_blocks(self) -> None:
+    def test_release_cache_for_requests_frees_blocks(self) -> None:
         config, cache = self.get_config_and_encoder_cache()
         img = config.image_token_id
         state = RequestState(request_id="r", initial_tokens=[1, img, img, 1])  # 2 image tokens
         cache.can_store_mm_embeddings(state)
         cache.allocate_blocks(state)
         free_after_alloc = len(cache.free_blocks)
-        cache.outgoing_requests.add("r")
 
-        cache.release_outgoing_requests()
+        cache.release_cache_for_requests({"r"})
 
         self.assertEqual(len(cache.free_blocks), free_after_alloc + 2)
         self.assertNotIn("r", cache.allocated_blocks_masks)
-        self.assertEqual(len(cache.outgoing_requests), 0)
 
-    def test_release_outgoing_requests_missing_mask_raises_in_sync_mode(self) -> None:
-        _, cache = self.get_config_and_encoder_cache(use_async_batching=False)
-        cache.outgoing_requests.add("ghost")  # no allocated mask registered
-        with self.assertRaises(ValueError):
-            cache.release_outgoing_requests()
-
-    def test_release_outgoing_requests_missing_mask_skipped_in_async_mode(self) -> None:
-        """In async mode a missing mask is tolerated (the request may have been released already on the other IO
-        pair), so release is a no-op rather than an error."""
-        _, cache = self.get_config_and_encoder_cache(use_async_batching=True)
-        cache.outgoing_requests.add("ghost")
-        cache.release_outgoing_requests()  # must not raise
-        self.assertEqual(len(cache.outgoing_requests), 0)
+    def test_release_cache_for_requests_unknown_id_is_noop(self) -> None:
+        """Releasing an id with no allocated blocks (already released, or a text-only request) is a silent no-op: the
+        request may have been freed on the other IO pair in async mode."""
+        _, cache = self.get_config_and_encoder_cache()
+        free_before = len(cache.free_blocks)
+        cache.release_cache_for_requests({"ghost"})  # must not raise
+        self.assertEqual(len(cache.free_blocks), free_before)
 
     def test_allocate_store_read_release_round_trip_conserves_blocks(self) -> None:
         """End-to-end of the cache lifecycle: every block allocated for a request is returned to the free pool once
@@ -849,10 +844,10 @@ class EncoderCacheTest(unittest.TestCase):
         self.assertEqual(len(cache.free_blocks), total_blocks - 3)
 
         read_indices: list[int] = []
-        cache.extend_read_indices("r", past_length=0, query_length=5, read_indices=read_indices)
-        self.assertIn("r", cache.outgoing_requests)
+        _, to_free = cache.extend_read_indices("r", past_length=0, query_length=5, read_indices=read_indices)
+        self.assertTrue(to_free)
 
-        cache.release_outgoing_requests()
+        cache.release_cache_for_requests({"r"})
         self.assertEqual(len(cache.free_blocks), total_blocks)
         self.assertEqual(len(cache.allocated_blocks_masks), 0)
 

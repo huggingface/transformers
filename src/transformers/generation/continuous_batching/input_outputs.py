@@ -129,6 +129,7 @@ class ContinuousBatchingIOs:
         self.encoder_cache_read = False  # whether the encoder cache is read from in the current batch
         # Setup other accumulators
         self.requests_in_batch: list[FutureRequestState] = []
+        self.encoder_cache_to_free: set[str] = set()
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
         self.graphs: CudaGraphBuffer = CudaGraphBuffer(continuous_batching_config.max_cached_graphs)
         self._trash_index = cache.trash_index
@@ -342,7 +343,7 @@ class ContinuousBatchingIOs:
         if self.compute_stream is not None:
             self.compute_stream.synchronize()
 
-    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
+    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None, set[str]]:
         new_tokens = self.output_ids[0, : self.num_request_in_batch].tolist()
         # If logprobs are generated, we retrieve them from the output tensor and cast them to the right dtype
         if self.return_logprobs:
@@ -350,7 +351,7 @@ class ContinuousBatchingIOs:
         # Otherwise, we can return an empty list because they wont be used
         else:
             logprobs = None
-        return self.requests_in_batch, new_tokens, logprobs
+        return self.requests_in_batch, new_tokens, logprobs, self.encoder_cache_to_free
 
     def prepare_batch_tensors(
         self,
@@ -392,6 +393,7 @@ class ContinuousBatchingIOs:
         self.req_id_to_new_token_position = {}
         self.encoder_kwargs = []
         self.encoder_cache_read = False
+        self.encoder_cache_to_free = set()
 
         # Prepare accumulators. For batches with no past cache to read, we leave read_index empty: the cache.update
         # will detect the 0-size indices and skip the read.
@@ -435,9 +437,12 @@ class ContinuousBatchingIOs:
                 )
             # Also accumulate the encoder cache read index if there is an encoder cache
             if self.cache.encoder_cache is not None:
-                self.encoder_cache_read |= self.cache.encoder_cache.extend_read_indices(
+                encoder_cache_read, to_free = self.cache.encoder_cache.extend_read_indices(
                     state.request_id, past_length, query_length, encoder_cache_read_index
                 )
+                self.encoder_cache_read |= encoder_cache_read
+                if to_free:
+                    self.encoder_cache_to_free.add(state.request_id)
 
             # If the request has no remaining prefill tokens, it means the next token prediction is relevant
             if future_state.has_new_token:
@@ -863,7 +868,7 @@ class ContinuousBatchingAsyncIOs:
         self.current_pair = 1 - self.current_pair
 
     # This method is called after the switch and not during the first batch
-    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
+    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None, set[str]]:
         io_pair = self.io_pairs[self.current_pair]
         io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]  <- this is always a CUDA event
         return io_pair.host_io.prepare_batch_update()

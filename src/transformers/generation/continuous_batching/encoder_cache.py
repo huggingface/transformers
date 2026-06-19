@@ -47,7 +47,6 @@ class EncoderCache:
         self.free_blocks = deque(range(cache_size))
         self.allocated_blocks_masks: dict[str, torch.Tensor] = {}
         self.embeddings_lengths: dict[str, int] = {}
-        self.outgoing_requests: set[str] = set()
         # Specialize on modality the encoder cache object
         self._specialize_on_modality(config, modality)
 
@@ -112,22 +111,23 @@ class EncoderCache:
 
     def extend_read_indices(
         self, request_id: str, past_length: int, query_length: int, read_indices: list[int]
-    ) -> bool:
+    ) -> tuple[bool, bool]:
         """
-        Extends the list of indices being read from the encoder cache for a given request. Returns True if any
-        multimodal embeddings are read in this batch, False otherwise. For instance, if the inital tokens and allocated
-        blocks are as follows:
+        Extends the list of indices being read from the encoder cache for a given request. Returns a tuple of booleans:
+            - cache_read: True if any multimodal embedding is read by this request
+            - to_free: True if the request has all its multimodal embeddings read and can be freed from the cache
+        For instance, if the inital tokens and allocated blocks are as follows:
 
             Initial tokens:   [xxx, xxx, xxx, img, img, img, xxx]
             Allocated blocks: [ -1,  -1,  -1,   0,   1,   3,  -1]
-            (index)              0    1    2    3    4    5    6
-
         Then for a past length of 3 and a query length of 5, the read indices will be:
 
             Read indices:     [                 0,   1,   3,  -1,  -1]
 
-        and the function will return True because there are actual cache reads (block 0, 1 and 3 are read).
+        and the function will return (True, True) because there are actual cache reads (block 0, 1 and 3 are read) and
+        all its multimodal embeddings have been read: they can be freed from the cache.
         """
+        to_free = False
         block_table = self.allocated_blocks_masks.get(request_id)
         # Only compute read indices if the request has allocated blocks
         if block_table is not None:
@@ -137,7 +137,7 @@ class EncoderCache:
             cache_read = (block_table[past_length : past_length + query_length] != -1).any().item()
             # Check if all the multimodal embeddings for this request have been read
             if past_length + query_length >= len(block_table):
-                self.outgoing_requests.add(request_id)
+                to_free = True
         else:
             intersection = []
             missing_indices = query_length
@@ -145,7 +145,7 @@ class EncoderCache:
         # Extend the read indices
         read_indices.extend(intersection)
         read_indices.extend(repeat(-1, missing_indices))
-        return cache_read
+        return cache_read, to_free
 
     def store_mm_embeddings(self, request_id: str, image_features: torch.Tensor) -> None:
         """Stores the multimodal embeddings for a request in the encoder cache."""
@@ -159,23 +159,17 @@ class EncoderCache:
         # Store the multimodal embeddings in the cache
         self.cache[allocated_blocks] = image_features
 
-    def maybe_outgoing(self, request_id: str) -> None:
-        """If the request has data stored in the encoder cache, add it to the set of outgoing requests."""
-        if request_id in self.allocated_blocks_masks:
-            self.outgoing_requests.add(request_id)
-
-    def release_outgoing_requests(self) -> None:
-        """Releases the outgoing requests from the encoder cache."""
-        # Loop until there are no outgoing requests
-        while self.outgoing_requests:
-            request_id = self.outgoing_requests.pop()
+    def release_cache_for_requests(self, requests: set[str]) -> None:
+        """Releases the cache for the given requests from the encoder cache. The set of request for which to release
+        cache is kept by the InputAndOutputs object, because in the case of asynchronous batching, a request for which
+        the multimodal embeddings were fully processed in batch N cannot be freed in batch N+1."""
+        # Loop until there are no requests for which to release cache
+        while requests:
+            request_id = requests.pop()
             # Retrieve the list of blocks to free
             allocated_blocks_mask = self.allocated_blocks_masks.pop(request_id, None)
-            if allocated_blocks_mask is None:
-                if self.use_async_batching:
-                    continue
-                raise ValueError(f"Cannot release {request_id} because it has no allocated blocks mask")
-            mask = allocated_blocks_mask != -1
-            blocks_to_free = allocated_blocks_mask[mask].tolist()
-            # Actually free the blocks
-            self.free_blocks.extend(blocks_to_free)
+            if allocated_blocks_mask is not None:
+                mask = allocated_blocks_mask != -1
+                blocks_to_free = allocated_blocks_mask[mask].tolist()
+                # Actually free the blocks
+                self.free_blocks.extend(blocks_to_free)

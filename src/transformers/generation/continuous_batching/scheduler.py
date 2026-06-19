@@ -112,7 +112,7 @@ class Scheduler(ABC):
                 self.cache.free_blocks(request_id)
                 # If there is an encoder cache, it might also need to free blocks for the cancelled request
                 if self.cache.encoder_cache is not None:
-                    self.cache.encoder_cache.maybe_outgoing(request_id)
+                    self.cache.encoder_cache.release_cache_for_requests({request_id})
             self._requests_to_cancel = set()
         return cancelled_states
 
