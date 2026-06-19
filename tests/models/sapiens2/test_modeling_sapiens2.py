@@ -314,7 +314,6 @@ class Sapiens2ModelTester:
             dtype=pixel_values.dtype,
         )
 
-        # Creating weights in a broadcastable shape as requested by the maintainer
         label_weights = torch.ones(
             self.batch_size, config.num_labels, 1, 1, device=pixel_values.device, dtype=pixel_values.dtype
         )

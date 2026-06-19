@@ -1137,7 +1137,7 @@ def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
     """,
 )
 class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
-    _loss_function = torch.nn.functional.mse_loss
+    _loss_function = staticmethod(torch.nn.functional.mse_loss)
 
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
@@ -1205,11 +1205,9 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            # Calculate unreduced loss using the standard HF loss API
             loss = self.loss_function(heatmaps, labels, reduction="none")
 
             if label_weights is not None:
-                # Assume label_weights is already in a broadcastable shape and dtype
                 loss = (loss * label_weights).mean()
             else:
                 loss = loss.mean()
