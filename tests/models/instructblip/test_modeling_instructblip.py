@@ -787,7 +787,9 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
     def test_inference_vicuna_7b(self):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipForConditionalGeneration.from_pretrained(
-            "Salesforce/instructblip-vicuna-7b", quantization_config=BitsAndBytesConfig(load_in_8bit=True)
+            "Salesforce/instructblip-vicuna-7b",
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            attn_implementation="eager",
         )
 
         url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
