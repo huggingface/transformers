@@ -450,7 +450,7 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         value_states = value_states.transpose(1, 2)
 
         if past_key_values is not None:
-            key_states, value_states = past_key_values.append(key_states, value_states, self.layer_idx)
+            key_states, value_states = self.append_to_cache(past_key_values, key_states, value_states)
 
         # CHANGED: removed the `if self.store_full_length_kv` branch
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -473,6 +473,34 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+    def append_to_cache(
+        self, past_key_values: Cache, key_states: torch.Tensor, value_states: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Append the key and value caches and return the full key-values. It doesn't modify
+        anything in-place in contrast to `past_key_values.update`, the tensors are concatenated and returned
+        """
+        cache_layer = past_key_values.layers[self.layer_idx]
+        if not past_key_values.is_compileable:
+            keys = torch.cat([cache_layer.keys, key_states], dim=-2)
+            values = torch.cat([cache_layer.values, value_states], dim=-2)
+        else:
+            batch, num_heads, max_len, dim = cache_layer.keys.shape
+            new_length = key_states.shape[-2]
+            cache_position_new = torch.arange(new_length, device=cache_layer.device) + cache_layer.cumulative_length
+            cache_position_old = torch.arange(max_len, device=cache_layer.device)
+
+            # Allocate new key-value tensor to return concat outputs
+            keys = key_states.new_zeros(batch, num_heads, max_len + new_length, dim)
+            values = value_states.new_zeros(batch, num_heads, max_len + new_length, dim)
+
+            # Add existing cache, then new KV right after it, leaving trailing zeros on right-side
+            keys.index_copy_(2, cache_position_old, cache_layer.keys)
+            keys.index_copy_(2, cache_position_new, key_states)
+            values.index_copy_(2, cache_position_old, cache_layer.values)
+            values.index_copy_(2, cache_position_new, value_states)
+        return keys, values
 
 
 class DiffusionGemmaText4MLP(nn.Module):
