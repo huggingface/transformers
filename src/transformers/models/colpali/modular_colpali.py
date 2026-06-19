@@ -108,14 +108,15 @@ class ColPaliProcessor(PaliGemmaProcessor):
         ProcessorMixin.validate_inputs(images=images, text=text)
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
-        if text is not None and images is not None:
-            raise ValueError("Only one of text or images can be processed at a time")
 
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
         images, text, *_ = ProcessorMixin.prepare_inputs_layout(images=images, text=text, **kwargs)
         if images is not None:
             images = make_flat_list_of_images(images)
-            text = [f"{self.image_token}{self.tokenizer.bos_token}{self.visual_prompt_prefix}\n" for _ in len(images)]
+            text = [
+                f"{self.image_token}{self.tokenizer.bos_token}{self.visual_prompt_prefix}\n"
+                for _ in range(len(images))
+            ]
         return images, text, videos, audio
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:

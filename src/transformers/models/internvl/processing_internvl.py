@@ -116,7 +116,7 @@ class InternVLProcessor(ProcessorMixin):
         image_video_patches = []
         for vision_type in visuals_order:
             if vision_type == "image":
-                start_index = image_num_patches_indices[image_index] if image_index > 0 else 0
+                start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
                 end_index = image_num_patches_indices[image_index]
                 image_video_patches.append(model_inputs["pixel_values"][start_index:end_index])
                 image_index += 1

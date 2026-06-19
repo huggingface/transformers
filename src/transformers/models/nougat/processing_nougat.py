@@ -43,8 +43,8 @@ class NougatProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(self, images=None, text=None, **kwargs):
         model_inputs = super().__call__(images=images, text=text, **kwargs)
-        if text is not None:
-            model_inputs["labels"] = model_inputs["input_ids"]
+        if text is not None and images is not None:
+            model_inputs["labels"] = model_inputs.pop("input_ids")
         return model_inputs
 
     def post_process_generation(self, *args, **kwargs):

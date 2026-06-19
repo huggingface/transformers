@@ -203,7 +203,7 @@ class LasrProcessor(ProcessorMixin):
 
         model_inputs = super().__call__(audio=audio, text=text, **output_kwargs)
         if text is not None:
-            model_inputs["labels"] = model_inputs["input_ids"]
+            model_inputs["labels"] = model_inputs.pop("input_ids")
         return model_inputs
 
     @property

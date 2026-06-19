@@ -110,14 +110,17 @@ class ColQwen2Processor(ProcessorMixin):
 
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
 
-        if images is not None and suffix is not None:
+        if images is not None:
             # DDP-aware pixel_values re-padding
             offsets = model_inputs["image_grid_thw"][:, 1] * model_inputs["image_grid_thw"][:, 2]
             pixel_values = list(torch.split(model_inputs["pixel_values"], offsets.tolist()))
             model_inputs["pixel_values"] = torch.nn.utils.rnn.pad_sequence(pixel_values, batch_first=True)
 
-            # add labels for training if needed
-            model_inputs["labels"] = model_inputs["input_ids"].masked_fill(model_inputs["token_type_ids"] == 0, -100)
+            if suffix is not None:
+                # add labels for training if needed
+                model_inputs["labels"] = model_inputs["input_ids"].masked_fill(
+                    model_inputs["token_type_ids"] == 0, -100
+                )
         return model_inputs
 
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
@@ -140,8 +143,6 @@ class ColQwen2Processor(ProcessorMixin):
         super().validate_inputs(images=images, text=text)
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
-        if text is not None and images is not None:
-            raise ValueError("Only one of text or images can be processed at a time")
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

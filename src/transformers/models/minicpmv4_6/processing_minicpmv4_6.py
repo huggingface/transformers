@@ -232,7 +232,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
 
     @property
     def unused_input_names(self) -> list[str]:
-        return ["num_patches_per_image", "grids"]
+        return ["num_patches_per_image", "grids", "grids_videos", "num_patches_per_frame", "num_frames_per_video"]
 
 
 __all__ = ["MiniCPMV4_6Processor"]
