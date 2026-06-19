@@ -362,32 +362,30 @@ if is_kernels_available():
             name = getattr(resample, "name", str(resample)).upper()
             return "bicubic" if "BICUBIC" in name else "bilinear" if "BILINEAR" in name else None
 
-    def _resize_normalize_runner(processor, images, **kwargs):
-        """Fixed-output resize(+crop)+normalize. Returns a BatchFeature, or None to fall back."""
-        if kwargs.get("do_pad") or not (kwargs.get("do_resize") and kwargs.get("do_normalize")) or not images:
-            return None
-        if not is_torch_available() or not torch.cuda.is_available() or images[0].dtype != torch.uint8:
-            return None
-        interp = _resample_to_interp(kwargs.get("resample"))
-        if interp is None:
-            return None
-        size = kwargs.get("size")
-        crop = kwargs.get("crop_size") if kwargs.get("do_center_crop") else None
+    def _resize_target(size, crop):
+        """Resolve a processor size(+crop) to (resize_arg, crop_arg, resize_mode); None if unsupported."""
         if size.shortest_edge and not size.longest_edge:
             if crop is None or not (crop.height and crop.width):
-                return None
-            resize_arg, crop_arg, mode = size.shortest_edge, (crop.height, crop.width), "shortest_edge"
-        elif size.height and size.width:
-            if crop is not None and (crop.height != size.height or crop.width != size.width):
-                resize_arg, crop_arg, mode = (size.height, size.width), (crop.height, crop.width), "square"
-            else:
-                resize_arg, crop_arg, mode = (size.height, size.width), None, "square"
-        else:
+                return None  # shortest-edge without a crop is variable-size output
+            return size.shortest_edge, (crop.height, crop.width), "shortest_edge"
+        if size.height and size.width:
+            cropped = crop is not None and (crop.height, crop.width) != (size.height, size.width)
+            return (size.height, size.width), (crop.height, crop.width) if cropped else None, "square"
+        return None
+
+    def _resize_normalize_runner(processor, images, **kwargs):
+        """Run resize(+crop)+normalize on the kernel; a BatchFeature, or None to fall back to torchvision."""
+        if not (images and is_torch_available() and torch.cuda.is_available() and images[0].dtype == torch.uint8):
             return None
+        if kwargs.get("do_pad") or not (kwargs.get("do_resize") and kwargs.get("do_normalize")):
+            return None
+        interp = _resample_to_interp(kwargs.get("resample"))
+        target = _resize_target(kwargs["size"], kwargs.get("crop_size") if kwargs.get("do_center_crop") else None)
         kernel = _load_processing_kernel("resize_normalize")
-        if kernel is None:
+        if interp is None or target is None or kernel is None:
             return None
-        rescale = float(kwargs.get("rescale_factor")) if kwargs.get("do_rescale") else 1.0
+        resize_arg, crop_arg, mode = target
+        rescale = float(kwargs["rescale_factor"]) if kwargs.get("do_rescale") else 1.0
         out = kernel.resize_normalize(
             list(images), resize_arg, kwargs.get("image_mean"), kwargs.get("image_std"),
             rescale_factor=rescale, resample=interp, antialias=True, crop_size=crop_arg, resize_mode=mode,
