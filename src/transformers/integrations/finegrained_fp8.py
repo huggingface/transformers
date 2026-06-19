@@ -26,7 +26,12 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
-from ..utils.import_utils import is_kernels_available, is_torchdynamo_compiling
+from ..utils.import_utils import (
+    KERNELS_MAX_VERSION,
+    KERNELS_MIN_VERSION,
+    is_kernels_available,
+    is_torchdynamo_compiling,
+)
 from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
@@ -83,7 +88,9 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(
-                "finegrained-fp8 kernel requires the `kernels` package. Install it with `pip install -U kernels`."
+                "finegrained-fp8 kernel requires the `kernels` package. "
+                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
             )
 
     kernel = lazy_load_kernel("finegrained-fp8")
@@ -93,14 +100,14 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             "has a build matching the current torch/CUDA."
         )
 
-    matmul = getattr(kernel, "matmul", None)
+    matmul = getattr(kernel, "matmul_2d", None)
     batched_matmul = getattr(kernel, "matmul_batched", None)
     grouped_matmul = getattr(kernel, "matmul_grouped", None)
 
     missing = [
         name
         for name, attr in [
-            ("matmul", matmul),
+            ("matmul_2d", matmul),
             ("matmul_batched", batched_matmul),
             ("matmul_grouped", grouped_matmul),
         ]
@@ -109,7 +116,8 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     if missing:
         raise ImportError(
             f"finegrained-fp8 kernel is missing required symbols: {', '.join(missing)}. "
-            "Please update the `kernels` package (`pip install -U kernels`)."
+            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
 
     return FineGrainedFP8(

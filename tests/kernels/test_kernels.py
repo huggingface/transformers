@@ -46,7 +46,6 @@ from transformers.utils.import_utils import is_kernels_available
 
 
 if is_kernels_available():
-    import kernels as kernels_pkg
     from kernels import Device, Mode, kernelize
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
@@ -202,7 +201,25 @@ class TestHubKernels(TestCasePlus):
         del model
 
     def test_kernels_mapping(self):
-        kernel_config = KernelConfig(kernel_mapping={"RMSNorm": "kernels-community/layer_norm:LlamaRMSNorm"})
+        kernel_config = KernelConfig(kernel_mapping={"RMSNorm": "kernels-community/layer-norm:LlamaRMSNorm"})
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+        )
+
+        EXPECTED_OUTPUT = set()
+        EXPECTED_OUTPUT.add("Hello, I'm looking for a reliable and trustworthy online")
+
+        tokenized_input = self.tokenizer(self.input, return_tensors="pt").input_ids.to(model.device)
+        output = model.generate(tokenized_input, max_new_tokens=10, do_sample=False)
+        output = self.tokenizer.decode(output[0], skip_special_tokens=True)
+        self.assertTrue(output in EXPECTED_OUTPUT)
+
+        del model
+
+    def test_kernels_mapping_explicit_version(self):
+        kernel_config = KernelConfig(
+            kernel_mapping={"RMSNorm": ("kernels-community/layer-norm:LlamaRMSNorm", {"version": 1})}
+        )
         model = AutoModelForCausalLM.from_pretrained(
             "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
         )
@@ -225,7 +242,10 @@ class TestHubKernels(TestCasePlus):
                 (
                     ("RMSNorm", "model.layers.*.post_attention_layernorm"),
                     ("MLP", "model.layers.*.mlp"),
-                ): "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
+                ): (
+                    "AntonV/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
+                    {"revision": "d582b66bea8e567dd06e683eca611648cfe53a7b", "trust_remote_code": True},
+                ),
             }
         )
 
@@ -271,7 +291,14 @@ class TestHubKernels(TestCasePlus):
     @require_torch_accelerator
     def test_kernel_replacement_with_layout(self):
         model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
-        kernel_config = KernelConfig({"RMSNorm": "michaelbenayoun/dummy-rmsnorm-kernel-with-init:CustomRMSNorm"})
+        kernel_config = KernelConfig(
+            {
+                "RMSNorm": (
+                    "AntonV/dummy-rmsnorm-kernel-with-init:CustomRMSNorm",
+                    {"revision": "e5dcd4fe743b81fa2b065964ef9a108107496c4f", "trust_remote_code": True},
+                )
+            }
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer("Hello, how are you?", return_tensors="pt")
@@ -310,16 +337,22 @@ class TestHubKernels(TestCasePlus):
                 (
                     ("RMSNorm", "layers.*.post_attention_layernorm"),
                     ("MLP", "layers.*.mlp"),
-                ): "michaelbenayoun/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
+                ): (
+                    "AntonV/dummy-rmsnorm-mlp-with-transformations-and-init:RMSNormMLP",
+                    {"revision": "d582b66bea8e567dd06e683eca611648cfe53a7b", "trust_remote_code": True},
+                ),
             }
         )
         with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(
-                model_id, use_kernels=True, kernel_config=kernel_config, device_map=torch_device
+                model_id,
+                use_kernels=True,
+                kernel_config=kernel_config,
+                device_map=torch_device,
             )
 
     def test_faulty_kernel_mapping_layer_name(self):
-        kernel_config = KernelConfig(kernel_mapping={"RMSNorm1": "kernels-community/layer_norm:LlamaRMSNorm"})
+        kernel_config = KernelConfig(kernel_mapping={"RMSNorm1": "kernels-community/layer-norm:LlamaRMSNorm"})
         with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(
                 "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
@@ -338,22 +371,28 @@ class TestKernelsEnv(TestCasePlus):
     def test_disable_hub_kernels(self):
         import importlib
 
-        from transformers.integrations import hub_kernels
+        original_state = hub_kernels_pkg.__dict__.copy()
 
-        with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
-            importlib.reload(hub_kernels)
-            self.assertFalse(hub_kernels._kernels_enabled)
-        importlib.reload(hub_kernels)
+        try:
+            with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
+                importlib.reload(hub_kernels_pkg)
+                self.assertFalse(hub_kernels_pkg._kernels_enabled)
+        finally:
+            hub_kernels_pkg.__dict__.clear()
+            hub_kernels_pkg.__dict__.update(original_state)
 
     def test_enable_hub_kernels(self):
         import importlib
 
-        from transformers.integrations import hub_kernels
+        original_state = hub_kernels_pkg.__dict__.copy()
 
-        with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
-            importlib.reload(hub_kernels)
-            self.assertTrue(hub_kernels._kernels_enabled)
-        importlib.reload(hub_kernels)
+        try:
+            with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
+                importlib.reload(hub_kernels_pkg)
+                self.assertTrue(hub_kernels_pkg._kernels_enabled)
+        finally:
+            hub_kernels_pkg.__dict__.clear()
+            hub_kernels_pkg.__dict__.update(original_state)
 
 
 @require_kernels
@@ -379,26 +418,29 @@ class TestKernelUtilities(TestCasePlus):
             self.assertFalse(is_kernel(s))
 
     def test_lazy_load_kernel_success_and_cache(self):
-        sentinel = types.SimpleNamespace(name="sentinel")
+        sentinel = types.ModuleType("sentinel_kernel_module")
 
-        original_get_kernel = getattr(kernels_pkg, "get_kernel")
-        try:
+        def fake_get_kernel(repo_id, revision=None, version=None, allow_all_kernels=False):
+            self.assertIn(repo_id, {"kernels-community/causal-conv1d"})
+            self.assertFalse(allow_all_kernels)
+            return sentinel
 
-            def fake_get_kernel(repo_id, revision=None, version=None):
-                self.assertIn(repo_id, {"kernels-community/causal-conv1d"})
-                return sentinel
+        patched_module_mapping = copy.copy(_KERNEL_MODULE_MAPPING)
+        patched_module_mapping.pop("causal-conv1d", None)
 
-            setattr(hub_kernels_pkg, "get_kernel", fake_get_kernel)
-            _KERNEL_MODULE_MAPPING.pop("causal-conv1d", None)
-
-            mod1 = lazy_load_kernel("causal-conv1d")
+        with patch.dict(
+            lazy_load_kernel.__globals__,
+            {
+                "_KERNEL_MODULE_MAPPING": patched_module_mapping,
+                "get_kernel": fake_get_kernel,
+                "ALLOW_ALL_KERNELS": False,
+            },
+        ):
+            mod1 = lazy_load_kernel("causal-conv1d", mapping=patched_module_mapping)
             self.assertIs(mod1, sentinel)
-            mod2 = lazy_load_kernel("causal-conv1d")
+
+            mod2 = lazy_load_kernel("causal-conv1d", mapping=patched_module_mapping)
             self.assertIs(mod2, sentinel)
-        finally:
-            setattr(kernels_pkg, "get_kernel", original_get_kernel)
-            # Ensure cache is cleared to avoid holding onto module references across tests
-            _KERNEL_MODULE_MAPPING.pop("causal-conv1d", None)
 
     def test_lazy_load_kernel_unknown(self):
         name = "unknown-kernel-name"
@@ -410,47 +452,44 @@ class TestKernelUtilities(TestCasePlus):
         _KERNEL_MODULE_MAPPING.pop(name, None)
 
     def test_lazy_load_kernel_version(self):
-        HUB = _HUB_KERNEL_MAPPING
         name = "causal-conv1d"
         version_spec = ">=0.0.4,<0.1.0"
-        original_get_kernel = getattr(kernels_pkg, "get_kernel")
-        original_entry = HUB.get(name, None)
 
-        # Use a real ModuleType so caching short-circuits on the second call
         sentinel_mod = types.ModuleType("sentinel_kernel_module")
         call_count = {"n": 0}
 
-        try:
-            # Inject dict-style mapping with repo_id and version
-            HUB[name] = {"repo_id": "kernels-community/causal-conv1d", "version": version_spec}  # type: ignore[assignment]
-            _KERNEL_MODULE_MAPPING.pop(name, None)
+        def fake_get_kernel(repo_id, revision=None, version=None, allow_all_kernels=False):
+            call_count["n"] += 1
+            self.assertEqual(repo_id, "kernels-community/causal-conv1d")
+            self.assertIsNone(revision)
+            self.assertEqual(version, version_spec)
+            self.assertFalse(allow_all_kernels)
+            return sentinel_mod
 
-            def fake_get_kernel(repo_id, revision=None, version=None):
-                call_count["n"] += 1
-                self.assertEqual(repo_id, "kernels-community/causal-conv1d")
-                self.assertIsNone(revision, "revision must not be set when version is provided")
-                self.assertEqual(version, version_spec)
-                return sentinel_mod
+        patched_hub_mapping = copy.deepcopy(_HUB_KERNEL_MAPPING)
+        patched_hub_mapping[name] = {
+            "repo_id": "kernels-community/causal-conv1d",
+            "version": version_spec,
+        }
 
-            # Patch kernels.get_kernel so lazy_load_kernel picks it up on import
-            setattr(hub_kernels_pkg, "get_kernel", fake_get_kernel)
+        patched_module_mapping = copy.copy(_KERNEL_MODULE_MAPPING)
+        patched_module_mapping.pop(name, None)
 
-            # Act
-            mod1 = lazy_load_kernel(name)
-            mod2 = lazy_load_kernel(name)
+        with patch.dict(
+            lazy_load_kernel.__globals__,
+            {
+                "_HUB_KERNEL_MAPPING": patched_hub_mapping,
+                "_KERNEL_MODULE_MAPPING": patched_module_mapping,
+                "get_kernel": fake_get_kernel,
+                "ALLOW_ALL_KERNELS": False,
+            },
+        ):
+            mod1 = lazy_load_kernel(name, mapping=patched_module_mapping)
+            mod2 = lazy_load_kernel(name, mapping=patched_module_mapping)
 
-            # Assert
             self.assertIs(mod1, sentinel_mod)
             self.assertIs(mod2, sentinel_mod)
-            self.assertEqual(call_count["n"], 1, "second call should hit the cache")
-        finally:
-            # Restore patched function and mapping to avoid side effects
-            setattr(kernels_pkg, "get_kernel", original_get_kernel)
-            if original_entry is None:
-                HUB.pop(name, None)
-            else:
-                HUB[name] = original_entry
-            _KERNEL_MODULE_MAPPING.pop(name, None)
+            self.assertEqual(call_count["n"], 1)
 
 
 @require_kernels
@@ -473,7 +512,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
             # Test that an untrusted kernel will raise an error without the flag
             with self.assertRaisesRegex(
                 ValueError,
-                "You need to specify `allow_all_kernels=True` to use kernels outside of the `kernels-community` repository",
+                "Kernel repository 'untrusted/flash_attention_2' could not verify publisher trust status. Set trust_remote_code=True to allow loading kernels from untrusted sources.",
             ):
                 _ = LlamaModel.from_pretrained(tmpdirname, attn_implementation=untrusted_kernel)
 
@@ -557,7 +596,7 @@ class TestUseKernelsLifecycle(TestCasePlus):
         def spy_kernelize(*args, **kwargs):
             call_count["n"] += 1
 
-        with patch.object(kernels_pkg, "kernelize", side_effect=spy_kernelize):
+        with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):
             self.model.use_kernels = True
             self.assertTrue(self.model.use_kernels)
             self.assertEqual(call_count["n"], 1)
@@ -570,7 +609,7 @@ class TestUseKernelsLifecycle(TestCasePlus):
         def spy_kernelize(model, device=None, mode=None):
             last_modes.append(mode)
 
-        with patch.object(kernels_pkg, "kernelize", side_effect=spy_kernelize):
+        with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):
             self.model.use_kernels = True
             self.model.train(True)
             self.assertTrue(any(m == Mode.TRAINING for m in last_modes))
@@ -590,8 +629,8 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
         """
         kernel_mapping = {
             "RMSNorm": {
-                "cuda": "kernels-community/layer_norm:LlamaRMSNorm",
-                "rocm": "kernels-community/layer_norm:LlamaRMSNorm",
+                "cuda": "kernels-community/layer-norm:LlamaRMSNorm",
+                "rocm": "kernels-community/layer-norm:LlamaRMSNorm",
             }
         }
 
@@ -628,7 +667,7 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
         """
         Test that single-device mappings continue to work as expected.
         """
-        kernel_mapping = {"RMSNorm": "kernels-community/layer_norm:LlamaRMSNorm"}
+        kernel_mapping = {"RMSNorm": "kernels-community/layer-norm:LlamaRMSNorm"}
 
         kernel_config = KernelConfig(kernel_mapping)
 
