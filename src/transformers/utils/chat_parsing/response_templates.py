@@ -117,7 +117,26 @@ def _compile_anchor(scope: str, field: dict, literal_key: str, pattern_key: str)
     return None, None, False
 
 
-def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
+def _validate_template_shape(spec: dict) -> None:
+    """Validate the top-level response_template structure: it must be a dict of the expected version with
+    only known keys, a dict of `defaults`, and a non-empty dict of `fields`. Per-field specs are checked
+    separately in `_build_field`."""
+    if not isinstance(spec, dict):
+        raise ValueError(f"response_template must be a dict, got {type(spec).__name__}")
+    version = spec.get("version", 1)
+    if version != 1:
+        raise ValueError(f"Unsupported response_template version: {version}")
+    if unknown_template_keys := set(spec) - {"version", "defaults", "fields", "start_anchor", "start_anchor_pattern"}:
+        raise ValueError(f"Unknown keys in response_template: {sorted(unknown_template_keys)}")
+    if not isinstance(spec.get("defaults", {}), dict):
+        raise ValueError("response_template.defaults must be a dict")
+    fields_raw = spec.get("fields", {})
+    if not isinstance(fields_raw, dict) or not fields_raw:
+        raise ValueError("response_template.fields must be a non-empty dict")
+
+def _build_field(name: str, field: dict) -> ResponseTemplateField:
+    """Validate a single field spec and compile it into a `ResponseTemplateField`."""
+
     _ALLOWED_FIELD_KEYS = {
         "open",
         "open_pattern",
@@ -130,92 +149,78 @@ def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
         "transform",
         "transform_each",
     }
-    # Error checking / validation block
+    scope = f"Field '{name}'"
+    if not isinstance(field, dict):
+        raise ValueError(f"{scope} must be a dict")
+    if unknown_field_keys := set(field) - _ALLOWED_FIELD_KEYS:
+        raise ValueError(f"{scope}: unknown keys {sorted(unknown_field_keys)}")
+    content = field.get("content", "text")
+    if content not in CONTENT_PARSERS:
+        raise ValueError(f"{scope}: unknown content parser '{content}'. Available: {sorted(CONTENT_PARSERS)}")
+    open_re, open_literals, open_literal_can_extend = _compile_anchor(scope, field, "open", "open_pattern")
+    close_re, close_literals, close_literal_can_extend = _compile_anchor(scope, field, "close", "close_pattern")
+    transform = field.get("transform")
+    transform_each = field.get("transform_each", False)
+    if not isinstance(transform_each, bool):
+        raise ValueError(f"{scope}: transform_each must be a bool, got {type(transform_each).__name__}")
+    if transform_each and transform is None:
+        raise ValueError(f"{scope}: transform_each is set but no transform was provided")
+    if transform is not None:
+        validate_transform_strings(scope, transform)
+    else:
+        # Named captures only reach the output through a transform, so flag any that would be silently dropped.
+        captured_names = set()
+        if open_re is not None:
+            captured_names |= set(open_re.groupindex)
+        if close_re is not None:
+            captured_names |= set(close_re.groupindex)
+        if captured_names:
+            raise ValueError(
+                f"{scope}: open_pattern/close_pattern declares named group(s) "
+                f"{sorted(captured_names)}, but the field has no 'transform'. Named captures "
+                f"are only surfaced through a 'transform' template (where they appear "
+                f"alongside 'content'). Either add a 'transform' that uses the captures, or "
+                f"remove the named groups from the pattern."
+            )
+    return ResponseTemplateField(
+        name=name,
+        open_re=open_re,
+        open_literals=open_literals,
+        open_literal_can_extend=open_literal_can_extend,
+        close_re=close_re,
+        close_literals=close_literals,
+        close_literal_can_extend=close_literal_can_extend,
+        content=content,
+        content_args=field.get("content_args", {}),
+        repeats=field.get("repeats", False),
+        optional=field.get("optional", True),
+        transform=transform,
+        transform_each=transform_each,
+    )
+
+
+def load_response_template(spec: dict | ResponseTemplate) -> ResponseTemplate:
     if isinstance(spec, ResponseTemplate):
         return spec
-    if not isinstance(spec, dict):
-        raise ValueError(f"response_template must be a dict, got {type(spec).__name__}")
-    version = spec.get("version", 1)
-    if version != 1:
-        raise ValueError(f"Unsupported response_template version: {version}")
-    if unknown_template_keys := set(spec) - {"version", "defaults", "fields", "start_anchor", "start_anchor_pattern"}:
-        raise ValueError(f"Unknown keys in response_template: {sorted(unknown_template_keys)}")
-    defaults = spec.get("defaults", {})
-    if not isinstance(defaults, dict):
-        raise ValueError("response_template.defaults must be a dict")
-    fields_raw = spec.get("fields", {})
-    if not isinstance(fields_raw, dict) or not fields_raw:
-        raise ValueError("response_template.fields must be a non-empty dict")
+    _validate_template_shape(spec)
 
-    fields: dict[str, ResponseTemplateField] = {}
-    implicit_fields: list[str] = []
-    for name, field in fields_raw.items():
-        if not isinstance(field, dict):
-            raise ValueError(f"Field '{name}' must be a dict")
-        if unknown_field_keys := set(field) - _ALLOWED_FIELD_KEYS:
-            raise ValueError(f"Field '{name}': unknown keys {sorted(unknown_field_keys)}")
-        content = field.get("content", "text")
-        if content not in CONTENT_PARSERS:
-            raise ValueError(
-                f"Field '{name}': unknown content parser '{content}'. Available: {sorted(CONTENT_PARSERS)}"
-            )
-        open_re, open_literals, open_literal_can_extend = _compile_anchor(
-            f"Field '{name}'", field, "open", "open_pattern"
-        )
-        close_re, close_literals, close_literal_can_extend = _compile_anchor(
-            f"Field '{name}'", field, "close", "close_pattern"
-        )
-        if open_re is None:
-            implicit_fields.append(name)
-        transform = field.get("transform")
-        transform_each = field.get("transform_each", False)
-        if not isinstance(transform_each, bool):
-            raise ValueError(f"Field '{name}': transform_each must be a bool, got {type(transform_each).__name__}")
-        if transform_each and transform is None:
-            raise ValueError(f"Field '{name}': transform_each is set but no transform was provided")
-        if transform is not None:
-            validate_transform_strings(f"Field '{name}'", transform)
-        if transform is None:
-            captured_names = set()
-            if open_re is not None:
-                captured_names |= set(open_re.groupindex)
-            if close_re is not None:
-                captured_names |= set(close_re.groupindex)
-            if captured_names:
-                raise ValueError(
-                    f"Field '{name}': open_pattern/close_pattern declares named group(s) "
-                    f"{sorted(captured_names)}, but the field has no 'transform'. Named captures "
-                    f"are only surfaced through a 'transform' template (where they appear "
-                    f"alongside 'content'). Either add a 'transform' that uses the captures, or "
-                    f"remove the named groups from the pattern."
-                )
-        fields[name] = ResponseTemplateField(
-            name=name,
-            open_re=open_re,
-            open_literals=open_literals,
-            open_literal_can_extend=open_literal_can_extend,
-            close_re=close_re,
-            close_literals=close_literals,
-            close_literal_can_extend=close_literal_can_extend,
-            content=content,
-            content_args=field.get("content_args", {}),
-            repeats=field.get("repeats", False),
-            optional=field.get("optional", True),
-            transform=transform,
-            transform_each=transform_each,
-        )
+    fields = {name: _build_field(name, raw) for name, raw in spec["fields"].items()}
+    # A field without an open anchor is the implicit-open / leftover sink; at most one is allowed.
+    implicit_fields = [name for name, field in fields.items() if field.open_re is None]
     if len(implicit_fields) > 1:
         raise ValueError(
             "At most one field may omit 'open'/'open_pattern' (that field becomes the "
             f"implicit-open / leftover sink). Found: {', '.join(implicit_fields)}"
         )
+
     start_anchor_re, start_anchor_literals, _ = _compile_anchor(
         "response_template", spec, "start_anchor", "start_anchor_pattern"
     )
     if start_anchor_re is None:
         raise ValueError("response_template must define 'start_anchor' or 'start_anchor_pattern'.")
+
     return ResponseTemplate(
-        defaults=dict(defaults),
+        defaults=dict(spec.get("defaults", {})),
         fields=fields,
         implicit=implicit_fields[0] if implicit_fields else None,
         start_anchor_re=start_anchor_re,
