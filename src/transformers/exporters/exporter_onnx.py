@@ -217,23 +217,18 @@ def _patch_unsqueeze(original):
 
 @register_patch("onnx", "torch.nn.functional.scaled_dot_product_attention")
 def _patch_scaled_dot_product_attention(original):
-    """Handle GQA/MHA head mismatch and 5D blocked attention tensors."""
+    """Drop ``enable_gqa=True`` when the head counts already match at the call site.
+
+    Some models (e.g. ``GlmAsr``) expand kv heads with ``repeat_kv`` *before* calling SDPA, so
+    the tensors arrive with ``q_num_heads == k_num_heads`` even though the config declares GQA.
+    Our dynamo SDPA wrapper sets ``enable_gqa = num_kv_heads != num_heads`` from the config and
+    is unaware of this in-model expansion — and onnxscript's SDPA translation hard-rejects
+    ``enable_gqa=True`` when ``q_num_heads == kv_num_heads`` with
+    ``AssertionError: SDPA (GQA or MQA) requires q_num_heads > kv_num_heads``."""
 
     def patch(query, key, *args, enable_gqa: bool = False, **kwargs):
         if enable_gqa and query.shape[1] == key.shape[1]:
             enable_gqa = False
-
-        if query.dim() == 5:
-            B, G = query.shape[0], query.shape[1]
-            query = query.flatten(0, 1)
-            key = key.flatten(0, 1)
-            value = args[0].flatten(0, 1)
-            args = (value,) + args[1:]
-            if kwargs.get("attn_mask") is not None and kwargs["attn_mask"].dim() == 5:
-                kwargs["attn_mask"] = kwargs["attn_mask"].flatten(0, 1)
-            out = original(query, key, *args, enable_gqa=enable_gqa, **kwargs)
-            return out.unflatten(0, (B, G))
-
         return original(query, key, *args, enable_gqa=enable_gqa, **kwargs)
 
     return patch
@@ -863,7 +858,8 @@ def _operator_floordiv(self, other):
         op.Not(op.Equal(op.Sign(self), op.Sign(other))),
         op.Cast(op.Mod(self, other), to=onnx_ir.DataType.BOOL.value),
     )
-    return op.Sub(op.Div(self, other), op.Cast(offset, to=self.dtype.value))
+    dtype = self.dtype.value if hasattr(self, "dtype") else other.dtype.value
+    return op.Sub(op.Div(self, other), op.Cast(offset, to=dtype))
 
 
 def _aten_masked_fill(self, mask, value):
