@@ -845,7 +845,10 @@ class NopConfig(PreTrainedConfig):
     def test_roundtrip_models_without_tokenizer_class(self, repo_id):
         text = "This is a test 😊 I was born in 92000, and this is falsé."
 
-        tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                tokenizer_auto = AutoTokenizer.from_pretrained(repo_id, cache_dir=tmpdir)
         self.assertEqual(tokenizer_auto.decode(tokenizer_auto.encode(text, add_special_tokens=False)), text)
 
     TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = [
@@ -865,8 +868,11 @@ class NopConfig(PreTrainedConfig):
         # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend
         TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT = "foo_bar\n\n123 "
 
-        tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
-        tokenizer_tok = TokenizersBackend.from_pretrained(repo_id)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                tokenizer_auto = AutoTokenizer.from_pretrained(repo_id, cache_dir=tmpdir)
+                tokenizer_tok = TokenizersBackend.from_pretrained(repo_id, cache_dir=tmpdir)
         self.assertEqual(
             tokenizer_tok(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
             tokenizer_auto(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
