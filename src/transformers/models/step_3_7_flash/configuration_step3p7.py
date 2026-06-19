@@ -56,6 +56,7 @@ class StepRoboticsVisionEncoderConfig(PretrainedConfig):
 class Step3p7TextConfig(PretrainedConfig):
     model_type = "step3p5"
     architectures = ["Step3p5ForCausalLM"]
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     def __init__(
         self,
@@ -68,8 +69,10 @@ class Step3p7TextConfig(PretrainedConfig):
         vocab_size: int = 128815,
         rms_norm_eps: float = 1e-5,
         moe_intermediate_size: int = 1280,
-        moe_num_experts: int = 288,
-        moe_top_k: int = 8,
+        n_routed_experts: int = 288,
+        moe_num_experts: int | None = None,  # backward compat alias for n_routed_experts
+        num_experts_per_tok: int = 8,
+        moe_top_k: int | None = None,  # backward compat alias for num_experts_per_tok
         rope_theta: float = 10000,
         rope_scaling: dict[str, Any] | None = None,
         max_position_embeddings: int = 128000,
@@ -90,6 +93,8 @@ class Step3p7TextConfig(PretrainedConfig):
         # Original checkpoints store sliding-layer head counts inside attention_other_setting;
         # num_sliding_attention_heads is derived from it automatically so config.json need not change.
         num_sliding_attention_heads: int | None = None,
+        hidden_act: str = "silu",
+        mlp_bias: bool = False,
         swiglu_limits: list[float | None] | None = None,
         swiglu_limits_shared: list[float | None] | None = None,
         use_rope_layers: list[bool] | None = None,
@@ -101,6 +106,10 @@ class Step3p7TextConfig(PretrainedConfig):
         torch_dtype = kwargs.get("torch_dtype")
         if isinstance(rope_scaling, dict):
             rope_scaling = dict(rope_scaling)
+        if moe_num_experts is not None:
+            n_routed_experts = moe_num_experts
+        if moe_top_k is not None:
+            num_experts_per_tok = moe_top_k
         if share_expert_dim is None:
             share_expert_dim = share_expert_dims
         self.hidden_size = hidden_size
@@ -112,8 +121,8 @@ class Step3p7TextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.rms_norm_eps = rms_norm_eps
         self.moe_intermediate_size = moe_intermediate_size
-        self.moe_num_experts = moe_num_experts
-        self.moe_top_k = moe_top_k
+        self.n_routed_experts = n_routed_experts
+        self.num_experts_per_tok = num_experts_per_tok
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.max_position_embeddings = max_position_embeddings
@@ -141,6 +150,8 @@ class Step3p7TextConfig(PretrainedConfig):
         if num_sliding_attention_heads is None and attention_other_setting:
             num_sliding_attention_heads = attention_other_setting.get("num_attention_heads", num_attention_heads)
         self.num_sliding_attention_heads = num_sliding_attention_heads or num_attention_heads
+        self.hidden_act = hidden_act
+        self.mlp_bias = mlp_bias
         self.swiglu_limits = swiglu_limits
         self.swiglu_limits_shared = swiglu_limits_shared
         self.use_rope_layers = use_rope_layers
