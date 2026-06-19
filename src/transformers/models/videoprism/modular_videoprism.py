@@ -170,7 +170,7 @@ class VideoPrismTokenizer(T5Tokenizer):
             **kwargs,
         )
         # VideoPrism does not append an EOS token by default
-        self._tokenizer.post_processor = None
+        del self._tokenizer.post_processor
 
 
 class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):

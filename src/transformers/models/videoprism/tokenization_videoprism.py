@@ -111,8 +111,6 @@ class VideoPrismTokenizer(TokenizersBackend):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-        # VideoPrism does not append an EOS token by default
-        self._tokenizer.post_processor = None
 
     def get_sentinel_tokens(self):
         """Get the list of sentinel tokens (extra_id tokens) from additional_special_tokens."""

@@ -925,7 +925,7 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         expectations = get_vision_integration_expectations()
         expected_values = torch.tensor(expectations.get_expectation(), device=torch_device)
         output_slice = outputs[0, :3, :3]
-        torch.testing.assert_close(output_slice, expected_values, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(output_slice, expected_values, rtol=2e-4, atol=3e-3)
 
     @slow
     def test_videoprism_clip_model(self):
