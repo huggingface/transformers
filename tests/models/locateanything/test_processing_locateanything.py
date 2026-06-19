@@ -14,16 +14,37 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import AutoTokenizer, LocateAnythingProcessor
 from transformers.testing_utils import require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
+CHAT_TEMPLATE = (
+    "{% set image_count = namespace(value=0) %}{% set video_count = namespace(value=0) %}"
+    "{% for message in messages %}{% if loop.first and message['role'] != 'system' %}"
+    "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n{% endif %}"
+    "<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}<|im_end|>\n"
+    "{% else %}{% for content in message['content'] %}"
+    "{% if content['type'] == 'image' or 'image' in content or 'image_url' in content %}"
+    "{% set image_count.value = image_count.value + 1 %}{% if add_vision_id %}<image {{ image_count.value }}>{% endif %}"
+    "<image-{{ image_count.value }}>{% elif content['type'] == 'video' or 'video' in content %}"
+    "{% set video_count.value = video_count.value + 1 %}{% if add_vision_id %}<video {{ video_count.value }}>{% endif %}"
+    "<video-{{ video_count.value }}>{% elif 'text' in content %}{{ content['text'] }}{% endif %}{% endfor %}"
+    "<|im_end|>\n{% endif %}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
+)
+
+
 @require_torch
 @require_vision
 class LocateAnythingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LocateAnythingProcessor
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {"chat_template": CHAT_TEMPLATE}
 
     @classmethod
     def _setup_image_processor(cls):
@@ -37,6 +58,19 @@ class LocateAnythingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
+
+    # Packed patches have no per-batch leading dim, so check the template -> text -> processor path instead.
+    @parameterized.expand([(1, "pt"), (2, "pt")])
+    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
+        processor = self.get_processor()
+        image = self.prepare_image_inputs()
+        messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": "Locate the cat."}]}]
+        prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        self.assertIn("<image-1>", prompt)
+        inputs = processor(images=image, text=[prompt], return_tensors="pt")
+        self.assertEqual(inputs["image_grid_thw"].shape[0], 1)
+        self.assertEqual(inputs["pixel_values"].shape[0], int(inputs["image_grid_thw"].prod(dim=-1).sum()))
+        self.assertGreater(int((inputs["input_ids"][0] == processor.image_token_id).sum()), 0)
 
     def test_image_placeholder_expansion(self):
         processor = self.get_processor()
