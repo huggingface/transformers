@@ -1126,7 +1126,6 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         self.attn_hc = DeepseekV4HyperConnection(config)
         self.ffn_hc = DeepseekV4HyperConnection(config)
 
-    @torch.compiler.nested_compile_region
     def forward(
         self,
         hidden_states: torch.Tensor,
