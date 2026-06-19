@@ -22,7 +22,12 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    AnnotationFormatTestMixin,
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
@@ -48,6 +53,7 @@ class ConditionalDetrImageProcessingTester:
         do_rescale=True,
         rescale_factor=1 / 255,
         do_pad=True,
+        num_labels=5,
     ):
         # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p
         size = size if size is not None else {"shortest_edge": 18, "longest_edge": 1333}
@@ -64,6 +70,11 @@ class ConditionalDetrImageProcessingTester:
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
+        self.num_labels = num_labels
+        # for the post_process methods
+        self.num_queries = 3
+        self.height = 3
+        self.width = 4
 
     def prepare_image_processor_dict(self):
         return {
@@ -125,10 +136,28 @@ class ConditionalDetrImageProcessingTester:
             torchify=torchify,
         )
 
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        from transformers.models.conditional_detr.modeling_conditional_detr import ConditionalDetrSegmentationOutput
+
+        inputs = {
+            "outputs": ConditionalDetrSegmentationOutput(
+                logits=torch.randn(self.batch_size, self.num_queries, self.num_labels),
+                pred_masks=torch.randn(self.batch_size, self.num_queries, self.height, self.width),
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.height,
+            "width": self.width,
+        }
+        return inputs, expected_shape
+
 
 @require_torch
 @require_vision
-class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
+class ConditionalDetrImageProcessingTest(
+    AnnotationFormatTestMixin, ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
+):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = ConditionalDetrImageProcessingTester(self)
