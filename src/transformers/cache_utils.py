@@ -44,6 +44,7 @@ class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
     is_compileable = False
+    supports_early_init = True
     # Subclasses can set ``layer_type`` to auto-register themselves in
     # ``LAYER_TYPE_CACHE_MAPPING`` at import time (used by ``DynamicCache`` to dispatch
     # per-layer cache classes from ``config.layer_types``).
@@ -386,12 +387,8 @@ class StaticLayer(CacheLayerMixin):
         devices, dtypes etc later on for each `update` (which could break the static dynamo addresses as well).
 
         If this is unwanted, one can call `early_initialization(...)` on the Cache directly, which will call this
-        function ahead-of-time (this is required for `torch.export` for example). Note that for `compile`, as we
-        internally don't compile the prefill, this is guaranteed to have been called already when compiling.
-        If compiling the prefill as well, e.g. calling `model.compile(...)` before `generate` with a static cache,
-        it is still supported in general, but without guarantees depending on the compilation options (e.g. cuda graphs,
-        i.e. `mode="reduce-overhead"` is known to fail). But it will in general work correctly, and prefill should
-        not be compiled anyway for performances!
+        function ahead-of-time (this is required for `torch.export` for example). It is also required whenever the
+        prefill itself ends up in a compiled region (with chunked prefill for instance).
         """
         self.dtype, self.device = key_states.dtype, key_states.device
         self.max_batch_size, self.num_heads = key_states.shape[:2]
@@ -857,6 +854,8 @@ class LinearAttentionCacheLayerMixin(ABC):
 
     # All shapes are static by essence in a LinearAttention layer, so it is compileable
     is_compileable = True
+    # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
+    supports_early_init = False
 
     def __init__(self):
         self.conv_states: torch.Tensor | None = None
@@ -1244,6 +1243,8 @@ class Cache:
             )
 
         for layer, layer_num_heads, layer_head_dim in zip(self.layers, num_heads, head_dim):
+            if not layer.supports_early_init or layer.is_initialized:
+                continue
             # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
             # this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
             # creates an empty tensor with correct shape, dtype and device), which is very efficient and practical
@@ -1380,7 +1381,10 @@ class Cache:
     @property
     def max_cache_len(self) -> int:
         """Returns the maximum cache length across all layers. ``-1`` means no layer reports a
-        fixed maximum: DynamicLayer grows on demand and recurrent layers carry no sequence length."""
+        fixed maximum: DynamicLayer grows on demand, and recurrent / linear-attention layers
+        carry no sequence length."""
+        # Layers without `max_cache_len` (recurrent, linear attention) are skipped so a hybrid
+        # cache still reports its attention layers' max.
         values = [layer.max_cache_len for layer in self.layers if hasattr(layer, "max_cache_len")]
         if not values:
             return -1
@@ -1397,7 +1401,8 @@ class Cache:
     @property
     def is_initialized(self) -> bool:
         """Return whether the cache data is initialized"""
-        return len(self.layers) > 0 and all(layer.is_initialized for layer in self.layers)
+        layers = [layer for layer in self.layers if layer.supports_early_init]
+        return len(layers) > 0 and all(layer.is_initialized for layer in layers)
 
     @property
     def is_sliding(self) -> list[bool]:
