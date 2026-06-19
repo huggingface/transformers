@@ -54,7 +54,9 @@ print(tokenizer.parse_response(out_text, prefix=input_ids[0]))
 When a tokenizer has a `response_template`, the `parse_response` method will cleanly turn an output message into a
 structured dict, ready to append to the chat. Note that we need to pass the `prefix` (the prompt tokens) to this method as well. This is because many chat templates start
 messages or open thinking blocks before letting the model begin its response, and so our parser needs to see the 
-prompt to understand the message. 
+prompt to understand the message. All of the prefix before the final turn is discarded; we only parse one message
+at a time. We just need the prefix to ensure we're seeing the entire final message, and not miss any prefilled
+fields!
 
 If the tokenizer has no response template set, `parse_response` will raise an error. We're working on adding
 templates to more models as quickly as we can!
@@ -257,7 +259,7 @@ multiple tool calls simultaneously:
 # Returns `"tool_calls": [{... "a" ...}, {... "b" ...}]` in a template with repeats: true
 ```
 
-Finally, you can specify `optional: false` for fields that must be present. If an optional field is missing,
+Finally, you can specify `optional: false` for fields that must be present. If such a field is missing,
 we raise an error instead of just returning a message dict without it.
 
 The end of generation will close and finalize any open regions, even if their closing delimiter was not seen.
