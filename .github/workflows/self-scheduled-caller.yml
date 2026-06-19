@@ -1,138 +1,37 @@
 name: Nvidia CI
 
 on:
-  repository_dispatch:
-  schedule:
-    - cron: "17 2 * * *"
   push:
     branches:
-      - run_nvidia_ci*
-  workflow_dispatch:
-    inputs:
-      prev_workflow_run_id:
-        description: 'previous workflow run id to compare'
-        type: string
-        required: false
-        default: ""
-      other_workflow_run_id:
-        description: 'other workflow run id to compare'
-        type: string
-        required: false
-        default: ""
-
-
-# Used for `push` to easily modify the target workflow runs to compare against
-env:
-    prev_workflow_run_id: ""
-    other_workflow_run_id: ""
-
-
-permissions:
-  contents: read
+      - try_my_own_actions
 
 jobs:
-  setup:
-    name: Setup
+  upload:
+    name: Upload artifacts
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        i: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100]
+    steps:
+      - name: Create artifact
+        run: |
+          mkdir artifact
+          echo "content of artifact ${{ matrix.i }}" > artifact/file.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifact-${{ matrix.i }}
+          path: artifact/
+
+  download:
+    name: Download 100 artifacts
+    needs: upload
     runs-on: ubuntu-22.04
     steps:
-      - name: Setup
-        env:
-          prev_workflow_run_id: ${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}
-          other_workflow_run_id: ${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}
-        run: |
-          mkdir "setup_values"
-          echo "$prev_workflow_run_id" > "setup_values/prev_workflow_run_id.txt"
-          echo "$other_workflow_run_id" > "setup_values/other_workflow_run_id.txt"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Download all artifacts
+        uses: ydshieh/download-artifact@rate_limit_friendly
         with:
-          name: setup_values
-          path: setup_values
-
-  model-ci:
-    name: Model CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_models_gpu
-      slack_report_channel: "#transformers-ci-daily-models"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      runner_type: "a10"
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  torch-pipeline:
-    name: Torch pipeline CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_pipelines_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-pipeline-torch"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  example-ci:
-    name: Example CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_examples_gpu
-      slack_report_channel: "#transformers-ci-daily-examples"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  trainer-fsdp-ci:
-    name: Trainer/FSDP CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_trainer_and_fsdp_gpu
-      slack_report_channel: "#transformers-ci-daily-training"
-      docker: huggingface/transformers-all-latest-gpu
-      runner_type: "a10"
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  deepspeed-ci:
-    name: DeepSpeed CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_torch_cuda_extensions_gpu
-      slack_report_channel: "#transformers-ci-daily-training"
-      docker: huggingface/transformers-pytorch-deepspeed-latest-gpu
-      ci_event: Daily CI
-      working-directory-prefix: /workspace
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  quantization-ci:
-    name: Quantization CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_quantization_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-quantization"
-      docker: huggingface/transformers-quantization-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
-  kernels-ci:
-    name: Kernels CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_kernels_gpu
-      slack_report_channel: "#transformers-ci-daily-kernels"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
+          pattern: test-artifact-*
+          path: downloaded/
+          chunk-delay: 5000
