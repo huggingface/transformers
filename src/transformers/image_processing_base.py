@@ -396,6 +396,7 @@ class ImageProcessingMixin(PushToHubMixin):
             `dict[str, Any]`: Dictionary of all the attributes that make up this image processor instance.
         """
         output = copy.deepcopy(self.__dict__)
+        output.pop("use_kernels", None)  # runtime flag, not part of the saved config
         output["image_processor_type"] = self.__class__.__name__
 
         return output
