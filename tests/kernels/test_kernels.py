@@ -591,17 +591,21 @@ class TestUseKernelsLifecycle(TestCasePlus):
         cleanup(torch_device, gc_collect=True)
 
     def test_setting_use_kernels_twice_does_not_rekernelize(self):
-        call_count = {"n": 0}
-
-        def spy_kernelize(*args, **kwargs):
-            call_count["n"] += 1
-
-        with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):
+        with (
+            patch.object(hub_kernels_pkg, "register_kernel_mapping_transformers") as mock_register,
+            patch.object(hub_kernels_pkg, "_kernels_kernelize") as mock_kernelize,
+        ):
             self.model.use_kernels = True
+
             self.assertTrue(self.model.use_kernels)
-            self.assertEqual(call_count["n"], 1)
+            # Check that both registraton and the underlying kernelize call happened
+            mock_register.assert_called_once_with()
+            self.assertEqual(mock_kernelize.call_count, 1)
+
             self.model.use_kernels = True
-            self.assertEqual(call_count["n"], 1)
+
+            mock_register.assert_called_once_with()
+            self.assertEqual(mock_kernelize.call_count, 1)
 
     def test_train_eval_calls_kernelize_with_correct_mode(self):
         last_modes = []
