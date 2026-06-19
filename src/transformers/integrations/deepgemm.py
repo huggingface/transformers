@@ -34,6 +34,8 @@ import torch
 
 from ..utils import logging
 from ..utils.import_utils import (
+    KERNELS_MAX_VERSION,
+    KERNELS_MIN_VERSION,
     get_cuda_runtime_version,
     is_kernels_available,
     is_torchdynamo_compiling,
@@ -80,7 +82,9 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(
-                "DeepGEMM kernel requires the `kernels` package. Install it with `pip install -U kernels`."
+                "DeepGEMM kernel requires the `kernels` package. "
+                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
             )
         if not torch.cuda.is_available():
             raise ImportError("DeepGEMM kernel requires CUDA, but CUDA is not available.")
@@ -137,7 +141,9 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     ]
     if missing:
         raise ImportError(
-            f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. Update with `pip install -U kernels`."
+            f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. "
+            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
 
     return DeepGEMM(
