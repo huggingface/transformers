@@ -531,6 +531,49 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
 
+    def test_fp8_ue8m0_quantize_dequantize_round_trip(self):
+        # ``scale_fmt="ue8m0"`` rounds weight_scale_inv to a power of two; the weight has to be
+        # quantized with that same rounded scale, or ``weight * weight_scale_inv`` at dequant
+        # disagrees with the scale the weight was divided by (a silent per-block error up to an octave).
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
+
+        if not hasattr(torch, "float8_e8m0fnu"):
+            self.skipTest("ue8m0 storage requires torch.float8_e8m0fnu")
+
+        quantizer = SimpleNamespace(
+            quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="ue8m0")
+        )
+        torch.manual_seed(0)
+        weight = torch.randn(128, 128, dtype=torch.float32)
+
+        quantized = Fp8Quantize(quantizer)._quantize_one("layer.weight", weight)
+        recovered = Fp8Dequantize(quantizer)._dequantize_one(
+            quantized["layer.weight"], quantized["layer.weight_scale_inv"], output_dtype=torch.float32
+        )
+        rel_err = ((recovered - weight).abs().sum() / weight.abs().sum()).item()
+        self.assertLess(rel_err, 5e-2)  # fp8 round-trip is ~2e-2; a scale mismatch inflates it past 0.2
+
+    def test_fp8_float_scale_fmt_quantization_unchanged(self):
+        # The ue8m0 reordering must leave the default scale_fmt="float" path bit-identical to the
+        # original single-division formula (scales = _FP8_MAX / max_abs). Any divergence only shows
+        # on rare fp32-ULP block maxima, so scan many random 128x128 blocks rather than one.
+        from transformers.integrations.finegrained_fp8 import _FP8_DTYPE, _FP8_MAX, _FP8_MIN, Fp8Quantize
+
+        quantizer = Fp8Quantize(
+            SimpleNamespace(quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="float"))
+        )
+        for seed in range(100):
+            torch.manual_seed(seed)
+            weight = torch.randn(128, 128, dtype=torch.float32)
+            out = quantizer._quantize_one("layer.weight", weight)
+            scales = _FP8_MAX / weight.abs().amax()
+            ref_q = torch.clamp(weight * scales, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+            ref_inv = (1.0 / scales).to(torch.float32).reshape(1, 1)
+            self.assertTrue(torch.equal(out["layer.weight"], ref_q), f"float weight diverged at seed {seed}")
+            self.assertTrue(
+                torch.equal(out["layer.weight_scale_inv"], ref_inv), f"float scale diverged at seed {seed}"
+            )
+
     def test_scoped_renaming_does_not_leak_to_sibling_or_parent(self):
         """scope_prefix gates a WeightRenaming to keys under one submodel only —
         neither the sibling submodel nor the parent's own keys must be affected.

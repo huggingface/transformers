@@ -864,18 +864,18 @@ class Fp8Quantize(ConversionOps):
         # We store inverse scale to match the upstream ``weight_scale_inv`` convention
         scales = _FP8_MAX / safe_max_abs
         scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))  # keep zeros stable
+        inv_scales = (1.0 / scales).to(torch.float32)
+        # ue8m0 stores weight_scale_inv as a power of two. Round it before quantizing and derive the
+        # forward scale from it, so dequant multiplies by the exact scale the weight was divided by.
+        if self.hf_quantizer.quantization_config.scale_fmt == "ue8m0":
+            inv_scales = torch.pow(2.0, torch.ceil(torch.log2(inv_scales.clamp(min=torch.finfo(torch.float32).tiny))))
+            inv_scales = inv_scales.to(_get_ue8m0_dtype())
+            scales = 1.0 / inv_scales.to(torch.float32)  # forward scale = exact reciprocal of the stored inverse
         # Broadcast scales over the block dims and quantize
         scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # (..., rows_tiles, 1, cols_tiles, 1)
         scaled = reshaped * scales_broadcast
         quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
         quantized = quantized.reshape(original_shape)
-        inv_scales = (1.0 / scales).to(torch.float32)
-        # DeepSeek V4-style storage (`scale_fmt="ue8m0"`): round inv_scales to UE8M0-representable
-        # values (powers of 2) and cast to `float8_e8m0fnu` byte storage so the on-disk dtype
-        # matches the parameter allocation in `FP8Linear`/`FP8Experts`.
-        if self.hf_quantizer.quantization_config.scale_fmt == "ue8m0":
-            inv_scales = torch.pow(2.0, torch.ceil(torch.log2(inv_scales.clamp(min=torch.finfo(torch.float32).tiny))))
-            inv_scales = inv_scales.to(_get_ue8m0_dtype())
         scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith(".weight") else key + "_scale_inv"
         return {key: quantized, scale_key: inv_scales}
 
