@@ -1647,6 +1647,8 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
     """,
 )
 class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
+    _loss_function = torch.nn.functional.mse_loss
+
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1661,7 +1663,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         flip_pairs: torch.Tensor | None = None,
         labels: torch.FloatTensor | None = None,
-        target_weights: torch.FloatTensor | None = None,
+        label_weights: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sapiens2PoseEstimatorOutput:
         r"""
@@ -1672,9 +1674,8 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
             original orientation.
         labels (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
             Heatmap ground truth for computing the loss.
-        target_weights (`torch.FloatTensor` of shape `(batch_size, num_keypoints)` or `(batch_size, num_keypoints, height, width)`, *optional*):
-            Visibility weights for each keypoint. If a keypoint is occluded or invisible, its weight should be 0.0 to prevent
-            penalizing the model during the loss computation. If `None`, standard unmasked MSE loss is computed.
+        label_weights (`torch.FloatTensor` of shape `(batch_size, num_labels, 1, 1)` or `(batch_size, num_labels, height, width)`, *optional*):
+            Visibility weights for each keypoint. Must be broadcastable to the shape of `labels`.
 
         Example:
 
@@ -1714,29 +1715,14 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            if labels.shape != heatmaps.shape:
-                raise ValueError(f"Expected labels shape {heatmaps.shape}, got {labels.shape}")
+            # Calculate unreduced loss using the standard HF loss API
+            loss = self.loss_function(heatmaps, labels, reduction="none")
 
-            if target_weights is None:
-                loss = torch.nn.functional.mse_loss(heatmaps, labels)
+            if label_weights is not None:
+                # Assume label_weights is already in a broadcastable shape and dtype
+                loss = (loss * label_weights).mean()
             else:
-                if target_weights.ndim not in (2, 4):
-                    raise ValueError(f"Expected target_weights to have 2 or 4 dimensions, got {target_weights.ndim}")
-
-                if target_weights.shape != labels.shape[: target_weights.ndim]:
-                    raise ValueError(
-                        f"Expected target_weights shape to match {labels.shape[: target_weights.ndim]}, "
-                        f"got {target_weights.shape}"
-                    )
-
-                per_pixel_loss = torch.nn.functional.mse_loss(heatmaps, labels, reduction="none")
-
-                ndim_pad = labels.ndim - target_weights.ndim
-                mask = target_weights.view(target_weights.shape + (1,) * ndim_pad)
-
-                mask = mask.to(heatmaps.dtype)
-
-                loss = (per_pixel_loss * mask).mean()
+                loss = loss.mean()
 
         return Sapiens2PoseEstimatorOutput(
             loss=loss,
