@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch NemotronAsrStreaming model."""
 
 import json
+import math
 import unittest
 from pathlib import Path
 from threading import Thread
@@ -54,6 +55,21 @@ FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/nemotron_asr_stre
 # NemotronAsrStreaming's modeling/config inherit from Parakeet (see `modular_nemotron_asr_streaming.py`), so the tests inherit
 # from the Parakeet testers/tests too and override only the NemotronAsrStreaming-specific classes and behaviours.
 class NemotronAsrStreamingEncoderModelTester(ParakeetEncoderModelTester):
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+        # Unlike Parakeet, NemotronAsrStreaming's subsampling convs are causal: each stride-2 layer pads
+        # `(kernel - 1, stride - 1)` on the time axis, yielding `floor(L / stride) + 1` frames per layer
+        # instead of Parakeet's exact halving. Recompute the expected encoder output length (and the
+        # attention key length) so the shape assertions match the model's actual output.
+        config = self.get_config()
+        total_pad = (config.subsampling_conv_kernel_size - 1) + (config.subsampling_conv_stride - 1)
+        length = self.seq_length
+        for _ in range(int(math.log2(config.subsampling_factor))):
+            length = (length + total_pad - config.subsampling_conv_kernel_size) // config.subsampling_conv_stride + 1
+        self.output_seq_length = length
+        self.encoder_seq_length = length
+        self.key_length = length
+
     def get_config(self):
         return NemotronAsrStreamingEncoderConfig(
             hidden_size=self.hidden_size,
@@ -103,6 +119,11 @@ class NemotronAsrStreamingForRNNTModelTester(ParakeetForRNNTModelTester):
         # NemotronAsrStreaming uses its own encoder tester (Parakeet's `__init__` wired the Parakeet one). The two share
         # identical settings, so the encoder-derived attributes set by `super().__init__` stay valid.
         self.encoder_model_tester = NemotronAsrStreamingEncoderModelTester(parent, **(encoder_kwargs or {}))
+        # Parakeet's `__init__` derived these from the (now-replaced) Parakeet encoder tester; resync them to
+        # NemotronAsrStreaming's causal-subsampling output length.
+        self.output_seq_length = self.encoder_model_tester.output_seq_length
+        self.seq_length = self.encoder_model_tester.output_seq_length
+        self.encoder_seq_length = self.encoder_model_tester.output_seq_length
 
     def get_config(self):
         return NemotronAsrStreamingConfig(
@@ -254,56 +275,73 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_integration_streaming(self):
-        """Cache-aware streaming generation from a generator of mel-frame chunks.
+        """Cache-aware streaming generation from a generator of per-chunk mel features.
 
-        Mirrors `test_stream_generate.py`: the full mel spectrogram is sliced into contiguous chunks (49 frames
-        for the first chunk, then 56) and fed to `generate` as a generator together with the streaming
-        attention context `[70, 6]`. The decoder/encoder caches are threaded across chunks internally and the
-        transcript is consumed incrementally via a `TextIteratorStreamer`.
+        Mirrors the streaming snippet in `docs/source/en/model_doc/nemotron_asr_streaming.md`: raw audio is fed
+        to the processor chunk by chunk in streaming mode — the first chunk with `is_first_audio_chunk=True`
+        (`center=True`) and every subsequent chunk with `is_first_audio_chunk=False` (`center=False`), so each
+        per-chunk STFT reproduces a single full-utterance pass frame-for-frame. The resulting features are
+        yielded to `generate` as a generator together with the streaming attention context `[70, 6]`. The
+        decoder/encoder caches are threaded across chunks internally and the transcript is consumed
+        incrementally via a `TextIteratorStreamer`.
 
         reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_streaming_rnnt-py
         """
-        # The fixture holds the NeMo cache-aware streaming reference. The HF re-implementation matches it
-        # except a single sub-word: NeMo emits "...rescued our economy from the worst crisis of our
-        # lifetimes...", the Transformers re-implementation emits "cris" instead — a borderline greedy
-        # emission flipped by ~1e-3 numerical drift in the re-implemented FastConformer encoder (WER-neutral).
-        # We assert against the NeMo reference, so this test is expected to fail on that one sub-word until the
-        # encoder drift is closed.
         RESULTS_PATH = FIXTURES_DIR / "expected_results_streaming.json"
         with open(RESULTS_PATH) as f:
             EXPECTED_TRANSCRIPTION = json.load(f)["transcription"]
+        # The shorter streaming example emits a few words less than the full fixture reference.
+        EXPECTED_TRANSCRIPTION = EXPECTED_TRANSCRIPTION[: -len(" of the")]
 
+        sampling_rate = self.processor.feature_extractor.sampling_rate
         audio = load_audio(
-            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
-            sampling_rate=self.processor.feature_extractor.sampling_rate,
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3",
+            sampling_rate=sampling_rate,
         )
         model = NemotronAsrStreamingForRNNT.from_pretrained(
             self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
         )
 
         # Select the streaming right attention context (lookahead, in subsampled encoder frames). This sizes
-        # the mel chunks below (49 then 56 frames) and must be passed to `generate` so the forward matches.
+        # the audio/mel chunks the processor emits and must reach `generate` so the forward matches; it travels
+        # through `**first_chunk_inputs` below.
         self.processor.set_num_lookahead_tokens(6)
 
-        inputs = self.processor(audio, sampling_rate=self.processor.feature_extractor.sampling_rate)
-        inputs.to(model.device, dtype=model.dtype)
+        first_chunk_inputs = self.processor(
+            audio[: self.processor.num_samples_first_audio_chunk],
+            sampling_rate=sampling_rate,
+            is_streaming=True,
+            is_first_audio_chunk=True,
+            return_tensors="pt",
+        )
+        first_chunk_inputs = first_chunk_inputs.to(model.device, dtype=model.dtype)
 
         def input_features_generator():
-            start_idx = 0
-            chunk = self.processor.num_mel_frames_first_audio_chunk
-            input_length = inputs.input_features.shape[1]
-            while start_idx < input_length:
-                end_idx = min(start_idx + chunk, input_length)
-                yield inputs.input_features[:, start_idx:end_idx, :]
-                start_idx = end_idx
-                chunk = self.processor.num_mel_frames_per_audio_chunk
+            yield first_chunk_inputs.input_features[:, : self.processor.num_mel_frames_first_audio_chunk, :]
 
-        streamer = TextIteratorStreamer(
-            self.processor.tokenizer, skip_special_tokens=True, clean_up_tokenization_spaces=True
-        )
+            mel_frame_idx = self.processor.num_mel_frames_first_audio_chunk
+            hop_length = self.processor.feature_extractor.hop_length
+            n_fft = self.processor.feature_extractor.n_fft
+
+            start_idx = mel_frame_idx * hop_length - n_fft // 2
+            while (end_idx := start_idx + self.processor.num_samples_per_audio_chunk) < audio.shape[0]:
+                inputs = self.processor(
+                    audio[start_idx:end_idx],
+                    sampling_rate=sampling_rate,
+                    is_streaming=True,
+                    is_first_audio_chunk=False,
+                    return_tensors="pt",
+                )
+                inputs = inputs.to(model.device, dtype=model.dtype)
+                yield inputs.input_features
+
+                mel_frame_idx += self.processor.num_mel_frames_per_audio_chunk
+                start_idx = mel_frame_idx * hop_length - n_fft // 2
+
+        streamer = TextIteratorStreamer(self.processor.tokenizer, skip_special_tokens=True)
         generate_kwargs = {
+            **first_chunk_inputs,
             "input_features": input_features_generator(),
-            "num_lookahead_tokens": self.processor.default_num_lookahead_tokens,
             "streamer": streamer,
         }
         thread = Thread(target=model.generate, kwargs=generate_kwargs)
