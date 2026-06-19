@@ -34,11 +34,9 @@ class EncoderCache:
         config: PretrainedConfig,
         modality: str,
         max_batch_tokens: int,
-        use_async_batching: bool,
         model_dtype: torch.dtype,
         device: torch.device,
     ) -> None:
-        self.use_async_batching = use_async_batching
         # Create the actual cache tensor
         cache_size = max(16384, max_batch_tokens)
         cache_shape = (cache_size, config.text_config.hidden_size)
@@ -116,7 +114,7 @@ class EncoderCache:
         Extends the list of indices being read from the encoder cache for a given request. Returns a tuple of booleans:
             - cache_read: True if any multimodal embedding is read by this request
             - to_free: True if the request has all its multimodal embeddings read and can be freed from the cache
-        For instance, if the inital tokens and allocated blocks are as follows:
+        For instance, if the initial tokens and allocated blocks are as follows:
 
             Initial tokens:   [xxx, xxx, xxx, img, img, img, xxx]
             Allocated blocks: [ -1,  -1,  -1,   0,   1,   3,  -1]
@@ -147,7 +145,7 @@ class EncoderCache:
         read_indices.extend(repeat(-1, missing_indices))
         return cache_read, to_free
 
-    def store_mm_embeddings(self, request_id: str, image_features: torch.Tensor) -> None:
+    def store_mm_embeddings(self, request_id: str, mm_embedding: torch.Tensor) -> None:
         """Stores the multimodal embeddings for a request in the encoder cache."""
         # Retrieve the allocated blocks mask for the request
         allocated_blocks_mask = self.allocated_blocks_masks.get(request_id)
@@ -157,7 +155,7 @@ class EncoderCache:
         mask = allocated_blocks_mask != -1
         allocated_blocks = allocated_blocks_mask[mask].to(self.cache.device)
         # Store the multimodal embeddings in the cache
-        self.cache[allocated_blocks] = image_features
+        self.cache[allocated_blocks] = mm_embedding
 
     def release_cache_for_requests(self, requests: set[str]) -> None:
         """Releases the cache for the given requests from the encoder cache. The set of request for which to release
@@ -173,3 +171,10 @@ class EncoderCache:
                 blocks_to_free = allocated_blocks_mask[mask].tolist()
                 # Actually free the blocks
                 self.free_blocks.extend(blocks_to_free)
+            # Also pop the embedding length for the request
+            self.embeddings_lengths.pop(request_id, None)
+
+    def free_all_requests(self) -> None:
+        """Frees all requests from the encoder cache, whatever their state."""
+        all_requests_stored = set(self.allocated_blocks_masks.keys()) | set(self.embeddings_lengths.keys())
+        self.release_cache_for_requests(all_requests_stored)

@@ -160,7 +160,7 @@ class PagedAttentionCache:
         group_size = len(layer_groups[0])
         self.num_groups = len(layer_groups)
 
-        self.sliding_windows = {}  # TODO: can this attroubte be removed there is only one sliding window size so far
+        self.sliding_windows = {}  # TODO: can this attribute be removed there is only one sliding window size so far
         self.layer_index_to_group_indices = {}
         for i, group in enumerate(layer_groups):
             sliding_window = llm_config.sliding_window if group_types[i] == "sliding_attention" else 1
@@ -291,26 +291,30 @@ class PagedAttentionCache:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
 
-        # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
-        self.use_prefix_sharing = self.allow_block_sharing and group_types == ["full_attention"]
-        self._block_manager = BlockManager(num_blocks, self.block_size, tp_on=tp_size > 1)
-        self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
-
-        # For block table support, we lazy init the name of the block table key
-        self._block_table_key = None
-
         # If there is one, initialize the encoder cache
         if is_multimodal_model:
             self.encoder_cache = EncoderCache(
                 config=config,
                 modality=mm_modality,
                 max_batch_tokens=max_batch_tokens,
-                use_async_batching=continuous_batching_config.use_async_batching,
                 model_dtype=self.dtype,
                 device=self.device,
             )
         else:
             self.encoder_cache = None
+
+        # We only use prefix sharing if the model is text-only, sharing available for all groups and allowed by user
+        # TODO: support prefix sharing for multimodal models using content hashing
+        self.use_prefix_sharing = (
+            self.allow_block_sharing and
+            group_types == ["full_attention"] and
+            not is_multimodal_model
+        )
+        self._block_manager = BlockManager(num_blocks, self.block_size, tp_on=tp_size > 1)
+        self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
+
+        # For block table support, we lazy init the name of the block table key
+        self._block_table_key = None
 
     def blocks_needed(self, num_requested_blocks: int, allocated_blocks: int) -> int:
         """Returns the number of physical blocks needed to allocate (num_requested_blocks) blocks to a request that
@@ -571,6 +575,8 @@ class PagedAttentionCache:
             all_request_ids.update(cm.block_table.keys())
         for request_id in all_request_ids:
             self.free_blocks(request_id)
+        if self.encoder_cache is not None:
+            self.encoder_cache.free_all_requests()
 
 
 # TODO: rework computation with the groups and their sizes
@@ -656,7 +662,7 @@ class PagedAttentionMemoryHandler:
         # -- M terms: cost per batch token -------------------------------------------------
         coeff_m = (
             delta_m * a                                # activation peak: M-proportional part
-            + k * 8 * i                                # bulk_input: [7, M] int32, packed as 7 rows
+            + k * 8 * i                                # bulk_input: [8, M] int32, packed as 8 rows
             + k * self.num_output_rows * i             # output_ids: [num_output_rows, M] int32
             + k * self.num_groups                      # block_table: [bt_groups, M, max_blocks_per_req] int32
             * self.max_blocks_per_request * i          #   (zero when fast-decode is off)
@@ -738,6 +744,9 @@ class PagedAttentionMemoryHandler:
         """
         available = self.get_available_memory(max_memory_percent)
         logger.info(f"Cache memory: {available}")
+        # If the model is multimodal, we account for the encoder cache memory here
+        if self.is_multimodal_model:
+            available -= 16384 * self.hidden_size * self._activation_dtype.itemsize
         # Solve each peak independently, then take the element-wise min (tightest constraint wins)
         acc_num_blocks = float("inf")
         acc_max_batch_tokens = float("inf")

@@ -284,9 +284,7 @@ class Scheduler(ABC):
 
             # If the request has multimodal data to process, we allocate space in the encoder cache
             if state.multimodal_inputs:
-                if self.cache.encoder_cache is None:
-                    raise ValueError(f"Request has multimodal data but there is no encoder cache: {state = }")
-                self.cache.encoder_cache.allocate_blocks(state)
+                self.cache.encoder_cache.allocate_blocks(state)  # type: ignore (was already checked)
 
             # The decode fast path is only used if the request is a single token and its length is less than the max blocks per request
             decode_fast_path &= request_len == 1 and state.position_offset < self.max_decode_fast_path_length

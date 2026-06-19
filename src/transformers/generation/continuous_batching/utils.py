@@ -93,20 +93,20 @@ def attn_mask_is_needed(config: PretrainedConfig) -> bool:
     return config._attn_implementation in ["paged|eager", "paged|sdpa"]
 
 
-def find_num_kv_heads(config: PretrainedConfig) -> int | None:
+def find_num_kv_heads(config: PretrainedConfig) -> int:
     """Finds the number of key-value heads for the given config."""
     for attr in ["num_key_value_heads", "num_attention_heads"]:
-        if hasattr(config, attr):
+        if hasattr(config, attr) and getattr(config, attr, None) is not None:
             return getattr(config, attr)
     raise ValueError(f"num_key_value_heads or num_attention_heads could not be found in the config:\n{config}")
 
 
-def find_head_dim(config: PretrainedConfig) -> int | None:
+def find_head_dim(config: PretrainedConfig) -> int:
     """Finds the head dimension for the given config."""
-    if hasattr(config, "head_dim"):
+    if hasattr(config, "head_dim") and config.head_dim is not None:
         return config.head_dim
     if hasattr(config, "hidden_size") and hasattr(config, "num_attention_heads"):
-        return config.hidden_size // config.num_attention_heads
+        return config.hidden_size // config.num_attention_heads  # will crash if any is None
     raise ValueError(f"head_dim or (hidden_size and num_attention_heads) could not be found in the config:\n{config}")
 
 
@@ -218,7 +218,7 @@ def build_attention_mask(
 
 
 def check_modality_support(input_modalities: str | list[str]) -> str | None:
-    """Check if CB supports the given input modalities and returns True if the model is multimodal."""
+    """Check if CB supports the given input modalities and returns the extra modality if there is one."""
     input_modalities = [input_modalities] if isinstance(input_modalities, str) else input_modalities
 
     # We only support text and image or text and audio for now

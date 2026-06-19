@@ -48,7 +48,6 @@ class ModelRunner:
         self.return_logprobs = return_logprobs
         self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.cuda_graph_booleans
         self.cache = cache
-        self._model_supports_logits_to_keep: bool | None = None  # resolved on first forward
 
         # Padding only happen when CUDA graphs or compile is used
         cuda_graph = self.use_cuda_graph_varlen or self.use_cuda_graph_decode
@@ -97,14 +96,6 @@ class ModelRunner:
             max_kv_read = 0
         return num_q_tokens, max_kv_read
 
-    def supports_logits_to_keep(self, model: nn.Module) -> bool:
-        """Returns True if the model accepts the logits_to_keep kwarg in its forward."""
-        if self._model_supports_logits_to_keep is None:
-            self._model_supports_logits_to_keep = (
-                hasattr(model, "_supports_logits_to_keep") and model._supports_logits_to_keep()
-            )
-        return self._model_supports_logits_to_keep
-
     def run_encoder(self, model: nn.Module, encoder_kwargs: list[dict]) -> None:
         """Runs the encoder on the given set of kwargs and stores the new embeddings in the encoder cache."""
         if self.cache.encoder_cache is None:
@@ -150,7 +141,7 @@ class ModelRunner:
         compute_stream = self.inputs_and_outputs.compute_stream
 
         # If there is inputs_embeds tensor, it is filled before the forward pass
-        # TODO: this can be made CUDA graphable with 0-masking + trick, but it will run every iteration: benchmark if it
+        # TODO: this can be made CUDA graphable with 0-masking + trick, but it will run every iteration: benchmark if
         # worth it across models / tasks
         input_ids = self._pop_or_get_input_ids(batch_data)
         if batch_data["inputs_embeds"] is not None:
