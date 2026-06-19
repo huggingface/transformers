@@ -118,6 +118,15 @@ class NemotronAsrStreamingEncoderConfig(ParakeetEncoderConfig):
     sliding_window: int = 71
     default_num_lookahead_tokens: int = 13
 
+    @property
+    def subsampling_out_hidden_size(self) -> int:
+        """Flattened feature size out of the subsampling stack (`channels * remaining freq bins`); the encoder projection input dim."""
+        total_pad = (self.subsampling_conv_kernel_size - 1) + (self.subsampling_conv_stride - 1)
+        out_length = self.num_mel_bins
+        for _ in range(int(math.log2(self.subsampling_factor))):
+            out_length = (out_length + total_pad - self.subsampling_conv_kernel_size) // self.subsampling_conv_stride + 1
+        return self.subsampling_conv_channels * out_length
+
 
 @auto_docstring(checkpoint="nvidia/nemotron-speech-streaming-en-0.6b")
 @strict
@@ -658,6 +667,14 @@ class NemotronAsrStreamingEncoderCausalConv2D(nn.Conv2d):
     def freq_pad(self):
         return (self.kernel_size[1] - 1, self.stride[1] - 1)
 
+    def output_length(self, input_lengths: torch.Tensor | None, streaming: bool = False) -> torch.Tensor | None:
+        # Streaming consumes `left_pad` cached frames on the left and no right padding; offline uses the
+        # full causal padding `(kernel - 1, stride - 1)` on the time axis.
+        if input_lengths is None:
+            return None
+        left, right = (self.left_pad, 0) if streaming else self.time_pad
+        return (input_lengths + left + right - self.kernel_size[0]) // self.stride[0] + 1
+
     def forward(
         self,
         x: torch.Tensor,
@@ -856,66 +873,62 @@ class NemotronAsrStreamingEncoderAttention(ParakeetEncoderAttention):
         return attn_output, attn_weights
 
 
+def _mask_subsampled_frames(hidden_states: torch.Tensor, lengths: torch.Tensor | None) -> torch.Tensor:
+    """Zero out time frames beyond each sequence's valid length so they don't leak into the next conv."""
+    if lengths is None:
+        return hidden_states
+    time = torch.arange(hidden_states.shape[2], device=hidden_states.device)
+    return hidden_states * (time < lengths[:, None])[:, None, :, None]
+
+
+class NemotronAsrStreamingEncoderSubsamplingLayer(nn.Module):
+    """Depthwise-separable subsampling stage: depthwise strided causal Conv2d + 1x1 pointwise Conv2d."""
+
+    def __init__(self, config: NemotronAsrStreamingEncoderConfig, layer_idx: int):
+        super().__init__()
+        channels = config.subsampling_conv_channels
+        self.depthwise_conv = NemotronAsrStreamingEncoderCausalConv2D(
+            channels,
+            channels,
+            kernel_size=config.subsampling_conv_kernel_size,
+            stride=config.subsampling_conv_stride,
+            groups=channels,
+            cache_key=f"subsampling.{layer_idx}",
+        )
+        self.pointwise_conv = nn.Conv2d(channels, channels, kernel_size=1)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        lengths: torch.Tensor | None,
+        padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        hidden_states = self.depthwise_conv(hidden_states, padding_cache=padding_cache)
+        lengths = self.depthwise_conv.output_length(lengths, streaming=padding_cache is not None)
+        hidden_states = self.pointwise_conv(hidden_states)
+        return _mask_subsampled_frames(hidden_states, lengths), lengths
+
+
 class NemotronAsrStreamingEncoderSubsamplingConv2D(nn.Module):
     def __init__(self, config: NemotronAsrStreamingEncoderConfig):
         super().__init__()
+        channels = config.subsampling_conv_channels
+        num_layers = int(math.log2(config.subsampling_factor))
 
-        self.kernel_size = config.subsampling_conv_kernel_size
-        self.stride = config.subsampling_conv_stride
-        self.channels = config.subsampling_conv_channels
-        self.padding = (self.kernel_size - 1) // 2
-        self.num_layers = int(math.log2(config.subsampling_factor))
-
-        self.layers = nn.ModuleList()
-        self.layers.append(
-            NemotronAsrStreamingEncoderCausalConv2D(
-                1,
-                self.channels,
-                kernel_size=self.kernel_size,
-                stride=self.stride,
-                padding=0,
-                cache_key="subsampling.0",
-            )
+        # stem: strided causal conv over the single-channel mel spectrogram
+        self.conv_in = NemotronAsrStreamingEncoderCausalConv2D(
+            1,
+            channels,
+            kernel_size=config.subsampling_conv_kernel_size,
+            stride=config.subsampling_conv_stride,
+            cache_key="subsampling.0",
         )
-        self.layers.append(nn.ReLU())
-        for idx in range(self.num_layers - 1):
-            # depthwise conv
-            self.layers.append(
-                NemotronAsrStreamingEncoderCausalConv2D(
-                    self.channels,
-                    self.channels,
-                    kernel_size=self.kernel_size,
-                    stride=self.stride,
-                    groups=self.channels,
-                    cache_key=f"subsampling.{idx + 1}",
-                )
-            )
-            # pointwise conv
-            self.layers.append(nn.Conv2d(self.channels, self.channels, kernel_size=1))
-            # activation
-            self.layers.append(nn.ReLU())
-
-        # Compute output freq length by simulating the conv chain with the actual padding applied.
-        pad_left, pad_right = self.kernel_size - 1, self.stride - 1
-        out_length = config.num_mel_bins
-        total_pad = pad_left + pad_right
-        for _ in range(self.num_layers):
-            out_length = (out_length + total_pad - self.kernel_size) // self.stride + 1
-        self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
-
-    def _get_output_length(self, input_lengths: torch.Tensor, conv_layer: nn.Conv2d, streaming: bool = False):
-        if not (hasattr(conv_layer, "stride") and conv_layer.stride != (1, 1)):
-            return input_lengths
-
-        kernel_size = conv_layer.kernel_size[0]
-        stride = conv_layer.stride[0]
-        if isinstance(conv_layer, NemotronAsrStreamingEncoderCausalConv2D):
-            # Streaming consumes `left_pad` cached frames on the left and no right padding; offline uses
-            # the full causal padding `(kernel - 1, stride - 1)` on the time axis.
-            left, right = (conv_layer.left_pad, 0) if streaming else conv_layer.time_pad
-        else:
-            left = right = conv_layer.padding[0]
-        return (input_lengths + left + right - kernel_size) // stride + 1
+        # depthwise-separable layers
+        self.layers = nn.ModuleList(
+            NemotronAsrStreamingEncoderSubsamplingLayer(config, layer_idx=i) for i in range(1, num_layers)
+        )
+        self.act_fn = nn.ReLU()
+        self.linear = nn.Linear(config.subsampling_out_hidden_size, config.hidden_size, bias=True)
 
     def forward(
         self,
@@ -924,23 +937,17 @@ class NemotronAsrStreamingEncoderSubsamplingConv2D(nn.Module):
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
     ):
         hidden_states = input_features.unsqueeze(1)
-        current_lengths = attention_mask.sum(-1) if attention_mask is not None else None
-        streaming = padding_cache is not None
+        lengths = attention_mask.sum(-1) if attention_mask is not None else None
 
+        # stem stage
+        hidden_states = self.conv_in(hidden_states, padding_cache=padding_cache)
+        lengths = self.conv_in.output_length(lengths, streaming=padding_cache is not None)
+        hidden_states = self.act_fn(_mask_subsampled_frames(hidden_states, lengths))
+
+        # depthwise-separable stages
         for layer in self.layers:
-            if isinstance(layer, NemotronAsrStreamingEncoderCausalConv2D):
-                hidden_states = layer(hidden_states, padding_cache=padding_cache)
-            else:
-                hidden_states = layer(hidden_states)
-
-            # mask the hidden states
-            if isinstance(layer, nn.Conv2d) and attention_mask is not None:
-                current_lengths = self._get_output_length(current_lengths, layer, streaming=streaming)
-                current_seq_length = hidden_states.shape[2]
-                channel_mask = (
-                    torch.arange(current_seq_length, device=attention_mask.device) < current_lengths[:, None]
-                )
-                hidden_states *= channel_mask[:, None, :, None]
+            hidden_states, lengths = layer(hidden_states, lengths, padding_cache=padding_cache)
+            hidden_states = self.act_fn(hidden_states)
 
         hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states.shape[0], hidden_states.shape[2], -1)
         hidden_states = self.linear(hidden_states)
