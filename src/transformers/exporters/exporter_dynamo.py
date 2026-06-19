@@ -289,8 +289,8 @@ def _reshaped_vision_attention_forward(
     key_states = _to_batched(key_states)
     value_states = _to_batched(value_states)
 
-    torch._check(query_states.shape[0] != 0)
-    torch._check(query_states.shape[2] != 0)
+    torch_compilable_check(query_states.shape[0] != 0, "Reshaped chunked-vision attention got zero batch.")
+    torch_compilable_check(query_states.shape[2] != 0, "Reshaped chunked-vision attention got zero seq.")
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query_states,
         key_states,

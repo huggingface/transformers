@@ -183,9 +183,10 @@ seq = torch.export.Dim("seq", min=1, max=2048)
 exporter = DynamoExporter()
 config = DynamoConfig(
     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
-    # Defer data-dependent shape checks to runtime asserts instead of trace-time guards — needed
-    # when a model's forward branches on tensor *values* (e.g. ``sum() > 0``), which would
-    # otherwise specialise the export to a single concrete shape.
+    # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
+    # guard wouldn't hold across the explicit symbolic range — most LLMs need this under fine-grained
+    # ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``, where torch.export
+    # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
 exported = exporter.export(model, inputs, config=config)
@@ -209,6 +210,10 @@ seq = torch.export.Dim("seq", min=1, max=2048)
 exporter = OnnxExporter()
 config = OnnxConfig(
     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
+    # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
+    # guard wouldn't hold across the explicit symbolic range — most LLMs need this under fine-grained
+    # ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``, where torch.export
+    # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
 onnx_program = exporter.export(model, inputs, config=config)
@@ -233,6 +238,10 @@ exporter = ExecutorchExporter()
 config = ExecutorchConfig(
     backend="xnnpack",
     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
+    # Emit data-dependent shape guards as runtime asserts instead of failing the export when a
+    # guard wouldn't hold across the explicit symbolic range — most LLMs need this under fine-grained
+    # ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``, where torch.export
+    # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
 et_program = exporter.export(model, inputs, config=config)
@@ -361,8 +370,9 @@ PyTorch patterns. The exporters work around these with a small set of reversible
 and FX-level fixes applied at well-defined points in the export flow. None of this is
 visible from the public `export()` API, but the most common things to know:
 
-- Flash-attention and flex-attention are not exportable on any backend; `sdpa` is the safe
-  default. Set it on the model before calling `export()` if your model uses something else.
+- Flash-attention and flex-attention are not exportable on any backend; `sdpa` is the preferred
+  setting and `eager` also works (slower). Set one of them on the model before calling `export()`
+  if it's using something else.
 - `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`;
   for `ExecutorchExporter` with the XNNPACK backend, the exporter swaps MoE experts to
   `batched_mm` because XNNPACK has no `_grouped_mm.out` kernel.

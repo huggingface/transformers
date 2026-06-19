@@ -90,9 +90,12 @@ class DynamoConfig(ExportConfigMixin):
             Explicit per-input dynamic shape specifications passed to
             `torch.export`. Takes precedence over `dynamic`.
         prefer_deferred_runtime_asserts_over_guards (`bool`, *optional*, defaults to `False`):
-            When `True`, shape guards are emitted as runtime assertions in the
-            exported graph instead of being specialised at trace time. Useful
-            for reducing retracing when shapes vary at runtime.
+            When `True`, data-dependent shape guards are emitted as runtime asserts in the exported
+            graph instead of failing the export at trace time when a guard wouldn't hold across the
+            full symbolic shape range. Most transformer LLMs need this set to `True` when using
+            fine-grained ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``,
+            where ``torch.export`` infers shape relations instead of verifying them against the
+            user-stated bounds.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
