@@ -49,9 +49,10 @@ The snippet below shows how to load the VideoPrismVisionModel for feature extrac
 import torch
 from transformers import AutoModel, AutoVideoProcessor
 
-processor = AutoVideoProcessor.from_pretrained("google/videoprism-base-f16r288")
+processor = AutoVideoProcessor.from_pretrained("google/videoprism-base-f16r288", revision="refs/pr/4")
 model = AutoModel.from_pretrained(
     "google/videoprism-base-f16r288",
+    revision="refs/pr/4",
     device_map="auto",
     # use "flash_attention_2" for faster inference on supported hardware
     # attn_implementation="flash_attention_2" 

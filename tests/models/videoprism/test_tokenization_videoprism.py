@@ -38,7 +38,8 @@ VIDEO_PRISM_DEMO_TEXT = [PROMPT_TEMPLATE.format(t) for t in TEXT_QUERY_CSV.split
 @require_tokenizers
 class VideoPrismTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = VideoPrismTokenizer
-    from_pretrained_id = "MHRDYN7/videoprism-lvt-base-f16r288"
+    from_pretrained_id = "google/videoprism-lvt-base-f16r288"
+    from_pretrained_kwargs = {"revision": "refs/pr/2"}
 
     integration_expected_tokens = ['▁This', '▁is', '▁', 'a', '▁test', '▁', '😊', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '.', '▁', '生活的真谛是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '<s>', '▁hi', '<s>', '▁there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁', 'encoded', ':', '▁Hello', '.', '▁But', '▁', 'i', 'r', 'd', '▁and', '▁', 'ปี', '▁', 'i', 'r', 'd', '▁', 'ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']  # fmt: skip
     integration_expected_token_ids = [330, 269, 262, 266, 937, 262, 2, 274, 292, 1700, 268, 914, 12125, 261, 263, 291, 269, 16201, 264, 2083, 259, 262, 2, 2038, 5930, 2038, 5930, 5930, 32100, 7808, 32100, 354, 281, 840, 4652, 412, 282, 2366, 262, 25966, 304, 5930, 259, 464, 262, 302, 331, 303, 263, 262, 2, 262, 302, 331, 303, 262, 2, 6919, 364, 280, 273, 742]  # fmt: skip

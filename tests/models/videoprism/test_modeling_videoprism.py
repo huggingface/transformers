@@ -71,8 +71,6 @@ INTEGRATION_FRAME_SIZE = 288
 INTEGRATION_TEXT_MAX_LENGTH = 64
 INTEGRATION_TEXT_QUERIES = "playing drums,sitting,playing flute,playing at playground,concert"
 INTEGRATION_TEXT_PROMPT_TEMPLATE = "a video of {}."
-VIDEO_PRISM_BASE_CHECKPOINT = "MHRDYN7/videoprism-base-f16r288"
-VIDEO_PRISM_LVT_CHECKPOINT = "MHRDYN7/videoprism-lvt-base-f16r288"
 
 
 class VideoPrismModelTest(ModelTesterMixin):
@@ -351,7 +349,7 @@ class VideoPrismVisionModelTest(VideoPrismModelTest, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = VideoPrismVisionModel.from_pretrained(VIDEO_PRISM_BASE_CHECKPOINT)
+        model = VideoPrismVisionModel.from_pretrained("google/videoprism-base-f16r288", revision="refs/pr/4")
         self.assertIsNotNone(model)
 
 
@@ -477,7 +475,7 @@ class VideoPrismTextModelTest(VideoPrismModelTest, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = VideoPrismTextModel.from_pretrained(VIDEO_PRISM_LVT_CHECKPOINT)
+        model = VideoPrismTextModel.from_pretrained("google/videoprism-lvt-base-f16r288", revision="refs/pr/2")
         self.assertIsNotNone(model)
 
 
@@ -595,7 +593,7 @@ class VideoPrismClipModelTest(VideoPrismModelTest, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = VideoPrismClipModel.from_pretrained(VIDEO_PRISM_LVT_CHECKPOINT)
+        model = VideoPrismClipModel.from_pretrained("google/videoprism-lvt-base-f16r288", revision="refs/pr/2")
         self.assertIsNotNone(model)
 
     def _test_get_text_features_output(self, return_dict):
@@ -803,7 +801,7 @@ def prepare_tennis_frames(resample=None, tennis_video=None):
 def prepare_texts():
     text_queries = INTEGRATION_TEXT_QUERIES.split(",")
     text_queries = [INTEGRATION_TEXT_PROMPT_TEMPLATE.format(t) for t in text_queries]
-    tokenizer = VideoPrismTokenizer.from_pretrained(VIDEO_PRISM_LVT_CHECKPOINT)
+    tokenizer = VideoPrismTokenizer.from_pretrained("google/videoprism-lvt-base-f16r288", revision="refs/pr/2")
     return tokenizer, text_queries
 
 
@@ -911,7 +909,9 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_videoprism_vision_model(self):
-        model = VideoPrismVisionModel.from_pretrained(VIDEO_PRISM_BASE_CHECKPOINT).to(torch_device)
+        model = VideoPrismVisionModel.from_pretrained("google/videoprism-base-f16r288", revision="refs/pr/4").to(
+            torch_device
+        )
         input_vids = torch.cat([self.tennis_frames, self.tennis_frames], dim=0).to(torch_device)
         model.eval()
         with torch.inference_mode():
@@ -929,7 +929,9 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_videoprism_clip_model(self):
-        model = VideoPrismClipModel.from_pretrained(VIDEO_PRISM_LVT_CHECKPOINT).to(torch_device)
+        model = VideoPrismClipModel.from_pretrained("google/videoprism-lvt-base-f16r288", revision="refs/pr/2").to(
+            torch_device
+        )
         input_vids = torch.cat([self.tennis_frames, self.tennis_frames], dim=0).to(torch_device)
         tokens = self.tokenizer(
             self.text_queries, max_length=INTEGRATION_TEXT_MAX_LENGTH, padding="max_length", return_tensors="pt"
@@ -960,8 +962,12 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_videoprism_interpolate_pos_encoding(self):
-        model = VideoPrismVisionModel.from_pretrained(VIDEO_PRISM_BASE_CHECKPOINT).to(torch_device)
-        processor = LlavaOnevisionVideoProcessor.from_pretrained(VIDEO_PRISM_BASE_CHECKPOINT)
+        model = VideoPrismVisionModel.from_pretrained("google/videoprism-base-f16r288", revision="refs/pr/4").to(
+            torch_device
+        )
+        processor = LlavaOnevisionVideoProcessor.from_pretrained(
+            "google/videoprism-base-f16r288", revision="refs/pr/4"
+        )
         kwargs = {
             "num_frames": 10,
             "size": {"height": 144, "width": 144},

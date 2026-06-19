@@ -30,7 +30,6 @@ if is_vision_available():
 TENNIS_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
 NUM_FRAMES = 16
 FRAME_SIZE = 288
-VIDEO_PRISM_LVT_CHECKPOINT = "MHRDYN7/videoprism-lvt-base-f16r288"
 
 # torchvision >= 0.27 supports native Lanczos; older versions fall back to BICUBIC in TorchvisionBackend.resize.
 EXPECTED_TENNIS_PIXEL_SLICE_LANCZOS = torch.tensor(
@@ -68,7 +67,7 @@ class VideoPrismProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_tokenizer(cls):
-        return VideoPrismTokenizer.from_pretrained(VIDEO_PRISM_LVT_CHECKPOINT)
+        return VideoPrismTokenizer.from_pretrained("google/videoprism-lvt-base-f16r288", revision="refs/pr/2")
 
     @classmethod
     def _setup_video_processor(cls):
