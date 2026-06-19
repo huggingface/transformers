@@ -122,7 +122,7 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
         self.max_length: int | None = kwargs.pop("max_length", None)
 
         # Parameter that controls the format of generate
-        self.return_dict_in_generate: bool = kwargs.pop("return_dict_in_generate", False)
+        self.return_dict_in_generate: bool = kwargs.pop("return_dict_in_generate", True)
 
         # Diffusion parameters
         # There can be only one sampler at a time, but multiple logits processors and/or stopping criteria.
@@ -230,7 +230,7 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
             "t_max": 0.8,
             "stability_threshold": 1,
             "confidence_threshold": 0.005,
-            "return_dict_in_generate": False,
+            "return_dict_in_generate": True,
         }
 
     # Overriding GenerationMixin-related functions that are not relevant to DiffusionGemma.
@@ -638,7 +638,7 @@ class DiffusionGemmaGenerationMixin:
         # 0.a. Prepare the generation config, respecting the kwarg-based parameterization from the original AR
         # `generate`
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
-        return_dict_in_generate = getattr(generation_config, "return_dict_in_generate", False)
+        return_dict_in_generate = getattr(generation_config, "return_dict_in_generate", True)
 
         # 0.b. Set generation or output control variables. As in AR generation, `max_new_tokens` takes precedence
         # over `max_length` (we check against the default value, 256).
