@@ -274,7 +274,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
             EXPECTED_TRANSCRIPTION = json.load(f)["transcription"]
 
         audio = load_audio(
-            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3",
             sampling_rate=self.processor.feature_extractor.sampling_rate,
         )
         model = NemotronAsrStreamingForRNNT.from_pretrained(
