@@ -15,13 +15,11 @@
 
 from dataclasses import dataclass
 
-import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ProcessorMixin, Unpack
@@ -46,7 +44,7 @@ from ..internvl.modeling_internvl import (
     InternVLVisionModel,
     InternVLVisionPreTrainedModel,
 )
-from ..internvl.processing_internvl import InternVLProcessor
+from ..internvl.processing_internvl import InternVLProcessor, InternVLProcessorKwargs
 
 
 @auto_docstring(checkpoint="baidu/Qianfan-OCR")
@@ -291,6 +289,10 @@ class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
         return super().forward(**super_kwargs)
 
 
+class QianfanOCRProcessorKwargs(InternVLProcessorKwargs):
+    pass
+
+
 class QianfanOCRProcessor(InternVLProcessor):
     def __init__(
         self,
@@ -320,52 +322,22 @@ class QianfanOCRProcessor(InternVLProcessor):
         self.video_token = None
         self.video_processor = None
 
-    def _insert_media_placeholders(
-        self,
-        text: list[str],
-        image_pixel_values,
-        video_pixel_values,
-        image_num_patches: list[int],
-        video_num_patches: list[int],
-        image_num_patches_indices: np.ndarray,
-        video_num_patches_indices: np.ndarray,
-        video_patch_indices: np.ndarray,
-    ):
-        """
-        Processes interleaved text with <image> placeholders, replacing them with appropriate image tokens.
-        """
-        image_index = 0
-        processed_text = []
-        image_patches = []
-        replace_strings = []
-        for prompt in text:
-            new_prompt = prompt
-            while self.image_placeholder_token in new_prompt:
-                start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
-                end_index = image_num_patches_indices[image_index]
-                image_patches.append(image_pixel_values[start_index:end_index])
-                new_prompt = new_prompt.replace(self.image_placeholder_token, "<placeholder>", 1)
-                replace_strings.append(
-                    f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_index]}{self.end_image_token}"
-                )
-                image_index += 1
-            while "<placeholder>" in new_prompt:
-                replace_str = replace_strings.pop(0)
-                new_prompt = new_prompt.replace("<placeholder>", replace_str, 1)
-            processed_text.append(new_prompt)
-        return processed_text, image_patches, image_index, 0
-
-    def __call__(
+    def validate_inputs(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos=None,
-        **kwargs,
-    ) -> BatchFeature:
+        **kwargs: Unpack[QianfanOCRProcessorKwargs],
+    ):
+        super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
+        if text is None:
+            raise ValueError("You have to specify text.")
+
         if videos is not None:
             raise ValueError("QianfanOCR does not support video input.")
 
-        return super().__call__(images=images, text=text, videos=None, **kwargs)
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        raise NotImplementedError("QianfanOCR does not support video input")
 
 
 __all__ = [
