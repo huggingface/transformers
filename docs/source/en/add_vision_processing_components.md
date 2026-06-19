@@ -164,7 +164,6 @@ Save the video processor with the checkpoint by instantiating it in the conversi
 > [!TIP]
 > See [`Qwen3VLVideoProcessor`] for reference.
 
-
 ## Register the classes
 
 Expose the processing classes from the model package `__init__.py`. Follow the lazy import pattern used by nearby models and guard imports with the same optional dependencies required by each backend.
