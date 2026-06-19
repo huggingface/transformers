@@ -200,9 +200,6 @@ class LightOnOcrProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
-    @property
-    def unused_input_names(self) -> list[str]:
-        return ["image_sizes"]
 
 
 class LightOnOcrMultiModalProjector(Mistral3MultiModalProjector):

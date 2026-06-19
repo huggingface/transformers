@@ -212,7 +212,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ):
         super().validate_inputs(images, text, **kwargs)
 

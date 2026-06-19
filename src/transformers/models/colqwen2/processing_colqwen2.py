@@ -130,10 +130,6 @@ class ColQwen2Processor(ProcessorMixin):
             text = [self.visual_prompt_prefix] * len(images)
         return images, text, videos, audio
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
-        merge_length = self.image_processor.merge_size**2
-        return self.image_token * (int(image_inputs["image_grid_thw"][image_idx].prod()) // merge_length)
-
     def validate_inputs(
         self,
         images: ImageInput | None = None,
@@ -143,6 +139,10 @@ class ColQwen2Processor(ProcessorMixin):
         super().validate_inputs(images=images, text=text)
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        merge_length = self.image_processor.merge_size**2
+        return self.image_token * (int(image_inputs["image_grid_thw"][image_idx].prod()) // merge_length)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

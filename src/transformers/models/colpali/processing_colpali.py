@@ -140,9 +140,6 @@ class ColPaliProcessor(ProcessorMixin):
             ]
         return images, text, videos, audio
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
-        return self.image_token * self.image_seq_length
-
     def validate_inputs(
         self,
         images: ImageInput | None = None,
@@ -152,6 +149,9 @@ class ColPaliProcessor(ProcessorMixin):
         super().validate_inputs(images=images, text=text)
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        return self.image_token * self.image_seq_length
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
@@ -173,9 +173,7 @@ class ColPaliProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids", "labels"]
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(tokenizer_input_names + image_processor_input_names)
+        return super().model_input_names + ["token_type_ids", "labels"]
 
     @property
     def query_augmentation_token(self) -> str:

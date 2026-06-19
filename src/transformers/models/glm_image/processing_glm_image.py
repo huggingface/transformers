@@ -119,6 +119,7 @@ class GlmImageProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
         if text is None:  # early exit if cond only on text
             return model_inputs

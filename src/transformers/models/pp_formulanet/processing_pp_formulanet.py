@@ -29,12 +29,28 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+class PPFormulaNetProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "is_split_into_words": False,
+            "verbose": True,
+        },
+        "images_kwargs": {
+            "data_format": "channels_first",
+        },
+    }
+
+
 @auto_docstring
 class PPFormulaNetProcessor(ProcessorMixin):
     r"""
     [`PPFormulaNetProcessor`] offers all the functionalities of [`PPFormulaNetImageProcessor`] and [`NougatTokenizer`]. See the
     [`~PPFormulaNetProcessor.__call__`] and [`~PPFormulaNetProcessor.decode`] for more information.
     """
+
+    valid_processor_kwargs = PPFormulaNetProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
