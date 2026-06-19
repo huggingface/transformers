@@ -31,7 +31,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...integrations.hub_kernels import lazy_load_kernel
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -727,6 +727,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         dtype = hidden_states.dtype
         if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
+            # The mask may be padded to ``max_cache_len`` under a compileable cache; slice to local seq.
             hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
         return self.torch_forward(hidden_states, cache_params, attention_mask)
@@ -1042,7 +1043,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         self.shared_mlp = GraniteMoeHybridMLP(config)
         self.mamba = None
 
-        if config.layers_block_type[layer_idx] == "mamba":
+        if config.layers_block_type[layer_idx].startswith("linear_attention"):
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
@@ -1174,17 +1175,18 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+        }
         causal_mask_mapping = {}
         for layer_type in set(self.config.layers_block_type):
             if "mamba" in layer_type:
-                causal_mask_mapping[layer_type] = self._update_mamba_mask(attention_mask, past_key_values)
+                causal_mask_mapping[layer_type] = create_recurrent_padding_mask(**mask_kwargs)
             else:
-                causal_mask_mapping[layer_type] = create_causal_mask(
-                    config=self.config,
-                    inputs_embeds=inputs_embeds,
-                    attention_mask=attention_mask,
-                    past_key_values=past_key_values,
-                )
+                causal_mask_mapping[layer_type] = create_causal_mask(**mask_kwargs)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1207,12 +1209,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _update_mamba_mask(self, attention_mask, past_key_values):
-        """No-op the mask on cached forwards — earlier tokens are already in the SSM state."""
-        if past_key_values is not None and past_key_values.has_previous_state():
-            return None
-        return attention_mask
 
 
 def load_balancing_loss_func(

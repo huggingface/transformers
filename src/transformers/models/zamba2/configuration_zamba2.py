@@ -16,7 +16,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -124,17 +124,20 @@ class Zamba2Config(PreTrainedConfig):
         self.kv_channels = self.hidden_size // self.num_attention_heads
         self.num_query_groups = self.num_attention_heads
 
-        # Below, "mamba" stands for mamba layer, "hybrid" stands for hybrid layer (composed by a shared transformer followed by mamba layer)
+        # Below, "linear_attention_mamba2" stands for the mamba2 layer, "hybrid" stands for hybrid layer
+        # (a shared transformer followed by a mamba2 layer).
         if self.layers_block_type is None:
             self.layers_block_type = (
-                ["mamba"]
-                + (["mamba"] * 5 + ["hybrid"]) * 7
-                + ["mamba"] * 4
+                ["linear_attention_mamba2"]
+                + (["linear_attention_mamba2"] * 5 + ["hybrid"]) * 7
+                + ["linear_attention_mamba2"] * 4
                 + ["hybrid"]
-                + ["mamba"] * 3
+                + ["linear_attention_mamba2"] * 3
                 + ["hybrid"]
-                + ["mamba"] * 2
+                + ["linear_attention_mamba2"] * 2
             )
+        else:
+            self.layers_block_type = remap_legacy_layer_types(self.layers_block_type, "mamba2")
         self.hybrid_layer_ids = [index for index, type in enumerate(self.layers_block_type) if type == "hybrid"]
         super().__post_init__(**kwargs)
 

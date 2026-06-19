@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ...utils.type_validators import interval
@@ -121,13 +121,15 @@ class OlmoHybridConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
             # Default: linear attention for most layers, full attention every 4th layer
-            self.layer_types = ["linear_attention"] * int(self.num_hidden_layers)
+            self.layer_types = ["linear_attention_gated_delta_net"] * int(self.num_hidden_layers)
             for i in range(int(self.num_hidden_layers)):
                 if i % 4 == 3:
                     self.layer_types[i] = "full_attention"
             # Ensure at least one full attention layer for small num_hidden_layers
             if "full_attention" not in self.layer_types:
                 self.layer_types[-1] = "full_attention"
+        else:
+            self.layer_types = remap_legacy_layer_types(self.layer_types, "gated_delta_net")
 
         if self.linear_num_key_heads is None:
             self.linear_num_key_heads = self.num_attention_heads
@@ -144,9 +146,9 @@ class OlmoHybridConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if "linear_attention" not in self.layer_types:
+        if "linear_attention_gated_delta_net" not in self.layer_types:
             raise ValueError("OLMoHybrid expects at least one 'linear_attention' layer.")
-        if all(t == "linear_attention" for t in self.layer_types):
+        if all(t == "linear_attention_gated_delta_net" for t in self.layer_types):
             raise ValueError("OLMoHybrid expects at least one attention layer.")
 
 

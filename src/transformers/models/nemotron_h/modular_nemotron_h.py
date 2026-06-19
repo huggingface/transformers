@@ -24,7 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_experts_implementation
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -239,8 +239,8 @@ class NemotronHAttention(JambaAttention):
 
 
 MIXER_TYPES = {
-    "mamba": NemotronHMamba2Mixer,
-    "attention": NemotronHAttention,
+    "linear_attention_mamba2": NemotronHMamba2Mixer,
+    "full_attention": NemotronHAttention,
     "moe": NemotronHMoE,
     "mlp": NemotronHMLP,
 }
@@ -283,9 +283,9 @@ class NemotronHBlock(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 
-        if self.block_type == "mamba":
+        if self.block_type.startswith("linear_attention"):
             hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
-        elif self.block_type == "attention":
+        elif self.block_type == "full_attention":
             hidden_states, _ = self.mixer(
                 hidden_states=hidden_states,
                 past_key_values=past_key_values,
@@ -313,6 +313,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _is_stateful = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": NemotronHBlock,
         "attentions": NemotronHAttention,
@@ -429,25 +430,25 @@ class NemotronHModel(NemotronHPreTrainedModel):
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
-
-        # Map block types to their corresponding masks
-        block_type_to_mask = {
-            "mamba": mamba_mask,
-            "attention": causal_mask,
-            "moe": None,
-            "mlp": None,
+        # Under a compileable cache, `generate()` precomputes per-pattern masks and hands them in as a dict;
+        # otherwise we build them here.
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
         }
+        if isinstance(causal_mask_mapping := attention_mask, dict):
+            causal_mask_mapping = attention_mask
+        else:
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+            }
 
         for layer_idx, mixer_block in enumerate(self.layers):
-            layer_mask = block_type_to_mask[mixer_block.block_type]
+            layer_mask = causal_mask_mapping.get(mixer_block.block_type)
 
             hidden_states = mixer_block(
                 hidden_states,
@@ -465,15 +466,25 @@ class NemotronHModel(NemotronHPreTrainedModel):
             past_key_values=past_key_values if use_cache else None,
         )
 
-    def _update_mamba_mask(self, attention_mask, past_key_values):
-        """No-op the mask on cached forwards — earlier tokens are already in the SSM state."""
-        if past_key_values is not None and past_key_values.has_previous_state():
-            return None
-        return attention_mask
-
 
 class NemotronHForCausalLM(ZambaForCausalLM):
     _tied_weights_keys = {}
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        # Nemotron-H layer_types include non-attention block types (moe / mlp) that the default dispatch
+        # table doesn't enumerate, so we return both masks the forward needs as a dict.
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        return {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+        }
 
     @can_return_tuple
     @auto_docstring

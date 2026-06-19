@@ -921,11 +921,15 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
     def lazy_initialization(
         self, conv_states: torch.Tensor | None = None, recurrent_states: torch.Tensor | None = None
     ) -> None:
-        # Here, we will lazy init both states separately, each in their own update function
+        # Capture dtype/device/batch from whichever state is initializing the layer — the two
+        # update functions arrive independently, so we may see ``recurrent_states`` first.
+        first_state = conv_states if conv_states is not None else recurrent_states
+        if first_state is not None and not (self.is_conv_states_initialized or self.is_recurrent_states_initialized):
+            self.dtype, self.device = first_state.dtype, first_state.device
+            self.max_batch_size = first_state.shape[0]
         if conv_states is not None:
-            self.dtype, self.device = conv_states.dtype, conv_states.device
             # Even if prefill is larfer/shorter than the conv_size, the tensor is always either padded or truncated
-            self.max_batch_size, self.conv_kernel_size = conv_states.shape[0], conv_states.shape[-1]
+            self.conv_kernel_size = conv_states.shape[-1]
             # The shape is always static, so we init as such
             self.conv_states = torch.zeros_like(conv_states, dtype=self.dtype, device=self.device)
             # Mark as static address to be able to use cudagraphs
@@ -1028,12 +1032,12 @@ LAYER_TYPE_CACHE_MAPPING.update(
         # only the mask differs.
         "sliding_attention": DynamicSlidingWindowLayer,
         "chunked_attention": DynamicSlidingWindowLayer,
-        # Linear-attention-shaped layers (mamba / conv / pure linear-attention / moe placeholders)
-        # don't grow per-token KV; they're tracked just so position bookkeeping stays consistent.
-        "mamba": LinearAttentionLayer,
+        # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
         "conv": LinearAttentionLayer,
-        "linear_attention": LinearAttentionLayer,
         "moe": LinearAttentionLayer,
+        "linear_attention_mamba": LinearAttentionLayer,
+        "linear_attention_mamba2": LinearAttentionLayer,
+        "linear_attention_gated_delta_net": LinearAttentionLayer,
         # Hybrid layers (e.g. zamba / zamba2) carry both a linear-attention state and a dynamic-attention state.
         "hybrid": LinearAttentionAndFullAttentionLayer,
     }
@@ -1327,12 +1331,16 @@ class Cache:
         return self.layers[layer_idx].get_mask_sizes(query_length)
 
     def get_max_cache_shape(self, layer_idx: int = 0) -> int:
-        """Returns maximum sequence length of the cache object. Dynamic caches do not have a maximum length."""
+        """Returns the maximum sequence length of the cache. ``-1`` means no fixed maximum: a
+        DynamicLayer grows on demand, and recurrent layers (mamba / linear-attn) carry no sequence
+        length at all."""
         # For DynamicCache, where the layers are created at runtime -> if it was not yet created, return -1
-        # as DynamicLayer does
         if layer_idx >= len(self.layers):
             return -1
-        return self.layers[layer_idx].get_max_cache_shape()
+        layer = self.layers[layer_idx]
+        if not hasattr(layer, "get_max_cache_shape"):
+            return -1
+        return layer.get_max_cache_shape()
 
     def reset(self):
         """Recursively reset all layers tensors"""
@@ -1362,15 +1370,19 @@ class Cache:
     @property
     def max_batch_size(self) -> int:
         """Return the maximum batch size of the cache"""
-        values = [layer.max_batch_size for layer in self.layers]
+        # Each layer sets ``max_batch_size`` in its ``lazy_initialization`` — skip ones that haven't run yet.
+        values = [layer.max_batch_size for layer in self.layers if hasattr(layer, "max_batch_size")]
         if len(set(values)) > 1:
             raise ValueError(f"Max batch size is not consistent across layers: {values}")
         return values[0]
 
     @property
     def max_cache_len(self) -> int:
-        """Return the maximum cache length of the cache"""
-        values = [layer.max_cache_len for layer in self.layers]
+        """Returns the maximum cache length across all layers. ``-1`` means no layer reports a
+        fixed maximum: DynamicLayer grows on demand and recurrent layers carry no sequence length."""
+        values = [layer.max_cache_len for layer in self.layers if hasattr(layer, "max_cache_len")]
+        if not values:
+            return -1
         return max(values)
 
     @property
@@ -1586,7 +1598,13 @@ class StaticCache(Cache):
             elif layer_type in sliding_layer_types:
                 layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
             # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
-            elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
+            elif layer_type in (
+                "conv",
+                "moe",
+                "linear_attention_mamba",
+                "linear_attention_mamba2",
+                "linear_attention_gated_delta_net",
+            ):
                 layer = LinearAttentionLayer()
             # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
             elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:

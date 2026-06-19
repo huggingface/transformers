@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import lazy_load_kernel
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -495,6 +495,7 @@ class JambaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _is_stateful = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": [JambaAttentionDecoderLayer, JambaMambaDecoderLayer],
         "attentions": JambaAttention,
@@ -561,14 +562,21 @@ class JambaModel(JambaPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
+        # Under a compileable cache, `generate()` precomputes per-pattern masks (4D for attention layers,
+        # padded-stable 2D for mamba layers) and hands them in as a dict; otherwise we build them here.
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        if isinstance(causal_mask_mapping := attention_mask, dict):
+            causal_mask = causal_mask_mapping.get("full_attention")
+            mamba_mask = causal_mask_mapping.get("linear_attention_mamba")
+        else:
+            causal_mask = create_causal_mask(**mask_kwargs)
+            mamba_mask = create_recurrent_padding_mask(**mask_kwargs)
         hidden_states = inputs_embeds
         for decoder_layer in self.layers:
             layer_mask = mamba_mask if isinstance(decoder_layer, JambaMambaDecoderLayer) else causal_mask
@@ -588,12 +596,6 @@ class JambaModel(JambaPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _update_mamba_mask(self, attention_mask, past_key_values):
-        """No-op the mask on cached forwards — earlier tokens are already in the SSM state."""
-        if past_key_values is not None and past_key_values.has_previous_state():
-            return None
-        return attention_mask
 
 
 class JambaForCausalLM(MixtralForCausalLM):

@@ -68,7 +68,7 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
     def __init__(self, parent):
         super().__init__(parent=parent)
         self.hidden_act = "silu"
-        self.layer_types = ["full_attention", "linear_attention"]
+        self.layer_types = ["full_attention", "linear_attention_gated_delta_net"]
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
         self.linear_value_head_dim = 16
@@ -263,7 +263,7 @@ class Qwen3_5VisionText2TextModelTester:
             "model_type": "qwen3_5_text",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
-            "layer_types": ["full_attention", "linear_attention"],
+            "layer_types": ["full_attention", "linear_attention_gated_delta_net"],
             "num_key_value_heads": 2,
             "rope_theta": 10000,
             "tie_word_embeddings": True,

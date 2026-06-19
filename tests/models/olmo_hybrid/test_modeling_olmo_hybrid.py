@@ -51,7 +51,7 @@ class OlmoHybridModelTester(CausalLMModelTester):
 
     def __init__(self, parent):
         super().__init__(parent=parent)
-        self.layer_types = ["linear_attention", "full_attention"]
+        self.layer_types = ["linear_attention_gated_delta_net", "full_attention"]
         self.linear_num_key_heads = 4
         self.linear_num_value_heads = 4
         self.linear_key_head_dim = 8

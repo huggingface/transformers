@@ -1452,6 +1452,30 @@ def create_chunked_causal_mask(
     return causal_mask
 
 
+def create_recurrent_padding_mask(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    past_key_values: Cache | None = None,
+    **kwargs,
+) -> torch.Tensor | None:
+    """Return the 2D padding mask for mamba / linear-attention layers, sized to the local sequence.
+
+    Returns ``None`` when the input mask is missing, is already a custom 4D attention mask (no 2D
+    padding signal), or when the recurrent state already covers past tokens (cached forwards) —
+    in that case the consumer skips masking entirely. Otherwise we trim the mask to the trailing
+    ``inputs_embeds.shape[1]`` positions so it aligns with the current forward's local sequence
+    and the consumer can multiply directly without further slicing.
+    """
+    if attention_mask is None or attention_mask.ndim != 2:
+        return None
+    if past_key_values is not None and past_key_values.has_previous_state():
+        return None
+    # ``.contiguous()`` so the returned tensor's stride doesn't depend on the source mask's length
+    # — would otherwise trigger a ``torch.compile`` recompile per step as the mask grows.
+    return attention_mask[:, -inputs_embeds.shape[1] :].contiguous()
+
+
 LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "full_attention": create_causal_mask,
     "sliding_attention": create_sliding_window_causal_mask,
@@ -1460,6 +1484,11 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "heavily_compressed_attention": create_sliding_window_causal_mask,
     "minimax_m3_sparse": create_causal_mask,
     "deepseek_sparse_attention": create_causal_mask,
+    # ``linear_attention_{backbone}`` keeps the specific recurrent backbone identifiable to
+    # downstream tooling (vLLM patches, model surgery) while sharing the same 2D padding mask.
+    "linear_attention_mamba": create_recurrent_padding_mask,
+    "linear_attention_mamba2": create_recurrent_padding_mask,
+    "linear_attention_gated_delta_net": create_recurrent_padding_mask,
 }
 
 
@@ -1516,7 +1545,7 @@ def create_masks_for_generate(
         "block_sequence_ids": block_sequence_ids,
     }
 
-    # If the attribute exist, we need several masks - unless every layer shares the same type, in which
+    # If the attribute exists, we need several masks - unless every layer shares the same type, in which
     # case we return a single mask.
     if hasattr(effective_config, "layer_types"):
         layer_patterns = set(effective_config.layer_types)

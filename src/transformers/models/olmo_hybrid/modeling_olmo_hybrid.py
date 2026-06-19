@@ -32,7 +32,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -72,7 +72,9 @@ class OlmoHybridDynamicCache:
         self.transformer_layers = [
             i for i in range(config.num_hidden_layers) if self.layer_types[i] == "full_attention"
         ]
-        self.last_linear_layer = len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention")
+        self.last_linear_layer = (
+            len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention_gated_delta_net")
+        )
         self.recurrent_states = [None for _ in range(config.num_hidden_layers)]
         self.key_cache = [None for _ in range(config.num_hidden_layers)]
         self.value_cache = [None for _ in range(config.num_hidden_layers)]
@@ -880,7 +882,7 @@ class OlmoHybridLinearAttentionDecoderLayer(GradientCheckpointingLayer):
         self.mlp = OlmoHybridMLP(config)
         self.input_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layer_type = "linear_attention"
+        self.layer_type = "linear_attention_gated_delta_net"
         self.linear_attn = OlmoHybridGatedDeltaNet(config, layer_idx=layer_idx)
 
     def forward(
@@ -926,6 +928,8 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
         "attentions": OlmoHybridAttention,
     }
     _is_stateful = True
+    # Uses a custom ``OlmoHybridDynamicCache``; StaticCache compatibility hasn't been wired up here.
+    _can_compile_fullgraph = False
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -952,7 +956,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
         self.layers = nn.ModuleList(
             [
                 OlmoHybridLinearAttentionDecoderLayer(config, layer_idx)
-                if config.layer_types[layer_idx] == "linear_attention"
+                if config.layer_types[layer_idx] == "linear_attention_gated_delta_net"
                 else OlmoHybridAttentionDecoderLayer(config, layer_idx)
                 for layer_idx in range(config.num_hidden_layers)
             ]
@@ -994,21 +998,24 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        linear_attn_mask = self._update_linear_attn_mask(attention_mask, past_key_values)
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        causal_mask = create_causal_mask(**mask_kwargs)
+        linear_attn_mask = create_recurrent_padding_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
         # RoPE or NoPE
         position_embeddings = self.rotary_emb(hidden_states, position_ids) if self.rotary_emb is not None else None
 
         for i, decoder_layer in enumerate(self.layers):
-            layer_mask = linear_attn_mask if self.config.layer_types[i] == "linear_attention" else causal_mask
+            layer_mask = (
+                linear_attn_mask if self.config.layer_types[i] == "linear_attention_gated_delta_net" else causal_mask
+            )
             layer_position_embeddings = position_embeddings if self.config.layer_types[i] == "full_attention" else None
 
             hidden_states = decoder_layer(
@@ -1027,15 +1034,6 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _update_linear_attn_mask(self, attention_mask, past_key_values):
-        """No-op the mask on cached forwards — earlier tokens are already in the recurrent state.
-
-        Left-padding is used for the linear attention mask.
-        """
-        if past_key_values is not None and past_key_values.has_previous_state():
-            return None
-        return attention_mask
 
 
 @auto_docstring
