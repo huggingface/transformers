@@ -48,6 +48,7 @@ class LocateAnythingVisionConfig(PreTrainedConfig):
     num_attention_heads: int = 16
     num_channels: int = 3
     patch_size: int = 14
+    hidden_act: str = "gelu_pytorch_tanh"
     init_pos_emb_height: int = 64
     init_pos_emb_width: int = 64
     spatial_merge_size: int = 2

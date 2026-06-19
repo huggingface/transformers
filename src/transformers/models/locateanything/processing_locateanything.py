@@ -66,7 +66,7 @@ class LocateAnythingProcessor(ProcessorMixin):
         image_inputs = {}
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-            grid = image_inputs["image_grid_hws"]
+            grid = image_inputs["image_grid_thw"]
             merge_area = self.image_processor.merge_kernel_size[0] * self.image_processor.merge_kernel_size[1]
 
             index = 0
@@ -74,7 +74,7 @@ class LocateAnythingProcessor(ProcessorMixin):
             def replace(match):
                 nonlocal index
                 number = match.group(1)
-                height, width = grid[index].tolist()
+                _, height, width = grid[index].tolist()
                 num_tokens = int(height * width) // merge_area
                 index += 1
                 return f"<image {number}>{self.image_start_token}{self.image_token * num_tokens}{self.image_end_token}"

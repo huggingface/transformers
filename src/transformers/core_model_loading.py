@@ -412,6 +412,46 @@ class PermuteForRope(ConversionOps):
         return output
 
 
+class SplitQkvDeinterleaveRope(ConversionOps):
+    """Split a fused vision `wqkv` projection into q/k/v and reorder the q/k head dimensions at load time.
+
+    LocateAnything's MoonViT applies an interleaved (complex) 2D rotary embedding; the standard
+    `apply_rotary_pos_emb_vision` uses the `rotate_half` (split) layout. The two are identical up to a
+    per-head permutation of the query/key dimensions, applied here so the checkpoint is never rewritten.
+    The value projection is left untouched, and the full target keys are derived from the matched source key.
+    """
+
+    def _perm(self, head_dim: int, device: torch.device) -> torch.Tensor:
+        quarter = head_dim // 4
+        ar = torch.arange(quarter, device=device)
+        perm = torch.empty(head_dim, dtype=torch.long, device=device)
+        perm[ar] = 4 * ar + 2
+        perm[quarter + ar] = 4 * ar
+        perm[2 * quarter + ar] = 4 * ar + 3
+        perm[3 * quarter + ar] = 4 * ar + 1
+        return perm
+
+    @torch.no_grad
+    def convert(self, input_dict, source_patterns, target_patterns, config, full_layer_name=None, **kwargs):
+        num_heads = config.vision_config.num_attention_heads
+        head_dim = config.vision_config.hidden_size // num_heads
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        perm = self._perm(head_dim, tensor.device)
+        query, key, value = tensor.chunk(3, dim=0)
+
+        def reorder(weight: torch.Tensor) -> torch.Tensor:
+            shape = weight.shape
+            return weight.view(num_heads, head_dim, *shape[1:])[:, perm].reshape(shape)
+
+        base, suffix = full_layer_name.rsplit(".q_proj.", 1)
+        return {
+            f"{base}.q_proj.{suffix}": reorder(query),
+            f"{base}.k_proj.{suffix}": reorder(key),
+            f"{base}.v_proj.{suffix}": value,
+        }
+
+
 class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
     r"""
     Special operation that splits a module list over all keys and fuses over the number of original modules.

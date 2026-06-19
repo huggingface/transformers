@@ -30,6 +30,23 @@ from transformers.models.locateanything.image_processing_locateanything import L
 from transformers.models.locateanything.processing_locateanything import LocateAnythingProcessor
 
 
+def rope_perm(head_dim: int) -> torch.Tensor:
+    """Maps MoonViT's interleaved-complex rope layout to the rotate_half layout of apply_rotary_pos_emb_vision."""
+    quarter = head_dim // 4
+    ar = torch.arange(quarter)
+    perm = torch.empty(head_dim, dtype=torch.long)
+    perm[ar] = 4 * ar + 2
+    perm[quarter + ar] = 4 * ar
+    perm[2 * quarter + ar] = 4 * ar + 3
+    perm[3 * quarter + ar] = 4 * ar + 1
+    return perm
+
+
+def permute_qk(tensor: torch.Tensor, num_heads: int, head_dim: int, perm: torch.Tensor) -> torch.Tensor:
+    shape = tensor.shape
+    return tensor.view(num_heads, head_dim, *shape[1:])[:, perm].reshape(shape)
+
+
 def remap_key(key: str) -> str:
     if key.startswith("language_model.model."):
         return "model.language_model." + key[len("language_model.model.") :]
@@ -37,8 +54,12 @@ def remap_key(key: str) -> str:
         return "lm_head.weight"
     if key.startswith("vision_model.encoder.blocks."):
         rest = key[len("vision_model.encoder.blocks.") :]
-        rest = re.sub(r"^(\d+)\.(wqkv|wo)\.", r"\1.attn.\2.", rest)
-        return "model.vision_tower.encoder.blocks." + rest
+        rest = re.sub(r"^(\d+)\.norm0\.", r"\1.layer_norm1.", rest)
+        rest = re.sub(r"^(\d+)\.norm1\.", r"\1.layer_norm2.", rest)
+        rest = re.sub(r"^(\d+)\.wo\.", r"\1.self_attn.out_proj.", rest)
+        rest = re.sub(r"^(\d+)\.mlp\.fc1\.", r"\1.mlp.fc2.", rest)
+        rest = re.sub(r"^(\d+)\.mlp\.fc0\.", r"\1.mlp.fc1.", rest)
+        return "model.vision_tower.encoder.layers." + rest
     if key.startswith("vision_model."):
         return "model.vision_tower." + key[len("vision_model.") :]
     if key.startswith("mlp1."):
@@ -84,11 +105,26 @@ def main():
 
     config = build_config(input_dir)
     model = LocateAnythingForConditionalGeneration(config)
+    num_heads = config.vision_config.num_attention_heads
+    head_dim = config.vision_config.hidden_size // num_heads
+    perm = rope_perm(head_dim)
+
+    original = {}
+    for shard in sorted(input_dir.glob("model-*.safetensors")):
+        original.update(load_file(str(shard)))
 
     state_dict = {}
-    for shard in sorted(input_dir.glob("model-*.safetensors")):
-        state_dict.update(load_file(str(shard)))
-    state_dict = {remap_key(k): v for k, v in state_dict.items()}
+    for key, tensor in original.items():
+        match = re.match(r"vision_model\.encoder\.blocks\.(\d+)\.wqkv\.(weight|bias)", key)
+        if match:
+            layer, suffix = match.group(1), match.group(2)
+            q, k, v = tensor.chunk(3, dim=0)
+            base = f"model.vision_tower.encoder.layers.{layer}.self_attn"
+            state_dict[f"{base}.q_proj.{suffix}"] = permute_qk(q, num_heads, head_dim, perm)
+            state_dict[f"{base}.k_proj.{suffix}"] = permute_qk(k, num_heads, head_dim, perm)
+            state_dict[f"{base}.v_proj.{suffix}"] = v
+        else:
+            state_dict[remap_key(key)] = tensor
 
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
     if missing or unexpected:

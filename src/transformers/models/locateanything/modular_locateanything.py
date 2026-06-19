@@ -14,8 +14,6 @@
 # limitations under the License.
 """LocateAnything: a MoonViT vision encoder + MLP projector + Qwen2.5 language model for visual grounding."""
 
-from collections.abc import Callable
-
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -25,10 +23,11 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
@@ -36,6 +35,8 @@ from ..llava.modeling_llava import (
     LlavaModel,
     LlavaModelOutputWithPast,
 )
+from ..qwen2_vl.modeling_qwen2_vl import VisionRotaryEmbedding
+from ..video_llama_3.modeling_video_llama_3 import VideoLlama3VisionEncoder
 
 
 logger = logging.get_logger(__name__)
@@ -64,6 +65,7 @@ class LocateAnythingVisionConfig(PreTrainedConfig):
     num_attention_heads: int = 16
     num_channels: int = 3
     patch_size: int = 14
+    hidden_act: str = "gelu_pytorch_tanh"
     init_pos_emb_height: int = 64
     init_pos_emb_width: int = 64
     spatial_merge_size: int = 2
@@ -130,65 +132,8 @@ class LocateAnythingConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float | None = None,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
-
-
-def apply_rope(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Apply the 2D complex rotary embedding to packed query/key tensors of shape `(seq, num_heads, head_dim)`."""
-    freqs_cis = freqs_cis.unsqueeze(-2)
-    xq_ = torch.view_as_complex(xq.float().view(*xq.shape[:-1], -1, 2))
-    xk_ = torch.view_as_complex(xk.float().view(*xk.shape[:-1], -1, 2))
-    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(-2)
-    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(-2)
-    return xq_out.type_as(xq), xk_out.type_as(xk)
-
-
-class LocateAnythingVisionRotaryEmbedding(nn.Module):
-    """2D rotary position embedding producing per-position `freqs_cis` (complex) for the packed grid."""
-
-    def __init__(self, config: LocateAnythingVisionConfig):
-        super().__init__()
-        self.dim = config.hidden_size // config.num_attention_heads
-        self.theta_base = config.rope_theta
-
-    def forward(self, grid_hws: torch.Tensor) -> torch.Tensor:
-        device = grid_hws.device
-        dim_range = torch.arange(0, self.dim, 4, device=device)[: self.dim // 4].float()
-        freqs = 1.0 / (self.theta_base ** (dim_range / self.dim))
-        all_freqs_cis = []
-        for height, width in grid_hws.tolist():
-            y_pos = torch.arange(height, device=device).float()
-            x_pos = torch.arange(width, device=device).float()
-            x_freqs = torch.outer(x_pos, freqs)
-            y_freqs = torch.outer(y_pos, freqs)
-            x_cis = torch.polar(torch.ones_like(x_freqs), x_freqs)
-            y_cis = torch.polar(torch.ones_like(y_freqs), y_freqs)
-            grid_x = x_cis[None, :, :].expand(height, width, -1)
-            grid_y = y_cis[:, None, :].expand(height, width, -1)
-            freqs_cis = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], dim=-1)
-            freqs_cis = freqs_cis.reshape(height * width, self.dim // 2)
-            all_freqs_cis.append(freqs_cis)
-        return torch.cat(all_freqs_cis, dim=0)
+class LocateAnythingVisionRotaryEmbedding(VisionRotaryEmbedding):
+    pass
 
 
 class LocateAnythingLearnable2DInterpPosEmb(nn.Module):
@@ -198,16 +143,14 @@ class LocateAnythingLearnable2DInterpPosEmb(nn.Module):
         self.width = config.init_pos_emb_width
         self.weight = nn.Parameter(torch.empty(self.height, self.width, config.hidden_size))
 
-    def forward(self, hidden_states: torch.Tensor, grid_hws: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
         pos_embeds = []
-        for height, width in grid_hws.tolist():
+        for _, height, width in image_grid_thw.tolist():
             if (height, width) == (self.height, self.width):
                 pos_embeds.append(self.weight.flatten(end_dim=1))
             else:
                 interpolated = F.interpolate(
-                    self.weight.permute(2, 0, 1).unsqueeze(0),
-                    size=(height, width),
-                    mode="bicubic",
+                    self.weight.permute(2, 0, 1).unsqueeze(0), size=(height, width), mode="bicubic"
                 )
                 pos_embeds.append(interpolated.squeeze(0).permute(1, 2, 0).flatten(end_dim=1))
         return hidden_states + torch.cat(pos_embeds)
@@ -221,118 +164,31 @@ class LocateAnythingPatchEmbed(nn.Module):
         )
         self.pos_emb = LocateAnythingLearnable2DInterpPosEmb(config)
 
-    def forward(self, pixel_values: torch.Tensor, grid_hws: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
         hidden_states = self.proj(pixel_values).view(pixel_values.size(0), -1)
-        hidden_states = self.pos_emb(hidden_states, grid_hws)
+        hidden_states = self.pos_emb(hidden_states, image_grid_thw)
         return hidden_states
 
 
-class LocateAnythingVisionMLP(nn.Module):
+class LocateAnythingVisionEncoder(VideoLlama3VisionEncoder):
     def __init__(self, config: LocateAnythingVisionConfig):
-        super().__init__()
-        self.fc0 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc1 = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.activation = ACT2FN["gelu_pytorch_tanh"]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.fc1(self.activation(self.fc0(hidden_states)))
-
-
-class LocateAnythingVisionAttention(nn.Module):
-    def __init__(self, config: LocateAnythingVisionConfig):
-        super().__init__()
-        self.config = config
-        self.num_heads = config.num_attention_heads
-        self.head_dim = config.hidden_size // config.num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = False
-        self.wqkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=True)
-        self.wo = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        rope_freqs_cis: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        seq_length = hidden_states.shape[0]
-        qkv = self.wqkv(hidden_states).view(seq_length, 3, self.num_heads, self.head_dim)
-        query_states, key_states, value_states = qkv.unbind(dim=1)
-        query_states, key_states = apply_rope(query_states, key_states, rope_freqs_cis)
-
-        query_states = query_states.transpose(0, 1).unsqueeze(0)
-        key_states = key_states.transpose(0, 1).unsqueeze(0)
-        value_states = value_states.transpose(0, 1).unsqueeze(0)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-        attn_output, _ = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            scaling=self.scaling,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            is_causal=False,
-            **kwargs,
-        )
-        attn_output = attn_output.reshape(seq_length, -1)
-        return self.wo(attn_output)
-
-
-class LocateAnythingVisionLayer(nn.Module):
-    def __init__(self, config: LocateAnythingVisionConfig):
-        super().__init__()
-        self.norm0 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attn = LocateAnythingVisionAttention(config)
-        self.mlp = LocateAnythingVisionMLP(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        rope_freqs_cis: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        hidden_states = hidden_states + self.attn(self.norm0(hidden_states), attention_mask, rope_freqs_cis, **kwargs)
-        hidden_states = hidden_states + self.mlp(self.norm1(hidden_states))
-        return hidden_states
-
-
-class LocateAnythingVisionEncoder(nn.Module):
-    def __init__(self, config: LocateAnythingVisionConfig):
-        super().__init__()
-        self.config = config
-        self.rotary_emb = LocateAnythingVisionRotaryEmbedding(config)
-        self.blocks = nn.ModuleList([LocateAnythingVisionLayer(config) for _ in range(config.num_hidden_layers)])
+        super().__init__(config)
+        head_dim = config.hidden_size // config.num_attention_heads
+        self.rotary_emb = LocateAnythingVisionRotaryEmbedding(head_dim // 2, theta=config.rope_theta)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
-        self, hidden_states: torch.Tensor, grid_hws: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> torch.Tensor:
-        rope_freqs_cis = self.rotary_emb(grid_hws)
-        seq_length = hidden_states.shape[0]
-        lengths = (grid_hws[:, 0] * grid_hws[:, 1]).tolist()
-        attention_mask = torch.full(
-            (1, 1, seq_length, seq_length),
-            torch.finfo(hidden_states.dtype).min,
-            dtype=hidden_states.dtype,
-            device=hidden_states.device,
-        )
-        start = 0
-        for length in lengths:
-            attention_mask[..., start : start + length, start : start + length] = 0.0
-            start += length
-
-        for block in self.blocks:
-            hidden_states = block(hidden_states, attention_mask, rope_freqs_cis, **kwargs)
-
-        return self.final_layernorm(hidden_states)
+        self, hidden_states: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutput:
+        position_ids = get_vision_position_ids(image_grid_thw, 1)
+        cu_seqlens = get_vision_cu_seqlens(image_grid_thw)
+        rotary = self.rotary_emb(position_ids).repeat(1, 2)
+        position_embeddings = (rotary.cos(), rotary.sin())
+        for layer in self.layers:
+            hidden_states = layer(
+                hidden_states, cu_seqlens=cu_seqlens, position_embeddings=position_embeddings, **kwargs
+            )
+        return BaseModelOutput(last_hidden_state=self.final_layernorm(hidden_states))
 
 
 class LocateAnythingMultiModalProjector(nn.Module):
@@ -345,12 +201,12 @@ class LocateAnythingMultiModalProjector(nn.Module):
         self.act = ACT2FN["gelu"]
         self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size)
 
-    def forward(self, image_features: torch.Tensor, grid_hws: torch.Tensor) -> torch.Tensor:
+    def forward(self, image_features: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
         merge = self.merge_size
         dim = image_features.shape[-1]
-        chunks = image_features.split((grid_hws[:, 0] * grid_hws[:, 1]).tolist(), dim=0)
+        chunks = image_features.split((image_grid_thw[:, 1] * image_grid_thw[:, 2]).tolist(), dim=0)
         outputs = []
-        for chunk, (height, width) in zip(chunks, grid_hws.tolist()):
+        for chunk, (_, height, width) in zip(chunks, image_grid_thw.tolist()):
             new_height, new_width = height // merge, width // merge
             chunk = chunk.view(new_height, merge, new_width, merge, dim).permute(0, 2, 1, 3, 4)
             chunk = chunk.reshape(new_height * new_width, merge * merge * dim)
@@ -364,17 +220,27 @@ class LocateAnythingPreTrainedModel(PreTrainedModel):
     config: LocateAnythingConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LocateAnythingVisionLayer", "Qwen2DecoderLayer"]
+    _no_split_modules = ["LocateAnythingVisionEncoderLayer", "Qwen2DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
 
+    def _check_and_adjust_attn_implementation(self, attn_implementation, *args, **kwargs):
+        # `magi` is an optional MTP-time NVIDIA kernel this integration does not implement; the published checkpoint
+        # ships it as the default, so fall back to the standard attention selection.
+        if attn_implementation == "magi":
+            attn_implementation = None
+        return super()._check_and_adjust_attn_implementation(attn_implementation, *args, **kwargs)
+
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, LocateAnythingLearnable2DInterpPosEmb):
             init.normal_(module.weight)
+        elif isinstance(module, LocateAnythingVisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class LocateAnythingVisionModel(LocateAnythingPreTrainedModel):
@@ -390,15 +256,14 @@ class LocateAnythingVisionModel(LocateAnythingPreTrainedModel):
 
     @auto_docstring
     def forward(
-        self, pixel_values: torch.FloatTensor, grid_hws: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutput:
         r"""
-        grid_hws (`torch.LongTensor` of shape `(num_images, 2)`):
-            Patch-grid height and width of each image, used to build the packed attention mask and rotary positions.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            Temporal, height and width of each image's patch grid.
         """
-        hidden_states = self.patch_embed(pixel_values, grid_hws)
-        hidden_states = self.encoder(hidden_states, grid_hws, **kwargs)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        hidden_states = self.patch_embed(pixel_values, image_grid_thw)
+        return self.encoder(hidden_states, image_grid_thw, **kwargs)
 
 
 class LocateAnythingModelOutputWithPast(LlavaModelOutputWithPast):
@@ -412,30 +277,27 @@ class LocateAnythingCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 class LocateAnythingModel(LlavaModel):
     def __init__(self, config: LocateAnythingConfig):
         super().__init__(config)
-        self.vision_tower = LocateAnythingVisionModel(config.vision_config)
+        self.vision_tower = LocateAnythingVisionModel._from_config(
+            config.vision_config, attn_implementation=self.config._attn_implementation
+        )
         self.multi_modal_projector = LocateAnythingMultiModalProjector(config)
-        self.language_model = AutoModel.from_config(config.text_config)
+        self.language_model = AutoModel.from_config(
+            config.text_config, attn_implementation=self.config._attn_implementation
+        )
         self.post_init()
 
-    @can_return_tuple
     @auto_docstring
     def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_hws: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+        self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         r"""
-        image_grid_hws (`torch.LongTensor` of shape `(num_images, 2)`):
-            Patch-grid height and width of each image.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            Temporal, height and width of each image's patch grid.
         """
-        vision_outputs: BaseModelOutput = self.vision_tower(
-            pixel_values=pixel_values.to(self.vision_tower.dtype), grid_hws=image_grid_hws, **kwargs
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values.to(self.vision_tower.dtype), image_grid_thw=image_grid_thw, **kwargs
         )
-        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state, image_grid_hws)
-        return BaseModelOutputWithPooling(
-            last_hidden_state=vision_outputs.last_hidden_state, pooler_output=image_features
-        )
+        return self.multi_modal_projector(vision_outputs.last_hidden_state, image_grid_thw)
 
     @can_return_tuple
     @auto_docstring
@@ -443,7 +305,7 @@ class LocateAnythingModel(LlavaModel):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
-        image_grid_hws: torch.LongTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -452,8 +314,8 @@ class LocateAnythingModel(LlavaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> LocateAnythingModelOutputWithPast:
         r"""
-        image_grid_hws (`torch.LongTensor` of shape `(num_images, 2)`):
-            Patch-grid height and width of each image.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            Temporal, height and width of each image's patch grid.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -463,7 +325,7 @@ class LocateAnythingModel(LlavaModel):
 
         image_features = None
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_grid_hws).pooler_output
+            image_features = self.get_image_features(pixel_values, image_grid_thw)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -495,7 +357,7 @@ class LocateAnythingForConditionalGeneration(LlavaForConditionalGeneration):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
-        image_grid_hws: torch.LongTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -506,15 +368,15 @@ class LocateAnythingForConditionalGeneration(LlavaForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> LocateAnythingCausalLMOutputWithPast:
         r"""
-        image_grid_hws (`torch.LongTensor` of shape `(num_images, 2)`):
-            Patch-grid height and width of each image.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            Temporal, height and width of each image's patch grid.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for the language-modeling loss; indices in `[0, ..., config.text_config.vocab_size]` or -100.
         """
         outputs: LocateAnythingModelOutputWithPast = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            image_grid_hws=image_grid_hws,
+            image_grid_thw=image_grid_thw,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,

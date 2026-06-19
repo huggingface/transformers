@@ -24,6 +24,7 @@ from .core_model_loading import (
     ErnieFuseAndSplitTextVisionExperts,
     MergeModulelist,
     PrefixChange,
+    SplitQkvDeinterleaveRope,
     Transpose,
     WeightConverter,
     WeightRenaming,
@@ -636,14 +637,47 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vqmodel", target_patterns="model.vqmodel"),
         ],
         "locateanything": [
-            WeightRenaming(source_patterns=r"\.wqkv", target_patterns=".attn.wqkv"),
-            WeightRenaming(source_patterns=r"\.wo\.", target_patterns=".attn.wo."),
-            WeightRenaming(source_patterns=r"^mlp1\.0", target_patterns="model.multi_modal_projector.pre_norm"),
-            WeightRenaming(source_patterns=r"^mlp1\.1", target_patterns="model.multi_modal_projector.linear_1"),
-            WeightRenaming(source_patterns=r"^mlp1\.3", target_patterns="model.multi_modal_projector.linear_2"),
-            WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
-            WeightRenaming(source_patterns=r"^language_model\.model", target_patterns="model.language_model"),
-            WeightRenaming(source_patterns=r"^vision_model", target_patterns="model.vision_tower"),
+            WeightRenaming(source_patterns=r"^language_model\.lm_head\.", target_patterns="lm_head."),
+            WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
+            WeightRenaming(source_patterns=r"^mlp1\.0\.", target_patterns="model.multi_modal_projector.pre_norm."),
+            WeightRenaming(source_patterns=r"^mlp1\.1\.", target_patterns="model.multi_modal_projector.linear_1."),
+            WeightRenaming(source_patterns=r"^mlp1\.3\.", target_patterns="model.multi_modal_projector.linear_2."),
+            WeightRenaming(
+                source_patterns=r"^vision_model\.encoder\.blocks\.(\d+)\.norm0\.",
+                target_patterns=r"model.vision_tower.encoder.layers.\1.layer_norm1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_model\.encoder\.blocks\.(\d+)\.norm1\.",
+                target_patterns=r"model.vision_tower.encoder.layers.\1.layer_norm2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_model\.encoder\.blocks\.(\d+)\.wo\.",
+                target_patterns=r"model.vision_tower.encoder.layers.\1.self_attn.out_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_model\.encoder\.blocks\.(\d+)\.mlp\.fc0\.",
+                target_patterns=r"model.vision_tower.encoder.layers.\1.mlp.fc1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_model\.encoder\.blocks\.(\d+)\.mlp\.fc1\.",
+                target_patterns=r"model.vision_tower.encoder.layers.\1.mlp.fc2.",
+            ),
+            WeightConverter(
+                source_patterns=r"^vision_model\.encoder\.blocks\.(\d+)\.wqkv\.(weight|bias)",
+                target_patterns=[
+                    r"model.vision_tower.encoder.layers.\1.self_attn.q_proj.\2",
+                    r"model.vision_tower.encoder.layers.\1.self_attn.k_proj.\2",
+                    r"model.vision_tower.encoder.layers.\1.self_attn.v_proj.\2",
+                ],
+                operations=[SplitQkvDeinterleaveRope()],
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_model\.encoder\.final_layernorm\.",
+                target_patterns="model.vision_tower.encoder.final_layernorm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_model\.patch_embed\.", target_patterns="model.vision_tower.patch_embed."
+            ),
         ],
         "paddleocr_vl": [
             WeightRenaming(source_patterns=r"^mlp_AR", target_patterns="model.projector"),

@@ -91,11 +91,11 @@ class LocateAnythingImageProcessor(TorchvisionBackend):
             patches = image.reshape(channels, grid_h, patch, grid_w, patch)
             patches = patches.permute(1, 3, 0, 2, 4).reshape(-1, channels, patch, patch)
             all_patches.append(patches)
-            all_grids.append([grid_h, grid_w])
+            all_grids.append([1, grid_h, grid_w])
 
         data = {
             "pixel_values": torch.cat(all_patches, dim=0),
-            "image_grid_hws": torch.tensor(all_grids, dtype=torch.long),
+            "image_grid_thw": torch.tensor(all_grids, dtype=torch.long),
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
 
