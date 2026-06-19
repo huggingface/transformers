@@ -100,7 +100,7 @@ if is_kernels_available():
     # importing transformers (or `transformers.pipeline`) does not instantiate any `LayerRepository` /
     # `FuncRepository`. This keeps the `kernels` library decoupled from normal transformers usage: the
     # repositories are only constructed when the user explicitly opts in via `use_kernels=True`.
-    _KERNEL_MAPPING_CACHE: "dict | None" = None
+    _KERNEL_MAPPING_CACHE: dict | None = None
 
     def _build_kernel_mapping() -> dict:
         _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
