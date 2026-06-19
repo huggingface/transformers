@@ -1010,7 +1010,6 @@ Hey how are you doing"""  # noqa: W293
         # Check that no error raised
         new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
-
     def test_chat_template_empty_conversation(self):
         dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
         tokenizer = self.get_tokenizer()
