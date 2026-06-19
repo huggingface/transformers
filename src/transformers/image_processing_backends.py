@@ -20,7 +20,6 @@ import numpy as np
 
 from .image_processing_base import BatchFeature
 from .image_processing_utils import BaseImageProcessor
-from .integrations.hub_kernels import use_image_kernel
 from .image_transforms import (
     center_crop as np_center_crop,
 )
@@ -54,6 +53,7 @@ from .image_utils import (
     is_valid_image,
     load_image_as_tensor,
 )
+from .integrations.hub_kernels import use_image_kernel
 from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     TensorType,

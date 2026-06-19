@@ -329,7 +329,7 @@ if is_kernels_available():
         register_kernel_mapping(mapping)
 
     _PROCESSING_KERNEL_MAPPING: dict[str, str] = {
-        "resize_normalize": "Molbap/kernel_image_resize",  # TODO: move to kernels-community or equivalent + version tag
+        "resize_normalize": "Molbap/kernel_image_resize",  # TODO: move to kernels-community + version tag
     }
     _processing_kernel_cache: dict[str, "ModuleType | None"] = {}
 
@@ -338,22 +338,17 @@ if is_kernels_available():
             repo = _PROCESSING_KERNEL_MAPPING.get(name)
             kernel = None
             if repo is not None:
-                # needed before moving to authorized org
                 try:
                     kernel = get_kernel(repo, allow_all_kernels=True)
                 except Exception as primary_error:
                     try:
-                        kernel = get_kernel_hub(repo, revision="main", trust_remote_code=True) # Yes I know, DO NOT MERGE AS IS
+                        kernel = get_kernel_hub(repo, revision="main", trust_remote_code=True)  # DO NOT MERGE AS IS
                     except Exception:
-                        logger.warning_once(
-                            f"use_kernels: could not load image kernel '{name}' from {repo} "
-                            f"({primary_error}); using torchvision."
-                        )
+                        logger.warning_once(f"use_kernels: could not load '{name}' from {repo} ({primary_error})")
             _processing_kernel_cache[name] = kernel
         return _processing_kernel_cache[name]
 
     def _resample_to_interp(resample):
-        """Map a PIL resample int or torchvision InterpolationMode to the kernel's name; None if unsupported."""
         if resample is None:
             return None
         try:
@@ -363,10 +358,9 @@ if is_kernels_available():
             return "bicubic" if "BICUBIC" in name else "bilinear" if "BILINEAR" in name else None
 
     def _resize_target(size, crop):
-        """Resolve a processor size(+crop) to (resize_arg, crop_arg, resize_mode); None if unsupported."""
         if size.shortest_edge and not size.longest_edge:
             if crop is None or not (crop.height and crop.width):
-                return None  # shortest-edge without a crop is variable-size output
+                return None
             return size.shortest_edge, (crop.height, crop.width), "shortest_edge"
         if size.height and size.width:
             cropped = crop is not None and (crop.height, crop.width) != (size.height, size.width)
@@ -374,7 +368,6 @@ if is_kernels_available():
         return None
 
     def _resize_normalize_runner(processor, images, **kwargs):
-        """Run resize(+crop)+normalize on the kernel; a BatchFeature, or None to fall back to torchvision."""
         if not (images and is_torch_available() and torch.cuda.is_available() and images[0].dtype == torch.uint8):
             return None
         if kwargs.get("do_pad") or not (kwargs.get("do_resize") and kwargs.get("do_normalize")):
@@ -387,22 +380,24 @@ if is_kernels_available():
         resize_arg, crop_arg, mode = target
         rescale = float(kwargs["rescale_factor"]) if kwargs.get("do_rescale") else 1.0
         out = kernel.resize_normalize(
-            list(images), resize_arg, kwargs.get("image_mean"), kwargs.get("image_std"),
-            rescale_factor=rescale, resample=interp, antialias=True, crop_size=crop_arg, resize_mode=mode,
+            list(images),
+            resize_arg,
+            kwargs.get("image_mean"),
+            kwargs.get("image_std"),
+            rescale_factor=rescale,
+            resample=interp,
+            antialias=True,
+            crop_size=crop_arg,
+            resize_mode=mode,
         )
         from ..image_processing_base import BatchFeature
 
         return BatchFeature(data={"pixel_values": list(out)}, tensor_type=kwargs.get("return_tensors"))
 
-    _PROCESSING_KERNEL_RUNNERS = {
-        "resize_normalize": _resize_normalize_runner,
-    }
+    _PROCESSING_KERNEL_RUNNERS = {"resize_normalize": _resize_normalize_runner}
 
     def use_image_kernel(name):
-        """Run the `name` processing kernel in place of the decorated method when use_kernels=True.
-
-        The registered runner gets the method's args and returns its result, or None to fall back.
-        """
+        """Run the `name` processing kernel in place of the decorated method when use_kernels=True."""
 
         def decorator(method):
             @functools.wraps(method)
