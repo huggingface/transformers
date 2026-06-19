@@ -20,6 +20,7 @@ import numpy as np
 
 from .image_processing_base import BatchFeature
 from .image_processing_utils import BaseImageProcessor
+from .integrations.hub_kernels import use_image_kernel
 from .image_transforms import (
     center_crop as np_center_crop,
 )
@@ -87,6 +88,7 @@ class TorchvisionBackend(BaseImageProcessor):
     """Torchvision backend for GPU-accelerated batched image processing."""
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        self.use_kernels = kwargs.pop("use_kernels", False)
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
 
@@ -377,6 +379,7 @@ class TorchvisionBackend(BaseImageProcessor):
         crop_left = int((image_width - crop_width) / 2.0)
         return tvF.crop(image, crop_top, crop_left, crop_height, crop_width)
 
+    @use_image_kernel("resize_normalize")
     def _preprocess(
         self,
         images: list["torch.Tensor"],

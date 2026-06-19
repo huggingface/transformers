@@ -221,6 +221,32 @@ Set the environment variable to disable kernels globally.
 export USE_HUB_KERNELS=0  # or OFF or NO
 ```
 
+## Processor kernels
+
+Preprocessing and postprocessing ops can be offloaded to Hub kernels the same way model layers are. `use_kernels=True` swaps a processor op for a registered Hub kernel and falls back to the default implementation when none applies — so custom, hot, or hard-to-vectorize ops (resize, normalize, patchify, NMS, mask decoding, ...) can move onto the GPU without rewriting the processor or the call site.
+
+Currently kernelized: the fast image processors' resize + normalize. The kernel batches the resize over a ragged set of images and folds rescale and normalize into the same pass.
+
+```py
+from transformers import AutoImageProcessor
+
+processor = AutoImageProcessor.from_pretrained("google/siglip2-base-patch16-224", use_kernels=True)
+pixel_values = processor(images, return_tensors="pt")["pixel_values"]
+```
+
+For vision-language models the image processor is wrapped in a processor, so the flag passes through [`AutoProcessor`] to the inner image processor.
+
+```py
+from transformers import AutoProcessor
+
+processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it", use_kernels=True)
+inputs = processor(text=prompt, images=images, return_tensors="pt")
+```
+
+This is opt-in and CUDA only. It falls back to torchvision when the kernel cannot run or the processor is not supported. Supported processors do a fixed-size resize, optionally with a center crop or a shortest-edge resize, followed by rescale and normalize — the classic vision encoders (ViT, DINOv2/DINOv3, SigLIP, BEiT, ...) and SigLIP-based VLMs. Padding processors and dynamic-resolution VLMs fall back.
+
+The kernel resizes in float, so outputs are parity-close to torchvision (around `1e-4` against the float reference) but not byte-identical to the legacy uint8 resize path. Use the default backend if you need exact reproduction of the original processor.
+
 ## Troubleshooting
 
 Kernel integration depends on hardware, drivers, and package versions working together. The following sections cover common failures.

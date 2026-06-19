@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import functools
 import os
 import re
 import sys
@@ -327,8 +328,102 @@ if is_kernels_available():
             mapping = _KERNEL_MAPPING
         register_kernel_mapping(mapping)
 
+    _PROCESSING_KERNEL_MAPPING: dict[str, str] = {
+        "resize_normalize": "Molbap/kernel_image_resize",  # TODO: move to kernels-community or equivalent + version tag
+    }
+    _processing_kernel_cache: dict[str, "ModuleType | None"] = {}
+
+    def _load_processing_kernel(name):
+        if name not in _processing_kernel_cache:
+            repo = _PROCESSING_KERNEL_MAPPING.get(name)
+            kernel = None
+            if repo is not None:
+                # needed before moving to authorized org
+                try:
+                    kernel = get_kernel(repo, allow_all_kernels=True)
+                except Exception as primary_error:
+                    try:
+                        kernel = get_kernel_hub(repo, revision="main", trust_remote_code=True) # Yes I know, DO NOT MERGE AS IS
+                    except Exception:
+                        logger.warning_once(
+                            f"use_kernels: could not load image kernel '{name}' from {repo} "
+                            f"({primary_error}); using torchvision."
+                        )
+            _processing_kernel_cache[name] = kernel
+        return _processing_kernel_cache[name]
+
+    def _resample_to_interp(resample):
+        """Map a PIL resample int or torchvision InterpolationMode to the kernel's name; None if unsupported."""
+        if resample is None:
+            return None
+        try:
+            return {2: "bilinear", 3: "bicubic"}.get(int(resample))
+        except (TypeError, ValueError):
+            name = getattr(resample, "name", str(resample)).upper()
+            return "bicubic" if "BICUBIC" in name else "bilinear" if "BILINEAR" in name else None
+
+    def _resize_normalize_runner(processor, images, **kwargs):
+        """Fixed-output resize(+crop)+normalize. Returns a BatchFeature, or None to fall back."""
+        if kwargs.get("do_pad") or not (kwargs.get("do_resize") and kwargs.get("do_normalize")) or not images:
+            return None
+        if not is_torch_available() or not torch.cuda.is_available() or images[0].dtype != torch.uint8:
+            return None
+        interp = _resample_to_interp(kwargs.get("resample"))
+        if interp is None:
+            return None
+        size = kwargs.get("size")
+        crop = kwargs.get("crop_size") if kwargs.get("do_center_crop") else None
+        if size.shortest_edge and not size.longest_edge:
+            if crop is None or not (crop.height and crop.width):
+                return None
+            resize_arg, crop_arg, mode = size.shortest_edge, (crop.height, crop.width), "shortest_edge"
+        elif size.height and size.width:
+            if crop is not None and (crop.height != size.height or crop.width != size.width):
+                resize_arg, crop_arg, mode = (size.height, size.width), (crop.height, crop.width), "square"
+            else:
+                resize_arg, crop_arg, mode = (size.height, size.width), None, "square"
+        else:
+            return None
+        kernel = _load_processing_kernel("resize_normalize")
+        if kernel is None:
+            return None
+        rescale = float(kwargs.get("rescale_factor")) if kwargs.get("do_rescale") else 1.0
+        out = kernel.resize_normalize(
+            list(images), resize_arg, kwargs.get("image_mean"), kwargs.get("image_std"),
+            rescale_factor=rescale, resample=interp, antialias=True, crop_size=crop_arg, resize_mode=mode,
+        )
+        from ..image_processing_base import BatchFeature
+
+        return BatchFeature(data={"pixel_values": list(out)}, tensor_type=kwargs.get("return_tensors"))
+
+    _PROCESSING_KERNEL_RUNNERS = {
+        "resize_normalize": _resize_normalize_runner,
+    }
+
+    def use_image_kernel(name):
+        """Run the `name` processing kernel in place of the decorated method when use_kernels=True.
+
+        The registered runner gets the method's args and returns its result, or None to fall back.
+        """
+
+        def decorator(method):
+            @functools.wraps(method)
+            def wrapper(self, *args, **kwargs):
+                if _kernels_enabled and getattr(self, "use_kernels", False):
+                    runner = _PROCESSING_KERNEL_RUNNERS.get(name)
+                    if runner is not None and (out := runner(self, *args, **kwargs)) is not None:
+                        return out
+                return method(self, *args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
 else:
     _kernels_enabled = False
+
+    def use_image_kernel(name):
+        return lambda method: method
 
     # Stub to make decorators int transformers work when `kernels`
     # is not installed.
@@ -823,6 +918,7 @@ __all__ = [
     "register_kernel_mapping_transformers",
     "register_kernel_replacements_and_fusions",
     "replace_kernel_forward_from_hub",
+    "use_image_kernel",
     "use_kernel_forward_from_hub",
     "use_kernel_func_from_hub",
     "use_kernelized_func",
