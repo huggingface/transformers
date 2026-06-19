@@ -478,8 +478,7 @@ class MiniMaxM3VLIndexer(nn.Module):
     `forward` returns the per-query, per-head selected key-block indices
     `[B, index_n_heads, S_q, index_topk_blocks]` -- one independent block
     selection per indexer head (`index_n_heads == num_key_value_heads`, so one
-    per KV / GQA group), matching the deployment kernel rather than a single
-    selection shared across all heads. Valid indices are left-packed and `-1`
+    per KV / GQA group). Valid indices are left-packed and `-1`
     right-pads the unused slots (future/empty blocks), and the local boost makes
     selections deduplicated -- the exact contract the block-sparse attention
     kernel consumes (it counts the valid entries, then reads them sequentially
@@ -550,10 +549,7 @@ class MiniMaxM3VLIndexer(nn.Module):
         if pad:
             scores = F.pad(scores, (0, pad), value=float("-inf"))
         scores = scores.view(batch, self.num_heads, q_len, num_key_blocks, self.block_size)
-        # Max-pool keys within each block, but keep the indexer-head axis. Each indexer head maps to
-        # one KV / GQA group (`index_n_heads == num_key_value_heads`) and selects its own blocks, the
-        # same per-head selection the deployment kernel does. Collapsing heads here (e.g. a second
-        # `amax(dim=1)` -> one shared selection) would diverge from that reference.
+        # Max-pool keys within each block
         block_scores = scores.amax(dim=-1)  # -> [B, H_idx, S_q, num_key_blocks]
 
         q_block = position_ids // self.block_size  # [B, S_q]
@@ -594,7 +590,7 @@ class MiniMaxM3VLIndexer(nn.Module):
 
         # Broadcast the per-block keep/drop verdict back onto every key (block granularity). The indexer
         # head axis carries one selection per KV / GQA group; expand it up to the full query-head count
-        # so each attention head sees its own group's block selection (not a single shared one).
+        # so each attention head sees its own group's block selection.
         block_keep = (bias == 0.0).repeat_interleave(self.block_size, dim=-1)[..., :key_length]
         block_keep = block_keep.repeat_interleave(self.config.num_attention_heads // n_idx_heads, dim=1)
 
