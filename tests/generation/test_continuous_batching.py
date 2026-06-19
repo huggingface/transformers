@@ -537,14 +537,14 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         expected_read = [to_physical(i) for i in range(read_start, read_start + read_cache_length)]
         expected_read += [sentinel_index] * query_length
         read = allocator.get_read_indices("req", past_length, query_length)
-        self.assertEqual(read, expected_read)
 
-        # Structural invariants, independent of the rolling-buffer arithmetic
-        self.assertEqual(len(read), read_cache_length + query_length)
-        self.assertEqual(read[read_cache_length:], [sentinel_index] * query_length)  # sentinels only at the tail
+        # Main check
+        self.assertEqual(read, expected_read)
+        # No sentinel in the real indices
         self.assertNotIn(sentinel_index, read[:read_cache_length])
+        # Cache reads land in allocated blocks
         for idx in read[:read_cache_length]:
-            self.assertIn(idx // block_size, block_table)  # cache reads land in allocated blocks
+            self.assertIn(idx // block_size, block_table)
 
         # Write indices: one slot per query token, left-padded with the write trash index when the query overflows the
         # window
@@ -554,14 +554,14 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         expected_write = [write_trash_index] * padding_length
         expected_write += [to_physical(i) for i in range(write_start, write_start + write_cache_length)]
         write = allocator.get_write_indices("req", past_length, query_length)
-        self.assertEqual(write, expected_write)
 
-        # Structural invariants
-        self.assertEqual(len(write), query_length)  # one write slot per query token
-        self.assertEqual(write[:padding_length], [write_trash_index] * padding_length)  # trash only at the front
+        # Main check
+        self.assertEqual(write, expected_write)
+        # Trash only at the front
         self.assertNotIn(write_trash_index, write[padding_length:])
+        # Cache writes land in allocated blocks
         for idx in write[padding_length:]:
-            self.assertIn(idx // block_size, block_table)  # cache writes land in allocated blocks
+            self.assertIn(idx // block_size, block_table)
 
     @slow
     def test_continuous_batching_no_accelerators(self) -> None:
