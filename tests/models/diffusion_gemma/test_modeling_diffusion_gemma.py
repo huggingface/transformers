@@ -591,7 +591,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         )
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
-        self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+        self.assertEqual(generation_outputs.shape, expected_shape)
 
     def test_generate_text_only(self):
         """Same as `test_generate`, but only with text inputs (no images)"""
@@ -602,7 +602,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         generation_outputs = model.generate(model_inputs["input_ids"], max_new_tokens=16, max_denoising_steps=2)
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
-        self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+        self.assertEqual(generation_outputs.shape, expected_shape)
 
     def test_generate_from_generation_config(self):
         """
@@ -617,7 +617,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         generation_outputs = model.generate(**model_inputs, generation_config=generation_config)
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
-        self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+        self.assertEqual(generation_outputs.shape, expected_shape)
 
     def test_generate_kwarg_overrides(self):
         """
@@ -628,7 +628,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
         # force `eos_token_id = None` to not stop before reaching `max_new_tokens`
-        generation_config = DiffusionGemmaGenerationConfig(eos_token_id=None, max_new_tokens=16, max_denoising_steps=2)
+        generation_config = DiffusionGemmaGenerationConfig(eos_token_id=None, max_new_tokens=16, max_denoising_steps=2, return_dict_in_generate=True)
         generation_outputs = model.generate(**model_inputs, generation_config=generation_config, max_new_tokens=32)
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 32)
@@ -642,6 +642,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
         model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
+        model.generation_config.return_dict_in_generate = True
 
         # 1st generate call, without KV cache
         generation_1_outputs = model.generate(**model_inputs, max_new_tokens=16, max_denoising_steps=2)
@@ -681,10 +682,10 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         generation_outputs = model.generate(
             **model_inputs, max_new_tokens=32, max_denoising_steps=2, cache_implementation=cache_implementation
         )
-        self.assertTrue(generation_outputs.sequences.shape[1] > config.text_config.sliding_window)
+        self.assertTrue(generation_outputs.shape[1] > config.text_config.sliding_window)
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 32)
-        self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+        self.assertEqual(generation_outputs.shape, expected_shape)
 
     @unittest.skip(reason="TODO(joaogante): red in CI, fix me")
     def test_diffusion_streaming(self):
@@ -703,7 +704,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
             streamer = TextDiffusionStreamer(tokenizer)
             model_out = model.generate(input_ids, max_new_tokens=16, max_denoising_steps=2, streamer=streamer)
         streamer_text = cs.out
-        generate_text = tokenizer.decode(model_out.sequences[0])
+        generate_text = tokenizer.decode(model_out[0])
 
         # the streamer ends with a `\n`
         self.assertTrue(streamer_text.endswith("\n"))
@@ -1135,7 +1136,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
 
         set_seed(42)
         gen_out = model.generate(**model_inputs, max_new_tokens=256)
-        generated_tokens = gen_out.sequences[:, -256:]
+        generated_tokens = gen_out[:, -256:]
         self.assertEqual(generated_tokens.tolist(), expected_sequences)
 
     @tooslow
@@ -1247,8 +1248,8 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         gen_out = model.generate(**model_inputs, max_new_tokens=1280)
 
         # sanity check: we went beyond the sliding window length
-        self.assertTrue(gen_out.sequences.shape[1] > model.config.text_config.sliding_window)
-        generated_tokens = gen_out.sequences[:, -256:]
+        self.assertTrue(gen_out.shape[1] > model.config.text_config.sliding_window)
+        generated_tokens = gen_out[:, -256:]
         self.assertEqual(generated_tokens.tolist(), expected_sequences)
 
     # The tests below use a botched model, using the first six layers, to respect memory constraints of HF's CI.
@@ -1522,7 +1523,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
 
         set_seed(42)
         gen_out = model.generate(**model_inputs, max_new_tokens=256)
-        generated_tokens = gen_out.sequences[:, -256:]
+        generated_tokens = gen_out[:, -256:]
         self.assertEqual(generated_tokens.tolist(), expected_sequences)
 
     @slow
@@ -1616,6 +1617,6 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         gen_out = model.generate(**model_inputs, max_new_tokens=1280)
 
         # sanity check: we went beyond the sliding window length
-        self.assertTrue(gen_out.sequences.shape[1] > model.config.text_config.sliding_window)
-        generated_tokens = gen_out.sequences[:, -256:]
+        self.assertTrue(gen_out.shape[1] > model.config.text_config.sliding_window)
+        generated_tokens = gen_out[:, -256:]
         self.assertEqual(generated_tokens.tolist(), expected_sequences)
