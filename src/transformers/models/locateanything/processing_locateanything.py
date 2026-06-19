@@ -31,7 +31,7 @@ class LocateAnythingProcessorKwargs(ProcessingKwargs, total=False):
 class LocateAnythingProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template", "image_token", "image_start_token", "image_end_token"]
-    image_processor_class = "AutoImageProcessor"
+    image_processor_class = "LocateAnythingImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(

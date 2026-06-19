@@ -23,10 +23,12 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..llava.modeling_llava import (
@@ -36,7 +38,11 @@ from ..llava.modeling_llava import (
     LlavaModelOutputWithPast,
 )
 from ..qwen2_vl.modeling_qwen2_vl import VisionRotaryEmbedding
-from ..video_llama_3.modeling_video_llama_3 import VideoLlama3VisionEncoder
+from ..video_llama_3.modeling_video_llama_3 import (
+    VideoLlama3VisionAttention,
+    VideoLlama3VisionEncoder,
+    VideoLlama3VisionEncoderLayer,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -132,8 +138,21 @@ class LocateAnythingConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+        # `magi` is an optional MTP-time NVIDIA kernel this integration does not implement; the published checkpoint
+        # ships it as the default, so unset it (and the sub-configs, via the setter) and let the standard selection apply.
+        if self._attn_implementation == "magi":
+            self._attn_implementation = None
+
 
 class LocateAnythingVisionRotaryEmbedding(VisionRotaryEmbedding):
+    pass
+
+
+class LocateAnythingVisionAttention(VideoLlama3VisionAttention):
+    pass
+
+
+class LocateAnythingVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
     pass
 
 
@@ -232,13 +251,6 @@ class LocateAnythingPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    def _check_and_adjust_attn_implementation(self, attn_implementation, *args, **kwargs):
-        # `magi` is an optional MTP-time NVIDIA kernel this integration does not implement; the published checkpoint
-        # ships it as the default, so fall back to the standard attention selection.
-        if attn_implementation == "magi":
-            attn_implementation = None
-        return super()._check_and_adjust_attn_implementation(attn_implementation, *args, **kwargs)
-
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, LocateAnythingLearnable2DInterpPosEmb):
@@ -252,6 +264,10 @@ class LocateAnythingVisionModel(LocateAnythingPreTrainedModel):
     config: LocateAnythingVisionConfig
     main_input_name = "pixel_values"
     input_modalities = "image"
+    _can_record_outputs = {
+        "hidden_states": LocateAnythingVisionEncoderLayer,
+        "attentions": LocateAnythingVisionAttention,
+    }
 
     def __init__(self, config: LocateAnythingVisionConfig):
         super().__init__(config)
@@ -259,7 +275,8 @@ class LocateAnythingVisionModel(LocateAnythingPreTrainedModel):
         self.encoder = LocateAnythingVisionEncoder(config)
         self.post_init()
 
-    @auto_docstring
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutput:
@@ -282,27 +299,31 @@ class LocateAnythingCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 class LocateAnythingModel(LlavaModel):
     def __init__(self, config: LocateAnythingConfig):
         super().__init__(config)
-        self.vision_tower = LocateAnythingVisionModel._from_config(
-            config.vision_config, attn_implementation=self.config._attn_implementation
-        )
+        self.vision_tower = LocateAnythingVisionModel._from_config(config.vision_config)
         self.multi_modal_projector = LocateAnythingMultiModalProjector(config)
-        self.language_model = AutoModel.from_config(
-            config.text_config, attn_implementation=self.config._attn_implementation
-        )
+        self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> torch.Tensor:
+    ) -> BaseModelOutputWithPooling:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             Temporal, height and width of each image's patch grid.
         """
-        vision_outputs = self.vision_tower(
+        vision_outputs: BaseModelOutput = self.vision_tower(
             pixel_values=pixel_values.to(self.vision_tower.dtype), image_grid_thw=image_grid_thw, **kwargs
         )
-        return self.multi_modal_projector(vision_outputs.last_hidden_state, image_grid_thw)
+        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state, image_grid_thw)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=vision_outputs.last_hidden_state,
+            pooler_output=image_features,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+        )
 
     @can_return_tuple
     @auto_docstring
@@ -330,7 +351,7 @@ class LocateAnythingModel(LlavaModel):
 
         image_features = None
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_grid_thw)
+            image_features = self.get_image_features(pixel_values, image_grid_thw).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features

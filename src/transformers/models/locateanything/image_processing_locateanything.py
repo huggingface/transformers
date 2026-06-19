@@ -16,6 +16,7 @@
 
 import math
 
+import numpy as np
 import torch
 from torchvision.transforms.v2 import functional as tvF
 
@@ -44,10 +45,10 @@ class LocateAnythingImageProcessorKwargs(ImagesKwargs, total=False):
 @auto_docstring
 class LocateAnythingImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
-    image_mean = (0.5, 0.5, 0.5)
-    image_std = (0.5, 0.5, 0.5)
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
     patch_size = 14
-    merge_kernel_size = (2, 2)
+    merge_kernel_size = [2, 2]
     in_token_limit = 25600
     do_rescale = True
     do_normalize = True
@@ -76,7 +77,12 @@ class LocateAnythingImageProcessor(TorchvisionBackend):
         patch = self.patch_size
         all_patches, all_grids = [], []
         for image in images:
-            image = tvF.pil_to_tensor(image.convert("RGB")) if not isinstance(image, torch.Tensor) else image
+            if isinstance(image, torch.Tensor):
+                pass
+            elif isinstance(image, np.ndarray):
+                image = tvF.to_image(image)
+            else:
+                image = tvF.pil_to_tensor(image.convert("RGB"))
             _, height, width = image.shape
             target_h, target_w = self._target_size(height, width)
             if (target_h, target_w) != (height, width):

@@ -115,5 +115,10 @@ class LocateAnythingConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+        # `magi` is an optional MTP-time NVIDIA kernel this integration does not implement; the published checkpoint
+        # ships it as the default, so unset it (and the sub-configs, via the setter) and let the standard selection apply.
+        if self._attn_implementation == "magi":
+            self._attn_implementation = None
+
 
 __all__ = ["LocateAnythingVisionConfig", "LocateAnythingConfig"]

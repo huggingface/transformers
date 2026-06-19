@@ -35,7 +35,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseMo
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import is_flash_attention_requested
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..auto import AutoModel
 from .configuration_locateanything import LocateAnythingConfig, LocateAnythingVisionConfig
@@ -53,55 +54,6 @@ class LocateAnythingVisionRotaryEmbedding(nn.Module):
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
         return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
-
-
-class LocateAnythingLearnable2DInterpPosEmb(nn.Module):
-    def __init__(self, config: LocateAnythingVisionConfig):
-        super().__init__()
-        self.height = config.init_pos_emb_height
-        self.width = config.init_pos_emb_width
-        self.weight = nn.Parameter(torch.empty(self.height, self.width, config.hidden_size))
-
-    def forward(self, hidden_states: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
-        pos_embeds = []
-        for _, height, width in image_grid_thw.tolist():
-            if (height, width) == (self.height, self.width):
-                pos_embeds.append(self.weight.flatten(end_dim=1))
-            else:
-                interpolated = F.interpolate(
-                    self.weight.permute(2, 0, 1).unsqueeze(0), size=(height, width), mode="bicubic"
-                )
-                pos_embeds.append(interpolated.squeeze(0).permute(1, 2, 0).flatten(end_dim=1))
-        return hidden_states + torch.cat(pos_embeds)
-
-
-class LocateAnythingPatchEmbed(nn.Module):
-    def __init__(self, config: LocateAnythingVisionConfig):
-        super().__init__()
-        self.proj = nn.Conv2d(
-            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
-        )
-        self.pos_emb = LocateAnythingLearnable2DInterpPosEmb(config)
-
-    def forward(self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.proj(pixel_values).view(pixel_values.size(0), -1)
-        hidden_states = self.pos_emb(hidden_states, image_grid_thw)
-        return hidden_states
-
-
-class LocateAnythingVisionMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
 
 
 def eager_attention_forward(
@@ -267,6 +219,21 @@ class LocateAnythingVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class LocateAnythingVisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
 class LocateAnythingVisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LocateAnythingVisionConfig):
         super().__init__()
@@ -306,6 +273,40 @@ class LocateAnythingVisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
+        return hidden_states
+
+
+class LocateAnythingLearnable2DInterpPosEmb(nn.Module):
+    def __init__(self, config: LocateAnythingVisionConfig):
+        super().__init__()
+        self.height = config.init_pos_emb_height
+        self.width = config.init_pos_emb_width
+        self.weight = nn.Parameter(torch.empty(self.height, self.width, config.hidden_size))
+
+    def forward(self, hidden_states: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
+        pos_embeds = []
+        for _, height, width in image_grid_thw.tolist():
+            if (height, width) == (self.height, self.width):
+                pos_embeds.append(self.weight.flatten(end_dim=1))
+            else:
+                interpolated = F.interpolate(
+                    self.weight.permute(2, 0, 1).unsqueeze(0), size=(height, width), mode="bicubic"
+                )
+                pos_embeds.append(interpolated.squeeze(0).permute(1, 2, 0).flatten(end_dim=1))
+        return hidden_states + torch.cat(pos_embeds)
+
+
+class LocateAnythingPatchEmbed(nn.Module):
+    def __init__(self, config: LocateAnythingVisionConfig):
+        super().__init__()
+        self.proj = nn.Conv2d(
+            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
+        )
+        self.pos_emb = LocateAnythingLearnable2DInterpPosEmb(config)
+
+    def forward(self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.proj(pixel_values).view(pixel_values.size(0), -1)
+        hidden_states = self.pos_emb(hidden_states, image_grid_thw)
         return hidden_states
 
 
@@ -386,13 +387,6 @@ class LocateAnythingPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    def _check_and_adjust_attn_implementation(self, attn_implementation, *args, **kwargs):
-        # `magi` is an optional MTP-time NVIDIA kernel this integration does not implement; the published checkpoint
-        # ships it as the default, so fall back to the standard attention selection.
-        if attn_implementation == "magi":
-            attn_implementation = None
-        return super()._check_and_adjust_attn_implementation(attn_implementation, *args, **kwargs)
-
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, LocateAnythingLearnable2DInterpPosEmb):
@@ -406,6 +400,10 @@ class LocateAnythingVisionModel(LocateAnythingPreTrainedModel):
     config: LocateAnythingVisionConfig
     main_input_name = "pixel_values"
     input_modalities = "image"
+    _can_record_outputs = {
+        "hidden_states": LocateAnythingVisionEncoderLayer,
+        "attentions": LocateAnythingVisionAttention,
+    }
 
     def __init__(self, config: LocateAnythingVisionConfig):
         super().__init__(config)
@@ -413,7 +411,8 @@ class LocateAnythingVisionModel(LocateAnythingPreTrainedModel):
         self.encoder = LocateAnythingVisionEncoder(config)
         self.post_init()
 
-    @auto_docstring
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutput:
@@ -484,27 +483,31 @@ class LocateAnythingCausalLMOutputWithPast(ModelOutput):
 class LocateAnythingModel(LocateAnythingPreTrainedModel):
     def __init__(self, config: LocateAnythingConfig):
         super().__init__(config)
-        self.vision_tower = LocateAnythingVisionModel._from_config(
-            config.vision_config, attn_implementation=self.config._attn_implementation
-        )
+        self.vision_tower = LocateAnythingVisionModel._from_config(config.vision_config)
         self.multi_modal_projector = LocateAnythingMultiModalProjector(config)
-        self.language_model = AutoModel.from_config(
-            config.text_config, attn_implementation=self.config._attn_implementation
-        )
+        self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> torch.Tensor:
+    ) -> BaseModelOutputWithPooling:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             Temporal, height and width of each image's patch grid.
         """
-        vision_outputs = self.vision_tower(
+        vision_outputs: BaseModelOutput = self.vision_tower(
             pixel_values=pixel_values.to(self.vision_tower.dtype), image_grid_thw=image_grid_thw, **kwargs
         )
-        return self.multi_modal_projector(vision_outputs.last_hidden_state, image_grid_thw)
+        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state, image_grid_thw)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=vision_outputs.last_hidden_state,
+            pooler_output=image_features,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+        )
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -556,7 +559,7 @@ class LocateAnythingModel(LocateAnythingPreTrainedModel):
 
         image_features = None
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_grid_thw)
+            image_features = self.get_image_features(pixel_values, image_grid_thw).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features

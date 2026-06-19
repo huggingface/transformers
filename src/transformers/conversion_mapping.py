@@ -662,14 +662,9 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^vision_model\.encoder\.blocks\.(\d+)\.mlp\.fc1\.",
                 target_patterns=r"model.vision_tower.encoder.layers.\1.mlp.fc2.",
             ),
-            WeightConverter(
-                source_patterns=r"^vision_model\.encoder\.blocks\.(\d+)\.wqkv\.(weight|bias)",
-                target_patterns=[
-                    r"model.vision_tower.encoder.layers.\1.self_attn.q_proj.\2",
-                    r"model.vision_tower.encoder.layers.\1.self_attn.k_proj.\2",
-                    r"model.vision_tower.encoder.layers.\1.self_attn.v_proj.\2",
-                ],
-                operations=[SplitQkvDeinterleaveRope()],
+            WeightRenaming(
+                source_patterns=r"^vision_model\.encoder\.blocks\.(\d+)\.wqkv\.",
+                target_patterns=r"model.vision_tower.encoder.layers.\1.self_attn.wqkv.",
             ),
             WeightRenaming(
                 source_patterns=r"^vision_model\.encoder\.final_layernorm\.",
@@ -677,6 +672,18 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(
                 source_patterns=r"^vision_model\.patch_embed\.", target_patterns="model.vision_tower.patch_embed."
+            ),
+        ],
+        "locateanything_vision": [
+            WeightConverter(
+                source_patterns="wqkv.weight",
+                target_patterns=["q_proj.weight", "k_proj.weight", "v_proj.weight"],
+                operations=[SplitQkvDeinterleaveRope()],
+            ),
+            WeightConverter(
+                source_patterns="wqkv.bias",
+                target_patterns=["q_proj.bias", "k_proj.bias", "v_proj.bias"],
+                operations=[SplitQkvDeinterleaveRope()],
             ),
         ],
         "paddleocr_vl": [
