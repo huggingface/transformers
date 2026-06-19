@@ -1271,9 +1271,8 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(r"decode_head\.conv_matting\.", r"decode_head.predictor."),
         ],
-        "tipsv2": [
-            WeightRenaming("text_encoder", "text_model"),
-            WeightRenaming("vision_encoder", "vision_model"),
+        "Tipsv2VisionModel": [
+            PrefixChange(prefix_to_remove="vision_encoder"),
             WeightRenaming(r"\.patch_embed\.proj\.", ".embeddings.patch_embeddings.projection."),
             WeightRenaming(r"\.cls_token", ".embeddings.cls_token"),
             WeightRenaming(r"\.mask_token", ".embeddings.mask_token"),
@@ -1284,16 +1283,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.attn\.proj\.", ".attention.output.dense."),
             WeightRenaming(r"\.ls1\.gamma", ".layer_scale1.lambda1"),
             WeightRenaming(r"\.ls2\.gamma", ".layer_scale2.lambda1"),
-            WeightRenaming(r"\.token_embedding\.", ".embeddings.token_embedding."),
-            WeightRenaming(r"\.ln_final\.", ".final_layer_norm."),
-            WeightRenaming(r"\.transformer\.resblocks\.(\d+)\.", r".encoder.layers.\1."),
-            WeightRenaming(r"\.ln_1\.", ".layer_norm1."),
-            WeightRenaming(r"\.ln_2\.", ".layer_norm2."),
-            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),
-            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),
-            # WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."), # if config.use_swiglu_ffn=True
-            # WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."), # if config.use_swiglu_ffn=True
-            WeightRenaming(r"\.attn\.out_proj\.", ".self_attn.out_proj."),
             WeightConverter(
                 source_patterns=r"\.attn\.qkv\.weight",
                 target_patterns=[
@@ -1312,6 +1301,18 @@ def _build_checkpoint_conversion_mapping():
                 ],
                 operations=[Chunk(dim=0)],
             ),
+        ],
+        "Tipsv2TextModel": [
+            PrefixChange(prefix_to_remove="text_encoder"),
+            WeightRenaming(r"\.token_embedding\.", ".embeddings.token_embedding."),
+            WeightRenaming(r"\.ln_final\.", ".final_layer_norm."),
+            WeightRenaming(r"\.transformer\.resblocks\.(\d+)\.", r".encoder.layers.\1."),
+            WeightRenaming(r"\.ln_1\.", ".layer_norm1."),
+            WeightRenaming(r"\.ln_2\.", ".layer_norm2."),
+            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),
+            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),
+            # WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."), # if config.use_swiglu_ffn=True
+            # WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."), # if config.use_swiglu_ffn=True
             WeightConverter(
                 source_patterns=r"\.attn\.in_proj_weight",
                 target_patterns=[".self_attn.q_proj.weight", ".self_attn.k_proj.weight", ".self_attn.v_proj.weight"],
@@ -1323,6 +1324,58 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
+        # "tipsv2": [
+        #     WeightRenaming("text_encoder", "text_model"),
+        #     WeightRenaming("vision_encoder", "vision_model"),
+        #     WeightRenaming(r"\.patch_embed\.proj\.", ".embeddings.patch_embeddings.projection."),
+        #     WeightRenaming(r"\.cls_token", ".embeddings.cls_token"),
+        #     WeightRenaming(r"\.mask_token", ".embeddings.mask_token"),
+        #     WeightRenaming(r"\.register_tokens", ".embeddings.register_tokens"),
+        #     WeightRenaming(r"\.pos_embed", ".embeddings.position_embeddings"),
+        #     WeightRenaming(r"\.norm\.", ".layernorm."),
+        #     WeightRenaming(r"\.blocks\.(\d+)\.", r".encoder.layer.\1."),
+        #     WeightRenaming(r"\.attn\.proj\.", ".attention.output.dense."),
+        #     WeightRenaming(r"\.ls1\.gamma", ".layer_scale1.lambda1"),
+        #     WeightRenaming(r"\.ls2\.gamma", ".layer_scale2.lambda1"),
+        #     WeightRenaming(r"\.token_embedding\.", ".embeddings.token_embedding."),
+        #     WeightRenaming(r"\.ln_final\.", ".final_layer_norm."),
+        #     WeightRenaming(r"\.transformer\.resblocks\.(\d+)\.", r".encoder.layers.\1."),
+        #     WeightRenaming(r"\.ln_1\.", ".layer_norm1."),
+        #     WeightRenaming(r"\.ln_2\.", ".layer_norm2."),
+        #     WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),
+        #     WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),
+        #     # WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."), # if config.use_swiglu_ffn=True
+        #     # WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."), # if config.use_swiglu_ffn=True
+        #     WeightRenaming(r"\.attn\.out_proj\.", ".self_attn.out_proj."),
+        #     WeightConverter(
+        #         source_patterns=r"\.attn\.qkv\.weight",
+        #         target_patterns=[
+        #             ".attention.attention.query.weight",
+        #             ".attention.attention.key.weight",
+        #             ".attention.attention.value.weight",
+        #         ],
+        #         operations=[Chunk(dim=0)],
+        #     ),
+        #     WeightConverter(
+        #         source_patterns=r"\.attn\.qkv\.bias",
+        #         target_patterns=[
+        #             ".attention.attention.query.bias",
+        #             ".attention.attention.key.bias",
+        #             ".attention.attention.value.bias",
+        #         ],
+        #         operations=[Chunk(dim=0)],
+        #     ),
+        #     WeightConverter(
+        #         source_patterns=r"\.attn\.in_proj_weight",
+        #         target_patterns=[".self_attn.q_proj.weight", ".self_attn.k_proj.weight", ".self_attn.v_proj.weight"],
+        #         operations=[Chunk(dim=0)],
+        #     ),
+        #     WeightConverter(
+        #         source_patterns=r"\.attn\.in_proj_bias",
+        #         target_patterns=[".self_attn.q_proj.bias", ".self_attn.k_proj.bias", ".self_attn.v_proj.bias"],
+        #         operations=[Chunk(dim=0)],
+        #     ),
+        # ],
         "Tipsv2VisionBackbone": [
             WeightRenaming(r"^vision_encoder\.", ""),
             WeightRenaming(r"^patch_embed\.proj\.", "embeddings.patch_embeddings.projection."),
@@ -1355,6 +1408,9 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
     }
+
+    mapping["tipsv2"] = [WeightRenaming("text_encoder", "text_model"), WeightRenaming("vision_encoder", "vision_model")]
+    
     # The backbone structural renames and QKV converters are handled automatically by the
     # Tipsv2VisionBackbone mapping (scoped to "backbone") via the composite-model DFS walk.
     # Only the prefix rename is needed here to route checkpoint keys into that scope.
