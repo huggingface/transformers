@@ -189,7 +189,7 @@ class Qwen3_5MoeDecoderLayer(Qwen3NextDecoderLayer):
         GradientCheckpointingLayer.__init__(self)
         self.hidden_size = config.hidden_size
         self.layer_type = config.layer_types[layer_idx]
-        if self.layer_type == "linear_attention":
+        if self.layer_type == "linear_attention_gated_delta_net":
             self.linear_attn = Qwen3_5MoeGatedDeltaNet(config, layer_idx)
         elif self.layer_type == "full_attention":
             self.self_attn = Qwen3_5MoeAttention(config, layer_idx)

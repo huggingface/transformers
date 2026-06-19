@@ -239,8 +239,8 @@ class NemotronHAttention(JambaAttention):
 
 
 MIXER_TYPES = {
-    "mamba": NemotronHMamba2Mixer,
-    "attention": NemotronHAttention,
+    "linear_attention_mamba2": NemotronHMamba2Mixer,
+    "full_attention": NemotronHAttention,
     "moe": NemotronHMoE,
     "mlp": NemotronHMLP,
 }
@@ -283,9 +283,9 @@ class NemotronHBlock(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 
-        if self.block_type == "mamba":
+        if self.block_type.startswith("linear_attention"):
             hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
-        elif self.block_type == "attention":
+        elif self.block_type == "full_attention":
             hidden_states, _ = self.mixer(
                 hidden_states=hidden_states,
                 past_key_values=past_key_values,
@@ -318,23 +318,6 @@ class NemotronHPreTrainedModel(PreTrainedModel):
         "hidden_states": NemotronHBlock,
         "attentions": NemotronHAttention,
     }
-
-    @staticmethod
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
-        # Nemotron-H layer_types include non-attention block types (moe / mlp) that the default dispatch
-        # table doesn't enumerate, so we return both masks the forward needs as a dict.
-        mask_kwargs = {
-            "config": config.get_text_config(),
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        return {
-            "attention": create_causal_mask(**mask_kwargs),
-            "mamba": create_recurrent_padding_mask(**mask_kwargs),
-        }
-
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
     ]
@@ -457,22 +440,15 @@ class NemotronHModel(NemotronHPreTrainedModel):
             "position_ids": position_ids,
         }
         if isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask = causal_mask_mapping.get("attention")
-            mamba_mask = causal_mask_mapping.get("mamba")
+            causal_mask_mapping = attention_mask
         else:
-            causal_mask = create_causal_mask(**mask_kwargs)
-            mamba_mask = create_recurrent_padding_mask(**mask_kwargs)
-
-        # Map block types to their corresponding masks
-        block_type_to_mask = {
-            "mamba": mamba_mask,
-            "attention": causal_mask,
-            "moe": None,
-            "mlp": None,
-        }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+            }
 
         for layer_idx, mixer_block in enumerate(self.layers):
-            layer_mask = block_type_to_mask[mixer_block.block_type]
+            layer_mask = causal_mask_mapping.get(mixer_block.block_type)
 
             hidden_states = mixer_block(
                 hidden_states,
@@ -493,6 +469,22 @@ class NemotronHModel(NemotronHPreTrainedModel):
 
 class NemotronHForCausalLM(ZambaForCausalLM):
     _tied_weights_keys = {}
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        # Nemotron-H layer_types include non-attention block types (moe / mlp) that the default dispatch
+        # table doesn't enumerate, so we return both masks the forward needs as a dict.
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        return {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+        }
 
     @can_return_tuple
     @auto_docstring

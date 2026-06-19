@@ -66,16 +66,33 @@ ALLOWED_LAYER_TYPES = (
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
     "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
-    "linear_attention",  # used in minimax
     "conv",  # used in LFMv2
-    "mamba",
-    "attention",
     "sparse",
     "dense",
-    "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
+    "hybrid",  # layers that fuse attention + mamba in a single block (zamba2, falcon_h1)
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
     "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
+    # ``linear_attention_{backbone}`` keeps the specific recurrent backbone identifiable to
+    # downstream tooling while sharing the same mask / cache plumbing.
+    "linear_attention_mamba",
+    "linear_attention_mamba2",
+    "linear_attention_gated_delta_net",
 )
+
+# Legacy ``layer_types`` strings → current ``linear_attention_{backbone}`` / ``full_attention``
+# convention, keyed by recurrent backbone. Configs call ``remap_legacy_layer_types`` in their
+# ``__post_init__`` so configs stored on the Hub with the old names load transparently.
+LEGACY_LAYER_TYPE_REMAP = {
+    "mamba": {"mamba": "linear_attention_mamba", "attention": "full_attention"},
+    "mamba2": {"mamba": "linear_attention_mamba2", "attention": "full_attention"},
+    "gated_delta_net": {"linear_attention": "linear_attention_gated_delta_net"},
+}
+
+
+def remap_legacy_layer_types(layer_types: list[str], backbone: str) -> list[str]:
+    """Apply legacy → current layer-type name mapping for the given recurrent backbone."""
+    remap = LEGACY_LAYER_TYPE_REMAP[backbone]
+    return [remap.get(t, t) for t in layer_types]
 
 
 # copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`

@@ -72,7 +72,9 @@ class OlmoHybridDynamicCache:
         self.transformer_layers = [
             i for i in range(config.num_hidden_layers) if self.layer_types[i] == "full_attention"
         ]
-        self.last_linear_layer = len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention")
+        self.last_linear_layer = (
+            len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention_gated_delta_net")
+        )
         self.recurrent_states = [None for _ in range(config.num_hidden_layers)]
         self.key_cache = [None for _ in range(config.num_hidden_layers)]
         self.value_cache = [None for _ in range(config.num_hidden_layers)]
@@ -486,19 +488,10 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
-    # NOTE: attention mask is a 2D boolean tensor; ``hidden_states`` is (batch, seq, channels) on the
-    # multi-token path. On the cached single-token path it is collapsed to (batch, channels) and the
-    # current token is always real, so masking is a no-op there.
-    if (
-        attention_mask is not None
-        and hidden_states.dim() == 3
-        and attention_mask.shape[1] > 1
-        and attention_mask.shape[0] > 1
-    ):
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
         dtype = hidden_states.dtype
-        # Under a compileable cache the mask is padded to ``max_cache_len`` for shape stability;
-        # slice it back to the local sequence length here.
-        hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
     return hidden_states
 
@@ -889,7 +882,7 @@ class OlmoHybridLinearAttentionDecoderLayer(GradientCheckpointingLayer):
         self.mlp = OlmoHybridMLP(config)
         self.input_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layer_type = "linear_attention"
+        self.layer_type = "linear_attention_gated_delta_net"
         self.linear_attn = OlmoHybridGatedDeltaNet(config, layer_idx=layer_idx)
 
     def forward(
@@ -963,7 +956,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
         self.layers = nn.ModuleList(
             [
                 OlmoHybridLinearAttentionDecoderLayer(config, layer_idx)
-                if config.layer_types[layer_idx] == "linear_attention"
+                if config.layer_types[layer_idx] == "linear_attention_gated_delta_net"
                 else OlmoHybridAttentionDecoderLayer(config, layer_idx)
                 for layer_idx in range(config.num_hidden_layers)
             ]
@@ -1020,7 +1013,9 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids) if self.rotary_emb is not None else None
 
         for i, decoder_layer in enumerate(self.layers):
-            layer_mask = linear_attn_mask if self.config.layer_types[i] == "linear_attention" else causal_mask
+            layer_mask = (
+                linear_attn_mask if self.config.layer_types[i] == "linear_attention_gated_delta_net" else causal_mask
+            )
             layer_position_embeddings = position_embeddings if self.config.layer_types[i] == "full_attention" else None
 
             hidden_states = decoder_layer(

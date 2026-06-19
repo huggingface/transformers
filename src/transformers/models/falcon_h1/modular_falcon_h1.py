@@ -418,7 +418,7 @@ class FalconH1Mixer(nn.Module):
                 if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                     dtype = hidden_states.dtype
-                    hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
+                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
                 # This is a hack to make sure multi-GPU inference works with HF accelerate
                 # see: https://github.com/Dao-AILab/flash-attention/issues/523 for more details
                 with torch.cuda.device(hidden_states.device):
@@ -656,7 +656,7 @@ class FalconH1Mixer(nn.Module):
         dtype = hidden_states.dtype
         if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-            hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
+            hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
         return self.torch_forward(hidden_states, cache_params, attention_mask)
 
@@ -789,22 +789,6 @@ class FalconH1PreTrainedModel(PreTrainedModel):
             for layer in module.layers:
                 init.copy_(layer.mamba.mup_vector, mup_vector)
 
-    @staticmethod
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
-        # Every FalconH1 decoder layer is hybrid (attention + mamba in the same block), so the layer-type
-        # dispatch table can't enumerate sub-patterns. We return both masks the layer needs as a dict.
-        mask_kwargs = {
-            "config": config.get_text_config(),
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        return {
-            "full_attention": create_causal_mask(**mask_kwargs),
-            "mamba": create_recurrent_padding_mask(**mask_kwargs),
-        }
-
 
 def compute_mup_vector(config):
     """
@@ -912,7 +896,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
         }
         if isinstance(causal_mask_mapping := attention_mask, dict):
             causal_mask = causal_mask_mapping.get("full_attention")
-            mamba_mask = causal_mask_mapping.get("mamba")
+            mamba_mask = causal_mask_mapping.get("linear_attention_mamba2")
         else:
             causal_mask = create_causal_mask(**mask_kwargs)
             mamba_mask = create_recurrent_padding_mask(**mask_kwargs)
@@ -940,6 +924,22 @@ class FalconH1Model(FalconH1PreTrainedModel):
 
 
 class FalconH1ForCausalLM(LlamaForCausalLM):
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        # Every FalconH1 decoder layer is hybrid (attention + mamba in the same block), so the layer-type
+        # dispatch table can't enumerate sub-patterns. We return both masks the layer needs as a dict.
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        return {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+        }
+
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -96,8 +96,7 @@ class JambaConfig(PreTrainedConfig):
     @property
     def layer_types(self):
         # Follow the `layer_types` conventions
-        layer_types = self.layers_block_type
-        return ["full_attention" if x == "attention" else x for x in layer_types]
+        return ["linear_attention_mamba" if x == "mamba" else "full_attention" for x in self.layers_block_type]
 
     @property
     def layers_num_experts(self):

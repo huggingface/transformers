@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -106,9 +106,11 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         if self.layer_types is None:
             interval_pattern = kwargs.pop("full_attention_interval", 4)
             self.layer_types = [
-                "linear_attention" if bool((i + 1) % interval_pattern) else "full_attention"
+                "linear_attention_gated_delta_net" if bool((i + 1) % interval_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
+        else:
+            self.layer_types = remap_legacy_layer_types(self.layer_types, "gated_delta_net")
 
         super().__post_init__(**kwargs)
 

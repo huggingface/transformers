@@ -57,7 +57,7 @@ class Qwen3NextModelTester(CausalLMModelTester):
         # leading to different dropout masks and mismatched losses.
         self.attention_probs_dropout_prob = 0.0
         self.hidden_act = "silu"
-        self.layer_types = ["linear_attention", "full_attention"]
+        self.layer_types = ["linear_attention_gated_delta_net", "full_attention"]
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
         self.linear_value_head_dim = 16
@@ -264,7 +264,7 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
             inputs_dict = {k: v.to(0) if isinstance(v, torch.Tensor) else v for k, v in inputs_dict.items()}
             # We want the linear attention layer to reside on device 1 with the device map (i.e. not the first/default device),
             # to check if cache initialization is on the correct device
-            config.layer_types = ["full_attention", "linear_attention"]
+            config.layer_types = ["full_attention", "linear_attention_gated_delta_net"]
             model = model_class(config).eval()
 
             with tempfile.TemporaryDirectory() as tmpdirname:

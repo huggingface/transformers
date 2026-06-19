@@ -286,7 +286,7 @@ class NemotronHMamba2Mixer(nn.Module):
             if attention_mask is not None and not torch.all(attention_mask == 1):
                 # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                 dtype = hidden_states.dtype
-                hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
+                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
             # 1. Gated MLP's linear projection
             projected_states = self.in_proj(hidden_states)
             A = -torch.exp(self.A_log.float())  # (num_heads) or (intermediate_size, state_size)
@@ -351,7 +351,7 @@ class NemotronHMamba2Mixer(nn.Module):
                 if attention_mask is not None and not torch.all(attention_mask == 1):
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                     dtype = hidden_states.dtype
-                    hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
+                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
                 scan_output, ssm_state = mamba_chunk_scan_combined(
                     hidden_states.view(batch_size, seq_len, -1, self.head_dim),
                     time_step,
@@ -388,7 +388,7 @@ class NemotronHMamba2Mixer(nn.Module):
         else:
             if attention_mask is not None:
                 # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                input_states = (input_states * attention_mask[:, : input_states.shape[1], None]).to(dtype)
+                input_states = (input_states * attention_mask[:, :, None]).to(dtype)
             projected_states = self.in_proj(input_states)
         d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size - 2 * self.n_groups * self.ssm_state_size- self.num_heads) // 2
         _, _, gate, hidden_states, dt = projected_states.split(
@@ -417,7 +417,7 @@ class NemotronHMamba2Mixer(nn.Module):
             if attention_mask is not None:
                 dtype = hidden_states.dtype
                 # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
+                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
         hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
         A = -torch.exp(self.A_log.float())                            # [num_heads]
@@ -892,8 +892,8 @@ class NemotronHAttention(nn.Module):
 
 
 MIXER_TYPES = {
-    "mamba": NemotronHMamba2Mixer,
-    "attention": NemotronHAttention,
+    "linear_attention_mamba2": NemotronHMamba2Mixer,
+    "full_attention": NemotronHAttention,
     "moe": NemotronHMoE,
     "mlp": NemotronHMLP,
 }
@@ -936,9 +936,9 @@ class NemotronHBlock(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 
-        if self.block_type == "mamba":
+        if self.block_type.startswith("linear_attention"):
             hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
-        elif self.block_type == "attention":
+        elif self.block_type == "full_attention":
             hidden_states, _ = self.mixer(
                 hidden_states=hidden_states,
                 past_key_values=past_key_values,
@@ -971,23 +971,6 @@ class NemotronHPreTrainedModel(PreTrainedModel):
         "hidden_states": NemotronHBlock,
         "attentions": NemotronHAttention,
     }
-
-    @staticmethod
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
-        # Nemotron-H layer_types include non-attention block types (moe / mlp) that the default dispatch
-        # table doesn't enumerate, so we return both masks the forward needs as a dict.
-        mask_kwargs = {
-            "config": config.get_text_config(),
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        return {
-            "attention": create_causal_mask(**mask_kwargs),
-            "mamba": create_recurrent_padding_mask(**mask_kwargs),
-        }
-
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
     ]
@@ -1110,22 +1093,15 @@ class NemotronHModel(NemotronHPreTrainedModel):
             "position_ids": position_ids,
         }
         if isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask = causal_mask_mapping.get("attention")
-            mamba_mask = causal_mask_mapping.get("mamba")
+            causal_mask_mapping = attention_mask
         else:
-            causal_mask = create_causal_mask(**mask_kwargs)
-            mamba_mask = create_recurrent_padding_mask(**mask_kwargs)
-
-        # Map block types to their corresponding masks
-        block_type_to_mask = {
-            "mamba": mamba_mask,
-            "attention": causal_mask,
-            "moe": None,
-            "mlp": None,
-        }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+            }
 
         for layer_idx, mixer_block in enumerate(self.layers):
-            layer_mask = block_type_to_mask[mixer_block.block_type]
+            layer_mask = causal_mask_mapping.get(mixer_block.block_type)
 
             hidden_states = mixer_block(
                 hidden_states,
@@ -1244,6 +1220,22 @@ class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
         )
 
         return model_inputs
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        # Nemotron-H layer_types include non-attention block types (moe / mlp) that the default dispatch
+        # table doesn't enumerate, so we return both masks the forward needs as a dict.
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        return {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+        }
 
 
 __all__ = ["NemotronHPreTrainedModel", "NemotronHModel", "NemotronHForCausalLM"]

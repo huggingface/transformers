@@ -366,19 +366,10 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
-    # NOTE: attention mask is a 2D boolean tensor; ``hidden_states`` is (batch, seq, channels) on the
-    # multi-token path. On the cached single-token path it is collapsed to (batch, channels) and the
-    # current token is always real, so masking is a no-op there.
-    if (
-        attention_mask is not None
-        and hidden_states.dim() == 3
-        and attention_mask.shape[1] > 1
-        and attention_mask.shape[0] > 1
-    ):
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
         dtype = hidden_states.dtype
-        # Under a compileable cache the mask is padded to ``max_cache_len`` for shape stability;
-        # slice it back to the local sequence length here.
-        hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
     return hidden_states
 
@@ -859,7 +850,7 @@ class BambaMixer(nn.Module):
         if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
             # The mask may be padded to ``max_cache_len`` under a compileable cache; slice to local seq.
-            hidden_states = (hidden_states * attention_mask[:, : hidden_states.shape[1], None]).to(dtype)
+            hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
         return self.torch_forward(hidden_states, cache_params, attention_mask)
 
@@ -902,7 +893,7 @@ class BambaRMSNorm(nn.Module):
 
 
 class BambaDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: BambaConfig, layer_idx: int, layer_type: str = "mamba"):
+    def __init__(self, config: BambaConfig, layer_idx: int, layer_type: str = "linear_attention_mamba2"):
         super().__init__()
 
         num_experts = 1
@@ -912,12 +903,12 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
         self.pre_ff_layernorm = BambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.layer_type = layer_type
-        if layer_type == "mamba":
+        if layer_type.startswith("linear_attention"):
             self.mamba = BambaMixer(config=config, layer_idx=layer_idx)
-        elif layer_type == "attention":
+        elif layer_type == "full_attention":
             self.self_attn = BambaAttention(config, layer_idx)
         else:
-            raise ValueError("Invalid layer_type")
+            raise ValueError(f"Invalid layer_type: {layer_type!r}")
 
     def forward(
         self,
@@ -933,7 +924,7 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        if self.layer_type == "mamba":
+        if self.layer_type.startswith("linear_attention"):
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
@@ -941,7 +932,7 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
                 **kwargs,
             )
             self_attn_weights = None
-        elif self.layer_type == "attention":
+        elif self.layer_type == "full_attention":
             hidden_states, self_attn_weights = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -1045,14 +1036,14 @@ class BambaModel(BambaPreTrainedModel):
         }
         if isinstance(causal_mask_mapping := attention_mask, dict):
             causal_mask = causal_mask_mapping.get("full_attention")
-            mamba_mask = causal_mask_mapping.get("mamba")
+            mamba_mask = causal_mask_mapping.get("linear_attention_mamba2")
         else:
             causal_mask = create_causal_mask(**mask_kwargs)
             mamba_mask = create_recurrent_padding_mask(**mask_kwargs)
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for i, decoder_layer in enumerate(self.layers):
-            layer_mask = mamba_mask if self.config.layers_block_type[i] == "mamba" else causal_mask
+            layer_mask = mamba_mask if self.config.layers_block_type[i].startswith("linear_attention") else causal_mask
 
             hidden_states, attn_weights = decoder_layer(
                 hidden_states,

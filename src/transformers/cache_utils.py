@@ -1032,12 +1032,12 @@ LAYER_TYPE_CACHE_MAPPING.update(
         # only the mask differs.
         "sliding_attention": DynamicSlidingWindowLayer,
         "chunked_attention": DynamicSlidingWindowLayer,
-        # Linear-attention-shaped layers (mamba / conv / pure linear-attention / moe placeholders)
-        # don't grow per-token KV; they're tracked just so position bookkeeping stays consistent.
-        "mamba": LinearAttentionLayer,
+        # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
         "conv": LinearAttentionLayer,
-        "linear_attention": LinearAttentionLayer,
         "moe": LinearAttentionLayer,
+        "linear_attention_mamba": LinearAttentionLayer,
+        "linear_attention_mamba2": LinearAttentionLayer,
+        "linear_attention_gated_delta_net": LinearAttentionLayer,
         # Hybrid layers (e.g. zamba / zamba2) carry both a linear-attention state and a dynamic-attention state.
         "hybrid": LinearAttentionAndFullAttentionLayer,
     }
@@ -1598,7 +1598,13 @@ class StaticCache(Cache):
             elif layer_type in sliding_layer_types:
                 layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
             # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
-            elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
+            elif layer_type in (
+                "conv",
+                "moe",
+                "linear_attention_mamba",
+                "linear_attention_mamba2",
+                "linear_attention_gated_delta_net",
+            ):
                 layer = LinearAttentionLayer()
             # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
             elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:

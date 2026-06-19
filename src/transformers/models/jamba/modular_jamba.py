@@ -185,7 +185,7 @@ class JambaMambaMixer(nn.Module):
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask[:, : hidden_states.shape[-1]].unsqueeze(1)
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 2. Convolution sequence transformation
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
@@ -205,7 +205,7 @@ class JambaMambaMixer(nn.Module):
             hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
 
         if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask[:, : hidden_states.shape[-1]].unsqueeze(1)
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
@@ -277,7 +277,7 @@ class JambaMambaMixer(nn.Module):
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask[:, : hidden_states.shape[-1]].unsqueeze(1)
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
             # In training mode, we don't want to perform in-place operations on ssm_state so we can compute the backwards pass
@@ -307,7 +307,7 @@ class JambaMambaMixer(nn.Module):
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
 
         if attention_mask is not None:
-            hidden_states = hidden_states * attention_mask[:, : hidden_states.shape[-1]].unsqueeze(1)
+            hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
@@ -573,7 +573,7 @@ class JambaModel(JambaPreTrainedModel):
         }
         if isinstance(causal_mask_mapping := attention_mask, dict):
             causal_mask = causal_mask_mapping.get("full_attention")
-            mamba_mask = causal_mask_mapping.get("mamba")
+            mamba_mask = causal_mask_mapping.get("linear_attention_mamba")
         else:
             causal_mask = create_causal_mask(**mask_kwargs)
             mamba_mask = create_recurrent_padding_mask(**mask_kwargs)

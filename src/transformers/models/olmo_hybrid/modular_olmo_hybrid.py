@@ -26,7 +26,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
@@ -160,13 +160,15 @@ class OlmoHybridConfig(LlamaConfig):
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
             # Default: linear attention for most layers, full attention every 4th layer
-            self.layer_types = ["linear_attention"] * int(self.num_hidden_layers)
+            self.layer_types = ["linear_attention_gated_delta_net"] * int(self.num_hidden_layers)
             for i in range(int(self.num_hidden_layers)):
                 if i % 4 == 3:
                     self.layer_types[i] = "full_attention"
             # Ensure at least one full attention layer for small num_hidden_layers
             if "full_attention" not in self.layer_types:
                 self.layer_types[-1] = "full_attention"
+        else:
+            self.layer_types = remap_legacy_layer_types(self.layer_types, "gated_delta_net")
 
         if self.linear_num_key_heads is None:
             self.linear_num_key_heads = self.num_attention_heads
@@ -183,9 +185,9 @@ class OlmoHybridConfig(LlamaConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if "linear_attention" not in self.layer_types:
+        if "linear_attention_gated_delta_net" not in self.layer_types:
             raise ValueError("OLMoHybrid expects at least one 'linear_attention' layer.")
-        if all(t == "linear_attention" for t in self.layer_types):
+        if all(t == "linear_attention_gated_delta_net" for t in self.layer_types):
             raise ValueError("OLMoHybrid expects at least one attention layer.")
 
 
@@ -204,7 +206,9 @@ class OlmoHybridDynamicCache:
         self.transformer_layers = [
             i for i in range(config.num_hidden_layers) if self.layer_types[i] == "full_attention"
         ]
-        self.last_linear_layer = len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention")
+        self.last_linear_layer = (
+            len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention_gated_delta_net")
+        )
         self.recurrent_states = [None for _ in range(config.num_hidden_layers)]
         self.key_cache = [None for _ in range(config.num_hidden_layers)]
         self.value_cache = [None for _ in range(config.num_hidden_layers)]
@@ -643,7 +647,7 @@ class OlmoHybridAttentionDecoderLayer(Olmo3DecoderLayer):
 class OlmoHybridLinearAttentionDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: OlmoHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.layer_type = "linear_attention"
+        self.layer_type = "linear_attention_gated_delta_net"
         del self.self_attn
         self.linear_attn = OlmoHybridGatedDeltaNet(config, layer_idx=layer_idx)
         self.input_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -713,7 +717,7 @@ class OlmoHybridModel(Qwen3NextModel):
         self.layers = nn.ModuleList(
             [
                 OlmoHybridLinearAttentionDecoderLayer(config, layer_idx)
-                if config.layer_types[layer_idx] == "linear_attention"
+                if config.layer_types[layer_idx] == "linear_attention_gated_delta_net"
                 else OlmoHybridAttentionDecoderLayer(config, layer_idx)
                 for layer_idx in range(config.num_hidden_layers)
             ]
@@ -767,7 +771,9 @@ class OlmoHybridModel(Qwen3NextModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids) if self.rotary_emb is not None else None
 
         for i, decoder_layer in enumerate(self.layers):
-            layer_mask = linear_attn_mask if self.config.layer_types[i] == "linear_attention" else causal_mask
+            layer_mask = (
+                linear_attn_mask if self.config.layer_types[i] == "linear_attention_gated_delta_net" else causal_mask
+            )
             layer_position_embeddings = position_embeddings if self.config.layer_types[i] == "full_attention" else None
 
             hidden_states = decoder_layer(
