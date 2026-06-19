@@ -257,47 +257,20 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
     def test_peft_load_adapter_applies_user_key_mapping(self):
         """
-        Regression test: a user-supplied ``key_mapping`` passed to ``from_pretrained`` must be applied to
-        the PEFT adapter weights, not only to the base model weights. ``load_adapter`` used to recompute
-        the conversion mapping from scratch (ignoring ``load_config.weight_mapping``) and therefore dropped
-        the ``key_mapping``, so an adapter whose keys only line up with the model after the mapping was
-        silently skipped, leaving its LoRA weights at the fresh init instead of the checkpoint values. This
-        affects adapters trained against a differently-nested module layout that the ``key_mapping`` bridges.
+        Regression test for https://github.com/huggingface/transformers/pull/46766: a user ``key_mapping``
+        passed to ``from_pretrained`` must reach the PEFT adapter weights, not just the base model. The fixture
+        mirrors ``vidore/colpali`` (old ``language_model.model.layers`` layout).
         """
-        from peft import LoraConfig
-        from safetensors import safe_open
-        from safetensors.torch import save_file
+        from transformers import PaliGemmaModel
 
-        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        model_id = "hf-internal-testing/tiny-random-paligemma-lora-key-mapping"
         sentinel_a, sentinel_b = 0.0234, 0.0567
 
-        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
-        model.add_adapter(LoraConfig(init_lora_weights=False, r=8, target_modules=["q_proj", "v_proj"]))
-        with torch.no_grad():
-            for name, p in model.named_parameters():
-                if "lora_A" in name:
-                    p.fill_(sentinel_a)
-                elif "lora_B" in name:
-                    p.fill_(sentinel_b)
+        model = PaliGemmaModel.from_pretrained(
+            model_id, key_mapping={r"language_model\.model\.": "language_model."}
+        ).to(torch_device)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-
-            # Insert an extra ``.indirection`` segment into every adapter weight key, so the adapter only
-            # lines up with the model once a ``key_mapping`` strips it back out again.
-            adapter_file = os.path.join(tmpdirname, "adapter_model.safetensors")
-            with safe_open(adapter_file, framework="pt") as f:
-                metadata = f.metadata()
-                state = {key: f.get_tensor(key) for key in f.keys()}
-            renamed = {key.replace("self_attn.", "self_attn.indirection.", 1): value for key, value in state.items()}
-            self.assertNotEqual(set(renamed), set(state), "test setup did not rename any adapter keys")
-            save_file(renamed, adapter_file, metadata=metadata)
-
-            reloaded = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, key_mapping={r"self_attn\.indirection\.": "self_attn."}
-            ).to(torch_device)
-
-        lora_params = {name: p for name, p in reloaded.named_parameters() if "lora_A" in name or "lora_B" in name}
+        lora_params = {n: p for n, p in model.named_parameters() if "lora_A" in n or "lora_B" in n}
         self.assertTrue(lora_params, "no LoRA parameters found on reloaded model")
         for name, p in lora_params.items():
             expected = sentinel_a if "lora_A" in name else sentinel_b
