@@ -32,6 +32,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -39,10 +40,8 @@ from ..nemotron_asr_streaming.configuration_nemotron_asr_streaming import (
     NemotronAsrStreamingConfig,
     NemotronAsrStreamingEncoderConfig,
 )
-from ..nemotron_asr_streaming.feature_extraction_nemotron_asr_streaming import NemotronAsrStreamingFeatureExtractor
 from ..nemotron_asr_streaming.modeling_nemotron_asr_streaming import (
     NemotronAsrStreamingForRNNT,
-    NemotronAsrStreamingRNNTOutput,
     NemotronAsrStreamingPreTrainedModel,
 )
 from ..nemotron_asr_streaming.processing_nemotron_asr_streaming import (
@@ -256,10 +255,6 @@ class Nemotron3_5AsrConfig(NemotronAsrStreamingConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class Nemotron3_5AsrFeatureExtractor(NemotronAsrStreamingFeatureExtractor):
-    pass
-
-
 class Nemotron3_5AsrProcessorKwargs(NemotronAsrStreamingProcessorKwargs, total=False):
     pass
 
@@ -419,10 +414,43 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
 
 
 @dataclass
-class Nemotron3_5AsrRNNTOutput(NemotronAsrStreamingRNNTOutput): ...
+class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
+    r"""
+    encoder_past_key_values (`Cache`, *optional*):
+        Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
+        (cache-aware streaming). Pass it to the next chunk's forward.
+    padding_cache (`Cache`, *optional*):
+        Updated unified streaming conv cache (subsampling Conv2d + conformer depthwise Conv1d), returned when
+        encoding audio with `use_cache=True`. Pass it to the next chunk's forward.
+
+    Defined standalone (rather than subclassing [`NemotronAsrStreamingRNNTOutput`]) and the conv cache typed as
+    the generic [`Cache`]: the encoder is reused as-is via `AutoModel`, so referencing its concrete conv-cache
+    class here would make the modular converter copy the whole encoder conv stack into this file as dead code.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
+
+    encoder_past_key_values: Cache | None = None
+    padding_cache: Cache | None = None
 
 
-class Nemotron3_5AsrPreTrainedModel(NemotronAsrStreamingPreTrainedModel): ...
+class Nemotron3_5AsrPreTrainedModel(NemotronAsrStreamingPreTrainedModel):
+    # The encoder is reused as-is via `AutoModel` (a `NemotronAsrStreamingEncoder` submodule that initializes
+    # itself and records its own hidden states/attentions), so this wrapper records no encoder outputs and only
+    # needs the generic `_init_weights`. Overriding both (rather than inheriting from the base, whose bodies
+    # reference the encoder block/attention classes by symbol) also stops the modular converter from copying the
+    # entire encoder stack into this file as dead code.
+    _no_split_modules = ["NemotronAsrStreamingEncoderBlock"]
+    _can_record_outputs = {}
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        # Call the framework base directly (not `super()`, which the modular converter would inline, pulling the
+        # encoder-specific init branches and their classes back into this file): the reused encoder submodule
+        # initializes its own attention/positional weights, so only generic init is needed here.
+        PreTrainedModel._init_weights(self, module)
 
 
 @auto_docstring(
@@ -562,7 +590,6 @@ class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGeneratio
 __all__ = [
     "Nemotron3_5AsrConfig",
     "Nemotron3_5AsrEncoderConfig",
-    "Nemotron3_5AsrFeatureExtractor",
     "Nemotron3_5AsrProcessor",
     "Nemotron3_5AsrRNNTOutput",
     "Nemotron3_5AsrForRNNT",

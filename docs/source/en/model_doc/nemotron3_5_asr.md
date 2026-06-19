@@ -63,10 +63,6 @@ print(processor.batch_decode(generated.sequences, skip_special_tokens=False))
 
 [[autodoc]] Nemotron3_5AsrEncoderConfig
 
-## Nemotron3_5AsrFeatureExtractor
-
-[[autodoc]] Nemotron3_5AsrFeatureExtractor
-
 ## Nemotron3_5AsrProcessor
 
 [[autodoc]] Nemotron3_5AsrProcessor

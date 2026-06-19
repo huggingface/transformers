@@ -40,9 +40,9 @@ from tokenizers import AddedToken
 from transformers import (
     Nemotron3_5AsrConfig,
     Nemotron3_5AsrEncoderConfig,
-    Nemotron3_5AsrFeatureExtractor,
     Nemotron3_5AsrForRNNT,
     Nemotron3_5AsrProcessor,
+    NemotronAsrStreamingFeatureExtractor,
     ParakeetTokenizer,
 )
 from transformers.convert_slow_tokenizer import ParakeetConverter
@@ -211,8 +211,8 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
     )
     print(f"Marked {len(language_tags)} language-tag tokens as special: {language_tags}")
 
-    # Nemotron3_5AsrFeatureExtractor (like NemotronAsrFeatureExtractor) has no normalization step at all,
-    # so NeMo's `preprocessor.normalize` is dropped rather than translated.
+    # NemotronAsrStreamingFeatureExtractor (reused directly; like NemotronAsrFeatureExtractor) has no
+    # normalization step at all, so NeMo's `preprocessor.normalize` is dropped rather than translated.
     feature_extractor_config_keys_mapping = {
         "sample_rate": "sampling_rate",
         "window_size": "win_length",
@@ -245,7 +245,7 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
         else:
             raise ValueError(f"Key {key} not found in feature_extractor_config_keys_mapping")
 
-    feature_extractor = Nemotron3_5AsrFeatureExtractor(**converted_feature_extractor_config)
+    feature_extractor = NemotronAsrStreamingFeatureExtractor(**converted_feature_extractor_config)
 
     # Carry the model's supported right attention contexts onto the processor so it can validate
     # `streaming_latency_ms` and emit `num_lookahead_tokens`. NeMo stores a single [left, right] pair, a list

@@ -953,7 +953,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
         ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
-        ("nemotron3_5_asr", "Nemotron3_5AsrFeatureExtractor"),
         ("nemotron_asr_streaming", "NemotronAsrStreamingFeatureExtractor"),
         ("pe_audio", "PeAudioFeatureExtractor"),
         ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),

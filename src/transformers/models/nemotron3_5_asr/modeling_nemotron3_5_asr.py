@@ -20,295 +20,24 @@
 # limitations under the License.
 
 import math
-from collections.abc import Callable
 from dataclasses import dataclass
-from functools import cached_property
 
 import torch
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMode
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torchdynamo_compiling,
-    logging,
-)
-from ...utils.generic import maybe_autocast
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
-from .configuration_nemotron3_5_asr import Nemotron3_5AsrConfig, Nemotron3_5AsrEncoderConfig
+from .configuration_nemotron3_5_asr import Nemotron3_5AsrConfig
 from .generation_nemotron3_5_asr import Nemotron3_5AsrGenerationMixin, Nemotron3_5AsrRNNTDecoderCache
 
 
 logger = logging.get_logger(__name__)
-
-
-class Nemotron3_5AsrEncoderCausalConv1dCacheLayer:
-    def __init__(self):
-        self.cache: torch.Tensor | None = None
-        self.is_initialized: bool = False
-
-    def lazy_initialization(self, hidden_states, conv_module):
-        self.left_pad = conv_module.left_pad
-        self.in_channels = conv_module.in_channels
-        self.cache = torch.zeros(
-            hidden_states.shape[0],
-            self.in_channels,
-            self.left_pad,
-            device=hidden_states.device,
-            dtype=hidden_states.dtype,
-        )
-
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.cache)
-
-        self.is_initialized = True
-
-    def update(self, hidden_states, conv_module=None):
-        if not self.is_initialized and conv_module is not None:
-            self.lazy_initialization(hidden_states, conv_module)
-        elif not self.is_initialized:
-            raise ValueError(
-                "Nemotron3_5AsrEncoderCausalConv1dCacheLayer is not initialized. Make sure to provide conv_module to the update method."
-            )
-
-        # get the padding states
-        if self.left_pad > 0:
-            shortfall = max(0, self.left_pad - hidden_states.shape[-1])
-            if shortfall > 0:
-                padding_states = torch.cat([self.cache[:, :, -shortfall:], hidden_states], dim=-1)
-            else:
-                padding_states = hidden_states[:, :, -self.left_pad :]
-        else:
-            padding_states = torch.empty(
-                hidden_states.shape[0], self.in_channels, 0, dtype=hidden_states.dtype, device=hidden_states.device
-            )
-
-        current_cache = self.cache.clone()
-        self.cache.copy_(padding_states)
-
-        return current_cache
-
-
-class Nemotron3_5AsrEncoderCausalConv2dCacheLayer:
-    def __init__(self):
-        self.cache: torch.Tensor | None = None
-        self.is_initialized: bool = False
-
-    def lazy_initialization(self, hidden_states, conv_module):
-        self.left_pad = conv_module.left_pad
-        self.init_pad = conv_module.left_pad_init - conv_module.left_pad
-        cache_shape = list(hidden_states.shape)
-        cache_shape[2] = self.left_pad
-        self.cache = torch.zeros(cache_shape, device=hidden_states.device, dtype=hidden_states.dtype)
-
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.cache)
-
-        self.is_first_chunk = True
-        self.is_initialized = True
-
-    def update(self, hidden_states, conv_module=None):
-        if not self.is_initialized and conv_module is not None:
-            self.lazy_initialization(hidden_states, conv_module)
-        elif not self.is_initialized:
-            raise ValueError(
-                "Nemotron3_5AsrEncoderCausalConv2dCacheLayer is not initialized. Make sure to provide conv_module to the update method."
-            )
-
-        # new cache: the last `left_pad` time frames (dim 2), keeping the old cache tail on shortfall
-        shortfall = max(0, self.left_pad - hidden_states.shape[2])
-        if shortfall > 0:
-            new_cache = torch.cat([self.cache[:, :, -shortfall:], hidden_states], dim=2)
-        else:
-            new_cache = hidden_states[:, :, -self.left_pad :]
-
-        # left context to prepend: the old cache, plus `init_pad` leading zeros on the first chunk
-        current_cache = self.cache.clone()
-        if self.is_first_chunk and self.init_pad > 0:
-            init_shape = list(current_cache.shape)
-            init_shape[2] = self.init_pad
-            current_cache = torch.cat([current_cache.new_zeros(init_shape), current_cache], dim=2)
-        self.is_first_chunk = False
-
-        self.cache.copy_(new_cache)
-        return current_cache
-
-
-class Nemotron3_5AsrEncoderCausalConv1d(nn.Conv1d):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        cache_key: str,
-        stride: int = 1,
-        dilation: int = 1,
-        groups: int = 1,
-        bias: bool = True,
-    ):
-        super().__init__(
-            in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, groups=groups, bias=bias
-        )
-        self.cache_key = cache_key
-
-    @cached_property
-    def left_pad(self):
-        effective_kernel_size = (self.kernel_size[0] - 1) * self.dilation[0] + 1
-        return effective_kernel_size - self.stride[0]
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        padding_cache: Nemotron3_5AsrConv1dPaddingCache | None = None,
-    ) -> torch.Tensor:
-        if padding_cache is not None:
-            x = padding_cache.update(x, self.cache_key, self)
-        else:
-            x = nn.functional.pad(x, (self.left_pad, 0))
-
-        return super().forward(x)
-
-
-class Nemotron3_5AsrEncoderCausalConv2D(nn.Conv2d):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        cache_key: str,
-        stride: int = 1,
-        padding: int = 0,
-        dilation: int = 1,
-        groups: int = 1,
-    ):
-        super().__init__(
-            in_channels, out_channels, kernel_size, stride=stride, padding=padding, dilation=dilation, groups=groups
-        )
-        self.cache_key = cache_key
-
-    @property
-    def left_pad(self):
-        return self.kernel_size[0] - self.stride[0]
-
-    @property
-    def left_pad_init(self):
-        return self.kernel_size[0] - 1
-
-    @property
-    def time_pad(self):
-        return (self.kernel_size[0] - 1, self.stride[0] - 1)
-
-    @property
-    def freq_pad(self):
-        return (self.kernel_size[1] - 1, self.stride[1] - 1)
-
-    def output_length(self, input_lengths: torch.Tensor | None, streaming: bool = False) -> torch.Tensor | None:
-        # Streaming consumes `left_pad` cached frames on the left and no right padding; offline uses the
-        # full causal padding `(kernel - 1, stride - 1)` on the time axis.
-        if input_lengths is None:
-            return None
-        left, right = (self.left_pad, 0) if streaming else self.time_pad
-        return (input_lengths + left + right - self.kernel_size[0]) // self.stride[0] + 1
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        padding_cache: Nemotron3_5AsrEncoderCausalConvPaddingCache | None = None,
-    ) -> torch.Tensor:
-        x = nn.functional.pad(x, (self.freq_pad[0], self.freq_pad[1]))
-        if padding_cache is not None:
-            x = padding_cache.update(x, self.cache_key, self)
-        else:
-            x = nn.functional.pad(x, (0, 0, self.time_pad[0], self.time_pad[1]))
-
-        return super().forward(x)
-
-
-class Nemotron3_5AsrEncoderCausalConvPaddingCache:
-    def __init__(self):
-        self.layers: dict[str, Nemotron3_5AsrEncoderCausalConv1dCacheLayer] = {}
-
-    def update(self, hidden_states, cache_key, conv_module):
-        if cache_key not in self.layers:
-            if isinstance(conv_module, Nemotron3_5AsrEncoderCausalConv2D):
-                self.layers[cache_key] = Nemotron3_5AsrEncoderCausalConv2dCacheLayer()
-            elif isinstance(conv_module, Nemotron3_5AsrEncoderCausalConv1d):
-                self.layers[cache_key] = Nemotron3_5AsrEncoderCausalConv1dCacheLayer()
-            else:
-                raise NotImplementedError(f"Unsupported conv_module type: {type(conv_module)}")
-
-        padding_states = self.layers[cache_key].update(hidden_states, conv_module)
-        return torch.cat([padding_states, hidden_states], dim=2)
-
-
-class Nemotron3_5AsrConv1dCacheLayer:
-    def __init__(self):
-        self.cache: torch.Tensor | None = None
-        self.is_initialized: bool = False
-
-    def lazy_initialization(self, hidden_states, conv_module):
-        self.left_pad = conv_module.left_pad
-        self.in_channels = conv_module.in_channels
-        self.cache = torch.zeros(
-            hidden_states.shape[0],
-            self.in_channels,
-            self.left_pad,
-            device=hidden_states.device,
-            dtype=hidden_states.dtype,
-        )
-
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.cache)
-
-        self.is_initialized = True
-
-    def update(self, hidden_states, conv_module=None):
-        if not self.is_initialized and conv_module is not None:
-            self.lazy_initialization(hidden_states, conv_module)
-        elif not self.is_initialized:
-            raise ValueError(
-                "Nemotron3_5AsrConv1dCacheLayer is not initialized. Make sure to provide conv_module to the update method."
-            )
-
-        # get the padding states
-        if self.left_pad > 0:
-            shortfall = max(0, self.left_pad - hidden_states.shape[-1])
-            if shortfall > 0:
-                padding_states = torch.cat([self.cache[:, :, -shortfall:], hidden_states], dim=-1)
-            else:
-                padding_states = hidden_states[:, :, -self.left_pad :]
-        else:
-            padding_states = torch.empty(
-                hidden_states.shape[0], self.in_channels, 0, dtype=hidden_states.dtype, device=hidden_states.device
-            )
-
-        current_cache = self.cache.clone()
-        self.cache.copy_(padding_states)
-
-        return current_cache
-
-
-class Nemotron3_5AsrConv1dPaddingCache:
-    def __init__(self):
-        self.layers = {}
-
-    def update(self, hidden_states, cache_key, conv_module):
-        if cache_key not in self.layers:
-            self.layers[cache_key] = Nemotron3_5AsrConv1dCacheLayer()
-
-        padding_states = self.layers[cache_key].update(hidden_states, conv_module)
-        padded_hidden_states = torch.cat([padding_states, hidden_states], dim=-1)
-        return padded_hidden_states
 
 
 @dataclass
@@ -317,9 +46,13 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
     encoder_past_key_values (`Cache`, *optional*):
         Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
         (cache-aware streaming). Pass it to the next chunk's forward.
-    padding_cache (`Nemotron3_5AsrEncoderCausalConvPaddingCache`, *optional*):
+    padding_cache (`Cache`, *optional*):
         Updated unified streaming conv cache (subsampling Conv2d + conformer depthwise Conv1d), returned when
         encoding audio with `use_cache=True`. Pass it to the next chunk's forward.
+
+    Defined standalone (rather than subclassing [`NemotronAsrStreamingRNNTOutput`]) and the conv cache typed as
+    the generic [`Cache`]: the encoder is reused as-is via `AutoModel`, so referencing its concrete conv-cache
+    class here would make the modular converter copy the whole encoder conv stack into this file as dead code.
     """
 
     loss: torch.FloatTensor | None = None
@@ -327,392 +60,7 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
     decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
 
     encoder_past_key_values: Cache | None = None
-    padding_cache: Nemotron3_5AsrEncoderCausalConvPaddingCache | None = None
-
-
-class Nemotron3_5AsrEncoderRelPositionalEncoding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: Nemotron3_5AsrEncoderConfig, device=None):
-        super().__init__()
-        self.max_position_embeddings = config.max_position_embeddings
-        self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config, device=device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    @staticmethod
-    def compute_default_relative_positional_parameters(
-        config: Nemotron3_5AsrEncoderConfig | None = None,
-        device=None,
-    ) -> torch.Tensor:
-        base = 10000.0
-        inv_freq = 1.0 / (
-            base
-            ** (
-                torch.arange(0, config.hidden_size, 2, dtype=torch.int64).to(device=device, dtype=torch.float)
-                / config.hidden_size
-            )
-        )
-        return inv_freq
-
-    @torch.no_grad()
-    def forward(self, hidden_states: torch.Tensor, cached_frames: int | None = None):
-        # `cached_frames` is the number of cached left-context frames (0 offline). This Transformer-XL
-        # style relative encoding spans the full key length `L = current chunk + cached_frames`, with
-        # relative distances running from `L - 1` down to `-(L - 1)`.
-        seq_length = hidden_states.shape[1] + (cached_frames if cached_frames is not None else 0)
-        if seq_length > self.max_position_embeddings:
-            raise ValueError(
-                f"Sequence Length: {seq_length} has to be less or equal than "
-                f"config.max_position_embeddings {self.max_position_embeddings}."
-            )
-        position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
-        )
-        position_ids_expanded = position_ids[None, None, :].float()
-
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            sin = freqs.sin()
-            cos = freqs.cos()
-            # interleave sin and cos
-            pos_embed = torch.stack([sin, cos], dim=-1)
-            pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
-
-        return pos_embed.to(dtype=hidden_states.dtype)
-
-
-class Nemotron3_5AsrEncoderConvolutionModule(nn.Module):
-    def __init__(self, config: Nemotron3_5AsrEncoderConfig, module_config=None, layer_idx: int | None = None):
-        """
-        Args:
-            config (Nemotron3_5AsrEncoderConfig): Configuration for the model.
-            module_config (dict): Configuration for the module (e.g., encoder or decoder).
-        """
-        super().__init__()
-        channels = config.hidden_size
-        # kernel_size should be an odd number for 'SAME' padding
-        if module_config is None:
-            # e.g. using `ParakeetEncoderConfig` in src/transformers/models/parakeet/configuration_parakeet.py
-            kernel_size = config.conv_kernel_size
-            self.activation = ACT2FN[getattr(config, "hidden_act", "silu")]
-        else:
-            kernel_size = module_config["kernel_size"]
-            self.activation = ACT2FN[module_config.get("activation", "silu")]
-        self.padding = (kernel_size - 1) // 2
-        self.pointwise_conv1 = nn.Conv1d(
-            channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=config.convolution_bias
-        )
-        self.depthwise_conv = Nemotron3_5AsrEncoderCausalConv1d(
-            channels,
-            channels,
-            kernel_size,
-            cache_key=f"conv.{layer_idx}",
-            stride=1,
-            groups=channels,
-            bias=config.convolution_bias,
-        )
-
-        self.norm = nn.LayerNorm(channels)
-        self.pointwise_conv2 = nn.Conv1d(
-            channels, channels, kernel_size=1, stride=1, padding=0, bias=config.convolution_bias
-        )
-        kernel_size = config.conv_kernel_size
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        all_masked_rows: torch.Tensor | None = None,
-        padding_cache: Nemotron3_5AsrEncoderCausalConvPaddingCache | None = None,
-    ):
-        """
-        Compute convolution module.
-
-        Args:
-            hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input tensor.
-            attention_mask (`torch.Tensor` of shape `(batch, 1, time, time)`): Attention mask.
-
-        Returns:
-            `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
-
-        """
-        hidden_states = hidden_states.transpose(1, 2)  # (B, C, T)
-
-        # GLU mechanism
-        hidden_states = self.pointwise_conv1(hidden_states)
-        hidden_states = nn.functional.glu(hidden_states, dim=1)
-
-        # Zero out fully-masked (padding) frames before convolution so they don't leak into valid frames.
-        # `all_masked_rows` is derived from the attention mask once in the encoder and shared across layers.
-        if all_masked_rows is not None:
-            hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
-
-        # Causal depthwise conv: left context from `padding_cache` when streaming, else left-padded.
-        hidden_states = self.depthwise_conv(hidden_states, padding_cache=padding_cache)
-
-        # LayerNorm expects (B, T, C).
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.norm(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
-
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.pointwise_conv2(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)  # (B, T, C)
-
-        return hidden_states
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-@use_kernelized_func(apply_rotary_pos_emb)
-class Nemotron3_5AsrEncoderAttention(nn.Module):
-    """
-    Multi-head attention with relative positional encoding.
-    The only difference with `ParakeetEncoderAttention` is the addition of the `past_key_values`.
-    See `ParakeetEncoderAttention`, and https://huggingface.co/papers/2312.17279 for more details
-    """
-
-    def __init__(self, config: Nemotron3_5AsrEncoderConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = False
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-        # W_{k,R} projection
-        self.relative_k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        # global content bias
-        self.bias_u = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
-        # global positional bias
-        self.bias_v = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor | None,
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        input_shape = hidden_states.shape[:-1]
-        batch_size, seq_length = input_shape
-        hidden_shape = (batch_size, seq_length, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        total_key_length = key_states.shape[2]
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        query_states_with_bias_u = query_states + self.bias_u.view(
-            1, self.config.num_attention_heads, 1, self.head_dim
-        )
-        query_states_with_bias_v = query_states + self.bias_v.view(
-            1, self.config.num_attention_heads, 1, self.head_dim
-        )
-
-        relative_key_states = self.relative_k_proj(position_embeddings)
-        relative_key_states = relative_key_states.view(batch_size, -1, self.config.num_attention_heads, self.head_dim)
-
-        # terms (b) and (d) — slice to total_key_length to cover cache + current chunk
-        matrix_bd = query_states_with_bias_v @ relative_key_states.permute(0, 2, 3, 1)
-        matrix_bd = self._rel_shift(matrix_bd)
-        matrix_bd = matrix_bd[..., :total_key_length]
-        matrix_bd = matrix_bd * self.scaling
-
-        if attention_mask is not None:
-            # here the original codebase uses -10000.0 rather than float("-inf") and then manual masked fill with 0.0s
-            # see: https://github.com/NVIDIA-NeMo/NeMo/blob/8cfedd7203462cb251a914e700e5605444277561/nemo/collections/asr/parts/submodules/multi_head_attention.py#L320-L340
-            # we rather went for a straight-forward approach with float("-inf")
-            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
-
-        # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
-        attn_output, attn_weights = attention_interface(
-            self,
-            query=query_states_with_bias_u,
-            key=key_states,
-            value=value_states,
-            attention_mask=matrix_bd,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-    def _rel_shift(self, attention_scores):
-        """Relative position shift for Shaw et al. style attention. See appendix B of https://huggingface.co/papers/1901.02860."""
-        batch_size, num_heads, query_length, position_length = attention_scores.shape
-        attention_scores = nn.functional.pad(attention_scores, pad=(1, 0))
-        attention_scores = attention_scores.view(batch_size, num_heads, -1, query_length)
-        attention_scores = attention_scores[:, :, 1:].view(batch_size, num_heads, query_length, position_length)
-        return attention_scores
-
-
-class Nemotron3_5AsrEncoderFeedForward(nn.Module):
-    def __init__(self, config: Nemotron3_5AsrEncoderConfig):
-        super().__init__()
-        self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.attention_bias)
-        self.activation = ACT2FN[config.hidden_act]
-        self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.attention_bias)
-        self.activation_dropout = config.activation_dropout
-
-    def forward(self, hidden_states):
-        hidden_states = self.activation(self.linear1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.linear2(hidden_states)
-        return hidden_states
-
-
-class Nemotron3_5AsrEncoderBlock(GradientCheckpointingLayer):
-    def __init__(self, config: Nemotron3_5AsrEncoderConfig, layer_idx: int | None = None):
-        super().__init__()
-        self.gradient_checkpointing = False
-
-        self.feed_forward1 = Nemotron3_5AsrEncoderFeedForward(config)
-        self.self_attn = Nemotron3_5AsrEncoderAttention(config, layer_idx)
-        self.conv = Nemotron3_5AsrEncoderConvolutionModule(config, layer_idx=layer_idx)
-        self.feed_forward2 = Nemotron3_5AsrEncoderFeedForward(config)
-
-        self.norm_feed_forward1 = nn.LayerNorm(config.hidden_size)
-        self.norm_self_att = nn.LayerNorm(config.hidden_size)
-        self.norm_conv = nn.LayerNorm(config.hidden_size)
-        self.norm_feed_forward2 = nn.LayerNorm(config.hidden_size)
-        self.norm_out = nn.LayerNorm(config.hidden_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        all_masked_rows: torch.Tensor | None = None,
-        position_embeddings: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        padding_cache: Nemotron3_5AsrEncoderCausalConvPaddingCache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.feed_forward1(self.norm_feed_forward1(hidden_states))
-        hidden_states = residual + 0.5 * hidden_states  # the conformer architecture uses a factor of 0.5
-
-        normalized_hidden_states = self.norm_self_att(hidden_states)
-        attn_output, _ = self.self_attn(
-            hidden_states=normalized_hidden_states,
-            attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-            past_key_values=past_key_values,
-            **kwargs,
-        )
-        hidden_states = hidden_states + attn_output
-
-        conv_output = self.conv(
-            self.norm_conv(hidden_states), all_masked_rows=all_masked_rows, padding_cache=padding_cache
-        )
-        hidden_states = hidden_states + conv_output
-
-        ff2_output = self.feed_forward2(self.norm_feed_forward2(hidden_states))
-        hidden_states = hidden_states + 0.5 * ff2_output  # the conformer architecture uses a factor of 0.5
-
-        hidden_states = self.norm_out(hidden_states)
-
-        return hidden_states
+    padding_cache: Cache | None = None
 
 
 @auto_docstring
@@ -722,7 +70,12 @@ class Nemotron3_5AsrPreTrainedModel(PreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Nemotron3_5AsrEncoderBlock"]
+    # The encoder is reused as-is via `AutoModel` (a `NemotronAsrStreamingEncoder` submodule that initializes
+    # itself and records its own hidden states/attentions), so this wrapper records no encoder outputs and only
+    # needs the generic `_init_weights`. Overriding both (rather than inheriting from the base, whose bodies
+    # reference the encoder block/attention classes by symbol) also stops the modular converter from copying the
+    # entire encoder stack into this file as dead code.
+    _no_split_modules = ["NemotronAsrStreamingEncoderBlock"]
     _supports_flat_attention_mask = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -732,22 +85,14 @@ class Nemotron3_5AsrPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": Nemotron3_5AsrEncoderBlock,
-        "attentions": Nemotron3_5AsrEncoderAttention,
-    }
+    _can_record_outputs = {}
 
     @torch.no_grad()
     def _init_weights(self, module):
+        # Call the framework base directly (not `super()`, which the modular converter would inline, pulling the
+        # encoder-specific init branches and their classes back into this file): the reused encoder submodule
+        # initializes its own attention/positional weights, so only generic init is needed here.
         super()._init_weights(module)
-        std = getattr(self.config, "initializer_range", 0.02)
-
-        if isinstance(module, Nemotron3_5AsrEncoderAttention):
-            init.normal_(module.bias_u, mean=0.0, std=std)
-            init.normal_(module.bias_v, mean=0.0, std=std)
-        elif isinstance(module, Nemotron3_5AsrEncoderRelPositionalEncoding):
-            buffer_value = module.compute_default_relative_positional_parameters(module.config)
-            init.copy_(module.inv_freq, buffer_value)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = getattr(self.config, "encoder_config", self.config)

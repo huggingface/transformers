@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_nemotron3_5_asr import *
-    from .feature_extraction_nemotron3_5_asr import *
     from .modeling_nemotron3_5_asr import *
     from .processing_nemotron3_5_asr import *
 else:
