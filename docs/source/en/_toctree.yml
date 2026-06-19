@@ -853,6 +853,8 @@
         title: RWKV
       - local: model_doc/seed_oss
         title: Seed-Oss
+      - local: model_doc/smollm3
+        title: SmolLM3
       - local: model_doc/solar_open
         title: SolarOpen
       - local: model_doc/splinter
@@ -1437,8 +1439,6 @@
         title: SLANet
       - local: model_doc/slanext
         title: SLANeXt
-      - local: model_doc/smollm3
-        title: SmolLM3
       - local: model_doc/smolvlm
         title: SmolVLM
       - local: model_doc/speech-encoder-decoder
