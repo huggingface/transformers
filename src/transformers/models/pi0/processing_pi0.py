@@ -24,7 +24,7 @@ import torch.nn.functional as F
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import requires
@@ -174,24 +174,6 @@ class PI0Processor(ProcessorMixin):
             model_inputs["state"] = state.view(-1, self.max_state_dim)
 
         return BatchFeature(data=model_inputs, tensor_type=return_tensors)
-
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            image_sizes (list[list[str]], *optional*):
-                The input sizes formatted as (height, width) per each image.
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-        vision_data = {}
-        if image_sizes is not None:
-            num_image_tokens = [self.image_seq_length] * len(image_sizes)
-            num_image_patches = [1] * len(image_sizes)
-            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
-        return MultiModalData(**vision_data)
 
     @property
     def model_input_names(self):

@@ -30,13 +30,12 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessingKwargs, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
 from ...utils.import_utils import requires
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..paligemma.processing_paligemma import PaligemmaProcessor
 from ..siglip.image_processing_siglip import SiglipImageProcessor
 
 
@@ -61,9 +60,13 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+IMAGE_TOKEN = "<image>"
+EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
+
+
 @auto_docstring
 @requires(backends=("vision", "torch"))
-class PI0Processor(PaligemmaProcessor):
+class PI0Processor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]
         state_mean = kwargs.get("state_mean", [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286])
@@ -77,8 +80,28 @@ class PI0Processor(PaligemmaProcessor):
         self.actions_std = torch.tensor(actions_std)
         self.max_state_dim = kwargs.get("max_state_dim", 32)
         self.chunk_size = kwargs.get("chunk_size", 50)
-        super().__init__(image_processor, tokenizer)
+        if not hasattr(image_processor, "image_seq_length"):
+            raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
+        self.image_seq_length = image_processor.image_seq_length
+
+        if not hasattr(tokenizer, "image_token"):
+            image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
+            tokens_to_add = {"additional_special_tokens": [image_token]}
+            tokenizer.add_special_tokens(tokens_to_add)
+            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+            self.image_token = IMAGE_TOKEN
+        else:
+            self.image_token_id = tokenizer.image_token_id
+            self.image_token = tokenizer.image_token
+
+        tokenizer.add_tokens(EXTRA_TOKENS)
+        tokenizer.add_bos_token = False
+        tokenizer.add_eos_token = False
+
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None,
