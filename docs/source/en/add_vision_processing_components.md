@@ -102,7 +102,7 @@ class MyModelImageProcessor(TorchvisionBackend):
         ...
 ```
 
-Post-processors either return a list of simple objects (e.g. `list[str]` or `list[torch.Tensor]`) or a list of complex objects (`list[MyTaskPostProcessorOutput]` or `list[dict]`). Post-processor outputs are defined in `src/transformers/image_processing_outputs.py` and inherit from [`BatchFeature`].
+Post-processors return either a list of simple objects (`list[str]` or `list[torch.Tensor]`) or a list of complex objects (`list[MyTaskPostProcessorOutput]` or `list[dict]`). Post-processor outputs are defined in `src/transformers/image_processing_outputs.py` and inherit from [`BatchFeature`].
 
 ```py
 class MyTaskPostProcessorOutput(BatchFeature):
