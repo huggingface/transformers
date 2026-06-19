@@ -16,7 +16,6 @@ import asyncio
 import gc
 import queue
 import threading
-import collections
 from abc import abstractmethod
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, nullcontext
@@ -82,53 +81,84 @@ class ProtoPretrainedModel(nn.Module):
 
 
 class TargetedQueue:
-    """A thread-safe queue that supports both global FIFO and O(1) targeted retrieval by request_id."""
+    """A queue that allows both global FIFO retrieval and O(1) targeted retrieval.
+
+    This is achieved by maintaining both a global queue and a dictionary of queues per request.
+    When an item departs (is consumed) from one sink, its `departed` field is set to True,
+    so it can be discarded (churned) when encountered in the other sink.
+    """
 
     def __init__(self):
-        self.lock = threading.Lock()
-        self.cond = threading.Condition(self.lock)
-        self.items_by_id = collections.defaultdict(collections.deque)
-        self.arrival_queue = collections.deque()
-        self.consumed_ids = set()
+        import collections
+
+        self.global_queue = collections.OrderedDict()
+        self.targeted_queues: dict[str, collections.deque] = {}
+        self.cond = threading.Condition()
 
     def put(self, item: GenerationOutput):
+        import collections
+
         with self.cond:
-            self.items_by_id[item.request_id].append(item)
-            self.arrival_queue.append(item)
+            self.global_queue[id(item)] = item
+            if item.request_id not in self.targeted_queues:
+                self.targeted_queues[item.request_id] = collections.deque()
+            self.targeted_queues[item.request_id].append(item)
             self.cond.notify_all()
 
-    def get(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput:
+    def get(self, request_id: str | None = None, block: bool = True, timeout: float | None = None) -> GenerationOutput:
+        start_time = perf_counter()
+
         with self.cond:
+            import collections
+
+            if request_id is not None and request_id not in self.targeted_queues:
+                self.targeted_queues[request_id] = collections.deque()
+
             while True:
+                item = None
+
                 if request_id is None:
-                    # Clean up consumed items at the front of the arrival queue
-                    while self.arrival_queue and id(self.arrival_queue[0]) in self.consumed_ids:
-                        consumed_item = self.arrival_queue.popleft()
-                        self.consumed_ids.remove(id(consumed_item))
-
-                    if self.arrival_queue:
-                        item = self.arrival_queue.popleft()
-                        self.items_by_id[item.request_id].popleft()
-                        if not self.items_by_id[item.request_id]:
-                            del self.items_by_id[item.request_id]
-                        return item
+                    if self.global_queue:
+                        item_id, item = self.global_queue.popitem(last=False)
+                        item.departed = True
                 else:
-                    if self.items_by_id[request_id]:
-                        item = self.items_by_id[request_id].popleft()
-                        if not self.items_by_id[request_id]:
-                            del self.items_by_id[request_id]
-                        self.consumed_ids.add(id(item))
-                        return item
+                    q = self.targeted_queues[request_id]
+                    while q and q[0].departed:
+                        q.popleft()
+                    if q:
+                        item = q.popleft()
+                        item.departed = True
+                        self.global_queue.pop(id(item), None)
 
-                if not self.cond.wait(timeout):
+                if item is not None:
+                    if item.is_finished() and item.request_id in self.targeted_queues:
+                        self.targeted_queues.pop(item.request_id, None)
+                    return item
+
+                if not block:
                     raise queue.Empty
 
-    def empty(self) -> bool:
-        with self.lock:
-            while self.arrival_queue and id(self.arrival_queue[0]) in self.consumed_ids:
-                consumed_item = self.arrival_queue.popleft()
-                self.consumed_ids.remove(id(consumed_item))
-            return len(self.arrival_queue) == 0
+                remaining = None
+                if timeout is not None:
+                    remaining = timeout - (perf_counter() - start_time)
+                    if remaining <= 0:
+                        raise queue.Empty
+
+                self.cond.wait(remaining)
+
+    def empty(self, request_id: str | None = None) -> bool:
+        with self.cond:
+            if request_id is None:
+                return len(self.global_queue) == 0
+
+            if request_id not in self.targeted_queues:
+                return True
+
+            q = self.targeted_queues[request_id]
+            while q and q[0].departed:
+                q.popleft()
+
+            return len(q) == 0
 
 
 class OutputRouter:
@@ -150,6 +180,7 @@ class OutputRouter:
             entry = self.result_handlers.get(output.request_id)
         if entry is not None:
             callback, loop = entry
+            output.departed = True
             loop.call_soon_threadsafe(callback, output)
         else:
             self.output_queue.put(output)
@@ -166,6 +197,7 @@ class OutputRouter:
                 entry = self.result_handlers.get(output.request_id)
                 if entry is not None:
                     callback, loop = entry
+                    output.departed = True
                     callbacks.append((callback, output))
                 else:
                     self.output_queue.put(output)
@@ -874,11 +906,11 @@ class ContinuousBatchingManager:
     def get_result(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput | None:
         """Retrieve one result from the output queue. If an ID is provided, returns the first matching request. If a
         timeout is provided, returns None after the timeout (in seconds)."""
-        if self._generation_thread is None and self.output_router.output_queue.empty():
+        if self._generation_thread is None and self.output_router.output_queue.empty(request_id):
             return None
 
         try:
-            return self.output_router.output_queue.get(request_id=request_id, timeout=timeout)
+            return self.output_router.output_queue.get(request_id=request_id, block=True, timeout=timeout)
         except queue.Empty:
             return None
 

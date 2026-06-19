@@ -103,6 +103,7 @@ class GenerationOutput:
         status (RequestStatus): The status of the request.
         created_time (float): The time the request was created.
         lifespan (tuple[float, float]): The time the request was no longer pending and the time the request finished.
+        departed (bool): Whether the output has already departed (been consumed) through a sink.
     """
 
     request_id: str
@@ -114,6 +115,7 @@ class GenerationOutput:
     created_time: float = field(default_factory=time.perf_counter)
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
     timestamps: list[float] | None = None  # Timestamps of the generated tokens
+    departed: bool = False  # Whether the output has already departed (been consumed) through a sink
 
     def is_finished(self) -> bool:
         return self.status == RequestStatus.FINISHED
