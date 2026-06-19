@@ -24,7 +24,13 @@ from ..conversion_mapping import get_checkpoint_conversion_mapping, register_che
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.generic import is_flash_attention_requested
-from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION, is_kernels_available, is_torch_available
+from ..utils.import_utils import (
+    KERNELS_MAX_VERSION,
+    KERNELS_MIN_VERSION,
+    is_kernels_available,
+    is_rocm_platform,
+    is_torch_available,
+)
 from .flash_attention import flash_attention_forward
 
 
@@ -56,9 +62,13 @@ if is_kernels_available():
         Mode,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
+        use_kernel_mapping,
     )
     from kernels import (
         get_kernel as get_kernel_hub,
+    )
+    from kernels import (
+        kernelize as _kernels_kernelize,
     )
     from kernels import (
         use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
@@ -86,235 +96,248 @@ if is_kernels_available():
             )
             return lambda func: func
 
-    _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
-        "MultiScaleDeformableAttention": {
-            "cuda": LayerRepository(
-                repo_id="kernels-community/deformable-detr",
-                layer_name="MultiScaleDeformableAttention",
-                version=1,
-            )
-        },
-        # NOTE: No longer maintained
-        # "Llama4TextMoe": {
-        #    "cuda": LayerRepository(
-        #        repo_id="kernels-community/moe",
-        #        layer_name="Llama4TextMoe",
-        #        version=1,
-        #    )
-        # },
-        "SwiGLUMLP": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerSwiGLUMLP",
-                    version=2,
-                ),
-                Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerTiledSwiGLUMLP",
-                    version=2,
-                ),
-            },
-        },
-        "GeGLUMLP": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerGEGLUMLP",
-                    version=2,
-                ),
-                Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerTiledGEGLUMLP",
-                    version=2,
-                ),
-            },
-        },
-        "Linear": {
-            "cuda": {
-                Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerLinear",
-                    version=2,
-                ),
-            },
-        },
-        "RMSNorm": {
-            # NOTE: Not torch.compile friendly for unknown reasons
-            "cuda": {
-                Mode.TRAINING: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
-                    version=2,
-                ),
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
-                    version=2,
-                ),
-            },
-            "rocm": {
-                Mode.TRAINING: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
-                    version=2,
-                ),
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
-                    version=2,
-                ),
-            },
-            "xpu": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/rmsnorm",
-                    layer_name="RMSNorm",
-                    version=1,
-                )
-            },
-            "mps": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/mlx_rmsnorm",
-                    layer_name="RMSNorm",
-                    version=1,
-                )
-            },
-            "npu": {
-                Mode.TRAINING: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
-                    version=2,
-                ),
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/liger-kernels",
-                    layer_name="LigerRMSNorm",
-                    version=2,
-                ),
-            },
-        },
-        "MegaBlocksMoeMLP": {
-            "cuda": {
-                Mode.TRAINING: LayerRepository(
-                    repo_id="kernels-community/megablocks",
-                    layer_name="MegaBlocksMoeMLP",
-                    version=1,
-                ),
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/megablocks",
-                    layer_name="MegaBlocksMoeMLP",
-                    version=1,
-                ),
-            },
-            "rocm": {
-                Mode.TRAINING: LayerRepository(
-                    repo_id="kernels-community/megablocks",
-                    layer_name="MegaBlocksMoeMLP",
-                    version=1,
-                ),
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/megablocks",
-                    layer_name="MegaBlocksMoeMLP",
-                    version=1,
-                ),
-            },
-            "xpu": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/megablocks",
-                    layer_name="MegaBlocksMoeMLP",
-                    version=1,
-                )
-            },
-            "cpu": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/megablocks",
-                    layer_name="CPUMegaBlocksMoeMLP",
-                    version=1,
-                )
-            },
-        },
-        "FastGELU": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation",
-                    layer_name="FastGELU",
-                    version=1,
-                )
-            }
-        },
-        "QuickGELU": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation",
-                    layer_name="QuickGELU",
-                    version=1,
-                )
-            }
-        },
-        "NewGELU": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation",
-                    layer_name="NewGELU",
-                    version=1,
-                )
-            }
-        },
-        "SiLU": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="Silu", version=1
-                )
-            }
-        },
-        "GeLU": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="Gelu", version=1
-                )
-            }
-        },
-        "GeluTanh": {
-            "cuda": {
-                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
-                )
-            }
-        },
-    }
+    # The default kernel mapping is built lazily (see `get_kernel_mapping_transformers`) so that simply
+    # importing transformers (or `transformers.pipeline`) does not instantiate any `LayerRepository` /
+    # `FuncRepository`. This keeps the `kernels` library decoupled from normal transformers usage: the
+    # repositories are only constructed when the user explicitly opts in via `use_kernels=True`.
+    _KERNEL_MAPPING_CACHE: dict | None = None
 
-    # Add function kernel mappings
-    _FUNCTION_KERNEL_MAPPING = {
-        "rotary_pos_emb": {
-            "xpu": {
-                Mode.INFERENCE: FuncRepository(
+    def _build_kernel_mapping() -> dict:
+        _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
+            "MultiScaleDeformableAttention": {
+                "cuda": LayerRepository(
+                    repo_id="kernels-community/deformable-detr",
+                    layer_name="MultiScaleDeformableAttention",
+                    version=1,
+                )
+            },
+            # NOTE: No longer maintained
+            # "Llama4TextMoe": {
+            #    "cuda": LayerRepository(
+            #        repo_id="kernels-community/moe",
+            #        layer_name="Llama4TextMoe",
+            #        version=1,
+            #    )
+            # },
+            "SwiGLUMLP": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerSwiGLUMLP",
+                        version=2,
+                    ),
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerTiledSwiGLUMLP",
+                        version=2,
+                    ),
+                },
+            },
+            "GeGLUMLP": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerGEGLUMLP",
+                        version=2,
+                    ),
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerTiledGEGLUMLP",
+                        version=2,
+                    ),
+                },
+            },
+            "Linear": {
+                "cuda": {
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerLinear",
+                        version=2,
+                    ),
+                },
+            },
+            "RMSNorm": {
+                # NOTE: Not torch.compile friendly for unknown reasons
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerRMSNorm",
+                        version=2,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerRMSNorm",
+                        version=2,
+                    ),
+                },
+                "rocm": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerRMSNorm",
+                        version=2,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerRMSNorm",
+                        version=2,
+                    ),
+                },
+                "xpu": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/rmsnorm",
+                        layer_name="RMSNorm",
+                        version=1,
+                    )
+                },
+                "mps": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mlx_rmsnorm",
+                        layer_name="RMSNorm",
+                        version=1,
+                    )
+                },
+                "npu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerRMSNorm",
+                        version=2,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels",
+                        layer_name="LigerRMSNorm",
+                        version=2,
+                    ),
+                },
+            },
+            "MegaBlocksMoeMLP": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/megablocks",
+                        layer_name="MegaBlocksMoeMLP",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/megablocks",
+                        layer_name="MegaBlocksMoeMLP",
+                        version=1,
+                    ),
+                },
+                "rocm": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/megablocks",
+                        layer_name="MegaBlocksMoeMLP",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/megablocks",
+                        layer_name="MegaBlocksMoeMLP",
+                        version=1,
+                    ),
+                },
+                "xpu": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/megablocks",
+                        layer_name="MegaBlocksMoeMLP",
+                        version=1,
+                    )
+                },
+                "cpu": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/megablocks",
+                        layer_name="CPUMegaBlocksMoeMLP",
+                        version=1,
+                    )
+                },
+            },
+            "FastGELU": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="FastGELU",
+                        version=1,
+                    )
+                }
+            },
+            "QuickGELU": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="QuickGELU",
+                        version=1,
+                    )
+                }
+            },
+            "NewGELU": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="NewGELU",
+                        version=1,
+                    )
+                }
+            },
+            "SiLU": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="Silu", version=1
+                    )
+                }
+            },
+            "GeLU": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="Gelu", version=1
+                    )
+                }
+            },
+            "GeluTanh": {
+                "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
+                    )
+                }
+            },
+        }
+
+        # Add function kernel mappings
+        _FUNCTION_KERNEL_MAPPING = {
+            "rotary_pos_emb": {
+                "xpu": {
+                    Mode.INFERENCE: FuncRepository(
+                        repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
+                    )
+                },
+                "cuda": FuncRepository(
                     repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
-                )
-            },
-            "cuda": FuncRepository(
-                repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
-            ),
-            "rocm": {
-                Mode.INFERENCE: FuncRepository(
-                    repo_id="kernels-community/aiter-rope", func_name="apply_rotary_transformers", version=1
-                )
-            },
-        },
-        "ForCausalLMLoss": {
-            "cuda": {
-                Mode.TRAINING | Mode.TORCH_COMPILE: FuncRepository(
-                    repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss", version=2
                 ),
+                "rocm": {
+                    Mode.INFERENCE: FuncRepository(
+                        repo_id="kernels-community/aiter-rope", func_name="apply_rotary_transformers", version=1
+                    )
+                },
             },
-        },
-    }
-    _KERNEL_MAPPING = _KERNEL_MAPPING | _FUNCTION_KERNEL_MAPPING
+            "ForCausalLMLoss": {
+                "cuda": {
+                    Mode.TRAINING | Mode.TORCH_COMPILE: FuncRepository(
+                        repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss", version=2
+                    ),
+                },
+            },
+        }
+        _KERNEL_MAPPING = _KERNEL_MAPPING | _FUNCTION_KERNEL_MAPPING
 
-    def has_key(d, key):
-        return key in d or any(isinstance(v, dict) and has_key(v, key) for v in d.values())
+        return _KERNEL_MAPPING
+
+    def get_kernel_mapping_transformers() -> dict:
+        """Return the default transformers kernel mapping, building it lazily on first use."""
+        global _KERNEL_MAPPING_CACHE
+        if _KERNEL_MAPPING_CACHE is None:
+            _KERNEL_MAPPING_CACHE = _build_kernel_mapping()
+        return _KERNEL_MAPPING_CACHE
 
     def register_kernel_mapping_transformers(mapping=None):
         if mapping is None:
-            mapping = _KERNEL_MAPPING
+            mapping = get_kernel_mapping_transformers()
         register_kernel_mapping(mapping)
 
 else:
@@ -508,6 +531,51 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             mapping[kernel_name] = None
 
     return mapping[kernel_name]
+
+
+def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
+    """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
+    if not is_kernels_available():
+        raise ValueError(
+            "Kernels are not available. To use kernels, please install kernels using `pip install -U kernels`"
+        )
+
+    def attach_hidden_kernels(module):
+        for name, fn in getattr(module, "_hidden_kernels", {}).items():
+            if name not in dict(module.named_children()):
+                if not isinstance(fn, nn.Module):
+                    raise ValueError(
+                        f"Attempted to register a kernel for {name}, but it was not a `torch.nn.Module`. "
+                        "This means the underlying function needs to be decorated with `@use_kernel_func_from_hub`. "
+                        "Please submit and issue to the transformers repo: `https://github.com/huggingface/transformers/issues`."
+                    )
+                module.register_module(name, fn)
+
+    def detach_hidden_kernels(module):
+        for name in getattr(module, "_hidden_kernels", {}):
+            # Skip deregistering if it failed to properly register,
+            # i.e. `ValueError` will be raised afterwards
+            if hasattr(module, name):
+                delattr(module, name)
+
+    try:
+        model.apply(attach_hidden_kernels)
+
+        mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
+        device_type = model.device.type
+        if device_type == "cuda" and is_rocm_platform():
+            device_type = "rocm"
+        device = Device(type=device_type)
+        if model.kernel_config is not None:
+            inherit_mapping = not model.kernel_config.use_local_kernel
+            with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+                _kernels_kernelize(model, device=device, mode=mode)
+        else:
+            _kernels_kernelize(model, device=device, mode=mode)
+
+        model._use_kernels = True
+    finally:
+        model.apply(detach_hidden_kernels)
 
 
 def get_kernel(
@@ -762,6 +830,7 @@ def register_kernel_replacements_and_fusions(
 __all__ = [
     "LayerRepository",
     "get_kernel",
+    "kernelize",
     "lazy_load_kernel",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
