@@ -1,9 +1,16 @@
 """Compare logits from two runs of the Step-3.7-Flash demo.
 
+Defaults compare the original-code baseline produced by demo.py against the
+new-code output from the same run.  Pass explicit paths to compare any two runs.
+
 Usage:
+    # default: baseline vs new-code from the last demo.py run
+    PYTHONPATH=src python scripts/step_3_7_flash/compare_outputs.py
+
+    # explicit paths
     PYTHONPATH=src python scripts/step_3_7_flash/compare_outputs.py \
         --original ./scripts/step_3_7_flash/debug_output \
-        --modified ./debug_step_3_7_flash
+        --modified ./some_other_dir
 """
 
 from __future__ import annotations
@@ -14,15 +21,22 @@ from pathlib import Path
 
 import torch
 
+_HERE = Path(__file__).parent
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--original", type=Path, required=True)
-    parser.add_argument("--modified", type=Path, required=True)
+    parser.add_argument("--original", type=Path, default=_HERE / "debug_output",
+                        help="directory containing logits_baseline.pt (default: debug_output/)")
+    parser.add_argument("--modified", type=Path, default=_HERE / "debug_output",
+                        help="directory containing logits.pt (default: debug_output/)")
     parser.add_argument("--atol", type=float, default=1e-4)
     args = parser.parse_args()
 
-    orig_path = args.original / "logits.pt"
+    # When both paths point at the same directory, compare baseline vs new-code.
+    # When they differ, compare logits.pt from each directory.
+    same_dir = args.original.resolve() == args.modified.resolve()
+    orig_path = args.original / ("logits_baseline.pt" if same_dir else "logits.pt")
     mod_path  = args.modified / "logits.pt"
 
     for p in (orig_path, mod_path):
@@ -35,6 +49,9 @@ def main():
 
     all_pass = True
     for key in ("text_logits", "pv_logits", "ie_logits"):
+        if key not in orig or key not in mod:
+            print(f"  - {key:<14}  (not in both files, skipped)")
+            continue
         r, g = orig[key], mod[key]
         diff  = (r - g).abs()
         mx    = diff.max().item()

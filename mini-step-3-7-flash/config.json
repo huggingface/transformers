@@ -1,6 +1,6 @@
 {
   "hidden_size": 128,
-  "image_token_id": 128001,
+  "image_token_id": 511,
   "max_position_embeddings": 512,
   "model_type": "step3p7",
   "projector_bias": false,
@@ -24,7 +24,10 @@
     "max_seq_len": 512,
     "model_type": "step3p5",
     "moe_intermediate_size": 64,
-    "mlp_layer_types": ["dense", "dense", "sparse", "sparse"],
+    "moe_layers_enum": [
+      2,
+      3
+    ],
     "moe_num_experts": 4,
     "moe_router_activation": "sigmoid",
     "moe_router_scaling_factor": 1.0,
