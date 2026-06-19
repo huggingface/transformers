@@ -80,7 +80,7 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
   | `False` (PyTorch fallback) | 0.73 s | 16.3 tok/s |
   | `True` ([`Atlas-Inference/gdn`](https://huggingface.co/Atlas-Inference/gdn)) | 0.53 s (1.38x faster) | 16.7 tok/s |
 
-  Decode is roughly flat because the single-token DeltaNet recurrence is memory-bandwidth-bound; the win is on the chunked-prefill core and grows with prompt length. Loading the mapped kernel currently needs `trust_remote_code=True` until `Atlas-Inference` is added to the trusted-kernels allowlist.
+  Decode is roughly flat because the single-token DeltaNet recurrence is memory-bandwidth-bound; the win is on the chunked-prefill core and grows with prompt length. Loading the mapped kernel needs the `kernels` package (`pip install kernels==0.15.2`) and currently requires `trust_remote_code=True` until `Atlas-Inference` is added to the trusted-kernels allowlist.
 
 ## Qwen3_5MoeConfig
 

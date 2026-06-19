@@ -78,7 +78,7 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
   | `False` (PyTorch fallback) | 1.66 s | 4.11 tok/s |
   | `True` ([`Atlas-Inference/gdn`](https://huggingface.co/Atlas-Inference/gdn)) | 1.11 s (1.49x faster) | 4.14 tok/s |
 
-  Decode is unchanged because the single-token DeltaNet recurrence is memory-bandwidth-bound; the win is on the chunked-prefill core and grows with prompt length. Loading the mapped kernel currently needs `trust_remote_code=True` until `Atlas-Inference` is added to the trusted-kernels allowlist.
+  Decode is unchanged because the single-token DeltaNet recurrence is memory-bandwidth-bound; the win is on the chunked-prefill core and grows with prompt length. Loading the mapped kernel needs the `kernels` package (`pip install kernels==0.15.2`) and currently requires `trust_remote_code=True` until `Atlas-Inference` is added to the trusted-kernels allowlist.
 - Multimodal RoPE splits the head dimension into three components (temporal, height, width) via `mrope_section` on the text config. If you replace the rotary module, preserve this split or position encodings for image and video tokens will be misaligned.
 - Use [`Qwen3_5ForCausalLM`] for text-only generation with [`Qwen3_5TextConfig`]; use [`Qwen3_5ForConditionalGeneration`] with the full [`Qwen3_5Config`] and a processor ([`~AutoProcessor.from_pretrained`]) to feed interleaved image/video + text via [`~ProcessorMixin.apply_chat_template`].
 
