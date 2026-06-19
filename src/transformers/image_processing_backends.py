@@ -53,7 +53,6 @@ from .image_utils import (
     is_valid_image,
     load_image_as_tensor,
 )
-from .integrations.hub_kernels import use_image_kernel
 from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     TensorType,
@@ -70,6 +69,13 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
+
+    from .integrations.hub_kernels import use_image_kernel
+else:
+
+    def use_image_kernel(name):
+        return lambda method: method
+
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
