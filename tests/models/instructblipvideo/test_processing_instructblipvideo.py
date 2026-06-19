@@ -54,4 +54,5 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_test_attributes(cls, processor):
-        cls.video_token = processor.video_token
+        # processor expects bare text without placeholders!
+        pass

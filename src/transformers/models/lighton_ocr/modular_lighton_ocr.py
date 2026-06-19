@@ -201,7 +201,6 @@ class LightOnOcrProcessor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
 
-
 class LightOnOcrMultiModalProjector(Mistral3MultiModalProjector):
     def __init__(self, config: LightOnOcrConfig):
         self.config = config
