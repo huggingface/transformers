@@ -103,7 +103,7 @@ class FalconMambaConfig(MambaConfig):
 
     @property
     def layer_types(self):
-        return ["mamba"] * self.num_hidden_layers
+        return ["linear_attention_mamba"] * self.num_hidden_layers
 
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):

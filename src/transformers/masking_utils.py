@@ -1489,6 +1489,7 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "linear_attention_mamba": create_recurrent_padding_mask,
     "linear_attention_mamba2": create_recurrent_padding_mask,
     "linear_attention_gated_delta_net": create_recurrent_padding_mask,
+    "linear_attention_lightning": create_recurrent_padding_mask,
 }
 
 

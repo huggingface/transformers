@@ -544,7 +544,7 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
         self.mlp = MiniMaxSparseMoeBlock(config)
-        if self.layer_type == "linear_attention":
+        if self.layer_type.startswith("linear_attention"):
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.attn_alpha_factor = config.linear_attn_alpha_factor
             self.attn_beta_factor = config.linear_attn_beta_factor
