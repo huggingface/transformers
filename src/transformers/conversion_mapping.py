@@ -674,7 +674,7 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^vision_model\.patch_embed\.", target_patterns="model.vision_tower.patch_embed."
             ),
         ],
-        "locateanything_vision": [
+        "LocateAnythingVisionModel": [
             WeightConverter(
                 source_patterns="wqkv.weight",
                 target_patterns=["q_proj.weight", "k_proj.weight", "v_proj.weight"],
