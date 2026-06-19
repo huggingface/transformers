@@ -22,6 +22,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from parameterized import parameterized
 
 import transformers
 from transformers import (
@@ -44,6 +45,7 @@ from transformers import (
 )
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.auto.tokenization_auto import (
+    MODEL_IDS_TO_TOKENIZERS_BACKEND,
     REGISTERED_FAST_ALIASES,
     REGISTERED_TOKENIZER_CLASSES,
     TOKENIZER_MAPPING,
@@ -806,15 +808,6 @@ class NopConfig(PreTrainedConfig):
 
     @slow
     @require_tokenizers
-    def test_deepseek_r1_tokenizer_preserves_spaces(self):
-        """Regression: deepseek_v3 Hub config has wrong tokenizer_class='LlamaTokenizerFast'; must use TokenizersBackend."""
-        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1")
-        self.assertIsInstance(tokenizer, TokenizersBackend)
-        text = "hello world"
-        self.assertEqual(tokenizer.decode(tokenizer.encode(text)), text)
-
-    @slow
-    @require_tokenizers
     def test_deepseek_r1_distill_qwen_uses_qwen2_tokenizer(self):
         """Regression: qwen2 model with wrong Hub tokenizer_class='LlamaTokenizerFast' must use Qwen2Tokenizer."""
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
@@ -846,3 +839,41 @@ class NopConfig(PreTrainedConfig):
             mock_nllb.assert_called_once()
             mock_tb.assert_not_called()
             self.assertIs(result, mock_tokenizer)
+
+    @require_tokenizers
+    @parameterized.expand([p for p in MODEL_IDS_TO_TOKENIZERS_BACKEND if "*" not in p])
+    def test_roundtrip_models_without_tokenizer_class(self, repo_id):
+        text = "This is a test 😊 I was born in 92000, and this is falsé."
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                tokenizer_auto = AutoTokenizer.from_pretrained(repo_id, cache_dir=tmpdir)
+        self.assertEqual(tokenizer_auto.decode(tokenizer_auto.encode(text, add_special_tokens=False)), text)
+
+    TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = [
+        "rhymes-ai/Aria",
+        "Salesforce/blip2-flan-t5-xl",
+        "google/bigbird-pegasus-large-pubmed",
+        "microsoft/kosmos-2-patch14-224",
+        "allenai/OLMo-2-0425-1B",
+        "stabilityai/tiny-random-stablelm-2",
+        "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    ]
+
+    @slow
+    @require_tokenizers
+    @parameterized.expand(TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS)
+    def test_tokenizers_auto_agreements_models_without_tokenizer_class(self, repo_id):
+        # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend
+        TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT = "foo_bar\n\n123 "
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                tokenizer_auto = AutoTokenizer.from_pretrained(repo_id, cache_dir=tmpdir)
+                tokenizer_tok = TokenizersBackend.from_pretrained(repo_id, cache_dir=tmpdir)
+        self.assertEqual(
+            tokenizer_tok(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
+            tokenizer_auto(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
+        )
