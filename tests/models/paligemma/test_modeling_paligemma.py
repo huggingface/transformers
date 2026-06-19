@@ -288,6 +288,8 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_attention_mask_with_token_types(self):
         """Test that attention masking works correctly both with and without token type IDs."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # remove possible padding tokens so we get full bidirectional mask below
+        inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
 
         for model_class in self.all_model_classes:
             model = model_class._from_config(config, attn_implementation="eager")
