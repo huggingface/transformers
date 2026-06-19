@@ -1787,16 +1787,19 @@ class GenerationMixin(ContinuousMixin):
     def _get_static_cache_init_shape(self: "GenerativePreTrainedModel") -> tuple[int, int] | None:
         """
         Returns the per-rank `(num_heads, head_dim)` to eagerly initialize a `StaticCache`, with the head count sharded
-        for tensor parallelism. Returns `None` when the cache cannot be initialized on a single device -- the model is
-        device-mapped across devices, or the head count does not shard evenly across TP ranks -- in which case it
-        should be lazily initialized instead.
+        for tensor parallelism. Returns `None` when the cache cannot be early initialized.
         """
         if hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1:
+            # The model layers are on different devices
             return None
         text_config = self.config.get_text_config(decoder=True)
         tp_size = getattr(self, "_tp_size", None) or 1
         num_key_value_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
         if num_key_value_heads % tp_size != 0:
+            # The model cannot be evenly sharded by head
+            return None
+        if getattr(text_config, "qk_head_dim", None) is not None:
+            # MLA models have distinct key (`qk_head_dim`) and value (`v_head_dim`) sizes.
             return None
         head_dim = getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
         return num_key_value_heads // tp_size, head_dim
