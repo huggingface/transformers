@@ -649,23 +649,12 @@ class Qwen3TTSSpeakerEncoder(ECAPA_TimeDelayNet):
         super().__init__(config)
 
 
-# ─── Utility MLP ──────────────────────────────────────────────────────────────
-
-
-class Qwen3TTSTalkerResizeMLP(nn.Module):
-    """2-layer MLP for text projection."""
-
-    def __init__(self, input_size: int, intermediate_size: int, output_size: int, act: str, bias: bool = False):
+class Qwen3TTSTalkerResizeMLP(VoxtralMultiModalProjector):
+    def __init__(self, config: Qwen3TTSTalkerConfig):
         super().__init__()
-        self.linear_fc1 = nn.Linear(input_size, intermediate_size, bias=bias)
-        self.linear_fc2 = nn.Linear(intermediate_size, output_size, bias=bias)
-        self.act_fn = ACT2FN[act]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_states)))
-
-
-# ─── Output dataclasses ──────────────────────────────────────────────────────
+        self.linear_1 = nn.Linear(config.text_hidden_size, config.text_hidden_size, bias=True)
+        self.linear_2 = nn.Linear(config.text_hidden_size, config.hidden_size, bias=True)
+        self.act = ACT2FN[config.hidden_act]
 
 
 @dataclass
@@ -691,18 +680,13 @@ class Qwen3TTSTalkerOutputWithPast(ModelOutput):
     tts_pad_embed: torch.FloatTensor | None = None
 
 
-# ─── PreTrainedModel ──────────────────────────────────────────────────────────
-
-
-class Qwen3TTSBasePreTrainedModel(PreTrainedModel):
+class Qwen3TTSBasePreTrainedModel(Qwen3PreTrainedModel):
     """Common base for all Qwen3TTS PreTrainedModel classes."""
 
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_attention_backend = True
+    _no_split_modules = []
+    # Qwen3TTS has separate Talker/CodePredictor attention classes, so the generic
+    # output-recording hook from Qwen3 does not apply.
+    _can_record_outputs = {}
 
 
 class Qwen3TTSPreTrainedModel(Qwen3TTSBasePreTrainedModel):
@@ -720,14 +704,22 @@ class Qwen3TTSTalkerTextPreTrainedModel(Qwen3TTSBasePreTrainedModel):
     _supports_static_cache = False
 
 
-# ─── Talker Model (text-to-acoustic) ──────────────────────────────────────────
+class Qwen3TTSTalkerModel(Qwen2_5OmniTalkerModel):
+    """Talker model: text encoder with dual codec+text embeddings.
 
-
-class Qwen3TTSTalkerModel(Qwen3TTSTalkerTextPreTrainedModel):
-    """Talker model: text encoder with dual codec+text embeddings."""
+    Reuses [`Qwen2_5OmniTalkerModel`]'s 3D-mRoPE decoder `forward`; only the embeddings (dual codec + text) and the
+    Talker-specific decoder layer / rotary embedding differ.
+    """
 
     config_class = Qwen3TTSTalkerConfig
     base_model_prefix = "talker.model"
+    input_modalities = ("text",)
+    # `generate` consumes the per-layer hidden states (the last entry, tied to `last_hidden_state`, feeds the
+    # code predictor), so record them from the Talker-specific layer/attention classes.
+    _can_record_outputs = {
+        "hidden_states": Qwen3TTSTalkerDecoderLayer,
+        "attentions": Qwen3TTSTalkerAttention,
+    }
 
     def __init__(self, config: Qwen3TTSTalkerConfig):
         super().__init__(config)
@@ -738,137 +730,39 @@ class Qwen3TTSTalkerModel(Qwen3TTSTalkerTextPreTrainedModel):
         )
         self.norm = Qwen3TTSRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen3TTSTalkerRotaryEmbedding(config)
+        self.has_sliding_layers = "sliding_attention" in self.config.layer_types
         self.gradient_checkpointing = False
-        self.codec_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
+        # The codec embedding is the talker's input embedding (named `embed_tokens` so the inherited
+        # 3D-mRoPE forward and `get_input_embeddings` work unchanged); `text_embedding` is an extra branch.
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.text_embedding = nn.Embedding(config.text_vocab_size, config.text_hidden_size)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.codec_embedding
+        return self.embed_tokens
 
     def get_text_embeddings(self):
         return self.text_embedding
 
     def set_input_embeddings(self, value):
-        self.codec_embedding = value
-
-    @can_return_tuple
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> BaseModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
-
-        if inputs_embeds is None:
-            inputs_embeds = self.codec_embedding(input_ids)
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
-        # the hard coded `3` is for temporal, height and width.
-        if position_ids is None:
-            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
-        elif position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
-
-        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
-            text_position_ids = position_ids[0]
-            position_ids = position_ids[1:]
-        else:
-            text_position_ids = position_ids[0]
-
-        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
-        causal_mask = mask_function(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=text_position_ids,
-        )
-
-        hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
-        for decoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask,
-                position_ids=text_position_ids,
-                past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
-                **flash_attn_kwargs,
-            )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-        hidden_states = self.norm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
+        self.embed_tokens = value
 
 
-# ─── Code Predictor Model ────────────────────────────────────────────────────
+class Qwen3TTSTalkerCodePredictorModel(Qwen3Model):
+    """Code predictor model: sequential multi-codebook refinement.
 
-
-class Qwen3TTSTalkerCodePredictorModel(Qwen3TTSPreTrainedModel):
-    """Code predictor model: sequential multi-codebook refinement."""
+    Reuses [`Qwen3Model`]'s decoder `forward`; only the input embedding differs (a per-codebook `codec_embedding`
+    `ModuleList` instead of a single `embed_tokens`).
+    """
 
     config_class = Qwen3TTSTalkerCodePredictorConfig
     base_model_prefix = "talker.code_predictor.model"
+    _can_record_outputs = {
+        "hidden_states": Qwen3TTSDecoderLayer,
+        "attentions": Qwen3TTSCodePredictorAttention,
+    }
 
     def __init__(self, config: Qwen3TTSTalkerCodePredictorConfig, embedding_dim: int):
         super().__init__(config)
@@ -881,6 +775,9 @@ class Qwen3TTSTalkerCodePredictorModel(Qwen3TTSPreTrainedModel):
         self.rotary_emb = Qwen3TTSRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
+        # Per-codebook input embeddings; the talker sums these externally and feeds `inputs_embeds`, so there is no
+        # single `embed_tokens`.
+        del self.embed_tokens
         self.codec_embedding = nn.ModuleList(
             [nn.Embedding(config.vocab_size, embedding_dim) for _ in range(config.num_code_groups - 1)]
         )
@@ -893,119 +790,6 @@ class Qwen3TTSTalkerCodePredictorModel(Qwen3TTSPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.codec_embedding = value
-
-    @can_return_tuple
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
-        generation_steps: int | None = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> BaseModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
-
-        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
-        if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
-
-        # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-            }
-            # The sliding window alternating layers are not always activated depending on the config
-            if self.has_sliding_layers:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
-
-        hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
-                **flash_attn_kwargs,
-            )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-        hidden_states = self.norm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
-
-
-# ─── For Conditional Generation Classes ──────────────────────────────────────
 
 
 class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTrainedModel, GenerationMixin):
