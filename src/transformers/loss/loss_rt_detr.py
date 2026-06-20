@@ -467,4 +467,5 @@ def RTDetrForObjectDetectionLoss(
     loss_dict = criterion(outputs_loss, labels)
 
     loss = sum(loss_dict.values())
+    loss_dict = {k: v.detach() for k, v in loss_dict.items()}
     return loss, loss_dict, auxiliary_outputs
