@@ -352,6 +352,12 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
+    _import_structure["models.humanv"] = [
+        "HumanVConfig",
+        "HumanVForCausalLM",
+        "HumanVModel",
+        "HumanVPreTrainedModel",
+    ]
     _import_structure["model_debugging_utils"] = [
         "model_addition_debugger_context",
     ]
@@ -641,6 +647,10 @@ if TYPE_CHECKING:
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
     from .models import *
+    from .models.humanv import HumanVConfig as HumanVConfig
+    from .models.humanv import HumanVForCausalLM as HumanVForCausalLM
+    from .models.humanv import HumanVModel as HumanVModel
+    from .models.humanv import HumanVPreTrainedModel as HumanVPreTrainedModel
     from .models.mamba.modeling_mamba import MambaCache as MambaCache
     from .models.timm_wrapper import TimmWrapperImageProcessor as TimmWrapperImageProcessor
 
