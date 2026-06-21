@@ -178,10 +178,10 @@ class ModelManager:
         if is_mps_device and is_kernels_available():
             logger.warning_once(
                 "MPS detected and `kernels` is installed: defaulting attention to "
-                "`kernels-community/metal-flash-sdpa@223ca3350d7ba32ecf19341ff2cbb8c43fa47d62. "
+                "`kernels-community/metal-flash-sdpa. "
                 "Pass `--attn-implementation sdpa` to opt out."
             )
-            return "kernels-community/metal-flash-sdpa@223ca3350d7ba32ecf19341ff2cbb8c43fa47d62"
+            return "kernels-community/metal-flash-sdpa"
         return attn_implementation
 
     def _validate_args(self):

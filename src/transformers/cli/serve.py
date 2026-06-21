@@ -148,6 +148,21 @@ class Serve:
             }.items()
             if v is not None
         }
+
+        # MPS: default to a smaller block size (32) when not explicitly set.
+        # The default block_size=256 causes ~17x slowdown on Apple Silicon because
+        # the paged SDPA attention path builds a full attention mask proportional
+        # to block_size, and MPS's SDPA implementation does not have the fused
+        # kernel that makes large blocks efficient on CUDA.
+        import torch as _torch
+        _is_mps = (
+            device.startswith("mps")
+            or (device == "auto" and _torch.backends.mps.is_available() and not _torch.cuda.is_available())
+        )
+        if _is_mps and "block_size" not in cb_kwargs:
+            cb_kwargs["block_size"] = 32
+            logger.info("MPS detected: defaulting CB block_size to 32 for better performance. Pass --cb-block-size to override.")
+
         cb_config = ContinuousBatchingConfig(**cb_kwargs) if cb_kwargs else None
         self._generation_state = GenerationState(
             continuous_batching=continuous_batching,

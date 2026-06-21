@@ -129,7 +129,14 @@ def ensure_decode_fast_path_is_available(
         # XPU support is given through its kernel variation `kernels-community/flash-attn2`
         xpu_available = is_torch_xpu_available()
         fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
-        if fa_cuda or fa_xpu:  # Block table is only supported on these
+        # MPS / other devices: hub kernels (e.g. `kernels-community/metal-flash-sdpa`) may
+        # expose `flash_attn_with_kvcache` for paged decode with block tables. We check the
+        # kernel directly rather than hardcoding device combinations, so that new kernels
+        # (Metal, etc.) are picked up automatically once they ship the function.
+        from ...integrations.hub_kernels import is_kernel
+
+        hub_kernel = is_kernel(config._attn_implementation)
+        if fa_cuda or fa_xpu or hub_kernel:  # Block table may be available on these
             flash_attn_with_kvcache = lazy_import_paged_flash_attention(config._attn_implementation)[1]
             # Throw a warning only if the decode fast path was requested by the user
             if flash_attn_with_kvcache is None:
@@ -139,15 +146,20 @@ def ensure_decode_fast_path_is_available(
                         f"because `flash_attn_with_kvcache` is not available for {config._attn_implementation = }."
                     )
                 cb_config.max_blocks_per_request = 0
+            elif hub_kernel and not (fa_cuda or fa_xpu):
+                logger.info(
+                    f"Decode fast path is available via hub kernel {config._attn_implementation} "
+                    f"with `flash_attn_with_kvcache`."
+                )
         # Specific warning for unsupported attention implementation/device combinations
         else:
             if user_requested:
                 logger.warning(
                     f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
                     "because the attention implementation and device combination is not supported. Supported "
-                    "combinations are Flash Attention 3 on CUDA, or Flash Attention 2 on XPU through "
-                    "`kernels-community/flash-attn2`. "
-                    f"Got {config._attn_implementation = }, {cuda_available = }, {xpu_available = }."
+                    "combinations are Flash Attention 3 on CUDA, Flash Attention 2 on XPU through "
+                    "`kernels-community/flash-attn2`, or a hub kernel that ships `flash_attn_with_kvcache`. "
+                    f"Got {config._attn_implementation = }, {cuda_available = }, {xpu_available = }. "
                 )
             cb_config.max_blocks_per_request = 0
 
