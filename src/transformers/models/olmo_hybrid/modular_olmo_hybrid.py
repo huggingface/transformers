@@ -160,7 +160,7 @@ class OlmoHybridConfig(LlamaConfig):
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
             # Default: linear attention for most layers, full attention every 4th layer
-            self.layer_types = ["linear_attention_gdn"] * int(self.num_hidden_layers)
+            self.layer_types = ["linear_attention"] * int(self.num_hidden_layers)
             for i in range(int(self.num_hidden_layers)):
                 if i % 4 == 3:
                     self.layer_types[i] = "full_attention"
@@ -168,7 +168,7 @@ class OlmoHybridConfig(LlamaConfig):
             if "full_attention" not in self.layer_types:
                 self.layer_types[-1] = "full_attention"
         else:
-            self.layer_types = remap_legacy_layer_types(self.layer_types, "gdn")
+            self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         if self.linear_num_key_heads is None:
             self.linear_num_key_heads = self.num_attention_heads
@@ -185,9 +185,9 @@ class OlmoHybridConfig(LlamaConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if "linear_attention_gdn" not in self.layer_types:
+        if "linear_attention" not in self.layer_types:
             raise ValueError("OLMoHybrid expects at least one 'linear_attention' layer.")
-        if all(t == "linear_attention_gdn" for t in self.layer_types):
+        if all(t == "linear_attention" for t in self.layer_types):
             raise ValueError("OLMoHybrid expects at least one attention layer.")
 
 
@@ -207,7 +207,7 @@ class OlmoHybridDynamicCache:
             i for i in range(config.num_hidden_layers) if self.layer_types[i] == "full_attention"
         ]
         self.last_linear_layer = (
-            len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention_gdn")
+            len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention")
         )
         self.recurrent_states = [None for _ in range(config.num_hidden_layers)]
         self.key_cache = [None for _ in range(config.num_hidden_layers)]
@@ -647,7 +647,7 @@ class OlmoHybridAttentionDecoderLayer(Olmo3DecoderLayer):
 class OlmoHybridLinearAttentionDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: OlmoHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.layer_type = "linear_attention_gdn"
+        self.layer_type = "linear_attention"
         del self.self_attn
         self.linear_attn = OlmoHybridGatedDeltaNet(config, layer_idx=layer_idx)
         self.input_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -717,7 +717,7 @@ class OlmoHybridModel(Qwen3NextModel):
         self.layers = nn.ModuleList(
             [
                 OlmoHybridLinearAttentionDecoderLayer(config, layer_idx)
-                if config.layer_types[layer_idx] == "linear_attention_gdn"
+                if config.layer_types[layer_idx] == "linear_attention"
                 else OlmoHybridAttentionDecoderLayer(config, layer_idx)
                 for layer_idx in range(config.num_hidden_layers)
             ]
@@ -768,7 +768,7 @@ class OlmoHybridModel(Qwen3NextModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention_gdn": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

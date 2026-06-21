@@ -646,6 +646,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["Mamba2Block"]
     supports_gradient_checkpointing = True
+    _can_compile_fullgraph = True
     _is_stateful = True
 
     @torch.no_grad()

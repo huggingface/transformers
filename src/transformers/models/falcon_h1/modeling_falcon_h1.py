@@ -1042,6 +1042,9 @@ class FalconH1PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _is_stateful = True
+    # ``_can_compile_fullgraph = True`` would require StaticCache support for ``"hybrid"`` layers:
+    # each layer is attention + mamba but the cache currently has no static counterpart that holds
+    # both K/V and SSM state.
 
     _can_record_outputs = {
         "hidden_states": FalconH1DecoderLayer,
@@ -1131,7 +1134,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
             }
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
@@ -1139,7 +1142,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping["full_attention"],
-                mamba_attention_mask=causal_mask_mapping["linear_attention_mamba2"],
+                mamba_attention_mask=causal_mask_mapping["linear_attention"],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -1242,7 +1245,7 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         }
         return {
             "full_attention": create_causal_mask(**mask_kwargs),
-            "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+            "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
         }
 
     def prepare_inputs_for_generation(

@@ -574,7 +574,7 @@ class JambaModel(JambaPreTrainedModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention_mamba": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
             }
         hidden_states = inputs_embeds
         for i, decoder_layer in enumerate(self.layers):

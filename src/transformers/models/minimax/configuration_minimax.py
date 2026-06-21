@@ -116,11 +116,10 @@ class MiniMaxConfig(PreTrainedConfig):
 
         if self.layer_types is None:
             self.layer_types = [
-                "full_attention" if bool((i + 1) % 2) else "linear_attention_minimax"
-                for i in range(self.num_hidden_layers)
+                "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
         else:
-            self.layer_types = remap_legacy_layer_types(self.layer_types, "minimax")
+            self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         super().__post_init__(**kwargs)
 

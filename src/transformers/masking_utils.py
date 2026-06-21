@@ -17,7 +17,7 @@ import torch
 import torch.nn.functional as F
 
 from .cache_utils import Cache
-from .configuration_utils import RECURRENT_BACKBONES, PreTrainedConfig
+from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_tracing
@@ -1486,9 +1486,7 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "heavily_compressed_attention": create_sliding_window_causal_mask,
     "minimax_m3_sparse": create_causal_mask,
     "deepseek_sparse_attention": create_causal_mask,
-    # ``linear_attention_{backbone}`` keeps the specific recurrent backbone identifiable to
-    # downstream tooling (vLLM patches, model surgery) while sharing the same 2D padding mask.
-    **{f"linear_attention_{b}": create_recurrent_padding_mask for b in RECURRENT_BACKBONES},
+    "linear_attention": create_recurrent_padding_mask,
 }
 
 

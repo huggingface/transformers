@@ -822,7 +822,7 @@ class Qwen3NextDecoderLayer(GradientCheckpointingLayer):
 
         # token mixer
         self.layer_type = config.layer_types[layer_idx]
-        if self.layer_type == "linear_attention_gdn":
+        if self.layer_type == "linear_attention":
             self.linear_attn = Qwen3NextGatedDeltaNet(config, layer_idx)
         elif self.layer_type == "full_attention":
             self.self_attn = Qwen3NextAttention(config, layer_idx)
@@ -851,7 +851,7 @@ class Qwen3NextDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Token Mixer
-        if self.layer_type == "linear_attention_gdn":
+        if self.layer_type == "linear_attention":
             hidden_states = self.linear_attn(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
@@ -968,7 +968,7 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention_gdn": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

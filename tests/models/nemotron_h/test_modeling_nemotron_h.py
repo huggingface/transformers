@@ -53,7 +53,7 @@ class NemotronHModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        layers_block_type=["linear_attention_mamba2", "moe", "linear_attention_mamba2", "full_attention", "moe"],
+        layers_block_type=["linear_attention", "moe", "linear_attention", "full_attention", "moe"],
         num_attention_heads=4,
         num_key_value_heads=2,
         head_dim=32,
@@ -289,7 +289,7 @@ class NemotronHModelTester:
         # Find the index of the first mamba layer
         mamba_layer_idx = None
         for idx, layer_type in enumerate(config.layers_block_type):
-            if layer_type.startswith("linear_attention"):
+            if layer_type == "linear_attention":
                 mamba_layer_idx = idx
                 break
 
@@ -395,7 +395,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 self.assertEqual(layer.keys.shape, attention_shape)
                 self.assertEqual(layer.values.shape, attention_shape)
             # Mamba layer cache
-            elif layer_type.startswith("linear_attention"):
+            elif layer_type == "linear_attention":
                 self.assertEqual(layer.conv_states.shape, conv_shape)
                 self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
             else:
@@ -609,7 +609,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config = NemotronHConfig(
             vocab_size=100,
             hidden_size=32,
-            layers_block_type=["linear_attention_mamba2", "moe", "full_attention", "moe"],
+            layers_block_type=["linear_attention", "moe", "full_attention", "moe"],
         )
         self.assertEqual(len(config.layers_block_type), 4)
         self.assertEqual(config.num_hidden_layers, 4)
@@ -620,7 +620,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 vocab_size=100,
                 hidden_size=32,
                 layers_block_type=[
-                    "linear_attention_mamba2",
+                    "linear_attention",
                     "moe",
                     "full_attention",
                     "invalid",
@@ -633,11 +633,11 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config = NemotronHConfig(
             vocab_size=100,
             hidden_size=32,
-            layers_block_type=["linear_attention_mamba2", "moe", "full_attention", "moe"],
+            layers_block_type=["linear_attention", "moe", "full_attention", "moe"],
         )
 
         # Test direct access to layers_block_type
-        self.assertEqual(config.layers_block_type[0], "linear_attention_mamba2")
+        self.assertEqual(config.layers_block_type[0], "linear_attention")
         self.assertEqual(config.layers_block_type[1], "moe")
         self.assertEqual(config.layers_block_type[2], "full_attention")
         self.assertEqual(config.layers_block_type[3], "moe")
@@ -651,9 +651,9 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # Test the model tester config
         config2 = self.model_tester.get_config()
         self.assertEqual(len(config2.layers_block_type), 5)
-        self.assertEqual(config2.layers_block_type[0], "linear_attention_mamba2")
+        self.assertEqual(config2.layers_block_type[0], "linear_attention")
         self.assertEqual(config2.layers_block_type[1], "moe")
-        self.assertEqual(config2.layers_block_type[2], "linear_attention_mamba2")
+        self.assertEqual(config2.layers_block_type[2], "linear_attention")
         self.assertEqual(config2.layers_block_type[3], "full_attention")
         self.assertEqual(config2.layers_block_type[4], "moe")
 
@@ -772,7 +772,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_mtp_backward_compatibility(self):
         """Test MTP backward compatibility with mtp_hybrid_override_pattern"""
         config = NemotronHConfig(
-            layers_block_type=["linear_attention_mamba2", "moe", "full_attention", "moe"],
+            layers_block_type=["linear_attention", "moe", "full_attention", "moe"],
             num_nextn_predict_layers=2,
             mtp_hybrid_override_pattern="*E",
         )
@@ -798,7 +798,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             # Verify (legacy "mamba" / "attention" remap to current names on load)
             self.assertEqual(
                 config2.layers_block_type,
-                ["linear_attention_mamba2", "full_attention", "moe", "full_attention"],
+                ["linear_attention", "full_attention", "moe", "full_attention"],
             )
             self.assertEqual(config2.num_hidden_layers, 4)
             self.assertEqual(config2.vocab_size, 100)

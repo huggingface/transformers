@@ -124,20 +124,20 @@ class Zamba2Config(PreTrainedConfig):
         self.kv_channels = self.hidden_size // self.num_attention_heads
         self.num_query_groups = self.num_attention_heads
 
-        # Below, "linear_attention_mamba2" stands for the mamba2 layer, "hybrid" stands for hybrid layer
+        # Below, "linear_attention" stands for the mamba2 layer, "hybrid" stands for hybrid layer
         # (a shared transformer followed by a mamba2 layer).
         if self.layers_block_type is None:
             self.layers_block_type = (
-                ["linear_attention_mamba2"]
-                + (["linear_attention_mamba2"] * 5 + ["hybrid"]) * 7
-                + ["linear_attention_mamba2"] * 4
+                ["linear_attention"]
+                + (["linear_attention"] * 5 + ["hybrid"]) * 7
+                + ["linear_attention"] * 4
                 + ["hybrid"]
-                + ["linear_attention_mamba2"] * 3
+                + ["linear_attention"] * 3
                 + ["hybrid"]
-                + ["linear_attention_mamba2"] * 2
+                + ["linear_attention"] * 2
             )
         else:
-            self.layers_block_type = remap_legacy_layer_types(self.layers_block_type, "mamba2")
+            self.layers_block_type = remap_legacy_layer_types(self.layers_block_type)
         self.hybrid_layer_ids = [index for index, type in enumerate(self.layers_block_type) if type == "hybrid"]
         super().__post_init__(**kwargs)
 

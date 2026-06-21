@@ -622,7 +622,7 @@ class BambaRMSNorm(LlamaRMSNorm):
 
 
 class BambaDecoderLayer(JambaAttentionDecoderLayer):
-    def __init__(self, config: BambaConfig, layer_idx: int, layer_type: str = "linear_attention_mamba2"):
+    def __init__(self, config: BambaConfig, layer_idx: int, layer_type: str = "linear_attention"):
         super().__init__(config, layer_idx)
 
         del self.self_attn
@@ -632,7 +632,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         self.feed_forward = ffn_layer_class(config)
 
         self.layer_type = layer_type
-        if layer_type== "linear_attention_mamba2":
+        if layer_type== "linear_attention":
             self.mamba = BambaMixer(config=config, layer_idx=layer_idx)
         elif layer_type == "full_attention":
             self.self_attn = BambaAttention(config, layer_idx)
@@ -653,7 +653,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        if self.layer_type== "linear_attention_mamba2":
+        if self.layer_type== "linear_attention":
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
@@ -766,7 +766,7 @@ class BambaModel(BambaPreTrainedModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
             }
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 

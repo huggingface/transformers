@@ -892,7 +892,7 @@ class NemotronHAttention(nn.Module):
 
 
 MIXER_TYPES = {
-    "linear_attention_mamba2": NemotronHMamba2Mixer,
+    "linear_attention": NemotronHMamba2Mixer,
     "full_attention": NemotronHAttention,
     "moe": NemotronHMoE,
     "mlp": NemotronHMLP,
@@ -936,7 +936,7 @@ class NemotronHBlock(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 
-        if self.block_type == "linear_attention_mamba2":
+        if self.block_type == "linear_attention":
             hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
         elif self.block_type == "full_attention":
             hidden_states, _ = self.mixer(
@@ -1097,7 +1097,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
             }
 
         for layer_idx, mixer_block in enumerate(self.layers):
@@ -1232,7 +1232,7 @@ class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
         }
         return {
             "full_attention": create_causal_mask(**mask_kwargs),
-            "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+            "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
         }
 
 
