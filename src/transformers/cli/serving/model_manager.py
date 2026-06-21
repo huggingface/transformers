@@ -228,10 +228,22 @@ class ModelManager:
         Args:
             model_id_and_revision: Model ID in ``'model_id@revision'`` format.
         """
+        import os as _os
+
         from transformers import AutoProcessor
+        from transformers.modeling_utils import _maybe_auto_detect_gguf
 
         model_id, revision = model_id_and_revision.split("@", 1)
-        return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
+        kwargs = {"revision": revision, "trust_remote_code": self.trust_remote_code}
+        # GGUF: the tokenizer lives inside the .gguf; point the loader at its dir + filename.
+        if model_id.lower().endswith(".gguf") and _os.path.isfile(model_id):
+            kwargs["gguf_file"] = _os.path.basename(model_id)
+            model_id = _os.path.dirname(model_id)
+        else:
+            _gguf = _maybe_auto_detect_gguf(model_id, revision=revision)
+            if _gguf is not None:
+                kwargs["gguf_file"] = _gguf
+        return AutoProcessor.from_pretrained(model_id, **kwargs)
 
     def _load_model(
         self, model_id_and_revision: str, tqdm_class: type | None = None, progress_callback: Callable | None = None
@@ -260,6 +272,20 @@ class ModelManager:
             "tqdm_class": tqdm_class,
         }
 
+        # GGUF: serve receives only a model id. Resolve a single .gguf + pass gguf_file so
+        # AutoConfig + from_pretrained read config/weights from it. Loaders expect a repo/dir
+        # + filename, so for a local .gguf path point model_id at its directory.
+        import os as _os
+        from transformers.modeling_utils import _maybe_auto_detect_gguf
+
+        if model_id.lower().endswith(".gguf") and _os.path.isfile(model_id):
+            model_kwargs["gguf_file"] = _os.path.basename(model_id)
+            model_id = _os.path.dirname(model_id)
+        else:
+            _gguf = _maybe_auto_detect_gguf(model_id, revision=revision)
+            if _gguf is not None:
+                model_kwargs["gguf_file"] = _gguf
+
         if progress_callback is not None:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
@@ -270,6 +296,11 @@ class ModelManager:
             from transformers import AutoModelForMultimodalLM
 
             return AutoModelForMultimodalLM.from_pretrained(model_id, **model_kwargs)
+
+        if not config.architectures:  # GGUF configs often omit architectures; route by model_type
+            from transformers import AutoModelForCausalLM
+
+            return AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
 
         architecture = getattr(transformers, config.architectures[0])
         return architecture.from_pretrained(model_id, **model_kwargs)
