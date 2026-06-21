@@ -468,7 +468,23 @@ def load_and_register_attn_kernel(
     except ValueError:
         raise
     except Exception as e:
-        raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
+        # Fallback: if the revision is a commit hash (common for PR refs like refs/pr/4),
+        # the kernels API endpoint rejects it with a 404. Fall back to snapshot_download
+        # and load the kernel from the local cache via get_local_kernel.
+        if rev and "404" in str(e) and "Invalid rev id" in str(e):
+            try:
+                from huggingface_hub import snapshot_download
+                from kernels import get_local_kernel
+                from pathlib import Path
+                local_path = snapshot_download(repo_id, revision=rev, repo_type="model")
+                kernel = get_local_kernel(Path(local_path))
+            except Exception as fallback_err:
+                raise ValueError(
+                    f"An error occurred while trying to load from '{repo_id}' at revision '{rev}': {e}. "
+                    f"Fallback to local download also failed: {fallback_err}."
+                )
+        else:
+            raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
 
     # correctly wrap the kernel
     mask_implementation = "flash_attention_2"
