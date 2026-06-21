@@ -3086,8 +3086,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         chat_template = self.get_chat_template(chat_template, tools)
 
-        if isinstance(conversation, (list, tuple)) and len(conversation) > 0 and (
-            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
+        if (
+            isinstance(conversation, (list, tuple))
+            and len(conversation) > 0
+            and (isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages"))
         ):
             conversations = conversation
             is_batched = True
@@ -3448,7 +3450,7 @@ def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
             entries = hf_api().list_repo_tree(
                 repo_id=pretrained_model_name_or_path,
                 revision=kwargs.get("revision"),
-                path_in_repo=subfolder if subfolder else None,
+                path_in_repo=subfolder or None,
                 recursive=False,
                 token=kwargs.get("token"),
             )

@@ -2069,8 +2069,10 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 sampling_rate = 16_000
 
-        if isinstance(conversation, (list, tuple)) and len(conversation) > 0 and (
-            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
+        if (
+            isinstance(conversation, (list, tuple))
+            and len(conversation) > 0
+            and (isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content"))
         ):
             is_batched = True
             conversations = conversation
