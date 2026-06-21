@@ -1090,7 +1090,7 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         if labels is not None:
             # Use standard loss computation for now
             loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = loss_fct(logits.view(-1, self.config.talker_config.vocab_size), labels.view(-1))
 
         return Qwen3TTSTalkerOutputWithPast(
             loss=loss,
@@ -1127,74 +1127,11 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         return model_kwargs
 
 
-class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerationMixin):
-    config_class = Qwen3TTSConfig
-    main_input_name = "input_ids"
-
-    def __init__(self, config: Qwen3TTSConfig):
-        super().__init__(config)
-        self.config = config
-
-        # Main TTS talker model
-        self.talker = Qwen3TTSTalkerForConditionalGeneration(self.config.talker_config)
-
-        # Optional speaker encoder for voice cloning (only for "base" model type)
-        if config.tts_model_type == "base":
-            self.speaker_encoder = Qwen3TTSSpeakerEncoder(self.config.speaker_encoder_config)
-        else:
-            self.speaker_encoder = None
-
-        # Optional: speech_tokenizer and generate_config loaded separately
-        self.speech_tokenizer = None
-        self.generate_config = None
-
-        # Model metadata
-        self.supported_speakers = (
-            list(self.config.talker_config.spk_id.keys())
-            if hasattr(self.config.talker_config, "spk_id") and self.config.talker_config.spk_id is not None
-            else []
-        )
-        self.supported_languages = ["auto"]
-        if (
-            hasattr(self.config.talker_config, "codec_language_id")
-            and self.config.talker_config.codec_language_id is not None
-        ):
-            for language_id in self.config.talker_config.codec_language_id.keys():
-                if "dialect" not in language_id:
-                    self.supported_languages.append(language_id)
-
-        self.speaker_encoder_sample_rate = (
-            self.config.speaker_encoder_config.sample_rate if hasattr(self.config, "speaker_encoder_config") else 24000
-        )
-        self.tokenizer_type = getattr(self.config, "tokenizer_type", "qwen2")
-        self.tts_model_size = getattr(self.config, "tts_model_size", "base")
-        self.tts_model_type = getattr(self.config, "tts_model_type", "base")
-
-        self.post_init()
-
-    def load_speech_tokenizer(self, speech_tokenizer):
-        """Load the speech tokenizer for audio encoding/decoding."""
-        self.speech_tokenizer = speech_tokenizer
-
-    def load_generate_config(self, generate_config):
-        """Load the generation configuration."""
-        if isinstance(generate_config, str):
-            import json
-
-            with open(generate_config, encoding="utf-8") as f:
-                generate_config = json.load(f)
-        self.generate_config = generate_config
-
-    def get_supported_speakers(self):
-        """Get list of supported speakers."""
-        return list(self.supported_speakers)
-
-    def get_supported_languages(self):
-        """Get list of supported languages."""
-        return self.supported_languages
-
-
 __all__ = [
+    "Qwen3TTSConfig",
+    "Qwen3TTSTalkerConfig",
+    "Qwen3TTSSpeakerEncoderConfig",
+    "Qwen3TTSTalkerCodePredictorConfig",
     "Qwen3TTSBasePreTrainedModel",
     "Qwen3TTSPreTrainedModel",
     "Qwen3TTSSpeakerEncoder",
@@ -1202,6 +1139,5 @@ __all__ = [
     "Qwen3TTSTalkerTextPreTrainedModel",
     "Qwen3TTSTalkerCodePredictorModel",
     "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",
-    "Qwen3TTSTalkerForConditionalGeneration",
     "Qwen3TTSForConditionalGeneration",
 ]
