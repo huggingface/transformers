@@ -3,7 +3,7 @@ from collections.abc import Iterable
 
 import torch
 
-from .configuration_utils import PreTrainedConfig
+from .configuration_utils import RECURRENT_BACKBONES, PreTrainedConfig
 from .utils import (
     is_hqq_available,
     is_optimum_quanto_available,
@@ -1034,10 +1034,7 @@ LAYER_TYPE_CACHE_MAPPING.update(
         # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
         "conv": LinearAttentionLayer,
         "moe": LinearAttentionLayer,
-        "linear_attention_mamba": LinearAttentionLayer,
-        "linear_attention_mamba2": LinearAttentionLayer,
-        "linear_attention_gated_delta_net": LinearAttentionLayer,
-        "linear_attention_lightning": LinearAttentionLayer,
+        **{f"linear_attention_{b}": LinearAttentionLayer for b in RECURRENT_BACKBONES},
         # Hybrid layers (e.g. zamba / zamba2) carry both a linear-attention state and a dynamic-attention state.
         "hybrid": LinearAttentionAndFullAttentionLayer,
     }
@@ -1604,14 +1601,7 @@ class StaticCache(Cache):
             elif layer_type in sliding_layer_types:
                 layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
             # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
-            elif layer_type in (
-                "conv",
-                "moe",
-                "linear_attention_mamba",
-                "linear_attention_mamba2",
-                "linear_attention_gated_delta_net",
-                "linear_attention_lightning",
-            ):
+            elif LAYER_TYPE_CACHE_MAPPING.get(layer_type) is LinearAttentionLayer:
                 layer = LinearAttentionLayer()
             # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
             elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:
