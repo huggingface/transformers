@@ -378,244 +378,244 @@ class HumanVAttention(nn.Module):
     # ---------------------
     # sparse attention impl
     # ---------------------
-def _local_global_block_sparse_prefill_grouped(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        v: torch.Tensor,
-        attention_mask_2d: Optional[torch.Tensor],
-    ) -> torch.Tensor:
-        bsz, h, q_len, d = q.shape
-        if h != self.num_heads:
-            raise ValueError(f"Expected q heads={self.num_heads}, got {h}")
-
-        seqlen = k.shape[-2]
-        orig_q_len = q_len
-        orig_seqlen = seqlen
-
-        b = self.sparse_block_size
-        if b <= 0:
-            raise ValueError("sparse_block_size must be > 0")
-
-        n_blocks = (seqlen + b - 1) // b
-        pad_len = n_blocks * b - seqlen
-        if pad_len > 0:
-            k = self._pad_to_blocks(k, pad_len)
-            v = self._pad_to_blocks(v, pad_len)
-            q = self._pad_to_blocks(q, pad_len)
-            if attention_mask_2d is not None:
-                attention_mask_2d = self._pad_mask_to_blocks(attention_mask_2d, pad_len)
-            seqlen = n_blocks * b
-            q_len = n_blocks * b
-
-        if attention_mask_2d is None:
+    def _local_global_block_sparse_prefill_grouped(
+            self,
+            q: torch.Tensor,
+            k: torch.Tensor,
+            v: torch.Tensor,
+            attention_mask_2d: Optional[torch.Tensor],
+        ) -> torch.Tensor:
+            bsz, h, q_len, d = q.shape
+            if h != self.num_heads:
+                raise ValueError(f"Expected q heads={self.num_heads}, got {h}")
+    
+            seqlen = k.shape[-2]
+            orig_q_len = q_len
+            orig_seqlen = seqlen
+    
+            b = self.sparse_block_size
+            if b <= 0:
+                raise ValueError("sparse_block_size must be > 0")
+    
+            n_blocks = (seqlen + b - 1) // b
+            pad_len = n_blocks * b - seqlen
             if pad_len > 0:
-                key_valid = torch.cat(
-                    [
-                        torch.ones((bsz, orig_seqlen), device=q.device, dtype=torch.float32),
-                        torch.zeros((bsz, seqlen - orig_seqlen), device=q.device, dtype=torch.float32),
-                    ],
-                    dim=-1,
-                )
+                k = self._pad_to_blocks(k, pad_len)
+                v = self._pad_to_blocks(v, pad_len)
+                q = self._pad_to_blocks(q, pad_len)
+                if attention_mask_2d is not None:
+                    attention_mask_2d = self._pad_mask_to_blocks(attention_mask_2d, pad_len)
+                seqlen = n_blocks * b
+                q_len = n_blocks * b
+    
+            if attention_mask_2d is None:
+                if pad_len > 0:
+                    key_valid = torch.cat(
+                        [
+                            torch.ones((bsz, orig_seqlen), device=q.device, dtype=torch.float32),
+                            torch.zeros((bsz, seqlen - orig_seqlen), device=q.device, dtype=torch.float32),
+                        ],
+                        dim=-1,
+                    )
+                else:
+                    key_valid = torch.ones((bsz, seqlen), device=q.device, dtype=torch.float32)
             else:
-                key_valid = torch.ones((bsz, seqlen), device=q.device, dtype=torch.float32)
-        else:
-            key_valid = attention_mask_2d.to(device=q.device, dtype=torch.float32)
-            if key_valid.shape[1] != seqlen:
-                raise ValueError(f"attention_mask_2d wrong length: {key_valid.shape[1]} vs {seqlen}")
-
-        q = q.contiguous()
-        k = k.contiguous()
-        v = v.contiguous()
-
-        q_blocks = q.reshape(bsz, self.num_kv_heads, self.num_kv_groups, n_blocks, b, d)
-        k_blocks = k.reshape(bsz, self.num_kv_heads, n_blocks, b, d)
-        v_blocks = v.reshape(bsz, self.num_kv_heads, n_blocks, b, d)
-        key_valid_blocks = key_valid.reshape(bsz, n_blocks, b)
-
-        idx_table, idx_valid, self_pos = self._get_sparse_tables(n_blocks, q.device)
-        intra = self._get_intra_causal(b, q.device)
-
-        chunk = self.sparse_prefill_chunk_blocks if self.sparse_prefill_chunk_blocks > 0 else n_blocks
-        chunk = max(1, int(chunk))
-
-        out = torch.zeros(
-            (bsz, self.num_kv_heads, self.num_kv_groups, n_blocks, b, d),
-            device=q.device,
-            dtype=q.dtype,
-        )
-
-        max_sel = idx_table.shape[1]
-        offsets = torch.arange(b, device=q.device).repeat(max_sel)
-        idx_valid_token = idx_valid[..., None].expand(n_blocks, max_sel, b).reshape(n_blocks, max_sel * b)
-
-        for start in range(0, n_blocks, chunk):
-            end = min(n_blocks, start + chunk)
-            clen = end - start
-
-            qb = q_blocks[:, :, :, start:end]  
-            idx_c = idx_table[start:end]  
-            idxv_c = idx_valid_token[start:end]  
-            selfpos_c = self_pos[start:end]  
-
-            k_sel = k_blocks[:, :, idx_c]  
-            v_sel = v_blocks[:, :, idx_c]
-            k_flat = k_sel.reshape(bsz, self.num_kv_heads, clen, max_sel * b, d)  
-            v_flat = v_sel.reshape(bsz, self.num_kv_heads, clen, max_sel * b, d)
-
+                key_valid = attention_mask_2d.to(device=q.device, dtype=torch.float32)
+                if key_valid.shape[1] != seqlen:
+                    raise ValueError(f"attention_mask_2d wrong length: {key_valid.shape[1]} vs {seqlen}")
+    
+            q = q.contiguous()
+            k = k.contiguous()
+            v = v.contiguous()
+    
+            q_blocks = q.reshape(bsz, self.num_kv_heads, self.num_kv_groups, n_blocks, b, d)
+            k_blocks = k.reshape(bsz, self.num_kv_heads, n_blocks, b, d)
+            v_blocks = v.reshape(bsz, self.num_kv_heads, n_blocks, b, d)
+            key_valid_blocks = key_valid.reshape(bsz, n_blocks, b)
+    
+            idx_table, idx_valid, self_pos = self._get_sparse_tables(n_blocks, q.device)
+            intra = self._get_intra_causal(b, q.device)
+    
+            chunk = self.sparse_prefill_chunk_blocks if self.sparse_prefill_chunk_blocks > 0 else n_blocks
+            chunk = max(1, int(chunk))
+    
+            out = torch.zeros(
+                (bsz, self.num_kv_heads, self.num_kv_groups, n_blocks, b, d),
+                device=q.device,
+                dtype=q.dtype,
+            )
+    
+            max_sel = idx_table.shape[1]
+            offsets = torch.arange(b, device=q.device).repeat(max_sel)
+            idx_valid_token = idx_valid[..., None].expand(n_blocks, max_sel, b).reshape(n_blocks, max_sel * b)
+    
+            for start in range(0, n_blocks, chunk):
+                end = min(n_blocks, start + chunk)
+                clen = end - start
+    
+                qb = q_blocks[:, :, :, start:end]  
+                idx_c = idx_table[start:end]  
+                idxv_c = idx_valid_token[start:end]  
+                selfpos_c = self_pos[start:end]  
+    
+                k_sel = k_blocks[:, :, idx_c]  
+                v_sel = v_blocks[:, :, idx_c]
+                k_flat = k_sel.reshape(bsz, self.num_kv_heads, clen, max_sel * b, d)  
+                v_flat = v_sel.reshape(bsz, self.num_kv_heads, clen, max_sel * b, d)
+    
+                k_t = k_flat.transpose(-2, -1).unsqueeze(2)  
+                scores = torch.matmul(qb.to(torch.float32), k_t.to(torch.float32)) * self.scaling
+    
+                kv_mask_sel = key_valid_blocks[:, idx_c].reshape(bsz, clen, max_sel * b)  
+                kv_mask_sel = kv_mask_sel * idxv_c[None, :, :].to(kv_mask_sel.dtype)
+                scores = scores + (1.0 - kv_mask_sel)[:, None, None, :, None, :] * _NEG_INF
+    
+                causal_mask = torch.zeros((clen, b, max_sel * b), device=q.device, dtype=torch.bool)
+                active = selfpos_c >= 0
+                if active.any():
+                    pos = torch.clamp(selfpos_c, min=0)
+                    onehot = F.one_hot(pos, num_classes=max_sel).to(dtype=torch.bool)
+                    onehot = onehot & active[:, None]
+                    for s in range(max_sel):
+                        if not onehot[:, s].any():
+                            continue
+                        causal_mask[:, :, s * b : (s + 1) * b] |= (onehot[:, s][:, None, None] & intra[None, :, :])
+    
+                scores = scores.masked_fill(causal_mask[None, None, None, :, :, :], _NEG_INF)
+    
+                if self.sparse_attention_window > 0:
+                    max_ctx = int(self.sparse_attention_window)
+                    key_abs = idx_c.repeat_interleave(b, dim=1) * b + offsets[None, :]  
+                    q_block_ids = torch.arange(start, end, device=q.device)  
+                    q_abs = q_block_ids[:, None] * b + torch.arange(b, device=q.device)[None, :]  
+                    min_allowed = (q_abs[:, :, None] - (max_ctx - 1)).clamp(min=0)  
+                    
+                    window_mask = key_abs[:, None, :] < min_allowed
+                    
+                    global_tokens_count = int(self.sparse_global_num_blocks) * b
+                    is_global_token = key_abs[:, None, :] < global_tokens_count
+                    
+                    final_mask = window_mask & (~is_global_token)
+                    
+                    scores = scores.masked_fill(final_mask[None, None, None, :, :, :], _NEG_INF)
+    
+                probs = torch.softmax(scores, dim=-1)
+                probs = F.dropout(probs, p=self.attention_dropout, training=self.training)
+    
+                v_exp = v_flat.unsqueeze(2)  
+                o = torch.matmul(probs.to(v_exp.dtype), v_exp).to(dtype=q.dtype)  
+                out[:, :, :, start:end] = o
+    
+            out = out.reshape(bsz, self.num_heads, n_blocks * b, d)
+            return out[:, :, :orig_q_len, :]
+    
+    def _local_global_block_sparse_decode_one_grouped(
+            self,
+            q: torch.Tensor,
+            k: torch.Tensor,
+            v: torch.Tensor,
+            attention_mask_2d: Optional[torch.Tensor],
+        ) -> torch.Tensor:
+            bsz, h, q_len, d = q.shape
+            if q_len != 1:
+                raise ValueError("decode_one expects q_len == 1")
+            if h != self.num_heads:
+                raise ValueError(f"Expected q heads={self.num_heads}, got {h}")
+    
+            seqlen = k.shape[-2]
+            orig_seqlen = seqlen
+            b = self.sparse_block_size
+            if b <= 0:
+                raise ValueError("sparse_block_size must be > 0")
+    
+            n_blocks = (seqlen + b - 1) // b
+            pad_len = n_blocks * b - seqlen
+            if pad_len > 0:
+                k = self._pad_to_blocks(k, pad_len)
+                v = self._pad_to_blocks(v, pad_len)
+                if attention_mask_2d is not None:
+                    attention_mask_2d = self._pad_mask_to_blocks(attention_mask_2d, pad_len)
+                seqlen = n_blocks * b
+    
+            if attention_mask_2d is None:
+                if pad_len > 0:
+                    key_valid = torch.cat(
+                        [
+                            torch.ones((bsz, orig_seqlen), device=q.device, dtype=torch.float32),
+                            torch.zeros((bsz, seqlen - orig_seqlen), device=q.device, dtype=torch.float32),
+                        ],
+                        dim=-1,
+                    )
+                else:
+                    key_valid = torch.ones((bsz, seqlen), device=q.device, dtype=torch.float32)
+            else:
+                key_valid = attention_mask_2d.to(device=q.device, dtype=torch.float32)
+                if key_valid.shape[1] != seqlen:
+                    raise ValueError(f"attention_mask_2d wrong length: {key_valid.shape[1]} vs {seqlen}")
+    
+            q = q.contiguous()
+            k = k.contiguous()
+            v = v.contiguous()
+    
+            qg = self._reshape_q_grouped(q)  
+    
+            k_blocks = k.reshape(bsz, self.num_kv_heads, n_blocks, b, d)
+            v_blocks = v.reshape(bsz, self.num_kv_heads, n_blocks, b, d)
+            key_valid_blocks = key_valid.reshape(bsz, n_blocks, b)
+    
+            idx_table, idx_valid, self_pos = self._get_sparse_tables(n_blocks, q.device)
+    
+            q_pos = orig_seqlen - 1
+            q_block = q_pos // b
+            q_intra = q_pos % b
+    
+            idx_row = idx_table[q_block]  
+            idxv_row = idx_valid[q_block]  
+            max_sel = idx_row.numel()
+            S = max_sel * b
+    
+            k_sel = k_blocks[:, :, idx_row]  
+            v_sel = v_blocks[:, :, idx_row]
+            k_flat = k_sel.reshape(bsz, self.num_kv_heads, S, d)  
+            v_flat = v_sel.reshape(bsz, self.num_kv_heads, S, d)
+    
             k_t = k_flat.transpose(-2, -1).unsqueeze(2)  
-            scores = torch.matmul(qb.to(torch.float32), k_t.to(torch.float32)) * self.scaling
-
-            kv_mask_sel = key_valid_blocks[:, idx_c].reshape(bsz, clen, max_sel * b)  
-            kv_mask_sel = kv_mask_sel * idxv_c[None, :, :].to(kv_mask_sel.dtype)
-            scores = scores + (1.0 - kv_mask_sel)[:, None, None, :, None, :] * _NEG_INF
-
-            causal_mask = torch.zeros((clen, b, max_sel * b), device=q.device, dtype=torch.bool)
-            active = selfpos_c >= 0
-            if active.any():
-                pos = torch.clamp(selfpos_c, min=0)
-                onehot = F.one_hot(pos, num_classes=max_sel).to(dtype=torch.bool)
-                onehot = onehot & active[:, None]
-                for s in range(max_sel):
-                    if not onehot[:, s].any():
-                        continue
-                    causal_mask[:, :, s * b : (s + 1) * b] |= (onehot[:, s][:, None, None] & intra[None, :, :])
-
-            scores = scores.masked_fill(causal_mask[None, None, None, :, :, :], _NEG_INF)
-
+            scores = torch.matmul(qg.to(torch.float32), k_t.to(torch.float32)) * self.scaling
+    
+            kv_mask_sel = key_valid_blocks[:, idx_row].reshape(bsz, S)  
+            idxv_tok = idxv_row[:, None].expand(max_sel, b).reshape(S).to(kv_mask_sel.dtype)
+            kv_mask_sel = kv_mask_sel * idxv_tok[None, :]
+            scores = scores + (1.0 - kv_mask_sel)[:, None, None, None, :] * _NEG_INF
+    
+            self_p = int(self_pos[q_block].item())
+            if self_p >= 0:
+                s = self_p * b
+                e = s + b
+                mask = torch.arange(b, device=q.device) > q_intra  
+                scores[..., s:e] = scores[..., s:e].masked_fill(mask[None, None, None, None, :], _NEG_INF)
+    
             if self.sparse_attention_window > 0:
                 max_ctx = int(self.sparse_attention_window)
-                key_abs = idx_c.repeat_interleave(b, dim=1) * b + offsets[None, :]  
-                q_block_ids = torch.arange(start, end, device=q.device)  
-                q_abs = q_block_ids[:, None] * b + torch.arange(b, device=q.device)[None, :]  
-                min_allowed = (q_abs[:, :, None] - (max_ctx - 1)).clamp(min=0)  
+                offsets = torch.arange(b, device=q.device).repeat(max_sel)  
+                key_abs = idx_row.repeat_interleave(b) * b + offsets  
+                min_allowed = max(0, q_pos - (max_ctx - 1))
                 
-                window_mask = key_abs[:, None, :] < min_allowed
+                window_mask = key_abs < min_allowed
                 
                 global_tokens_count = int(self.sparse_global_num_blocks) * b
-                is_global_token = key_abs[:, None, :] < global_tokens_count
+                is_global_token = key_abs < global_tokens_count
                 
                 final_mask = window_mask & (~is_global_token)
                 
-                scores = scores.masked_fill(final_mask[None, None, None, :, :, :], _NEG_INF)
-
+                scores = scores.masked_fill(final_mask[None, None, None, None, :], _NEG_INF)
+    
             probs = torch.softmax(scores, dim=-1)
             probs = F.dropout(probs, p=self.attention_dropout, training=self.training)
-
+    
             v_exp = v_flat.unsqueeze(2)  
-            o = torch.matmul(probs.to(v_exp.dtype), v_exp).to(dtype=q.dtype)  
-            out[:, :, :, start:end] = o
-
-        out = out.reshape(bsz, self.num_heads, n_blocks * b, d)
-        return out[:, :, :orig_q_len, :]
-
-def _local_global_block_sparse_decode_one_grouped(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        v: torch.Tensor,
-        attention_mask_2d: Optional[torch.Tensor],
-    ) -> torch.Tensor:
-        bsz, h, q_len, d = q.shape
-        if q_len != 1:
-            raise ValueError("decode_one expects q_len == 1")
-        if h != self.num_heads:
-            raise ValueError(f"Expected q heads={self.num_heads}, got {h}")
-
-        seqlen = k.shape[-2]
-        orig_seqlen = seqlen
-        b = self.sparse_block_size
-        if b <= 0:
-            raise ValueError("sparse_block_size must be > 0")
-
-        n_blocks = (seqlen + b - 1) // b
-        pad_len = n_blocks * b - seqlen
-        if pad_len > 0:
-            k = self._pad_to_blocks(k, pad_len)
-            v = self._pad_to_blocks(v, pad_len)
-            if attention_mask_2d is not None:
-                attention_mask_2d = self._pad_mask_to_blocks(attention_mask_2d, pad_len)
-            seqlen = n_blocks * b
-
-        if attention_mask_2d is None:
-            if pad_len > 0:
-                key_valid = torch.cat(
-                    [
-                        torch.ones((bsz, orig_seqlen), device=q.device, dtype=torch.float32),
-                        torch.zeros((bsz, seqlen - orig_seqlen), device=q.device, dtype=torch.float32),
-                    ],
-                    dim=-1,
-                )
-            else:
-                key_valid = torch.ones((bsz, seqlen), device=q.device, dtype=torch.float32)
-        else:
-            key_valid = attention_mask_2d.to(device=q.device, dtype=torch.float32)
-            if key_valid.shape[1] != seqlen:
-                raise ValueError(f"attention_mask_2d wrong length: {key_valid.shape[1]} vs {seqlen}")
-
-        q = q.contiguous()
-        k = k.contiguous()
-        v = v.contiguous()
-
-        qg = self._reshape_q_grouped(q)  
-
-        k_blocks = k.reshape(bsz, self.num_kv_heads, n_blocks, b, d)
-        v_blocks = v.reshape(bsz, self.num_kv_heads, n_blocks, b, d)
-        key_valid_blocks = key_valid.reshape(bsz, n_blocks, b)
-
-        idx_table, idx_valid, self_pos = self._get_sparse_tables(n_blocks, q.device)
-
-        q_pos = orig_seqlen - 1
-        q_block = q_pos // b
-        q_intra = q_pos % b
-
-        idx_row = idx_table[q_block]  
-        idxv_row = idx_valid[q_block]  
-        max_sel = idx_row.numel()
-        S = max_sel * b
-
-        k_sel = k_blocks[:, :, idx_row]  
-        v_sel = v_blocks[:, :, idx_row]
-        k_flat = k_sel.reshape(bsz, self.num_kv_heads, S, d)  
-        v_flat = v_sel.reshape(bsz, self.num_kv_heads, S, d)
-
-        k_t = k_flat.transpose(-2, -1).unsqueeze(2)  
-        scores = torch.matmul(qg.to(torch.float32), k_t.to(torch.float32)) * self.scaling
-
-        kv_mask_sel = key_valid_blocks[:, idx_row].reshape(bsz, S)  
-        idxv_tok = idxv_row[:, None].expand(max_sel, b).reshape(S).to(kv_mask_sel.dtype)
-        kv_mask_sel = kv_mask_sel * idxv_tok[None, :]
-        scores = scores + (1.0 - kv_mask_sel)[:, None, None, None, :] * _NEG_INF
-
-        self_p = int(self_pos[q_block].item())
-        if self_p >= 0:
-            s = self_p * b
-            e = s + b
-            mask = torch.arange(b, device=q.device) > q_intra  
-            scores[..., s:e] = scores[..., s:e].masked_fill(mask[None, None, None, None, :], _NEG_INF)
-
-        if self.sparse_attention_window > 0:
-            max_ctx = int(self.sparse_attention_window)
-            offsets = torch.arange(b, device=q.device).repeat(max_sel)  
-            key_abs = idx_row.repeat_interleave(b) * b + offsets  
-            min_allowed = max(0, q_pos - (max_ctx - 1))
-            
-            window_mask = key_abs < min_allowed
-            
-            global_tokens_count = int(self.sparse_global_num_blocks) * b
-            is_global_token = key_abs < global_tokens_count
-            
-            final_mask = window_mask & (~is_global_token)
-            
-            scores = scores.masked_fill(final_mask[None, None, None, None, :], _NEG_INF)
-
-        probs = torch.softmax(scores, dim=-1)
-        probs = F.dropout(probs, p=self.attention_dropout, training=self.training)
-
-        v_exp = v_flat.unsqueeze(2)  
-        out = torch.matmul(probs.to(v_exp.dtype), v_exp).to(dtype=q.dtype)  
-        out = out.reshape(bsz, self.num_heads, 1, d)
-        return out
+            out = torch.matmul(probs.to(v_exp.dtype), v_exp).to(dtype=q.dtype)  
+            out = out.reshape(bsz, self.num_heads, 1, d)
+            return out
 
     # ---------------------
     # forward
