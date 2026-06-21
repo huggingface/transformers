@@ -898,86 +898,80 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         model_kwargs["generation_steps"] = outputs.generation_steps
         return model_kwargs
 
-    def forward_finetune(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
-        generation_steps: int | None = None,
-        **kwargs,
-    ) -> CausalLMOutputWithPast:
-        """Fine-tuning forward pass with per-codebook processing."""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        inputs_embeds = self.small_to_mtp_projection(inputs_embeds)
-
-        outputs: BaseModelOutputWithPast = self.model(
-            input_ids=None,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-
-        logits = []
-        for i in range(1, self.config.num_code_groups):
-            logits.append(self.lm_head[i - 1](hidden_states[:, i]))
-        logits = torch.stack(logits, dim=1)
-
-        loss = None
-        if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
-            loss = 0
-            for codebook_idx in range(1, self.config.num_code_groups):
-                loss += loss_fct(
-                    logits[:, codebook_idx - 1].reshape(-1, self.config.vocab_size),
-                    labels[:, codebook_idx - 1].reshape(-1),
-                )
-            loss = loss / (self.config.num_code_groups - 1)
-
-        return Qwen3TTSTalkerCodePredictorOutputWithPast(loss=loss, logits=logits)
-
-
-class Qwen3TTSTalkerForConditionalGeneration(Qwen3TTSTalkerTextPreTrainedModel, GenerationMixin):
+class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerationMixin):
     """Main Qwen3-TTS model for text-to-acoustic generation."""
 
-    config_class = Qwen3TTSTalkerConfig
-    base_model_prefix = "talker"
+    config_class = Qwen3TTSConfig
+    main_input_name = "input_ids"
 
-    def __init__(self, config: Qwen3TTSTalkerConfig):
+    def __init__(self, config: Qwen3TTSConfig):
         super().__init__(config)
-        self.model = Qwen3TTSTalkerModel(config)
-        self.vocab_size = config.vocab_size
-        self.text_projection = Qwen3TTSTalkerResizeMLP(
-            config.text_hidden_size, config.text_hidden_size, config.hidden_size, config.hidden_act, bias=True
-        )
+        self.config = config
+        talker_config = config.talker_config
 
-        self.codec_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        # Talker: text encoder + codec head + code predictor
+        self.model = Qwen3TTSTalkerModel(talker_config)
+        self.vocab_size = talker_config.vocab_size
+        self.text_projection = Qwen3TTSTalkerResizeMLP(talker_config)
+        self.codec_head = nn.Linear(talker_config.hidden_size, talker_config.vocab_size, bias=False)
         self.code_predictor = Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(
-            config=config.code_predictor_config,
-            talker_config=config,
+            config=talker_config.code_predictor_config,
+            talker_config=talker_config,
         )
         self.rope_deltas = None
 
+        # Optional speaker encoder for voice cloning (present only when a speaker_encoder_config is set)
+        if config.speaker_encoder_config is not None:
+            self.speaker_encoder = Qwen3TTSSpeakerEncoder(config.speaker_encoder_config)
+        else:
+            self.speaker_encoder = None
+
+        # Optional: speech_tokenizer and generate_config loaded separately
+        self.speech_tokenizer = None
+        self.generate_config = None
+
+        # Model metadata
+        self.supported_speakers = (
+            list(talker_config.spk_id.keys())
+            if hasattr(talker_config, "spk_id") and talker_config.spk_id is not None
+            else []
+        )
+        self.supported_languages = ["auto"]
+        if hasattr(talker_config, "codec_language_id") and talker_config.codec_language_id is not None:
+            for language_id in talker_config.codec_language_id.keys():
+                if "dialect" not in language_id:
+                    self.supported_languages.append(language_id)
+
+        self.speaker_encoder_sample_rate = (
+            config.speaker_encoder_config.sample_rate if config.speaker_encoder_config is not None else 24000
+        )
+        self.tokenizer_type = getattr(config, "tokenizer_type", "qwen2")
+        self.tts_model_size = getattr(config, "tts_model_size", "base")
+        self.tts_model_type = getattr(config, "tts_model_type", "base")
+
         # Initialize weights and apply final processing
         self.post_init()
+
+    def load_speech_tokenizer(self, speech_tokenizer):
+        """Load the speech tokenizer for audio encoding/decoding."""
+        self.speech_tokenizer = speech_tokenizer
+
+    def load_generate_config(self, generate_config):
+        """Load the generation configuration."""
+        if isinstance(generate_config, str):
+            import json
+
+            with open(generate_config, encoding="utf-8") as f:
+                generate_config = json.load(f)
+        self.generate_config = generate_config
+
+    def get_supported_speakers(self):
+        """Get list of supported speakers."""
+        return list(self.supported_speakers)
+
+    def get_supported_languages(self):
+        """Get list of supported languages."""
+        return self.supported_languages
 
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
@@ -999,33 +993,6 @@ class Qwen3TTSTalkerForConditionalGeneration(Qwen3TTSTalkerTextPreTrainedModel, 
 
     def get_decoder(self):
         return self.model
-
-    def forward_sub_talker_finetune(self, codec_ids, talker_hidden_states):
-        """Fine-tuning forward pass for code predictor."""
-        assert len(codec_ids.shape) == 2
-        assert len(talker_hidden_states.shape) == 2
-        assert codec_ids.shape[0] == talker_hidden_states.shape[0]
-        assert talker_hidden_states.shape[1] == self.config.hidden_size
-        assert codec_ids.shape[1] == self.config.num_code_groups
-
-        sub_talker_inputs_embeds = [talker_hidden_states.unsqueeze(1)]
-
-        for i in range(self.config.num_code_groups - 1):
-            if i == 0:
-                sub_talker_inputs_embeds.append(self.get_input_embeddings()(codec_ids[:, :1]))
-            else:
-                sub_talker_inputs_embeds.append(
-                    self.code_predictor.get_input_embeddings()[i - 1](codec_ids[:, i : i + 1])
-                )
-        sub_talker_inputs_embeds = torch.cat(sub_talker_inputs_embeds, dim=1)
-
-        sub_talker_outputs = self.code_predictor.forward_finetune(
-            inputs_embeds=sub_talker_inputs_embeds, labels=codec_ids[:, 1:]
-        )
-
-        sub_talker_logits = sub_talker_outputs.logits
-        sub_talker_loss = sub_talker_outputs.loss
-        return sub_talker_logits, sub_talker_loss
 
     def forward(
         self,
@@ -1058,7 +1025,7 @@ class Qwen3TTSTalkerForConditionalGeneration(Qwen3TTSTalkerTextPreTrainedModel, 
             last_id_hidden = self.get_input_embeddings()(input_ids)
             predictor_result = self.code_predictor.generate(
                 inputs_embeds=torch.cat((past_hidden, last_id_hidden), dim=1),
-                max_new_tokens=self.config.num_code_groups - 1,
+                max_new_tokens=self.config.talker_config.num_code_groups - 1,
                 do_sample=subtalker_dosample,
                 top_p=subtalker_top_p,
                 top_k=subtalker_top_k,
@@ -1071,7 +1038,7 @@ class Qwen3TTSTalkerForConditionalGeneration(Qwen3TTSTalkerTextPreTrainedModel, 
                 [last_id_hidden]
                 + [
                     self.code_predictor.get_input_embeddings()[i](predictor_result.sequences[..., i : i + 1])
-                    for i in range(self.config.num_code_groups - 1)
+                    for i in range(self.config.talker_config.num_code_groups - 1)
                 ],
                 dim=1,
             )
