@@ -340,7 +340,7 @@ def get_layer_types_from_config(olmo_config: dict) -> list[str]:
         if i in fla_hybrid_attention_indices:
             layer_types.append("full_attention")
         else:
-            layer_types.append("linear_attention_gated_delta_net")
+            layer_types.append("linear_attention")
 
     return layer_types
 

@@ -142,11 +142,10 @@ class MiniMaxConfig(PreTrainedConfig):
 
         if self.layer_types is None:
             self.layer_types = [
-                "full_attention" if bool((i + 1) % 2) else "linear_attention_lightning"
-                for i in range(self.num_hidden_layers)
+                "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
         else:
-            self.layer_types = remap_legacy_layer_types(self.layer_types, "lightning")
+            self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         super().__post_init__(**kwargs)
 
@@ -364,7 +363,7 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         self.mlp_beta_factor = config.mlp_beta_factor
         del self.mlp
         self.mlp = MiniMaxSparseMoeBlock(config)
-        if self.layer_type.startswith("linear_attention"):
+        if self.layer_type == "linear_attention":
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.attn_alpha_factor = config.linear_attn_alpha_factor
             self.attn_beta_factor = config.linear_attn_beta_factor

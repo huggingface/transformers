@@ -72,9 +72,7 @@ class OlmoHybridDynamicCache:
         self.transformer_layers = [
             i for i in range(config.num_hidden_layers) if self.layer_types[i] == "full_attention"
         ]
-        self.last_linear_layer = (
-            len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention_gated_delta_net")
-        )
+        self.last_linear_layer = len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention")
         self.recurrent_states = [None for _ in range(config.num_hidden_layers)]
         self.key_cache = [None for _ in range(config.num_hidden_layers)]
         self.value_cache = [None for _ in range(config.num_hidden_layers)]
@@ -882,7 +880,7 @@ class OlmoHybridLinearAttentionDecoderLayer(GradientCheckpointingLayer):
         self.mlp = OlmoHybridMLP(config)
         self.input_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layer_type = "linear_attention_gated_delta_net"
+        self.layer_type = "linear_attention"
         self.linear_attn = OlmoHybridGatedDeltaNet(config, layer_idx=layer_idx)
 
     def forward(
@@ -956,7 +954,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
         self.layers = nn.ModuleList(
             [
                 OlmoHybridLinearAttentionDecoderLayer(config, layer_idx)
-                if config.layer_types[layer_idx] == "linear_attention_gated_delta_net"
+                if config.layer_types[layer_idx] == "linear_attention"
                 else OlmoHybridAttentionDecoderLayer(config, layer_idx)
                 for layer_idx in range(config.num_hidden_layers)
             ]
@@ -998,30 +996,32 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        causal_mask = create_causal_mask(**mask_kwargs)
-        linear_attn_mask = create_recurrent_padding_mask(**mask_kwargs)
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
         # RoPE or NoPE
         position_embeddings = self.rotary_emb(hidden_states, position_ids) if self.rotary_emb is not None else None
 
         for i, decoder_layer in enumerate(self.layers):
-            layer_mask = (
-                linear_attn_mask if self.config.layer_types[i] == "linear_attention_gated_delta_net" else causal_mask
-            )
             layer_position_embeddings = position_embeddings if self.config.layer_types[i] == "full_attention" else None
 
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=layer_position_embeddings,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,

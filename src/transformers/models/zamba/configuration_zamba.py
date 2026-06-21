@@ -105,11 +105,11 @@ class ZambaConfig(PreTrainedConfig):
 
     def _layers_block_type(self, num_hidden_layers, attn_layer_period, attn_layer_offset):
         layers = [
-            "linear_attention_mamba",
-            "linear_attention_mamba",
+            "linear_attention",
+            "linear_attention",
             "hybrid",
         ] + [
-            "hybrid" if i % attn_layer_period == attn_layer_offset else "linear_attention_mamba"
+            "hybrid" if i % attn_layer_period == attn_layer_offset else "linear_attention"
             for i in range(num_hidden_layers - 3)
         ]
         return layers

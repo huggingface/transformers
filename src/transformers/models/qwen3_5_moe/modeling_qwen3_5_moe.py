@@ -32,7 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -366,6 +366,7 @@ def torch_recurrent_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
+@use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
 class Qwen3_5MoeGatedDeltaNet(nn.Module):
     def __init__(self, config: Qwen3_5MoeConfig, layer_idx: int):
         super().__init__()
@@ -839,7 +840,7 @@ class Qwen3_5MoeDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.layer_type = config.layer_types[layer_idx]
-        if self.layer_type == "linear_attention_gated_delta_net":
+        if self.layer_type == "linear_attention":
             self.linear_attn = Qwen3_5MoeGatedDeltaNet(config, layer_idx)
         elif self.layer_type == "full_attention":
             self.self_attn = Qwen3_5MoeAttention(config, layer_idx)
@@ -861,7 +862,7 @@ class Qwen3_5MoeDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Token Mixer
-        if self.layer_type == "linear_attention_gated_delta_net":
+        if self.layer_type == "linear_attention":
             hidden_states = self.linear_attn(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
@@ -1291,34 +1292,29 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
         else:
             text_position_ids = None
 
-        # Under a compileable cache, `generate()` precomputes per-pattern masks (4D for attention layers,
-        # padded-stable 2D for linear-attention layers) and hands them in as a dict; otherwise here.
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": text_position_ids,
-        }
-        if isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask = causal_mask_mapping.get("full_attention")
-            linear_attn_mask = causal_mask_mapping.get("linear_attention_gated_delta_net")
-        else:
-            causal_mask = create_causal_mask(**mask_kwargs)
-            linear_attn_mask = create_recurrent_padding_mask(**mask_kwargs)
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": text_position_ids,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_mask = (
-                linear_attn_mask if self.config.layer_types[i] == "linear_attention_gated_delta_net" else causal_mask
-            )
-
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=text_position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,

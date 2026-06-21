@@ -100,7 +100,7 @@ class MambaConfig(PreTrainedConfig):
 
     @property
     def layer_types(self):
-        return ["linear_attention_mamba"] * self.num_hidden_layers
+        return ["linear_attention"] * self.num_hidden_layers
 
 
 __all__ = ["MambaConfig"]

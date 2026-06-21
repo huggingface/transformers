@@ -1471,8 +1471,10 @@ def create_recurrent_padding_mask(
         return None
     if past_key_values is not None and past_key_values.has_previous_state():
         return None
-    # ``.contiguous()`` so the returned tensor's stride doesn't depend on the source mask's length
-    # — would otherwise trigger a ``torch.compile`` recompile per step as the mask grows.
+    # ``.contiguous()`` so the returned tensor's stride doesn't depend on the source mask's
+    # length — would otherwise trigger a ``torch.compile`` recompile per step as the mask grows.
+    # Can't gate on ``is_compiling()``: the mask is built eagerly in ``generate()`` before the
+    # compiled forward runs, so the producer can't see the compiled consumer downstream.
     return attention_mask[:, -inputs_embeds.shape[1] :].contiguous()
 
 
@@ -1484,12 +1486,7 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "heavily_compressed_attention": create_sliding_window_causal_mask,
     "minimax_m3_sparse": create_causal_mask,
     "deepseek_sparse_attention": create_causal_mask,
-    # ``linear_attention_{backbone}`` keeps the specific recurrent backbone identifiable to
-    # downstream tooling (vLLM patches, model surgery) while sharing the same 2D padding mask.
-    "linear_attention_mamba": create_recurrent_padding_mask,
-    "linear_attention_mamba2": create_recurrent_padding_mask,
-    "linear_attention_gated_delta_net": create_recurrent_padding_mask,
-    "linear_attention_lightning": create_recurrent_padding_mask,
+    "linear_attention": create_recurrent_padding_mask,
 }
 
 

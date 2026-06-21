@@ -72,29 +72,24 @@ ALLOWED_LAYER_TYPES = (
     "hybrid",  # layers that fuse attention + mamba in a single block (zamba2, falcon_h1)
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
     "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
-    # ``linear_attention_{backbone}`` keeps the specific recurrent backbone identifiable to
-    # downstream tooling while sharing the same mask / cache plumbing.
-    "linear_attention_mamba",
-    "linear_attention_mamba2",
-    "linear_attention_gated_delta_net",
-    "linear_attention_lightning",
+    # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning). The specific backbone is
+    # determined by ``config.model_type``, so the per-layer string stays generic.
+    "linear_attention",
 )
 
-# Legacy ``layer_types`` strings → current ``linear_attention_{backbone}`` / ``full_attention``
-# convention, keyed by recurrent backbone. Configs call ``remap_legacy_layer_types`` in their
-# ``__post_init__`` so configs stored on the Hub with the old names load transparently.
-LEGACY_LAYER_TYPE_REMAP = {
-    "mamba": {"mamba": "linear_attention_mamba", "attention": "full_attention"},
-    "mamba2": {"mamba": "linear_attention_mamba2", "attention": "full_attention"},
-    "gated_delta_net": {"linear_attention": "linear_attention_gated_delta_net"},
-    "lightning": {"linear_attention": "linear_attention_lightning"},
+
+# Legacy ``layer_types`` strings → current ``linear_attention`` / ``full_attention`` convention.
+# Configs call ``remap_legacy_layer_types`` in their ``__post_init__`` so checkpoints stored on
+# the Hub with the old names (``mamba``, ``attention``) load transparently.
+_LEGACY_LAYER_TYPE_REMAP = {
+    "mamba": "linear_attention",
+    "attention": "full_attention",
 }
 
 
-def remap_legacy_layer_types(layer_types: list[str], backbone: str) -> list[str]:
-    """Apply legacy → current layer-type name mapping for the given recurrent backbone."""
-    remap = LEGACY_LAYER_TYPE_REMAP[backbone]
-    return [remap.get(t, t) for t in layer_types]
+def remap_legacy_layer_types(layer_types: list[str]) -> list[str]:
+    """Apply legacy → current layer-type name mapping."""
+    return [_LEGACY_LAYER_TYPE_REMAP.get(t, t) for t in layer_types]
 
 
 # copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`

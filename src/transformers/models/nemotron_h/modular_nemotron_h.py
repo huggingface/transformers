@@ -239,7 +239,7 @@ class NemotronHAttention(JambaAttention):
 
 
 MIXER_TYPES = {
-    "linear_attention_mamba2": NemotronHMamba2Mixer,
+    "linear_attention": NemotronHMamba2Mixer,
     "full_attention": NemotronHAttention,
     "moe": NemotronHMoE,
     "mlp": NemotronHMLP,
@@ -283,7 +283,7 @@ class NemotronHBlock(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 
-        if self.block_type.startswith("linear_attention"):
+        if self.block_type == "linear_attention":
             hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
         elif self.block_type == "full_attention":
             hidden_states, _ = self.mixer(
@@ -432,27 +432,25 @@ class NemotronHModel(NemotronHPreTrainedModel):
 
         # Under a compileable cache, `generate()` precomputes per-pattern masks and hands them in as a dict;
         # otherwise we build them here.
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        if isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask_mapping = attention_mask
-        else:
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
             }
 
         for layer_idx, mixer_block in enumerate(self.layers):
-            layer_mask = causal_mask_mapping.get(mixer_block.block_type)
-
             hidden_states = mixer_block(
                 hidden_states,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask_mapping.get(mixer_block.block_type),
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -483,7 +481,7 @@ class NemotronHForCausalLM(ZambaForCausalLM):
         }
         return {
             "full_attention": create_causal_mask(**mask_kwargs),
-            "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+            "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
         }
 
     @can_return_tuple

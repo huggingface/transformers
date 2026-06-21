@@ -106,9 +106,9 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
 
         self.time_step_limit = tuple(self.time_step_limit) if self.time_step_limit is not None else None
         if self.layer_types is None:
-            self.layer_types = ["linear_attention_mamba2"] * self.num_hidden_layers
+            self.layer_types = ["linear_attention"] * self.num_hidden_layers
         else:
-            self.layer_types = remap_legacy_layer_types(self.layer_types, "mamba2")
+            self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         super().__post_init__(**kwargs)
 

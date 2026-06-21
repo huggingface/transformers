@@ -98,9 +98,7 @@ class BambaConfig(PreTrainedConfig):
     @property
     def layers_block_type(self):
         return [
-            "full_attention"
-            if (self.attn_layer_indices and i in self.attn_layer_indices)
-            else "linear_attention_mamba2"
+            "full_attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "linear_attention"
             for i in range(self.num_hidden_layers)
         ]
 
