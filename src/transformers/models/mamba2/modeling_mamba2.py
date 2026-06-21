@@ -344,39 +344,34 @@ class Mamba2Mixer(nn.Module):
                 )
 
                 # 2. Convolution sequence transformation
+                hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
+                # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
                 if use_precomputed_states:
-                    # Seed the causal conv with cached left-context via initial_states
-                    hidden_states_B_C, new_conv_state = causal_conv1d_fn(
-                        x=hidden_states_B_C.transpose(1, 2),
+                    # Cached chunked-tokens decode: prepend the cached conv context so the causal conv
+                    # sees the correct left-context rather than zero-padding. Dropped from the output
+                    # at the end of this branch.
+                    hidden_states_B_C = torch.cat([conv_state, hidden_states_B_C], dim=-1)
+
+                if cache_params is not None:
+                    new_conv_state = nn.functional.pad(
+                        hidden_states_B_C, (self.conv_kernel_size - hidden_states_B_C.shape[-1], 0)
+                    )
+                    cache_params.update_conv_state(new_conv_state, layer_idx=self.layer_idx)
+
+                if self.activation not in ["silu", "swish"]:
+                    hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C)[..., : hidden_states_B_C.shape[-1]])
+                else:
+                    hidden_states_B_C = causal_conv1d_fn(
+                        x=hidden_states_B_C,
                         weight=self.conv1d.weight.squeeze(1),
                         bias=self.conv1d.bias,
                         activation=self.activation,
-                        initial_states=conv_state[:, :, 1:],
-                        return_final_states=True,
                     )
-                    hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-                    cache_params.update_conv_state(nn.functional.pad(new_conv_state, (1, 0)), layer_idx=self.layer_idx)
-                else:
-                    # Init cache
-                    if cache_params is not None:
-                        hidden_states_B_C_transposed = hidden_states_B_C.transpose(1, 2)
-                        conv_states = nn.functional.pad(
-                            hidden_states_B_C_transposed,
-                            (self.conv_kernel_size - hidden_states_B_C_transposed.shape[-1], 0),
-                        )
-                        cache_params.update_conv_state(conv_states, layer_idx=self.layer_idx)
 
-                    if self.activation not in ["silu", "swish"]:
-                        hidden_states_B_C = self.act(
-                            self.conv1d(hidden_states_B_C.transpose(1, 2))[..., :seq_len].transpose(1, 2)
-                        )
-                    else:
-                        hidden_states_B_C = causal_conv1d_fn(
-                            x=hidden_states_B_C.transpose(1, 2),
-                            weight=self.conv1d.weight.squeeze(1),
-                            bias=self.conv1d.bias,
-                            activation=self.activation,
-                        ).transpose(1, 2)
+                if use_precomputed_states:
+                    hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
+
+                hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
 
                 hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
                 hidden_states, B, C = torch.split(
@@ -435,6 +430,8 @@ class Mamba2Mixer(nn.Module):
         hidden_states_B_C = hidden_states_B_C.transpose(1,2)
 
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
 
         # 2. Convolution sequence transformation
         if use_precomputed_states and seq_len == 1:
@@ -448,9 +445,7 @@ class Mamba2Mixer(nn.Module):
             hidden_states_B_C = self.act(hidden_states_B_C)
         else:
             if use_precomputed_states:
-                hidden_states_B_C = torch.cat(
-                    [cache_params.layers[self.layer_idx].conv_states[:, :, 1:], hidden_states_B_C], dim=-1
-                )
+                hidden_states_B_C = torch.cat([conv_state, hidden_states_B_C], dim=-1)
             # Init cache
             if cache_params is not None:
                 conv_states = nn.functional.pad(

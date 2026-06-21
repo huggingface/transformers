@@ -207,13 +207,13 @@ class Mamba2ModelTester:
             torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-3, rtol=1e-3)
         )
 
-    def create_and_check_mamba2_chunked_prefill(self, config, *args):
+    def create_and_check_mamba2_chunked_prefill(self, config, *args, device="cpu"):
         model = Mamba2Model(config=config)
-        model.to("cpu")
+        model.to(device)
         model.eval()
 
         L = 8
-        inputs_embeds = torch.randn(1, L, config.hidden_size)
+        inputs_embeds = torch.randn(1, L, config.hidden_size, device=device)
 
         cache_tbt = DynamicCache(config=config)
         outputs_tbt = []
@@ -233,12 +233,10 @@ class Mamba2ModelTester:
         )
 
     def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args, gradient_checkpointing=False):
+        # Device + fast-path-kernel gating is handled by the require_* decorators on the test methods
+        # (require_mamba_2_ssm / require_causal_conv1d both already imply a CUDA device).
         model = Mamba2Model(config)
         model.eval()
-
-        if torch_device != "cuda":
-            self.parent.skipTest("This test needs the Mamba2 fast path. Skipping as we need a cuda capable device.")
-
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -283,35 +281,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
 
     def test_mamba2_chunked_prefill(self):
+        # Runs on torch_device: exercises the slow path on CPU and, when an accelerator with
+        # mamba-ssm / causal-conv1d is present, the CUDA fast path.
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs)
-
-    @require_torch_accelerator
-    @require_mamba_2_ssm
-    @require_causal_conv1d
-    def test_mamba2_chunked_prefill_cuda_path(self):
-        torch.manual_seed(0)
-        config = self.model_tester.get_config()
-        L = 8
-        model = Mamba2Model(config=config).to(torch_device).eval()
-        inputs_embeds = torch.randn(1, L, config.hidden_size, device=torch_device)
-
-        cache_tbt = DynamicCache(config=config)
-        outputs_tbt = []
-        for t in range(L):
-            out = model(inputs_embeds=inputs_embeds[:, t : t + 1, :], cache_params=cache_tbt, use_cache=True)
-            outputs_tbt.append(out.last_hidden_state)
-        result_tbt = torch.cat(outputs_tbt, dim=1)
-
-        cache_chunk = DynamicCache(config=config)
-        out_first = model(inputs_embeds=inputs_embeds[:, :1, :], cache_params=cache_chunk, use_cache=True)
-        out_rest = model(inputs_embeds=inputs_embeds[:, 1:, :], cache_params=cache_chunk, use_cache=True)
-        result_chunk = torch.cat([out_first.last_hidden_state, out_rest.last_hidden_state], dim=1)
-
-        self.assertTrue(
-            torch.allclose(result_tbt, result_chunk, atol=1e-4, rtol=1e-4),
-            msg=f"Max diff: {(result_tbt - result_chunk).abs().max().item():.6f}",
-        )
+        self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs, device=torch_device)
 
     @require_mamba_2_ssm
     @require_causal_conv1d
@@ -322,6 +295,8 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     # This test adjusts n_groups to half the original setting and effectively
     # creates a grouped SSD configuration in the mamba2 layers
     # See https://github.com/huggingface/transformers/pull/37533/
+    @require_mamba_2_ssm
+    @require_causal_conv1d
     def test_mamba2_slow_vs_fast_forward_grouped(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config_and_inputs[0].n_groups //= 2
