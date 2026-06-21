@@ -1085,8 +1085,6 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_sdpa = True
     _is_stateful = True
-    # ``_can_compile_fullgraph = True`` blocked by StaticCache support for ``"hybrid"`` layers
-    # (same constraint as falcon_h1)
     _can_record_outputs = {
         "hidden_states": Zamba2MambaDecoderLayer,
         "attentions": Zamba2Attention,
