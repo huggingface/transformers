@@ -20,6 +20,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -27,7 +28,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...integrations import use_experts_implementation
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
 from ..mixtral.modeling_mixtral import MixtralDecoderLayer, MixtralForCausalLM, MixtralModel, load_balancing_loss_func

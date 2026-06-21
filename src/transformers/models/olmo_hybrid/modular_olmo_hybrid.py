@@ -206,9 +206,7 @@ class OlmoHybridDynamicCache:
         self.transformer_layers = [
             i for i in range(config.num_hidden_layers) if self.layer_types[i] == "full_attention"
         ]
-        self.last_linear_layer = (
-            len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention")
-        )
+        self.last_linear_layer = len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention")
         self.recurrent_states = [None for _ in range(config.num_hidden_layers)]
         self.key_cache = [None for _ in range(config.num_hidden_layers)]
         self.value_cache = [None for _ in range(config.num_hidden_layers)]

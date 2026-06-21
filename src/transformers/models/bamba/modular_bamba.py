@@ -632,7 +632,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         self.feed_forward = ffn_layer_class(config)
 
         self.layer_type = layer_type
-        if layer_type== "linear_attention":
+        if layer_type == "linear_attention":
             self.mamba = BambaMixer(config=config, layer_idx=layer_idx)
         elif layer_type == "full_attention":
             self.self_attn = BambaAttention(config, layer_idx)
@@ -653,7 +653,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        if self.layer_type== "linear_attention":
+        if self.layer_type == "linear_attention":
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
