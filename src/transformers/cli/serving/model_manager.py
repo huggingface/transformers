@@ -478,6 +478,8 @@ class ModelManager:
                     continue
 
                 architectures = config["architectures"]
+                if not architectures:  # some configs have "architectures": null
+                    continue
                 llms = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
                 vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
                 multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
