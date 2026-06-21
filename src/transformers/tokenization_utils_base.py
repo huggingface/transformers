@@ -3086,8 +3086,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         chat_template = self.get_chat_template(chat_template, tools)
 
-        if isinstance(conversation, (list, tuple)) and conversation and (
-            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
+        if (
+            isinstance(conversation, (list, tuple))
+            and conversation
+            and (isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages"))
         ):
             conversations = conversation
             is_batched = True
