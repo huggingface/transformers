@@ -409,7 +409,7 @@ class NemotronHMamba2Mixer(nn.Module):
             if use_precomputed_state:
                 # chunked prefill / speculative verify: prepend cached left context to the conv input
                 hidden_states = torch.cat(
-                    [cache_params.layers[self.layer_idx].conv_states[:, :, 1:], hidden_states], dim=-1
+                    [cache_params.layers[self.layer_idx].conv_states, hidden_states], dim=-1
                 )
             if cache_params is not None:
                 conv_state = nn.functional.pad(
