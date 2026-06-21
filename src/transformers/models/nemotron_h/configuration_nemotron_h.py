@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 class NemotronHConfig(PreTrainedConfig):
     r"""
     layers_block_type (`list`, *optional*):
-        Explicit list of layer types for each layer. Each element must be one of: "mlp", "mamba", "attention", or "moe".
+        Explicit list of layer types for each layer. Each element must be one of: "mlp", "linear_attention_mamba2", "full_attention", or "moe".
         The number of layers is determined by the length of this list.
     num_logits_to_keep (`int`, *optional*, defaults to 1):
         Number of prompt logits to calculate during generation. If `None`, all logits will be calculated.
@@ -57,7 +57,7 @@ class NemotronHConfig(PreTrainedConfig):
         Number of groups for expert routing.
     num_nextn_predict_layers (`int`, *optional*, defaults to 0):
         Number of additional layers for multi-token prediction. If 0, multi-token prediction is disabled.
-    mtp_layers_block_type (`list`, *optional*, defaults to `['attention', 'moe']`):
+    mtp_layers_block_type (`list`, *optional*, defaults to `['full_attention', 'moe']`):
         Explicit list of layer types for multi-token prediction layers when `num_nextn_predict_layers` > 0.
     use_bias (`bool`, *optional*, defaults to `False`):
         Whether to use bias in the model.

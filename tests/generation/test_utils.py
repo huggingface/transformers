@@ -123,7 +123,7 @@ def is_hybrid_mamba_model(config):
     layer_types = getattr(text_config, "layer_types", None) or getattr(text_config, "layers_block_type", None)
     if not layer_types:
         return False
-    return any(lt in {"mamba", "linear_attention"} for lt in layer_types)
+    return any(lt.startswith("linear_attention_") for lt in layer_types)
 
 
 class GenerationTesterMixin:

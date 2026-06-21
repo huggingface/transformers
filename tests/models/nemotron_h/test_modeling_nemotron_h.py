@@ -795,8 +795,11 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             # Load
             config2 = NemotronHConfig.from_pretrained(tmpdir)
 
-            # Verify
-            self.assertEqual(config2.layers_block_type, ["mamba", "attention", "moe", "attention"])
+            # Verify (legacy "mamba" / "attention" remap to current names on load)
+            self.assertEqual(
+                config2.layers_block_type,
+                ["linear_attention_mamba2", "full_attention", "moe", "full_attention"],
+            )
             self.assertEqual(config2.num_hidden_layers, 4)
             self.assertEqual(config2.vocab_size, 100)
             self.assertEqual(config2.hidden_size, 32)

@@ -727,7 +727,6 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         dtype = hidden_states.dtype
         if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-            # The mask may be padded to ``max_cache_len`` under a compileable cache; slice to local seq.
             hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
         return self.torch_forward(hidden_states, cache_params, attention_mask)
@@ -1043,7 +1042,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         self.shared_mlp = GraniteMoeHybridMLP(config)
         self.mamba = None
 
-        if config.layers_block_type[layer_idx].startswith("linear_attention"):
+        if config.layers_block_type[layer_idx] == "linear_attention_mamba2":
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
@@ -1175,18 +1174,19 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-        }
-        causal_mask_mapping = {}
-        for layer_type in set(self.config.layers_block_type):
-            if "mamba" in layer_type:
-                causal_mask_mapping[layer_type] = create_recurrent_padding_mask(**mask_kwargs)
-            else:
-                causal_mask_mapping[layer_type] = create_causal_mask(**mask_kwargs)
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention_mamba2": create_recurrent_padding_mask(**mask_kwargs),
+            }
 
         # embed positions
         hidden_states = inputs_embeds
