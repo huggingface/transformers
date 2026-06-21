@@ -378,16 +378,13 @@ class HumanVAttention(nn.Module):
     # ---------------------
     # sparse attention impl
     # ---------------------
-    def _local_global_block_sparse_prefill_grouped(
+def _local_global_block_sparse_prefill_grouped(
         self,
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
         attention_mask_2d: Optional[torch.Tensor],
     ) -> torch.Tensor:
-        """Prefill path for sparse local+global block attention.
-        Expects q_len == k_len (no cache). Handles short prompts by padding to block multiple.
-        """
         bsz, h, q_len, d = q.shape
         if h != self.num_heads:
             raise ValueError(f"Expected q heads={self.num_heads}, got {h}")
@@ -400,7 +397,6 @@ class HumanVAttention(nn.Module):
         if b <= 0:
             raise ValueError("sparse_block_size must be > 0")
 
-        # Pad to block multiple
         n_blocks = (seqlen + b - 1) // b
         pad_len = n_blocks * b - seqlen
         if pad_len > 0:
@@ -412,9 +408,7 @@ class HumanVAttention(nn.Module):
             seqlen = n_blocks * b
             q_len = n_blocks * b
 
-        # key-valid mask as float32 for arithmetic
         if attention_mask_2d is None:
-            # mask real tokens valid, padding invalid
             if pad_len > 0:
                 key_valid = torch.cat(
                     [
@@ -430,8 +424,6 @@ class HumanVAttention(nn.Module):
             if key_valid.shape[1] != seqlen:
                 raise ValueError(f"attention_mask_2d wrong length: {key_valid.shape[1]} vs {seqlen}")
 
-        # Reshape into blocks
-        # q: (B, H, T, D) -> (B, Kvh, G, n_blocks, b, D)
         q = q.contiguous()
         k = k.contiguous()
         v = v.contiguous()
@@ -461,27 +453,23 @@ class HumanVAttention(nn.Module):
             end = min(n_blocks, start + chunk)
             clen = end - start
 
-            qb = q_blocks[:, :, :, start:end]  # (B,Kvh,G,clen,b,d)
-            idx_c = idx_table[start:end]  # (clen,max_sel)
-            idxv_c = idx_valid_token[start:end]  # (clen, max_sel*b)
-            selfpos_c = self_pos[start:end]  # (clen,)
+            qb = q_blocks[:, :, :, start:end]  
+            idx_c = idx_table[start:end]  
+            idxv_c = idx_valid_token[start:end]  
+            selfpos_c = self_pos[start:end]  
 
-            # select blocks
-            k_sel = k_blocks[:, :, idx_c]  # (B,Kvh,clen,max_sel,b,d)
+            k_sel = k_blocks[:, :, idx_c]  
             v_sel = v_blocks[:, :, idx_c]
-            k_flat = k_sel.reshape(bsz, self.num_kv_heads, clen, max_sel * b, d)  # (B,Kvh,clen,S,d)
+            k_flat = k_sel.reshape(bsz, self.num_kv_heads, clen, max_sel * b, d)  
             v_flat = v_sel.reshape(bsz, self.num_kv_heads, clen, max_sel * b, d)
 
-            # scores: (B,Kvh,G,clen,b,S)
-            k_t = k_flat.transpose(-2, -1).unsqueeze(2)  # (B,Kvh,1,clen,d,S)
+            k_t = k_flat.transpose(-2, -1).unsqueeze(2)  
             scores = torch.matmul(qb.to(torch.float32), k_t.to(torch.float32)) * self.scaling
 
-            # mask invalid keys (padding + invalid selection entries)
-            kv_mask_sel = key_valid_blocks[:, idx_c].reshape(bsz, clen, max_sel * b)  # (B,clen,S)
+            kv_mask_sel = key_valid_blocks[:, idx_c].reshape(bsz, clen, max_sel * b)  
             kv_mask_sel = kv_mask_sel * idxv_c[None, :, :].to(kv_mask_sel.dtype)
             scores = scores + (1.0 - kv_mask_sel)[:, None, None, :, None, :] * _NEG_INF
 
-            # causal within self block only
             causal_mask = torch.zeros((clen, b, max_sel * b), device=q.device, dtype=torch.bool)
             active = selfpos_c >= 0
             if active.any():
@@ -495,35 +483,39 @@ class HumanVAttention(nn.Module):
 
             scores = scores.masked_fill(causal_mask[None, None, None, :, :, :], _NEG_INF)
 
-            # optional sliding window in absolute token positions
             if self.sparse_attention_window > 0:
                 max_ctx = int(self.sparse_attention_window)
-                key_abs = idx_c.repeat_interleave(b, dim=1) * b + offsets[None, :]  # (clen,S)
-                q_block_ids = torch.arange(start, end, device=q.device)  # (clen,)
-                q_abs = q_block_ids[:, None] * b + torch.arange(b, device=q.device)[None, :]  # (clen,b)
-                min_allowed = (q_abs[:, :, None] - (max_ctx - 1)).clamp(min=0)  # (clen,b,1)
-                window_mask = key_abs[:, None, :] < min_allowed  # (clen,b,S)
-                scores = scores.masked_fill(window_mask[None, None, None, :, :, :], _NEG_INF)
+                key_abs = idx_c.repeat_interleave(b, dim=1) * b + offsets[None, :]  
+                q_block_ids = torch.arange(start, end, device=q.device)  
+                q_abs = q_block_ids[:, None] * b + torch.arange(b, device=q.device)[None, :]  
+                min_allowed = (q_abs[:, :, None] - (max_ctx - 1)).clamp(min=0)  
+                
+                window_mask = key_abs[:, None, :] < min_allowed
+                
+                global_tokens_count = int(self.sparse_global_num_blocks) * b
+                is_global_token = key_abs[:, None, :] < global_tokens_count
+                
+                final_mask = window_mask & (~is_global_token)
+                
+                scores = scores.masked_fill(final_mask[None, None, None, :, :, :], _NEG_INF)
 
             probs = torch.softmax(scores, dim=-1)
             probs = F.dropout(probs, p=self.attention_dropout, training=self.training)
 
-            v_exp = v_flat.unsqueeze(2)  # (B,Kvh,1,clen,S,d)
-            o = torch.matmul(probs.to(v_exp.dtype), v_exp).to(dtype=q.dtype)  # (B,Kvh,G,clen,b,d)
+            v_exp = v_flat.unsqueeze(2)  
+            o = torch.matmul(probs.to(v_exp.dtype), v_exp).to(dtype=q.dtype)  
             out[:, :, :, start:end] = o
 
         out = out.reshape(bsz, self.num_heads, n_blocks * b, d)
-        # return only real q tokens (exclude padded tail)
         return out[:, :, :orig_q_len, :]
 
-    def _local_global_block_sparse_decode_one_grouped(
+def _local_global_block_sparse_decode_one_grouped(
         self,
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
         attention_mask_2d: Optional[torch.Tensor],
     ) -> torch.Tensor:
-        """Decode path for sparse local+global block attention (q_len == 1)."""
         bsz, h, q_len, d = q.shape
         if q_len != 1:
             raise ValueError("decode_one expects q_len == 1")
@@ -546,7 +538,6 @@ class HumanVAttention(nn.Module):
             seqlen = n_blocks * b
 
         if attention_mask_2d is None:
-            # real tokens valid; padding invalid
             if pad_len > 0:
                 key_valid = torch.cat(
                     [
@@ -566,7 +557,7 @@ class HumanVAttention(nn.Module):
         k = k.contiguous()
         v = v.contiguous()
 
-        qg = self._reshape_q_grouped(q)  # (B,Kvh,G,1,D)
+        qg = self._reshape_q_grouped(q)  
 
         k_blocks = k.reshape(bsz, self.num_kv_heads, n_blocks, b, d)
         v_blocks = v.reshape(bsz, self.num_kv_heads, n_blocks, b, d)
@@ -574,52 +565,55 @@ class HumanVAttention(nn.Module):
 
         idx_table, idx_valid, self_pos = self._get_sparse_tables(n_blocks, q.device)
 
-        # IMPORTANT: query position is based on original (unpadded) length
         q_pos = orig_seqlen - 1
         q_block = q_pos // b
         q_intra = q_pos % b
 
-        idx_row = idx_table[q_block]  # (max_sel,)
-        idxv_row = idx_valid[q_block]  # (max_sel,)
+        idx_row = idx_table[q_block]  
+        idxv_row = idx_valid[q_block]  
         max_sel = idx_row.numel()
         S = max_sel * b
 
-        k_sel = k_blocks[:, :, idx_row]  # (B,Kvh,max_sel,b,d)
+        k_sel = k_blocks[:, :, idx_row]  
         v_sel = v_blocks[:, :, idx_row]
-        k_flat = k_sel.reshape(bsz, self.num_kv_heads, S, d)  # (B,Kvh,S,d)
+        k_flat = k_sel.reshape(bsz, self.num_kv_heads, S, d)  
         v_flat = v_sel.reshape(bsz, self.num_kv_heads, S, d)
 
-        # scores: (B,Kvh,G,1,S)
-        k_t = k_flat.transpose(-2, -1).unsqueeze(2)  # (B,Kvh,1,d,S)
+        k_t = k_flat.transpose(-2, -1).unsqueeze(2)  
         scores = torch.matmul(qg.to(torch.float32), k_t.to(torch.float32)) * self.scaling
 
-        # key mask (padding + invalid selection entries)
-        kv_mask_sel = key_valid_blocks[:, idx_row].reshape(bsz, S)  # (B,S)
+        kv_mask_sel = key_valid_blocks[:, idx_row].reshape(bsz, S)  
         idxv_tok = idxv_row[:, None].expand(max_sel, b).reshape(S).to(kv_mask_sel.dtype)
         kv_mask_sel = kv_mask_sel * idxv_tok[None, :]
         scores = scores + (1.0 - kv_mask_sel)[:, None, None, None, :] * _NEG_INF
 
-        # causal within self block segment
         self_p = int(self_pos[q_block].item())
         if self_p >= 0:
             s = self_p * b
             e = s + b
-            mask = torch.arange(b, device=q.device) > q_intra  # (b,)
+            mask = torch.arange(b, device=q.device) > q_intra  
             scores[..., s:e] = scores[..., s:e].masked_fill(mask[None, None, None, None, :], _NEG_INF)
 
-        # optional absolute sliding window
         if self.sparse_attention_window > 0:
             max_ctx = int(self.sparse_attention_window)
-            offsets = torch.arange(b, device=q.device).repeat(max_sel)  # (S,)
-            key_abs = idx_row.repeat_interleave(b) * b + offsets  # (S,)
+            offsets = torch.arange(b, device=q.device).repeat(max_sel)  
+            key_abs = idx_row.repeat_interleave(b) * b + offsets  
             min_allowed = max(0, q_pos - (max_ctx - 1))
-            scores = scores.masked_fill(key_abs[None, None, None, None, :] < min_allowed, _NEG_INF)
+            
+            window_mask = key_abs < min_allowed
+            
+            global_tokens_count = int(self.sparse_global_num_blocks) * b
+            is_global_token = key_abs < global_tokens_count
+            
+            final_mask = window_mask & (~is_global_token)
+            
+            scores = scores.masked_fill(final_mask[None, None, None, None, :], _NEG_INF)
 
         probs = torch.softmax(scores, dim=-1)
         probs = F.dropout(probs, p=self.attention_dropout, training=self.training)
 
-        v_exp = v_flat.unsqueeze(2)  # (B,Kvh,1,S,d)
-        out = torch.matmul(probs.to(v_exp.dtype), v_exp).to(dtype=q.dtype)  # (B,Kvh,G,1,d)
+        v_exp = v_flat.unsqueeze(2)  
+        out = torch.matmul(probs.to(v_exp.dtype), v_exp).to(dtype=q.dtype)  
         out = out.reshape(bsz, self.num_heads, 1, d)
         return out
 
