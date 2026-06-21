@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-01-22 and added to Hugging Face Transformers on 2025-10-13.*
+*This model was published in HF papers on 2025-01-22 and contributed to Hugging Face Transformers on 2025-10-13.*
 
 # VideoLLaMA3
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 </div>
 
@@ -45,8 +44,8 @@ This model was contributed by [lkhl](https://huggingface.co/lkhl).
 The model can accept both images and videos as input. Here's an example code for inference.
 
 ```python
-import torch
-from transformers import VideoLlama3ForConditionalGeneration, AutoTokenizer, AutoProcessor
+from transformers import AutoProcessor, VideoLlama3ForConditionalGeneration
+
 
 # Load the model in half-precision on the available device(s)
 model = VideoLlama3ForConditionalGeneration.from_pretrained("lkhl/VideoLLaMA3-2B-Image-HF", device_map="auto")
@@ -180,10 +179,9 @@ To load and run a model using Flash Attention-2, simply add `attn_implementation
 from transformers import VideoLlama3ForConditionalGeneration
 
 model = VideoLlama3ForConditionalGeneration.from_pretrained(
-    "lkhl/VideoLLaMA3-2B-Image-HF", 
-    dtype=torch.bfloat16, 
+    "lkhl/VideoLLaMA3-2B-Image-HF", , 
     attn_implementation="flash_attention_2",
-)
+ device_map="auto")
 ```
 
 ## VideoLlama3Config
@@ -204,9 +202,9 @@ model = VideoLlama3ForConditionalGeneration.from_pretrained(
 [[autodoc]] VideoLlama3VideoProcessor
     - preprocess
 
-## VideoLlama3ImageProcessorFast
+## VideoLlama3ImageProcessorPil
 
-[[autodoc]] VideoLlama3ImageProcessorFast
+[[autodoc]] VideoLlama3ImageProcessorPil
     - preprocess
 
 ## VideoLlama3Processor

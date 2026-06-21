@@ -7,6 +7,8 @@
     title: Instalación
   title: Empezar
 - sections:
+  - local: conversations
+    title: Conceptos básicos de chat
   - local: pipeline_tutorial
     title: Pipelines para inferencia
   - local: autoclass_tutorial

@@ -36,8 +36,10 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.import_utils import requires, requires_backends
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..detr.image_processing_detr_fast import DetrImageProcessorFast
+from ..detr.image_processing_detr import DetrImageProcessor
+from ..detr.image_processing_pil_detr import DetrImageProcessorPil
 from ..detr.modeling_detr import (
     DetrConvEncoder,
     DetrDecoderLayer,
@@ -58,7 +60,7 @@ from .configuration_deformable_detr import DeformableDetrConfig
 logger = logging.get_logger(__name__)
 
 
-class DeformableDetrImageProcessorFast(DetrImageProcessorFast):
+class DeformableDetrImageProcessor(DetrImageProcessor):
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
     ):
@@ -128,12 +130,80 @@ class DeformableDetrImageProcessorFast(DetrImageProcessorFast):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Deformable DETR yet.")
 
 
+class DeformableDetrImageProcessorPil(DetrImageProcessorPil):
+    @requires(backends=("torch",))
+    def post_process_object_detection(
+        self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
+    ):
+        """
+        Converts the raw output of [`DeformableDetrForObjectDetection`] into final bounding boxes in (top_left_x,
+        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+
+        Args:
+            outputs ([`DetrObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            top_k (`int`, *optional*, defaults to 100):
+                Keep only top k bounding boxes before filtering by thresholding.
+
+        Returns:
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
+        """
+        requires_backends(self, ["torch"])
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+
+        if target_sizes is not None:
+            if len(out_logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+        prob = out_logits.sigmoid()
+        prob = prob.view(out_logits.shape[0], -1)
+        k_value = min(top_k, prob.size(1))
+        topk_values, topk_indexes = torch.topk(prob, k_value, dim=1)
+        scores = topk_values
+        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
+        labels = topk_indexes % out_logits.shape[2]
+        boxes = center_to_corners_format(out_bbox)
+        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+
+        # and from relative [0, 1] to absolute [0, height] coordinates
+        if target_sizes is not None:
+            if isinstance(target_sizes, list):
+                img_h = torch.Tensor([i[0] for i in target_sizes])
+                img_w = torch.Tensor([i[1] for i in target_sizes])
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+
+        results = []
+        for s, l, b in zip(scores, labels, boxes):
+            score = s[s > threshold]
+            label = l[s > threshold]
+            box = b[s > threshold]
+            results.append({"scores": score, "labels": label, "boxes": box})
+
+        return results
+
+    def post_process_instance_segmentation(self):
+        raise NotImplementedError("Segmentation post-processing is not implemented for Deformable DETR yet.")
+
+    def post_process_semantic_segmentation(self):
+        raise NotImplementedError("Semantic segmentation post-processing is not implemented for Deformable DETR yet.")
+
+    def post_process_panoptic_segmentation(self):
+        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Deformable DETR yet.")
+
+
 class DeformableDetrDecoderOutput(DetrDecoderOutput):
     r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -144,12 +214,12 @@ class DeformableDetrDecoderOutput(DetrDecoderOutput):
     intermediate_reference_points: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Deformable DETR encoder-decoder model.
     """
 )
+@dataclass
 class DeformableDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
@@ -319,33 +389,33 @@ class DeformableDetrConvEncoder(DetrConvEncoder):
 
 
 class DeformableDetrSinePositionEmbedding(DetrSinePositionEmbedding):
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
         mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
         y_embed = mask.cumsum(1, dtype=dtype)
         x_embed = mask.cumsum(2, dtype=dtype)
-        if self.normalize:
+        if normalize:
             eps = 1e-6
-            y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_position_features)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
 
 
@@ -1110,10 +1180,12 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrModel.from_pretrained("SenseTime/deformable-detr")
@@ -1185,6 +1257,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             spatial_shape = (height, width)
             spatial_shapes_list.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
+            pos_embed = pos_embed.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
             lvl_pos_embed = pos_embed + self.level_embed[level].view(1, 1, -1)
             lvl_pos_embed_flatten.append(lvl_pos_embed)
@@ -1359,10 +1432,12 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io imoprt BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr")
@@ -1462,7 +1537,8 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
 
 
 __all__ = [
-    "DeformableDetrImageProcessorFast",
+    "DeformableDetrImageProcessor",
+    "DeformableDetrImageProcessorPil",
     "DeformableDetrForObjectDetection",
     "DeformableDetrModel",
     "DeformableDetrPreTrainedModel",

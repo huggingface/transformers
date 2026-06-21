@@ -25,22 +25,49 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, is_torchdynamo_compiling, logging, torch_compilable_check
-from ..auto import AutoModel, AutoModelForCausalLM
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging, torch_compilable_check
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..auto import AutoModel
 from .configuration_qwen2_audio import Qwen2AudioConfig, Qwen2AudioEncoderConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for Qwen2Audio outputs, with hidden states and attentions.
+    """
+)
 @dataclass
+class Qwen2AudioModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    attention_mask (`torch.FloatTensor`, *optional*):
+        Attention mask, potentially updated by the audio merging logic so that audio tokens are unmasked.
+    labels (`torch.LongTensor`, *optional*):
+        Labels, potentially re-aligned by the legacy audio merging logic. Returned so the language-modeling
+        head can compute the loss against the expanded sequence.
+    """
+
+    attention_mask: torch.FloatTensor | None = None
+    labels: torch.LongTensor | None = None
+
+
 @auto_docstring(
     custom_intro="""
     Base class for Qwen2Audio causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -208,23 +235,20 @@ class Qwen2AudioEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_attentions: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -241,7 +265,7 @@ class Qwen2AudioEncoderLayer(GradientCheckpointingLayer):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 @auto_docstring
@@ -251,7 +275,7 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2AudioAttention"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -276,6 +300,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
     _no_split_modules = ["Qwen2AudioEncoderLayer"]
+    _can_record_outputs = {"hidden_states": Qwen2AudioEncoderLayer, "attentions": Qwen2AudioAttention}
 
     def __init__(self, config: Qwen2AudioEncoderConfig):
         super().__init__(config)
@@ -313,28 +338,19 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_features,
         attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Args:
             attention_mask (`torch.Tensor`)`, *optional*):
                 Qwen2Audio does not support masking of the `input_features`, this argument is preserved for compatibility,
                 but it is not used. By default the silence in the input log mel spectrogram are ignored.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
 
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
@@ -342,12 +358,6 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
             raise ValueError(
                 f"Qwen2Audio expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
             )
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Ignore copy
         input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
@@ -361,12 +371,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
@@ -375,19 +380,12 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
                     to_drop = True
 
             # Ignore copy
-            if to_drop:
-                layer_outputs = (None, None)
-            else:
-                layer_outputs = encoder_layer(
+            if not to_drop:
+                hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    output_attentions=output_attentions,
+                    **kwargs,
                 )
-
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
 
         # Ignore copy
         hidden_states = hidden_states.permute(0, 2, 1)
@@ -395,14 +393,8 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
         hidden_states = hidden_states.permute(0, 2, 1)
 
         hidden_states = self.layer_norm(hidden_states)
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
     # Ignore copy
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
@@ -426,17 +418,17 @@ class Qwen2AudioMultiModalProjector(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The QWEN2AUDIO model which consists of a audio backbone and a language model.
+    The Qwen2Audio model which consists of an audio backbone and a language model, without a language modeling head.
     """
 )
-class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMixin):
+class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config)  # Usually a `Qwen2AudioEncoder` instance
 
         self.multi_modal_projector = Qwen2AudioMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
 
         self.pad_token_id = (
             self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
@@ -453,24 +445,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         if padding_side not in ["left", "right"]:
             raise ValueError(f"{padding_side} is not `left` or `right`.")
         self._padding_side = padding_side
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
 
     def _merge_input_ids_with_audio_features(
         self, audio_features, num_audio_tokens, inputs_embeds, input_ids, attention_mask, labels
@@ -669,6 +643,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
 
         return final_embedding, final_attention_mask, final_labels, position_ids, final_input_ids
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -681,12 +656,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs,
-    ) -> tuple | Qwen2AudioCausalLMOutputWithPast:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Qwen2AudioModelOutputWithPast:
         r"""
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
@@ -694,38 +665,9 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >>> from io import BytesIO
-        >>> from urllib.request import urlopen
-        >>> import librosa
-        >>> from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
-
-        >>> model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B")
-        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
-
-        >>> prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
-        >>> url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
-        >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
-
-        >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Generate the caption in English: Glass is breaking."
-        ```"""
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+            Labels kept in the signature for the legacy merge path that may re-align them with audio tokens.
+            The loss is not computed here; `Qwen2AudioForConditionalGeneration` is responsible for that.
+        """
 
         target_device = self.audio_tower.device
 
@@ -784,8 +726,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                     )
                 else:
                     num_audios, max_audio_tokens, embed_dim = audio_features.shape
-                    audio_features_mask = torch.arange(max_audio_tokens, device=audio_output_lengths.device)[None, :]
-                    audio_features_mask = audio_features_mask < audio_output_lengths[:, None]
+                    audio_features_mask = torch.arange(max_audio_tokens, device=audio_features.device)[None, :]
+                    audio_features_mask = audio_features_mask < audio_output_lengths.to(audio_features.device)[:, None]
                     audio_features = audio_features[audio_features_mask]
 
                     n_audio_tokens = (input_ids == self.config.audio_token_id).sum().item()
@@ -795,7 +737,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                         f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
                     )
                     special_audio_mask = (input_ids == self.config.audio_token_id).to(inputs_embeds.device)
-                    special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
+                    special_audio_mask = special_audio_mask.unsqueeze(-1)
                     audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
 
@@ -805,13 +747,104 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
+            **kwargs,
         )
 
-        logits = outputs[0]
+        return Qwen2AudioModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            attention_mask=attention_mask,
+            labels=labels,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The QWEN2AUDIO model which consists of an audio backbone and a language model.
+    """
+)
+class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMixin):
+    def __init__(self, config: Qwen2AudioConfig):
+        super().__init__(config)
+        self.model = Qwen2AudioModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.post_init()
+
+    @property
+    def padding_side(self):
+        return self.model.padding_side
+
+    @padding_side.setter
+    def padding_side(self, padding_side: str):
+        self.model.padding_side = padding_side
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        feature_attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Qwen2AudioCausalLMOutputWithPast:
+        r"""
+        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from io import BytesIO
+        >>> from urllib.request import urlopen
+        >>> import librosa
+        >>> from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+
+        >>> model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B")
+        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
+
+        >>> prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
+        >>> url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
+        >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
+
+        >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_length=30)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Generate the caption in English: Glass is breaking."
+        ```"""
+        outputs = self.model(
+            input_ids=input_ids,
+            input_features=input_features,
+            attention_mask=attention_mask,
+            feature_attention_mask=feature_attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            labels=labels,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        logits = self.lm_head(hidden_states)
+        attention_mask = outputs.attention_mask
+        labels = outputs.labels if outputs.labels is not None else labels
 
         loss = None
         if labels is not None:
@@ -828,10 +861,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             loss = loss_fct(
                 shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return Qwen2AudioCausalLMOutputWithPast(
             loss=loss,
@@ -857,4 +886,4 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         return model_inputs
 
 
-__all__ = ["Qwen2AudioForConditionalGeneration", "Qwen2AudioPreTrainedModel", "Qwen2AudioEncoder"]
+__all__ = ["Qwen2AudioForConditionalGeneration", "Qwen2AudioPreTrainedModel", "Qwen2AudioEncoder", "Qwen2AudioModel"]

@@ -17,6 +17,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
+from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -26,7 +27,6 @@ from ...utils.import_utils import is_causal_conv1d_available
 from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
     Lfm2DecoderLayer,
-    Lfm2HybridConvCache,
     Lfm2MLP,
     Lfm2RotaryEmbedding,
     Lfm2ShortConv,
@@ -110,10 +110,6 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
-class Lfm2MoeHybridConvCache(Lfm2HybridConvCache):
-    pass
-
-
 class Lfm2MoeAttention(Lfm2Attention):
     pass
 
@@ -133,7 +129,7 @@ class Lfm2MoeDecoderLayer(Lfm2DecoderLayer):
 
 
 class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = False  # uses a non-compilable custom cache class Lfm2MoeHybridConvCache
+    _can_compile_fullgraph = False  # uses a non-compilable cache class
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -159,10 +155,9 @@ class Lfm2MoeModel(MixtralModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Lfm2MoeHybridConvCache | None = None,
+        past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -172,25 +167,17 @@ class Lfm2MoeModel(MixtralModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            batch_size = inputs_embeds.shape[0]
-            past_key_values = Lfm2MoeHybridConvCache(
-                config=self.config, max_batch_size=batch_size, dtype=self.dtype, device=self.device
-            )
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
+            past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -201,14 +188,13 @@ class Lfm2MoeModel(MixtralModel):
         position_embeddings = self.pos_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            layer_mask = causal_mask if decoder_layer.is_attention_layer else linear_attention
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_mask = causal_mask if self.config.layer_types[i] == "full_attention" else linear_attention
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=layer_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

@@ -25,7 +25,7 @@ import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any
 
 from parameterized import parameterized
 
@@ -134,9 +134,9 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 def merge_model_tokenizer_mappings(
     model_mapping: dict["PretrainedConfig", "PreTrainedModel"],
-    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "TokenizersBackend"]],
+    tokenizer_mapping: dict["PretrainedConfig", "TokenizersBackend"],
 ) -> dict[
-    Union["PreTrainedTokenizer", "TokenizersBackend"],
+    "TokenizersBackend",
     tuple["PretrainedConfig", "PreTrainedModel"],
 ]:
     configurations = list(model_mapping.keys())
@@ -145,15 +145,12 @@ def merge_model_tokenizer_mappings(
     for configuration in configurations:
         if configuration in model_mapping and configuration in tokenizer_mapping:
             model = model_mapping[configuration]
-            tokenizer = tokenizer_mapping[configuration][0]
-            tokenizer_fast = tokenizer_mapping[configuration][1]
+            tokenizer = tokenizer_mapping[configuration]
 
             if tokenizer is not None:
-                if configuration.__name__.startswith(tokenizer.__name__.replace("Tokenizer", "")):
+                name = tokenizer.__name__.replace("TokenizerFast", "").replace("Tokenizer", "")
+                if configuration.__name__.startswith(name):
                     model_tokenizer_mapping.update({tokenizer: (configuration, model)})
-            if tokenizer_fast is not None:
-                if configuration.__name__.startswith(tokenizer_fast.__name__.replace("TokenizerFast", "")):
-                    model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
 
     return model_tokenizer_mapping
 
@@ -448,6 +445,21 @@ Hey how are you doing"""  # noqa: W293
             if _type.__name__ == "BPE" or _type.__name__ == "WordPiece":
                 vocab = vocab_ids
 
+        # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
+        extra_kwargs = {}
+        normalizer_config = extractor.tokenizer_data.get("normalizer")
+        if normalizer_config:
+            if normalizer_config.get("type", None) == "Sequence":
+                normalizer_list = normalizer_config["normalizers"]
+            elif not isinstance(normalizer_config, list):
+                normalizer_list = [normalizer_config]
+            for normalizer in normalizer_list:
+                if normalizer.get("type") == "Precompiled" and "precompiled_charsmap" in normalizer:
+                    import base64
+
+                    extra_kwargs["_spm_precompiled_charsmap"] = base64.b64decode(normalizer["precompiled_charsmap"])
+                    break
+
         # Convert added_tokens list to added_tokens_decoder dict format
         # This matches the format used by from_pretrained() from tokenizer_config.jso
         tokenizer_from_extractor = self.tokenizer_class(
@@ -456,6 +468,7 @@ Hey how are you doing"""  # noqa: W293
             do_lower_case=False,
             keep_accents=True,
             added_tokens_decoder=added_tokens_decoder,
+            **extra_kwargs,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
 
@@ -640,6 +653,7 @@ Hey how are you doing"""  # noqa: W293
                 "vocab",
                 "merges",
                 "legacy",
+                "_spm_precompiled_charsmap",
                 "additional_special_tokens",  # V5: deprecated, converted to extra_special_tokens
             ]:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
@@ -869,6 +883,10 @@ Hey how are you doing"""  # noqa: W293
         tokenizer_from_extractor = self.get_extracted_tokenizer(reference_tokenizer=tokenizer_original)
         if tokenizer_from_extractor is None:
             self.fail("No tokenizer from TokenizersExtractor provided")
+
+        # Debug: print tokenizer class used by tokenizer_from_extractor
+        print("tokenizer_from_extractor class:", type(tokenizer_from_extractor))
+
         self._run_integration_checks(tokenizer_from_extractor, "from_extractor")
 
     def test_internal_consistency(self):
@@ -1496,6 +1514,38 @@ Hey how are you doing"""  # noqa: W293
         )
 
     @require_jinja
+    def test_continue_final_message_string_and_reasoning(self):
+        dummy_template = """
+        {%- for message in messages %}
+            {{- "<|im_start|>" + message['role'] + "\n" }}
+            {%- if message['reasoning_content'] is defined %}
+                {{- "<think>\n" + message['reasoning_content'] + "\n</think>\n" }}
+            {%- endif %}
+            {{- message['content'] + "<|im_end|>" + "\n"}}
+        {%- endfor %}"""
+        dummy_conversation = [
+            {"role": "user", "content": "user message"},
+            {
+                "role": "assistant",
+                "reasoning_content": "assistant reasoning...",
+                "content": "assistant message",  # not shown because the continue_final_message is set at "reasoning_content"
+            },
+        ]
+        tokenizer = self.get_tokenizer()
+
+        # Test continue_final_message="reasoning_content"
+        prefill_output = tokenizer.apply_chat_template(
+            dummy_conversation,
+            chat_template=dummy_template,
+            tokenize=False,
+            continue_final_message="reasoning_content",
+        )
+        self.assertEqual(
+            prefill_output,
+            "<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\n<think>\nassistant reasoning...",
+        )
+
+    @require_jinja
     def test_chat_template_dict(self):
         dummy_template_1 = "{{'a'}}"
         dummy_template_2 = "{{'b'}}"
@@ -1542,6 +1592,22 @@ Hey how are you doing"""  # noqa: W293
                 new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
             # Assert that the serialized list is correctly reconstructed as a single dict
             self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
+
+    def test_chat_template_dict_saving_rejects_path_traversal(self):
+        # A malicious chat_template dict key must not be usable to escape the save directory and write
+        # attacker-controlled content to an arbitrary path (path traversal, CWE-22). The dict key is used
+        # verbatim as a `<name>.jinja` filename, so `save_pretrained` must reject names that are not plain
+        # filenames instead of silently writing outside the target directory.
+        tokenizer = self.get_tokenizer()
+        tokenizer.chat_template = {"default": "{{'a'}}", "../../PWNED": "attacker content"}
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            save_dir = os.path.join(tmp_dir_name, "save")
+            # Where the "../../PWNED" key would land if traversal succeeded:
+            # save/additional_chat_templates/../../PWNED.jinja -> tmp_dir_name/PWNED.jinja
+            canary = Path(tmp_dir_name, "PWNED.jinja")
+            with self.assertRaises(ValueError):
+                tokenizer.save_pretrained(save_dir)
+            self.assertFalse(canary.exists())
 
     @require_jinja
     def test_chat_template_file_priority(self):

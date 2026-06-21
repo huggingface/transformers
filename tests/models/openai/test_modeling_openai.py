@@ -217,6 +217,22 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         return False
 
+    def _greedy_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._greedy_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._sample_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_search_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._beam_search_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._beam_sample_generate(*args, use_cache=use_cache, **kwargs)
+
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -268,6 +284,14 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model_name = "openai-community/openai-gpt"
         model = OpenAIGPTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @unittest.skip("Openai cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_methods_with_logits_to_keep(self):
+        pass
+
+    @unittest.skip("Openai cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_with_and_without_position_ids(self):
+        pass
 
 
 @require_torch

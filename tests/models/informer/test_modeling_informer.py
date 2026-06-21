@@ -338,20 +338,14 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     "decoder_attention_mask",
                     "encoder_outputs",
                     "past_key_values",
-                    "output_hidden_states",
-                    "output_attentions",
                     "use_cache",
-                    "return_dict",
                 ]
                 if "future_observed_mask" in arg_names
                 else [
                     "decoder_attention_mask",
                     "encoder_outputs",
                     "past_key_values",
-                    "output_hidden_states",
-                    "output_attentions",
                     "use_cache",
-                    "return_dict",
                 ]
             )
 

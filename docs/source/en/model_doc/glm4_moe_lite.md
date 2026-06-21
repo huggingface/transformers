@@ -13,25 +13,59 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-19 and added to Hugging Face Transformers on 2026-01-13.*
+*This model was contributed to Hugging Face Transformers on 2026-01-13.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
+
+# Glm4MoeLite
+
+Glm4MoeLite (GLM-4.7-Flash) is a 30B-parameter mixture-of-experts model with approximately 3B active parameters per token, designed for lightweight deployment that balances performance and efficiency. It is part of the GLM-4.7 family and supports interleaved thinking capabilities.
+
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
 
 
-# GLM-4.7-Flash
+pipe = pipeline(
+    task="text-generation",
+    model="zai-org/GLM-4.7-Flash",
+)
+pipe("The key to efficient language models is")
+```
 
-## Overview
+</hfoption>
+<hfoption id="AutoModelForCausalLM">
 
-GLM-4.7-Flash offers a new option for lightweight deployment that balances performance and efficiency.
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-![bench](https://raw.githubusercontent.com/zai-org/GLM-4.5/refs/heads/main/resources/bench_glm47_flash.png)
+
+tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.7-Flash")
+model = AutoModelForCausalLM.from_pretrained(
+    "zai-org/GLM-4.7-Flash",
+    device_map="auto",
+)
+input_ids = tokenizer("The key to efficient language models is", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+</hfoptions>
 
 ## Glm4MoeLiteConfig
 
 [[autodoc]] Glm4MoeLiteConfig
-
-## Glm4MoeLitePreTrainedModel
-
-[[autodoc]] Glm4MoeLitePreTrainedModel
-    - forward
 
 ## Glm4MoeLiteModel
 

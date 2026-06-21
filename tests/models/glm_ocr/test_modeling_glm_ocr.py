@@ -41,7 +41,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -170,6 +170,9 @@ class GlmOcrVisionText2TextModelTester:
         patch_size = config.vision_config.patch_size
         patches_per_side = self.image_size // patch_size
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[:, 1 : 1 + self.num_image_tokens] = 1
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor(
@@ -177,6 +180,7 @@ class GlmOcrVisionText2TextModelTester:
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
@@ -404,7 +408,7 @@ class GlmOcrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
                 )
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
-                self.assertTrue(has_similar_generate_outputs(dynamic_result, compiled_result))
+                assert_similar_generate_outputs(dynamic_result, compiled_result)
 
 
 @require_torch

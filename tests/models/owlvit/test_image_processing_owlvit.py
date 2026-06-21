@@ -16,16 +16,8 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
-
-if is_vision_available():
-    from transformers import OwlViTImageProcessor
-
-    if is_torchvision_available():
-        from transformers import OwlViTImageProcessorFast
 
 
 class OwlViTImageProcessingTester:
@@ -91,9 +83,6 @@ class OwlViTImageProcessingTester:
 @require_torch
 @require_vision
 class OwlViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = OwlViTImageProcessor if is_vision_available() else None
-    fast_image_processing_class = OwlViTImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = OwlViTImageProcessingTester(self)
@@ -103,7 +92,7 @@ class OwlViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -115,7 +104,7 @@ class OwlViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})

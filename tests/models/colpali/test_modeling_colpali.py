@@ -182,6 +182,7 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (ColPaliForRetrieval,) if is_torch_available() else ()
     test_resize_embeddings = True
+    test_missing_keys = False
     additional_model_inputs = ["token_type_ids"]
 
     def setUp(self):

@@ -116,7 +116,6 @@ class BertGenerationSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -134,12 +133,7 @@ class BertGenerationSelfAttention(nn.Module):
                 current_past_key_values = past_key_values.self_attention_cache
 
             # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            key_layer, value_layer = current_past_key_values.update(
-                key_layer,
-                value_layer,
-                self.layer_idx,
-                {"cache_position": cache_position},
-            )
+            key_layer, value_layer = current_past_key_values.update(key_layer, value_layer, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -193,14 +187,12 @@ class BertGenerationCrossAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = encoder_hidden_states.shape[1]
+        input_shape = hidden_states.shape[:-1]
 
-        q_input_shape = (bsz, tgt_len, -1, self.attention_head_size)
-        kv_input_shape = (bsz, src_len, -1, self.attention_head_size)
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
 
         # get query proj
-        query_layer = self.query(hidden_states).view(*q_input_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
         if past_key_values is not None and is_updated:
@@ -208,8 +200,9 @@ class BertGenerationCrossAttention(nn.Module):
             key_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
             value_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].values
         else:
-            key_layer = self.key(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_layer = self.value(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+            kv_shape = (*encoder_hidden_states.shape[:-1], -1, self.attention_head_size)
+            key_layer = self.key(encoder_hidden_states).view(kv_shape).transpose(1, 2)
+            value_layer = self.value(encoder_hidden_states).view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all states to the cache
@@ -233,7 +226,7 @@ class BertGenerationCrossAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return attn_output, attn_weights
 
 
@@ -253,7 +246,6 @@ class BertGenerationAttention(nn.Module):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
@@ -262,7 +254,6 @@ class BertGenerationAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attention_output = self.output(attention_output, hidden_states)
@@ -328,14 +319,12 @@ class BertGenerationLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attention_output = self_attention_output
@@ -384,7 +373,6 @@ class BertEncoder(nn.Module):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
         for i, layer_module in enumerate(self.layer):
@@ -394,7 +382,6 @@ class BertEncoder(nn.Module):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -517,9 +504,11 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
@@ -532,20 +521,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
                 else DynamicCache(config=self.config)
             )
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if input_ids is not None:
-            device = input_ids.device
-            input_shape = input_ids.shape
-        else:
-            device = inputs_embeds.device
-            input_shape = inputs_embeds.shape[:-1]
-
-        seq_length = input_shape[1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -559,7 +535,6 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -570,7 +545,6 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_ids=position_ids,
             **kwargs,
         )
@@ -588,7 +562,6 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         encoder_attention_mask,
         embedding_output,
         encoder_hidden_states,
-        cache_position,
         past_key_values,
     ):
         if self.config.is_decoder:
@@ -596,7 +569,6 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
                 config=self.config,
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
                 past_key_values=past_key_values,
             )
         else:
@@ -671,7 +643,6 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
         labels: torch.Tensor | None = None,
         past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
@@ -711,7 +682,6 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             return_dict=True,
             **kwargs,
         )

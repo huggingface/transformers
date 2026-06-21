@@ -38,7 +38,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import TvpImageProcessor
+    from transformers import TvpImageProcessorPil
 
 
 # Copied from test.models.videomae.test_modeling_videomae.VideoMAEModelTester with VideoMAE->TVP
@@ -218,7 +218,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         # Load a timm backbone
         # We hack adding hidden_sizes to the config to test the backbone loading
-        backbone_config = TimmBackboneConfig("resnet18", out_indices=[-2, -1], hidden_sizes=[64, 128])
+        backbone_config = TimmBackboneConfig(backbone="resnet18", out_indices=[-2, -1], hidden_sizes=[64, 128])
         config_dict["backbone_config"] = backbone_config
         config = config.__class__(**config_dict)
         _validate_backbone_init()
@@ -242,7 +242,7 @@ def prepare_img():
 class TvpModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return TvpImageProcessor.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1")
+        return TvpImageProcessorPil.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1")
 
     def test_inference_no_head(self):
         model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1").to(torch_device)

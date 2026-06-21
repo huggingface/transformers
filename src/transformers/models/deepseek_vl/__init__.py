@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_deepseek_vl import *
     from .image_processing_deepseek_vl import *
-    from .image_processing_deepseek_vl_fast import *
+    from .image_processing_pil_deepseek_vl import *
     from .modeling_deepseek_vl import *
     from .processing_deepseek_vl import *
 else:

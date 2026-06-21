@@ -44,7 +44,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from transformers import SegGptImageProcessor
+    from transformers import SegGptImageProcessorPil
 
 
 class SegGptModelTester:
@@ -346,7 +346,7 @@ def prepare_bool_masked_pos(config: SegGptConfig):
 class SegGptModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return SegGptImageProcessor.from_pretrained("BAAI/seggpt-vit-large") if is_vision_available() else None
+        return SegGptImageProcessorPil.from_pretrained("BAAI/seggpt-vit-large") if is_vision_available() else None
 
     @slow
     def test_one_shot_inference(self):

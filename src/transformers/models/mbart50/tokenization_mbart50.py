@@ -85,6 +85,7 @@ class MBart50Tokenizer(TokenizersBackend):
     def __init__(
         self,
         vocab: str | dict | list | None = None,
+        _spm_precompiled_charsmap: str | None = None,
         src_lang=None,
         tgt_lang=None,
         eos_token="</s>",
@@ -158,19 +159,11 @@ class MBart50Tokenizer(TokenizersBackend):
             )
         )
 
-        # Set normalizer equivalent to Precompiled + Strip + Replace from tokenizer.json
-        # When loading from pretrained, this will be overridden by the tokenizer.json config
-        # When creating from extractor (vocab), this provides equivalent behavior
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Replace(Regex(r"[\n\r\t]"), " "),  # Precompiled converts newlines/tabs to spaces
-                normalizers.NFKC(),  # Precompiled does NFKC normalization
-                normalizers.Strip(left=False, right=True),  # Strip trailing whitespace (matches tokenizer.json)
-                normalizers.Replace(
-                    Regex(r" {2,}"), "▁"
-                ),  # Replace multiple spaces with underscore (matches tokenizer.json)
-            ]
-        )
+        normalizers_ = [normalizers.Replace(Regex(r" {2,}"), " ")]
+        if _spm_precompiled_charsmap is not None:
+            normalizers_ = [normalizers.Precompiled(_spm_precompiled_charsmap)] + normalizers_
+
+        self._tokenizer.normalizer = normalizers.Sequence(normalizers_)
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)

@@ -14,10 +14,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-08 and added to Hugging Face Transformers on 2025-06-25.*
+*This model was published in HF papers on 2025-04-08 and contributed to Hugging Face Transformers on 2025-06-25.*
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -37,40 +36,17 @@ The pretrained variants are trained with two objectives: prefix language modelin
 The example below demonstrates how to chat with the model with [`Pipeline`] or the [`AutoModel`] class, and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-import torch
-from transformers import pipeline
-
-pipe = pipeline(
-    "text2text-generation",
-    model="google/t5gemma-2b-2b-prefixlm-it",
-    dtype=torch.bfloat16,
-    device_map="auto",
-)
-
-messages = [
-    {"role": "user", "content": "Tell me an unknown interesting biology fact about the brain."},
-]
-prompt = pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-
-pipe(prompt, max_new_tokens=32)
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python
 # pip install accelerate
-import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("google/t5gemma-2b-2b-prefixlm-it")
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/t5gemma-2b-2b-prefixlm-it",
     device_map="auto",
-    dtype=torch.bfloat16,
 )
 
 messages = [
@@ -80,13 +56,6 @@ input_ids = tokenizer.apply_chat_template(messages, return_tensors="pt", return_
 
 outputs = model.generate(**input_ids, max_new_tokens=32)
 print(tokenizer.decode(outputs[0]))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Write me a poem about Machine Learning. Answer:" | transformers run --task text2text-generation --model google/t5gemma-2b-2b-prefixlm --device 0
 ```
 
 </hfoption>

@@ -55,7 +55,7 @@ def _load_cv_utils_kernel_once():
         return
 
     try:
-        cv_utils_kernel = get_kernel("kernels-community/cv-utils")
+        cv_utils_kernel = get_kernel("kernels-community/cv-utils", version=1)
     except Exception as e:
         logger.warning_once(
             f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "
@@ -457,8 +457,8 @@ class Sam3VideoInferenceSession:
         self.cache.clear_all()
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam3Video model's output.")
+@dataclass
 class Sam3VideoSegmentationOutput(ModelOutput):
     r"""
     object_ids (`list[int]`, *optional*):
@@ -592,7 +592,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                     input_ids=inference_session.prompt_input_ids[prompt_id],
                     attention_mask=inference_session.prompt_attention_masks[prompt_id],
                     return_dict=True,
-                ).pooler_output
+                )
                 inference_session.prompt_embeddings[prompt_id] = text_embeds
             else:
                 text_embeds = inference_session.prompt_embeddings[prompt_id]

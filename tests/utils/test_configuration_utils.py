@@ -144,13 +144,13 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertListEqual(
             missing_keys,
             [
-                "_output_attentions",
+                "transformers_version",
                 "is_encoder_decoder",
                 "_name_or_path",
                 "_commit_hash",
+                "_output_attentions",
                 "_attn_implementation_internal",
                 "_experts_implementation_internal",
-                "transformers_version",
             ],
         )
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
@@ -282,16 +282,16 @@ class ConfigTestUtils(unittest.TestCase):
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-bart")
         self.assertEqual(config.get_text_config(), config)
         # both encoder_layers and decoder_layers exist
-        self.assertTrue(getattr(config, "encoder_layers", None) is not None)
-        self.assertTrue(getattr(config, "decoder_layers", None) is not None)
+        self.assertTrue(getattr(config, "encoder_ffn_dim", None) is not None)
+        self.assertTrue(getattr(config, "decoder_ffn_dim", None) is not None)
+
         decoder_config = config.get_text_config(decoder=True)
         self.assertNotEqual(decoder_config, config)
         self.assertEqual(decoder_config.num_hidden_layers, config.decoder_layers)
-        self.assertTrue(getattr(decoder_config, "encoder_layers", None) is None)  # encoder_layers is removed
+
         encoder_config = config.get_text_config(encoder=True)
         self.assertNotEqual(encoder_config, config)
         self.assertEqual(encoder_config.num_hidden_layers, config.encoder_layers)
-        self.assertTrue(getattr(encoder_config, "decoder_layers", None) is None)  # decoder_layers is removed
 
     @require_torch
     def test_bc_torch_dtype(self):
@@ -359,3 +359,41 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertIsInstance(new_config_instance.inf_positive, float)
         self.assertIsInstance(new_config_instance.inf_negative, float)
         self.assertIsInstance(new_config_instance.nan, float)
+
+
+class ConfigSubclassKwOnlyTest(unittest.TestCase):
+    """Test that config subclasses with non-default fields following parent default fields
+    no longer raise TypeError (fixed by kw_only=True in __init_subclass__). Regression
+    test for https://github.com/huggingface/transformers/issues/XXXX."""
+
+    def test_subclass_non_default_field_after_default(self):
+        """A config subclass adding a required field after parent defaults must not raise."""
+
+        class MyConfig(PreTrainedConfig):
+            pooling: str  # no default — would fail under Python dataclass ordering rules
+
+        # Should construct without TypeError
+        cfg = MyConfig(pooling="mean")
+        self.assertEqual(cfg.pooling, "mean")
+
+    def test_subclass_multiple_non_default_fields(self):
+        """Multiple non-default fields in the subclass should all work."""
+
+        class EmbedConfig(PreTrainedConfig):
+            dim: int
+            pooling: str
+
+        cfg = EmbedConfig(dim=128, pooling="cls")
+        self.assertEqual(cfg.dim, 128)
+        self.assertEqual(cfg.pooling, "cls")
+
+    def test_inherited_defaults_still_work(self):
+        """Inherited fields with defaults must still be accessible."""
+        from transformers import BertConfig
+
+        class BertWithPooling(BertConfig):
+            pooling: str
+
+        cfg = BertWithPooling(pooling="mean", hidden_size=256)
+        self.assertEqual(cfg.pooling, "mean")
+        self.assertEqual(cfg.hidden_size, 256)

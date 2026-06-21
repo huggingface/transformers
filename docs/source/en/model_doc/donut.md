@@ -12,13 +12,8 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
-*This model was released on 2021-11-30 and added to Hugging Face Transformers on 2022-08-12.*
+*This model was published in HF papers on 2021-11-30 and contributed to Hugging Face Transformers on 2022-08-12.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # Donut
 
@@ -36,17 +31,15 @@ The examples below demonstrate how to perform document understanding tasks using
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 # pip install datasets
-import torch
 from transformers import pipeline
-from PIL import Image
+
 
 pipeline = pipeline(
     task="document-question-answering",
     model="naver-clova-ix/donut-base-finetuned-docvqa",
     device=0,
-    dtype=torch.float16
 )
 dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
@@ -57,20 +50,21 @@ pipeline(image=image, question="What time is the coffee break?")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 # pip install datasets
-import torch
 from datasets import load_dataset
-from transformers import AutoProcessor, AutoModelForImageTextToText
+
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
-model = AutoModelForImageTextToText.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
+model = AutoModelForImageTextToText.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa", device_map="auto")
 
 dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
 question = "What time is the coffee break?"
 task_prompt = f"<s_docvqa><s_question>{question}</s_question><s_answer>"
-inputs = processor(image, task_prompt, return_tensors="pt")
+inputs = processor(image, task_prompt, return_tensors="pt").to(model.device)
 
 outputs = model.generate(
     input_ids=inputs.input_ids,
@@ -88,21 +82,22 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
-```py
+```python
 # pip install datasets torchao
-import torch
 from datasets import load_dataset
-from transformers import TorchAoConfig, AutoProcessor, AutoModelForImageTextToText
+
+from transformers import AutoModelForImageTextToText, AutoProcessor, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 processor = AutoProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
-model = AutoModelForImageTextToText.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa", quantization_config=quantization_config)
+model = AutoModelForImageTextToText.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa", quantization_config=quantization_config, device_map="auto")
 
 dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
 question = "What time is the coffee break?"
 task_prompt = f"<s_docvqa><s_question>{question}</s_question><s_answer>"
-inputs = processor(image, task_prompt, return_tensors="pt")
+inputs = processor(image, task_prompt, return_tensors="pt").to(model.device)
 
 outputs = model.generate(
     input_ids=inputs.input_ids,
@@ -118,86 +113,82 @@ print(answer)
 - Use Donut for document image classification as shown below.
 
     ```py
-    >>> import re
-    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
-    >>> from accelerate import Accelerator
-    >>> from datasets import load_dataset
-    >>> import torch
+    import re
+    from transformers import DonutProcessor, VisionEncoderDecoderModel
+        from datasets import load_dataset
+    import torch
 
-    >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
-    >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
+    processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
+    model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip", device_map="auto")
 
-    >>> device = Accelerator().device
-    >>> model.to(device)  # doctest: +IGNORE_RESULT
+    model.to(model.device)  # doctest: +IGNORE_RESULT
 
-    >>> # load document image
-    >>> dataset = load_dataset("hf-internal-testing/example-documents", split="test")
-    >>> image = dataset[1]["image"]
+    # load document image
+    dataset = load_dataset("hf-internal-testing/example-documents", split="test")
+    image = dataset[1]["image"]
 
-    >>> # prepare decoder inputs
-    >>> task_prompt = "<s_rvlcdip>"
-    >>> decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").input_ids
+    # prepare decoder inputs
+    task_prompt = "<s_rvlcdip>"
+    decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").to(model.device).input_ids
 
-    >>> pixel_values = processor(image, return_tensors="pt").pixel_values
+    pixel_values = processor(image, return_tensors="pt").to(model.device).pixel_values
 
-    >>> outputs = model.generate(
-    ...     pixel_values.to(device),
-    ...     decoder_input_ids=decoder_input_ids.to(device),
-    ...     max_length=model.decoder.config.max_position_embeddings,
-    ...     pad_token_id=processor.tokenizer.pad_token_id,
-    ...     eos_token_id=processor.tokenizer.eos_token_id,
-    ...     use_cache=True,
-    ...     bad_words_ids=[[processor.tokenizer.unk_token_id]],
-    ...     return_dict_in_generate=True,
-    ... )
+    outputs = model.generate(
+        pixel_values.to(model.device),
+        decoder_input_ids=decoder_input_ids.to(model.device),
+        max_length=model.decoder.config.max_position_embeddings,
+        pad_token_id=processor.tokenizer.pad_token_id,
+        eos_token_id=processor.tokenizer.eos_token_id,
+        use_cache=True,
+        bad_words_ids=[[processor.tokenizer.unk_token_id]],
+        return_dict_in_generate=True,
+    )
 
-    >>> sequence = processor.batch_decode(outputs.sequences)[0]
-    >>> sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
-    >>> sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
-    >>> print(processor.token2json(sequence))
+    sequence = processor.batch_decode(outputs.sequences)[0]
+    sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
+    sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+    print(processor.token2json(sequence))
     {'class': 'advertisement'}
     ```
 
 - Use Donut for document parsing as shown below.
 
     ```py
-    >>> import re
-    >>> from accelerate import Accelerator
-    >>> from datasets import load_dataset
-    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
-    >>> import torch
+    import re
+        from datasets import load_dataset
+    from transformers import DonutProcessor, VisionEncoderDecoderModel
+    import torch
 
-    >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
-    >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
+    processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
+    model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2", device_map="auto")
 
-    >>> device = Accelerator().device
-    >>> model.to(device)  # doctest: +IGNORE_RESULT
+    model.to(model.device)  # doctest: +IGNORE_RESULT
 
-    >>> # load document image
-    >>> dataset = load_dataset("hf-internal-testing/example-documents", split="test")
-    >>> image = dataset[2]["image"]
+    # load document image
+    dataset = load_dataset("hf-internal-testing/example-documents", split="test")
+    image = dataset[2]["image"]
 
-    >>> # prepare decoder inputs
-    >>> task_prompt = "<s_cord-v2>"
-    >>> decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").input_ids
+    # prepare decoder inputs
+    task_prompt = "<s_cord-v2>"
+    decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").to(model.device).input_ids
 
-    >>> pixel_values = processor(image, return_tensors="pt").pixel_values
+    pixel_values = processor(image, return_tensors="pt").to(model.device).pixel_values
 
-    >>> outputs = model.generate(
-    ...     pixel_values.to(device),
-    ...     decoder_input_ids=decoder_input_ids.to(device),
-    ...     max_length=model.decoder.config.max_position_embeddings,
-    ...     pad_token_id=processor.tokenizer.pad_token_id,
-    ...     eos_token_id=processor.tokenizer.eos_token_id,
-    ...     use_cache=True,
-    ...     bad_words_ids=[[processor.tokenizer.unk_token_id]],
-    ...     return_dict_in_generate=True,
-    ... )
+    outputs = model.generate(
+        pixel_values.to(model.device),
+        decoder_input_ids=decoder_input_ids.to(model.device),
+        max_length=model.decoder.config.max_position_embeddings,
+        pad_token_id=processor.tokenizer.pad_token_id,
+        eos_token_id=processor.tokenizer.eos_token_id,
+        use_cache=True,
+        bad_words_ids=[[processor.tokenizer.unk_token_id]],
+        return_dict_in_generate=True,
+    )
 
-    >>> sequence = processor.batch_decode(outputs.sequences)[0]
-    >>> sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
-    >>> sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
-    >>> print(processor.token2json(sequence))
+    sequence = processor.batch_decode(outputs.sequences)[0]
+    sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
+    sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+    print(processor.token2json(sequence))
     {'menu': {'nm': 'CINNAMON SUGAR', 'unitprice': '17,000', 'cnt': '1 x', 'price': '17,000'}, 'sub_total': {'subtotal_price': '17,000'}, 'total': 
     {'total_price': '17,000', 'cashprice': '20,000', 'changeprice': '3,000'}}
     ```
@@ -211,9 +202,9 @@ print(answer)
 [[autodoc]] DonutImageProcessor
     - preprocess
 
-## DonutImageProcessorFast
+## DonutImageProcessorPil
 
-[[autodoc]] DonutImageProcessorFast
+[[autodoc]] DonutImageProcessorPil
     - preprocess
 
 ## DonutProcessor

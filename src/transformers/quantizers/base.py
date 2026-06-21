@@ -20,11 +20,15 @@ from .quantizers_utils import get_module_from_name
 
 
 if TYPE_CHECKING:
+    from torch.nn import ModuleList
+
     from ..modeling_utils import PreTrainedModel
 
 if is_torch_available():
     import torch
-    from torch.nn import ModuleList
+
+    if not TYPE_CHECKING:
+        from torch.nn import ModuleList
 else:
     ModuleList = str
 
@@ -160,8 +164,8 @@ class HfQuantizer(ABC):
             kwargs (`dict`, *optional*):
                 The keyword arguments that are passed along `_process_model_before_weight_loading`.
         """
-        model.is_quantized = True
-        model.quantization_method = self.quantization_config.quant_method
+        setattr(model, "is_quantized", True)
+        setattr(model, "quantization_method", self.quantization_config.quant_method)
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
         self._process_model_before_weight_loading(model, **kwargs)
@@ -289,6 +293,19 @@ class HfQuantizer(ABC):
 
     def get_weight_conversions(self):
         return []
+
+    def update_weight_conversions(self, weight_conversions):
+        """Give the quantizer a chance to rewrite the weight conversion pipeline.
+
+        Loading runs ``renamings → converters → (dequant → merge → concat)``. Dequant
+        has to happen *before* any merge/concat op because those operations aren't
+        aware of per-block scales, so the per-expert (weight, scale) pairs need to be
+        collapsed into full-precision tensors first. Subclasses (e.g. the FP8
+        quantizer in ``dequantize=True`` mode) override this to inject a dequantize
+        op at the start of each model-provided :class:`WeightConverter` and attach the
+        matching scale source patterns. Default: no-op.
+        """
+        return weight_conversions + self.get_weight_conversions()
 
 
 class SequentialLlama4TextExperts(ModuleList):

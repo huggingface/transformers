@@ -14,6 +14,7 @@
 
 import copy
 import unittest
+from unittest.mock import patch
 
 import pytest
 from packaging import version
@@ -55,6 +56,7 @@ if is_torch_available():
         convert_and_export_with_cache,
         pipeline,
     )
+    from transformers.cache_utils import LinearAttentionLayer, StaticLayer
     from transformers.integrations.executorch import export_with_dynamic_cache
 
 
@@ -64,7 +66,7 @@ TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
-    if cache_name not in ["offloaded_hybrid", "offloaded_static", "offloaded_hybrid_chunked"]
+    if cache_name not in ["offloaded", "offloaded_hybrid", "offloaded_static", "offloaded_hybrid_chunked"]
 ]
 
 
@@ -92,27 +94,63 @@ class CacheTest(unittest.TestCase):
 
         mha_config = LlamaConfig(num_attention_heads=32)
         mha_static_cache = StaticCache(config=mha_config, max_cache_len=10)
-        cached_keys, cached_values = mha_static_cache.update(
-            *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
-        )
+        cached_keys, cached_values = mha_static_cache.update(*_random_kvs(mha_config), 0)
         self.assertTrue(cached_keys.shape == (1, 32, 10, 128))
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
 
         gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
         gqa_static_cache = StaticCache(config=gqa_config, max_cache_len=10)
-        cached_keys, cached_values = gqa_static_cache.update(
-            *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
-        )
+        cached_keys, cached_values = gqa_static_cache.update(*_random_kvs(gqa_config), 0)
         self.assertTrue(cached_keys.shape == (1, 4, 10, 128))
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
 
         mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
         mqa_static_cache = StaticCache(config=mqa_config, max_cache_len=10)
-        cached_keys, cached_values = mqa_static_cache.update(
-            *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
-        )
+        cached_keys, cached_values = mqa_static_cache.update(*_random_kvs(mqa_config), 0)
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
+
+    def test_early_initialization_does_not_corrupt_linear_attention_layers(self):
+        """
+        Regression test: `early_initialization` initialized *every* layer through the attention `(num_heads, head_dim)`
+        key/value layout, but linear attention layers track their own statically-shaped conv/recurrent states. So it
+        pre-allocated their `conv_states` with the wrong shape (a spurious 0-length axis) and flagged them
+        initialized; the first real `update_conv_state` then hit `conv_states.copy_(...)` with mismatched shapes and
+        raised a `RuntimeError` (the customer-facing failure, observed e.g. on Neuron). Linear attention layers must
+        be left untouched so they lazily take the correct shape on their first update.
+        """
+        config = LlamaConfig(num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=2, hidden_size=32)
+        config.layer_types = ["full_attention", "linear_attention"]
+        cache = StaticCache(config=config, max_cache_len=8)
+        self.assertIsInstance(cache.layers[0], StaticLayer)
+        linear_layer = cache.layers[1]
+        self.assertIsInstance(linear_layer, LinearAttentionLayer)
+        # Linear attention layers opt out of the key/value early-init path; attention layers opt in.
+        self.assertTrue(cache.layers[0].supports_early_init)
+        self.assertFalse(linear_layer.supports_early_init)
+
+        cache.early_initialization(batch_size=1, num_heads=2, head_dim=8, dtype=torch.float32, device=torch_device)
+        # The attention layer is initialized via the key/value layout, as expected.
+        self.assertTrue(cache.layers[0].is_initialized)
+
+        # Simulate the first forward updating the linear layer's conv state with its real (conv) shape. Before the
+        # fix, `early_initialization` had pre-allocated `conv_states` with the wrong key/value shape, so this raised
+        # `RuntimeError: ... must match ...`; with the fix the layer lazily takes the correct shape here instead.
+        conv_states = torch.zeros((1, 8, 4), dtype=torch.float32, device=torch_device)  # (batch, channels, kernel)
+        updated_conv_states = linear_layer.update_conv_state(conv_states)
+        self.assertEqual(updated_conv_states.shape, conv_states.shape)
+
+        # The cache-level `is_initialized` must also tolerate linear attention layers (which don't expose the flag);
+        # before the fix this raised `AttributeError`. It reflects the attention layer's state.
+        self.assertTrue(cache.is_initialized)
+
+    def test_max_cache_len_ignores_linear_attention_layers(self):
+        """`max_cache_len` must skip linear attention layers (which have no such attribute), else the static-cache
+        reuse check in `_prepare_static_cache` raises `AttributeError` on a hybrid model."""
+        config = LlamaConfig(num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=2, hidden_size=32)
+        config.layer_types = ["full_attention", "linear_attention"]
+        cache = StaticCache(config=config, max_cache_len=8)
+        self.assertEqual(cache.max_cache_len, 8)
 
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
@@ -494,6 +532,79 @@ class CacheHardIntegrationTest(unittest.TestCase):
             model.generate(**inputs, max_new_tokens=2, cache_implementation="static")
         self.assertNotIn("cuda", cap.err.lower())
 
+    def test_static_cache_honors_max_cache_len(self):
+        """
+        `generation_config.max_cache_len` must size the auto-allocated `StaticCache` on the static path, so a cache
+        pinned to a worst-case length is reused across calls instead of reallocating (and recompiling). Without this,
+        the cache is sized to the current call's `max_length` only. Regression test for #46424.
+        """
+        # Llama has only full-attention layers, so the cache length is not capped by a sliding window.
+        model_repo = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+        inputs = tokenizer(["The quick brown fox"], return_tensors="pt").to(torch_device)
+
+        max_new_tokens = 5
+        # Deliberately ask for a cache much larger than the natural `max_length - 1` for this call.
+        natural_max_cache_len = inputs.input_ids.shape[-1] + max_new_tokens - 1
+        requested_max_cache_len = natural_max_cache_len + 64
+
+        out = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            cache_implementation="static",
+            max_cache_len=requested_max_cache_len,
+            return_dict_in_generate=True,
+        )
+        self.assertIsInstance(out.past_key_values, StaticCache)
+        self.assertEqual(out.past_key_values.max_cache_len, requested_max_cache_len)
+
+    def test_chunked_prefill_initializes_static_cache_eagerly(self):
+        """
+        With chunked prefill the prefill runs inside a compiled region, where the static cache's lazy initialization
+        cannot tag its tensors via `torch._dynamo.mark_static_address`, so a later call recompiles. `generate` must
+        therefore initialize the static cache eagerly, and only when it compiles the prefill (i.e. when
+        `prefill_chunk_size` is set). Regression test for #46421.
+        """
+        model_repo = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+        inputs = tokenizer(["The quick brown fox jumps over the lazy dog"], return_tensors="pt").to(torch_device)
+        generation_kwargs = {"max_new_tokens": 3, "do_sample": False, "cache_implementation": "static"}
+
+        # Without chunked prefill, the static cache is left to lazily initialize on the (eager) prefill.
+        with patch.object(Cache, "early_initialization", autospec=True) as eager_init:
+            model.generate(**inputs, **generation_kwargs)
+        eager_init.assert_not_called()
+
+        # Drop the (now initialized) cache so the chunked-prefill call re-allocates and initializes a fresh one.
+        model._cache = None
+        # With chunked prefill, `generate` must initialize the static cache itself, before the prefill runs.
+        prefill_chunk_size = max(inputs.input_ids.shape[-1] // 2, 1)
+        with patch.object(Cache, "early_initialization", autospec=True, wraps=Cache.early_initialization) as init:
+            model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+        init.assert_called_once()
+
+        # Under TP, eager init is still used but the head count is sharded by `_tp_size` (one device per rank).
+        tc = model.config.get_text_config(decoder=True)
+        num_kv_heads = getattr(tc, "num_key_value_heads", None) or tc.num_attention_heads
+        model._cache = None
+        model._tp_size = num_kv_heads  # divides evenly -> 1 head per rank
+        with patch.object(Cache, "early_initialization", autospec=True) as tp_init:
+            model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+        tp_init.assert_called_once()
+        self.assertEqual(tp_init.call_args.kwargs["num_heads"], 1)
+        model._tp_size = None
+
+        # A multi-device `device_map` (single `model.device` can't cover all layers) skips eager init -> lazy.
+        model._cache = None
+        model.hf_device_map = {"a": 0, "b": 1}
+        with patch.object(Cache, "early_initialization", autospec=True) as md_init:
+            model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+        md_init.assert_not_called()
+        del model.hf_device_map
+
     @require_torch_multi_accelerator
     @slow
     def test_static_cache_multi_accelerator(self):
@@ -843,14 +954,15 @@ class SyntheticCacheTest(unittest.TestCase):
     def test_static_cache_out_of_bounds(self):
         """Test StaticCache raises IndexError for out-of-bounds positions."""
         static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
-        pos_out_of_bounds = torch.tensor([self.max_cache_len])  # Position >= max_cache_len
+        prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
+        # Fill-up the cache
+        static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0)
 
         with self.assertRaises(IndexError):
             static_cache.update(
                 key_states=torch.tensor([[[[1.0]]]]),
                 value_states=torch.tensor([[[[1.0]]]]),
                 layer_idx=0,
-                cache_kwargs={"cache_position": pos_out_of_bounds},
             )
 
     def test_static_cache(self):
@@ -865,13 +977,12 @@ class SyntheticCacheTest(unittest.TestCase):
         """
         # Scenario 1: Fill up to near capacity
         static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
-        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
-        static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0, cache_kwargs=None)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0)
         static_cache.update(
             key_states=torch.tensor(3.0)[None, None, None, None],
             value_states=torch.tensor(3.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0], "StaticCache Scenario 1 failed"
@@ -882,7 +993,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=torch.tensor(4.0)[None, None, None, None],
             value_states=torch.tensor(4.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([3])},
         )
         self.assertEqual(
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
@@ -912,13 +1022,11 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(2)},
         )
         sliding_cache.update(
             key_states=torch.tensor(3.0)[None, None, None, None],
             value_states=torch.tensor(3.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -933,13 +1041,11 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4)},
         )
         sliding_cache.update(
             key_states=torch.tensor(5.0)[None, None, None, None],
             value_states=torch.tensor(5.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([4])},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -954,7 +1060,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=long_prefill,
             value_states=long_prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(6)},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1057,7 +1162,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=prefill_static,
             value_states=prefill_static,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(3)},
         )
 
         # Update sliding layer (layer 1)
@@ -1065,7 +1169,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=prefill_sliding,
             value_states=prefill_sliding,
             layer_idx=1,
-            cache_kwargs={"cache_position": torch.arange(3), "sliding_window": self.window_size},
         )
 
         # Verify initial states
@@ -1099,7 +1202,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=new_key_static,
             value_states=new_key_static,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([3])},
         )
 
         # Update sliding layer (layer 1)
@@ -1107,7 +1209,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=new_key_sliding,
             value_states=new_key_sliding,
             layer_idx=1,
-            cache_kwargs={"cache_position": torch.tensor([3])},
         )
 
         # The static layer does not slide, so it should have updated the element at position 3
@@ -1160,13 +1261,11 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=prefill_static,
             value_states=prefill_static,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(3)},
         )
         res_sliding = chunked_cache.update(
             key_states=prefill_sliding,
             value_states=prefill_sliding,
             layer_idx=1,
-            cache_kwargs={"cache_position": torch.arange(3)},
         )
 
         # Static layer keeps everything
@@ -1183,13 +1282,11 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=new_static,
             value_states=new_static,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([3])},
         )
         res_one = chunked_cache.update(
             key_states=new_sliding,
             value_states=new_sliding,
             layer_idx=1,
-            cache_kwargs={"cache_position": torch.tensor([3])},
         )
 
         self.assertEqual(chunked_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 5.0])
@@ -1202,7 +1299,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=new_sliding_2,
             value_states=new_sliding_2,
             layer_idx=1,
-            cache_kwargs={"cache_position": torch.tensor([4, 5])},  # arbitrary positions; ignored in full mode
         )
 
         # Cache now keeps the latest two tokens
@@ -1213,8 +1309,8 @@ class SyntheticCacheTest(unittest.TestCase):
     def test_hybrid_chunked_cache_extra_cases(self):
         """
         Covers the new cases that appear on prefill chunking:
-        1) Not full multi-token update (cache_position[0] + update_len <= max_cache_len)
-        2) Multi-token update crossing the window (cache_position[0] < max_cache_len  and  cache_position[0] + update_len > max_cache_len)
+        1) Not full multi-token update (past_length + update_len <= max_cache_len)
+        2) Multi-token update crossing the window (past_length < max_cache_len  and  past_length + update_len > max_cache_len)
 
         Single sliding layer, max_cache_len = 3.
 
@@ -1238,7 +1334,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=first_chunk,
             value_states=first_chunk,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(2)},  # p = 0,1
         )
 
         # internal cache should have first two tokens and a zero pad
@@ -1251,7 +1346,6 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=second_chunk,
             value_states=second_chunk,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([2, 3])},  # p = 2
         )
 
         self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [20.0, 30.0, 40.0])

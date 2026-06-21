@@ -70,7 +70,6 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
     return torch.where(max_mask, scores, zeros)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of image point description models. Due to the nature of keypoint detection, the number of
@@ -80,6 +79,7 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
     and which are padding.
     """
 )
+@dataclass
 class SuperPointKeypointDescriptionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
@@ -406,7 +406,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 

@@ -26,7 +26,7 @@ Call [`~PreTrainedModel.from_pretrained`] to download and load a model's weights
 ```py
 from transformers import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="auto")
 ```
 
 This guide explains how models are loaded, the different ways you can load a model, how to overcome memory issues for really big models, and how to load custom models.
@@ -190,16 +190,13 @@ model.hf_device_map
 
 ### Model data type
 
-The `dtype` argument controls which PyTorch [dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) model weights are instantiated in. By default, `dtype="auto"` scans `config.json` for a `dtype` or legacy `torch_dtype` entry and loads weights in that format. If `config.json` lacks this information, Transformers inspects the first floating-point weight in the checkpoint and adopts its data type.
+The `dtype` argument controls the PyTorch [dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) used to instantiate model weights. By default, Transformers loads weights with the `dtype` or legacy `torch_dtype` value from `config.json`. If `config.json` doesn't include either value, Transformers uses the dtype of the first floating-point weight in the checkpoint.
 
-Override the default by passing a specific data type.
+Override the default by passing a specific dtype.
 
 ```py
 import torch
 from transformers import AutoModelForCausalLM
-
-# default
-model = AutoModelForCausalLM.from_pretrained("google/gemma-3-1b-it", dtype="auto")
 
 # specific dtype
 model = AutoModelForCausalLM.from_pretrained("google/gemma-3-1b-it", dtype=torch.float16)

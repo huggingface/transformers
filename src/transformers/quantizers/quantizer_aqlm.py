@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
+from importlib import metadata
 from typing import TYPE_CHECKING
 
 from packaging import version
@@ -21,6 +21,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import AqlmConfig
 
 from ..integrations import replace_with_aqlm_linear
 from ..utils import is_accelerate_available, is_aqlm_available, logging
@@ -36,6 +37,7 @@ class AqlmHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
+    quantization_config: "AqlmConfig"
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -54,18 +56,18 @@ class AqlmHfQuantizer(HfQuantizer):
     ):
         replace_with_aqlm_linear(
             model,
+            modules_to_not_convert=self.quantization_config.linear_weights_not_to_quantize,
             quantization_config=self.quantization_config,
-            linear_weights_not_to_quantize=self.quantization_config.linear_weights_not_to_quantize,
         )
 
     @property
     def is_trainable(self) -> bool:
-        aqlm_supports_training = version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.2")
+        aqlm_supports_training = version.parse(metadata.version("aqlm")) >= version.parse("1.0.2")
         if aqlm_supports_training:
             return True
         else:
             logger.warning(
-                f"Currently installed `aqlm` version ({importlib.metadata.version('aqlm')}) doesn't support training. If you wish to train a quantized model, please update `aqlm` with `pip install aqlm>=1.0.2`"
+                f"Currently installed `aqlm` version ({metadata.version('aqlm')}) doesn't support training. If you wish to train a quantized model, please update `aqlm` with `pip install aqlm>=1.0.2`"
             )
             return False
 

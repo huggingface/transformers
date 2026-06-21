@@ -12,296 +12,146 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from collections.abc import Callable
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
-from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...models.llama.modeling_llama import apply_rotary_pos_emb
 from ...processing_utils import Unpack
-from ...utils import logging
-from ...utils.import_utils import is_tracing
-from ..deepseek_v3.modeling_deepseek_v3 import apply_rotary_pos_emb_interleave, yarn_get_mscale
-from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeForCausalLM,
-    Glm4MoeModel,
-    Glm4MoePreTrainedModel,
-    Glm4MoeRMSNorm,
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3Attention,
+    DeepseekV3RMSNorm,
+    apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
-from ..glm4_moe_lite.configuration_glm4_moe_lite import Glm4MoeLiteConfig
-from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
+from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+from ..deepseek_v32.modeling_deepseek_v32 import (
+    DeepseekV32DecoderLayer,
+    DeepseekV32ForCausalLM,
+    DeepseekV32Indexer,
+    DeepseekV32Model,
+    DeepseekV32PreTrainedModel,
+    DeepseekV32RotaryEmbedding,
+)
 
 
 logger = logging.get_logger(__name__)
 
 
-class GlmMoeDsaConfig(Glm4MoeLiteConfig):
+@auto_docstring(checkpoint="zai-org/GLM-5")
+@strict
+class GlmMoeDsaConfig(DeepseekV32Config):
     r"""
-    This is the configuration class to store the configuration of a [`GlmMoeDsaModel`]. It is used to instantiate a
-    GLM-5 model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the GLM-5.
-    e.g. [zai-org/GLM-5](https://huggingface.co/zai-org/GLM-5)
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 154880):
-            Vocabulary size of the Deep model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Glm4MoeLiteModel`]
-        hidden_size (`int`, *optional*, defaults to 6144):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 12288):
-            Dimension of the MLP representations.
-        moe_intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimension of the MoE representations.
-        num_hidden_layers (`int`, *optional*, defaults to 78):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 64):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        n_shared_experts (`int`, *optional*, defaults to 1):
-            Number of shared experts.
-        n_routed_experts (`int`, *optional*, defaults to 256):
-            Number of routed experts.
-        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
-            Scaling factor or routed experts.
-        kv_lora_rank (`int`, *optional*, defaults to 512):
-            Rank of the LoRA matrices for key and value projections.
-        q_lora_rank (`int`, *optional*, defaults to 2048):
-            Rank of the LoRA matrices for query projections.
-        qk_rope_head_dim (`int`, *optional*, defaults to 64):
-            Dimension of the query/key heads that use rotary position embeddings.
-        v_head_dim (`int`, *optional*, defaults to 256):
-            Dimension of the value heads.
-        qk_nope_head_dim (`int`, *optional*, defaults to 192):
-            Dimension of the query/key heads that don't use rotary position embeddings.
-        n_group (`int`, *optional*, defaults to 1):
-            Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to 1):
-            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
-            Number of selected experts, None means dense model.
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the weights of the routed experts.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 202752):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 0):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 1):
-            End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        rope_interleave (`bool`, *optional*, defaults to `True`):
-            Whether to interleave the rotary position embeddings.
-        mlp_layer_types (`list`, *optional*):
-            MLP (Moe vs Dense) pattern for each layer.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        index_topk (`int`, *optional*, defaults to 2048):
-            Number of top tokens selected by the indexer for retrieval/attention in each step.
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+    mlp_layer_types (`list`, *optional*):
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
+    index_topk (`int`, *optional*, defaults to 2048):
+        Number of top tokens selected by the indexer for sparse attention.
+    index_head_dim (`int`, *optional*, defaults to 128):
+        Head dimension for the indexer projections (DSA).
+    index_n_heads (`int`, *optional*, defaults to 32):
+        Number of heads for the indexer projections (DSA).
+    first_k_dense_replace (`int`, *optional*, defaults to 3):
+        Number of leading layers that use a dense MLP; the rest use the MoE block.
+    indexer_types (`list[str]`, *optional*):
+        Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
+        layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
+        `index_skip_topk_offset` (or `index_topk_pattern`).
 
     ```python
-    >>> from transformers import Glm4MoeLiteModel, Glm4MoeLiteConfig
+    >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
 
-    >>> # Initializing a GLM-MOE-DSA style configuration
+    >>> # Initializing a GLM-MoE-DSA configuration
     >>> configuration = GlmMoeDsaConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = GlmMoeDsaModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        vocab_size: int | None = 154880,
-        hidden_size: int | None = 6144,
-        intermediate_size: int | None = 12288,
-        moe_intermediate_size: int | None = 2048,
-        num_hidden_layers: int | None = 78,
-        num_attention_heads: int | None = 64,
-        num_key_value_heads: int | None = 64,
-        n_shared_experts: int | None = 1,
-        n_routed_experts: int | None = 256,
-        routed_scaling_factor: float | None = 2.5,
-        kv_lora_rank: int | None = 512,
-        q_lora_rank: int | None = 2048,
-        qk_rope_head_dim: int | None = 64,
-        v_head_dim: int | None = 256,
-        qk_nope_head_dim: int | None = 192,
-        n_group: int | None = 1,
-        topk_group: int | None = 1,
-        num_experts_per_tok: int | None = 8,
-        norm_topk_prob: bool | None = True,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 202752,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 0,
-        eos_token_id: int | None = 1,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        rope_interleave: bool | None = True,
-        mlp_layer_types=None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        index_topk: int | None = 2048,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
-        # Default to MoE from the fourth layer and on
-        if mlp_layer_types is None:
-            mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (self.num_hidden_layers - 3)
-        layer_type_validation(mlp_layer_types, self.num_hidden_layers, attention=False)
-        self.mlp_layer_types = mlp_layer_types
+    vocab_size: int = 154880
+    hidden_size: int = 6144
+    intermediate_size: int = 12288
+    moe_intermediate_size: int = 2048
+    num_hidden_layers: int = 78
+    num_attention_heads: int = 64
+    num_key_value_heads: int = 64
+    n_shared_experts: int = 1
+    n_routed_experts: int = 256
+    routed_scaling_factor: float = 2.5
+    kv_lora_rank: int = 512
+    q_lora_rank: int = 2048
+    qk_rope_head_dim: int = 64
+    v_head_dim: int = 256
+    qk_nope_head_dim: int = 192
+    n_group: int = 1
+    topk_group: int = 1
+    num_experts_per_tok: int = 8
+    max_position_embeddings: int = 202752
+    rms_norm_eps: float = 1e-5
+    index_topk: int = 2048
+    index_head_dim: int = 128
+    index_n_heads: int = 32
+    # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
+    indexer_types: list[str] | None = None
 
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_attention_heads = num_attention_heads
-        self.n_shared_experts = n_shared_experts
-        self.n_routed_experts = n_routed_experts
-        self.routed_scaling_factor = routed_scaling_factor
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
-        self.head_dim = qk_rope_head_dim
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.num_experts_per_tok = num_experts_per_tok
-        self.norm_topk_prob = norm_topk_prob
-        self.rope_interleave = rope_interleave
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.index_topk = index_topk
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        PreTrainedConfig.__init__(self, **kwargs)
+    def __post_init__(self, **kwargs):
+        # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
+        if self.indexer_types is None:
+            pattern = kwargs.get("index_topk_pattern")
+            if pattern is not None:
+                self.indexer_types = (
+                    [{"F": "full", "S": "shared"}[c] for c in pattern] if isinstance(pattern, str) else list(pattern)
+                )
+            else:
+                freq = max(kwargs.get("index_topk_freq", 1), 1)
+                offset = kwargs.get("index_skip_topk_offset", 2)
+                self.indexer_types = [
+                    "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
+                ]
+        super().__post_init__(**kwargs)
 
 
-class GlmMoeDsaRMSNorm(Glm4MoeRMSNorm):
+class GlmMoeDsaRMSNorm(DeepseekV3RMSNorm):
     pass
 
 
-class GlmMoeDsaAttention(nn.Module):
+class GlmMoeDsaRotaryEmbedding(DeepseekV32RotaryEmbedding):
+    pass
+
+
+class GlmMoeDsaIndexer(DeepseekV32Indexer):
+    pass
+
+
+class GlmMoeDsaAttention(DeepseekV3Attention):
     """
-    DeepSeek V3.2 sparse attention mechanism with indexer.
+    DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
 
-    This implements the native sparse attention from [DeepSeek V3.2](https://huggingface.co/deepseek-ai/DeepSeek-V3.2) which uses
-    an indexer to select top-k tokens for attention computation, making it more efficient for long sequences.
-
-    In GLM-5, the indexer RoPE uses neox_style = false. Therefore, we introduced the indexer_rope_interleave parameter:
-    when indexer_rope_interleave is set to True, RoPE is computed using the same neox_style = false behavior as in the
-    GlmMoeDsa model. This part has not yet been implemented in transformers.
+    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or
+    reuses the previous full layer's top-k selection (`"shared"`).
+    `next_skip_topk` signals that the *next* layer will reuse this
+    layer's top-k, so it is propagated upward via `prev_topk_indices`.
     """
 
     def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.attention_dropout = config.attention_dropout
-        self.num_heads = config.num_attention_heads
-
-        self.q_lora_rank = config.q_lora_rank
-        self.qk_rope_head_dim = config.qk_rope_head_dim
-        self.kv_lora_rank = config.kv_lora_rank
-        self.v_head_dim = config.v_head_dim
-        self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_head_dim
-        self.index_topk = config.index_topk
-
-        self.is_causal = True
-
-        # Query projection
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = GlmMoeDsaRMSNorm(config.q_lora_rank)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-
-        # Key-Value projections
-        self.kv_a_proj_with_mqa = nn.Linear(
-            config.hidden_size,
-            self.kv_lora_rank + self.qk_rope_head_dim,
-            bias=config.attention_bias,
-        )
-        self.kv_a_layernorm = GlmMoeDsaRMSNorm(self.kv_lora_rank)
-        self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank,
-            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
-            bias=False,
-        )
-
-        # Output projection
-        self.o_proj = nn.Linear(
-            self.num_heads * self.v_head_dim,
-            config.hidden_size,
-            bias=config.attention_bias,
-        )
-
-        # Indexer components for sparse attention
-        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-        self.wk = nn.Linear(config.hidden_size, self.qk_head_dim, bias=config.attention_bias)
-        self.k_norm = GlmMoeDsaRMSNorm(self.qk_head_dim)
-        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-
-        self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_parameters.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_parameters["factor"]
-            if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-                self.scaling = self.scaling * mscale * mscale
+        super().__init__(config, layer_idx)
+        # Refer: https://arxiv.org/abs/2603.12201 for more details.
+        self.skip_topk = config.indexer_types[layer_idx] == "shared"
+        self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
 
     def forward(
         self,
@@ -309,80 +159,68 @@ class GlmMoeDsaAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        batch_size, seq_length = hidden_states.shape[:-1]
-
-        # For training or when index_topk is not effective, fall back to standard attention
-        # This is a simplified implementation - in practice, you'd implement the full sparse indexer
-        if self.training or seq_length <= self.index_topk:
-            if not is_tracing(hidden_states):
-                logger.warning_once(
-                    "DeepSeek V3.2 sparse attention is not fully implemented in this version. "
-                    "Falling back to standard attention. For production use, please use vLLM or "
-                    "other optimized inference engines.",
-                )
-            return self._standard_attention(
-                hidden_states, position_embeddings, attention_mask, past_key_values, cache_position, **kwargs
-            )
-
-        # Sparse attention implementation would go here
-        # This requires custom CUDA kernels for efficient top-k selection and indexing
-        return self._standard_attention(
-            hidden_states, position_embeddings, attention_mask, past_key_values, cache_position, **kwargs
-        )
-
-    def _standard_attention(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        """Standard attention fallback (same as DeepSeek V3)"""
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
-        if self.q_lora_rank is None:
-            q_states = self.q_proj(hidden_states)
-        else:
-            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-        q_states = q_states.view(query_shape).transpose(1, 2)
+        q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
+        q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-
         k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
         k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-
         cos, sin = position_embeddings
-        if self.config.rope_interleave:
-            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        else:
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
         key_states = torch.cat((k_pass, k_rot), dim=-1)
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
+        # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
+        if self.indexer is not None:
+            indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
+            topk_indices = self.indexer(
+                hidden_states,
+                q_resid,
+                position_embeddings,
+                indexer_mask,
+                position_ids,
+                past_key_values=past_key_values,
+            )  # [B, S, topk]
+        else:
+            if prev_topk_indices is None:
+                raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
+            topk_indices = prev_topk_indices
+
+        sparse_indices = None
+        if self.config._attn_implementation in ("eager", "sdpa"):
+            index_mask = (
+                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+                .scatter(-1, topk_indices.long(), False)
+                .unsqueeze(1)
+            )
+            if attention_mask is None:
+                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
+                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
+                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
+            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+        else:
+            sparse_indices = topk_indices
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -391,30 +229,110 @@ class GlmMoeDsaAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
             **kwargs,
         )
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
-
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+        return attn_output, attn_weights, topk_indices
 
 
-class GlmMoeDsaDecoderLayer(Glm4MoeLiteDecoderLayer):
-    pass
+class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        prev_topk_indices: torch.Tensor | None = None,  # MAIN DIFF with DSV3.2
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
+        hidden_states, _, topk_indices = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
+            prev_topk_indices=prev_topk_indices,  # MAIN DIFF with DSV3.2
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states, topk_indices
 
 
-class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
+class GlmMoeDsaPreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
 
 
-class GlmMoeDsaModel(Glm4MoeModel):
-    pass
+class GlmMoeDsaModel(DeepseekV32Model):
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        topk_indices = None  # MAIN DIFF with DSV3.2
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states, topk_indices = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                prev_topk_indices=topk_indices,  # MAIN DIFF with DSV3.2
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
-class GlmMoeDsaForCausalLM(Glm4MoeForCausalLM):
+class GlmMoeDsaForCausalLM(DeepseekV32ForCausalLM):
     pass
 
 

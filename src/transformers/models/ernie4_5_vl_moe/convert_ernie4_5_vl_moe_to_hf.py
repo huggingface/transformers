@@ -24,10 +24,10 @@ from tokenizers import AddedToken
 
 from transformers import (
     AutoTokenizer,
-    Ernie4_5_VL_MoeConfig,
-    Ernie4_5_VL_MoeImageProcessorFast,
-    Ernie4_5_VL_MoeProcessor,
-    Ernie4_5_VL_MoeVideoProcessor,
+    Ernie4_5_VLMoeConfig,
+    Ernie4_5_VLMoeImageProcessorFast,
+    Ernie4_5_VLMoeProcessor,
+    Ernie4_5_VLMoeVideoProcessor,
     LlamaTokenizer,
 )
 
@@ -225,7 +225,7 @@ def convert_config(model_path, save_dir):
     checkpoint_path = snapshot_download(repo_id=model_path, allow_patterns=["*config*"])
     for filename in sorted(os.listdir(checkpoint_path)):
         if filename == CONFIG_NAME:
-            hf_config = Ernie4_5_VL_MoeConfig()
+            hf_config = Ernie4_5_VLMoeConfig()
             original_config = load_json(checkpoint_path, filename)
 
             # general config
@@ -241,11 +241,12 @@ def convert_config(model_path, save_dir):
             text_config = convert_text_config_to_hf(text_config, original_config)
 
             # total config
-            final_config = Ernie4_5_VL_MoeConfig(
+            final_config = Ernie4_5_VLMoeConfig(
                 text_config=text_config,
                 vision_config=vision_config,
                 image_token_id=image_token_id,
             )
+            setattr(final_config, "architectures", original_config["architectures"])  # carry over
 
             final_config.save_pretrained(save_dir)
             break
@@ -312,10 +313,10 @@ def convert_processor(model_path, save_dir):
     # font used within the video processor
     copyfile(hf_hub_download(FONT_REPO, FONT_NAME), Path(save_dir, FONT_NAME))
 
-    processor = Ernie4_5_VL_MoeProcessor(
-        image_processor=Ernie4_5_VL_MoeImageProcessorFast(),
+    processor = Ernie4_5_VLMoeProcessor(
+        image_processor=Ernie4_5_VLMoeImageProcessorFast(),
         tokenizer=tokenizer,
-        video_processor=Ernie4_5_VL_MoeVideoProcessor(font=str(Path(save_dir, FONT_NAME))),
+        video_processor=Ernie4_5_VLMoeVideoProcessor(font=str(Path(save_dir, FONT_NAME))),
         chat_template=tokenizer.chat_template,
     )
     processor.save_pretrained(save_dir)

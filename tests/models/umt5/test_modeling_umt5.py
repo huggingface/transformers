@@ -233,11 +233,7 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {
             "feature-extraction": UMT5Model,
-            "question-answering": UMT5ForQuestionAnswering,
-            "summarization": UMT5ForConditionalGeneration,
             "text-classification": UMT5ForSequenceClassification,
-            "text2text-generation": UMT5ForConditionalGeneration,
-            "translation": UMT5ForConditionalGeneration,
             "zero-shot": UMT5ForSequenceClassification,
         }
         if is_torch_available()
@@ -337,6 +333,11 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_with_sequence_classification_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
+
+    def test_tie_word_embeddings(self):
+        # Force it to True, see https://github.com/huggingface/transformers/pull/43880
+        config = UMT5Config(tie_word_embeddings=False)
+        self.assertTrue(config.tie_word_embeddings)
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):

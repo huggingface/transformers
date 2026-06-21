@@ -339,7 +339,8 @@ class IdeficsProcessor(ProcessorMixin):
             if add_eos_token:
                 full_text += self.tokenizer.eos_token
 
-            image_objects = self.image_processor(image_objects, **output_kwargs["images_kwargs"])
+            if len(image_objects) > 0:
+                image_objects = self.image_processor(image_objects, **output_kwargs["images_kwargs"])
 
             all_prompts.append(full_text)
             all_images.append(image_objects)
@@ -363,7 +364,6 @@ class IdeficsProcessor(ProcessorMixin):
             padded_input_ids = text_single
             image_count = padded_input_ids.count(self.image_token_id)
             local_max_num_images = min(image_count, max_num_images)
-
             current_images = extracted_images[:local_max_num_images]
 
             if len(current_images) > 0:

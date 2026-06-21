@@ -62,6 +62,9 @@ env:
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
 
+permissions:
+  contents: read
+
 jobs:
   setup:
     name: Setup
@@ -113,8 +116,8 @@ jobs:
             python3 -c "import ast; folder_slices = ast.literal_eval(open('folder_slices.txt').read()); open('slice_ids.txt', 'w').write(str(list(range(len(folder_slices)))))"
             echo "slice_ids=$(cat slice_ids.txt)" >> $GITHUB_OUTPUT
           elif [ "$job" = "run_trainer_and_fsdp_gpu" ]; then
-            echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
-            echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
+            echo "folder_slices=[['trainer'], ['fsdp'], ['ddp']]" >> $GITHUB_OUTPUT
+            echo "slice_ids=[0, 1, 2]" >> $GITHUB_OUTPUT
           fi
 
       - id: set-matrix-quantization
@@ -159,7 +162,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
-        slice_id: [0, 1]
+        slice_id: [0, 1, 2]
     uses: ./.github/workflows/model_jobs.yml
     with:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
@@ -239,7 +242,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
@@ -312,7 +315,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_examples_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.machine_type }}_run_examples_gpu_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_examples_gpu_test_reports
@@ -403,7 +406,7 @@ jobs:
       - name: Run all tests on GPU
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: |
-          python3 -m pytest -v --make-reports="${machine_type}_run_torch_cuda_extensions_gpu_test_reports" tests/deepspeed tests/extended
+          script -q -c "python3 -m pytest -v -rsfE --make-reports=${machine_type}_run_torch_cuda_extensions_gpu_test_reports tests/trainer/distributed/test_trainer_distributed_deepspeed.py" test_outputs.txt
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -414,7 +417,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
           path: ${{ inputs.working-directory-prefix }}/transformers/reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
@@ -449,7 +452,7 @@ jobs:
         working-directory: /transformers
         env:
           commit_sha: ${{ inputs.commit_sha || github.sha }}
-        run: git fetch && git checkout "$commit_sha"
+        run: git fetch origin "$commit_sha" && git checkout "$commit_sha"
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -501,7 +504,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
@@ -575,7 +578,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_kernels_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.machine_type }}_run_kernels_gpu_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_kernels_gpu_test_reports
@@ -590,7 +593,9 @@ jobs:
       # Checkout in order to run `utils/extract_warnings.py`. Avoid **explicit** checkout (i.e. don't specify `ref`) for
       # security reason.
       - name: Checkout transformers
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Install transformers
         run: pip install transformers
@@ -601,9 +606,12 @@ jobs:
       - name: Create output directory
         run: mkdir warnings_in_ci
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        env:
+          ACTIONS_ARTIFACT_MAX_ARTIFACT_COUNT: 2000
         with:
           path: warnings_in_ci
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Show artifacts
         run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
@@ -619,7 +627,7 @@ jobs:
 
       - name: Upload artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: warnings_in_ci
           path: warnings_in_ci/selected_warnings.json

@@ -302,6 +302,37 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         self.assertEqual(outputs, EXPECTED_OUTPUT)
 
     @slow
+    @require_torch
+    def test_small_model_pt_chat_with_response_parsing(self):
+        pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is the capital of France?"},
+                ],
+            },
+        ]
+        pipe.tokenizer.response_schema = {
+            # A real response schema should probably have things like "role" and "content"
+            # and "reasoning_content" but it's unlikely we'd get a tiny model to reliably
+            # output anything like that, so let's keep it simple.
+            "type": "object",
+            "properties": {
+                "first_word": {"type": "string", "x-regex": r"^\s*([a-zA-Z]+)"},
+                "last_word": {"type": "string", "x-regex": r"([a-zA-Z]+)\s*$"},
+            },
+        }
+        outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
+        parsed_message = outputs[0]["generated_text"][-1]
+        # The parsed message should be a dict with the schema keys, not {"role": "assistant", "content": ...}
+        self.assertIn("first_word", parsed_message)
+        self.assertIn("last_word", parsed_message)
+        self.assertNotIn("role", parsed_message)
+        self.assertIsInstance(parsed_message["first_word"], str)
+        self.assertIsInstance(parsed_message["last_word"], str)
+
+    @slow
     def test_small_model_pt_token_audio_input(self):
         pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
 

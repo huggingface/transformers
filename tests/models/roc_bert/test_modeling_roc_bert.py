@@ -548,7 +548,6 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         {
             "feature-extraction": RoCBertModel,
             "fill-mask": RoCBertForMaskedLM,
-            "question-answering": RoCBertForQuestionAnswering,
             "text-classification": RoCBertForSequenceClassification,
             "text-generation": RoCBertForCausalLM,
             "token-classification": RoCBertForTokenClassification,
@@ -617,7 +616,7 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = RoCBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RoCBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=RoCBertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

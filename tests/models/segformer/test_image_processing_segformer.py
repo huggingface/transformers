@@ -18,19 +18,19 @@ import unittest
 from datasets import load_dataset
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    from transformers import SegformerImageProcessor
-
-    if is_torchvision_available():
-        from transformers import SegformerImageProcessorFast
+    from transformers.modeling_outputs import SemanticSegmenterOutput
 
 
 class SegformerImageProcessingTester:
@@ -47,6 +47,7 @@ class SegformerImageProcessingTester:
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         do_reduce_labels=False,
+        num_labels=5,
     ):
         size = size if size is not None else {"height": 30, "width": 30}
         self.parent = parent
@@ -60,6 +61,7 @@ class SegformerImageProcessingTester:
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_reduce_labels = do_reduce_labels
+        self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
         return {
@@ -85,6 +87,24 @@ class SegformerImageProcessingTester:
             torchify=torchify,
         )
 
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {
+            "outputs": SemanticSegmenterOutput(
+                logits=torch.randn(
+                    self.batch_size,
+                    self.num_labels,
+                    self.size["height"],
+                    self.size["width"],
+                )
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.size["height"],
+            "width": self.size["width"],
+        }
+        return inputs, expected_shape
+
 
 def prepare_semantic_single_inputs():
     ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
@@ -99,10 +119,9 @@ def prepare_semantic_batch_inputs():
 
 @require_torch
 @require_vision
-class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = SegformerImageProcessor if is_vision_available() else None
-    fast_image_processing_class = SegformerImageProcessorFast if is_torchvision_available() else None
-
+class SegformerImageProcessingTest(
+    ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
+):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = SegformerImageProcessingTester(self)
@@ -112,7 +131,7 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -122,7 +141,7 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_reduce_labels"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 30, "width": 30})
             self.assertEqual(image_processor.do_reduce_labels, False)
@@ -134,7 +153,7 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.do_reduce_labels, True)
 
     def test_call_segmentation_maps(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -242,7 +261,7 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_reduce_labels(self):
         # Initialize image_processing
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
 
             # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
@@ -261,32 +280,33 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoding = image_processing(image, map, return_tensors="pt")
             self.assertTrue(len(encoding["labels"]) == len(map))
 
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image, dummy_map = prepare_semantic_single_inputs()
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
 
-        image_encoding_slow = image_processor_slow(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
-        image_encoding_fast = image_processor_fast(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_pixel_values = encodings[reference_backend].pixel_values
+        reference_labels = encodings[reference_backend].labels.float()
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(
+                reference_labels,
+                encodings[backend_name].labels.float(),
+                atol=5,
+                mean_atol=0.01,
+            )
 
-        self._assert_slow_fast_tensors_equivalence(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values)
-        self._assert_slow_fast_tensors_equivalence(
-            image_encoding_slow.labels.float(), image_encoding_fast.labels.float(), atol=5, mean_atol=0.01
-        )
-
-    def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence_batched(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
@@ -295,13 +315,20 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         dummy_images, dummy_maps = prepare_semantic_batch_inputs()
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
 
-        encoding_slow = image_processor_slow(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
-
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.labels.float(), encoding_fast.labels.float(), atol=5, mean_atol=0.01
-        )
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_pixel_values = encodings[reference_backend].pixel_values
+        reference_labels = encodings[reference_backend].labels.float()
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(
+                reference_labels,
+                encodings[backend_name].labels.float(),
+                atol=5,
+                mean_atol=0.01,
+            )

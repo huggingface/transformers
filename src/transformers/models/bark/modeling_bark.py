@@ -39,7 +39,6 @@ from ...utils import (
     is_torch_accelerator_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -153,7 +152,7 @@ class BarkSelfAttention(nn.Module):
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         query, key, value = self.att_proj(hidden_states).split(self.embed_dim, dim=2)
@@ -163,7 +162,7 @@ class BarkSelfAttention(nn.Module):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if past_key_values is not None:
-            key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
+            key, value = past_key_values.update(key, value, self.layer_idx)
 
         attn_output, attn_weights = self._attn(query, key, value, attention_mask)
 
@@ -215,7 +214,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         batch_size, query_len, _ = hidden_states.size()
 
@@ -227,7 +226,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if past_key_values is not None:
-            key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
+            key, value = past_key_values.update(key, value, self.layer_idx)
 
         target_dtype = get_target_dtype(query, self)  # if the query is in float32, this is the dtype to cast to for FA
 
@@ -298,7 +297,7 @@ class BarkBlock(GradientCheckpointingLayer):
         attention_mask=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         intermediary_hidden_states = self.layernorm_1(hidden_states)
 
@@ -308,7 +307,6 @@ class BarkBlock(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
 
         attn_output = attn_outputs[0]  # output_attn: output, present_key_values, (attn_weights)
@@ -393,7 +391,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         self.input_embeds_layer = new_embeddings
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @auto_docstring
     def forward(
         self,
@@ -407,7 +404,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | CausalLMOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -415,7 +411,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         if labels is not None:
@@ -488,7 +484,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
                 attention_mask=attention_mask,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             hidden_states = outputs[0]
@@ -993,7 +988,6 @@ class BarkFineModel(BarkPreTrainedModel):
 
         return model_embeds
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @auto_docstring
     def forward(
         self,
@@ -1018,7 +1012,7 @@ class BarkFineModel(BarkPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         if labels is not None:

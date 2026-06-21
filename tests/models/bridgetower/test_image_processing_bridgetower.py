@@ -17,17 +17,9 @@ import unittest
 
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 from ...test_processing_common import url_to_local_path
-
-
-if is_vision_available():
-    from transformers import BridgeTowerImageProcessor
-
-    if is_torchvision_available():
-        from transformers import BridgeTowerImageProcessorFast
 
 
 class BridgeTowerImageProcessingTester:
@@ -97,9 +89,6 @@ class BridgeTowerImageProcessingTester:
 @require_torch
 @require_vision
 class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = BridgeTowerImageProcessor if is_vision_available() else None
-    fast_image_processing_class = BridgeTowerImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = BridgeTowerImageProcessingTester(self)
@@ -109,7 +98,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -120,31 +109,30 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
     @require_vision
     @require_torch
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_mask.float(), encoding_fast.pixel_mask.float())
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_pixel_values = encodings[reference_backend].pixel_values
+        reference_pixel_mask = encodings[reference_backend].pixel_mask.float()
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(reference_pixel_mask, encodings[backend_name].pixel_mask.float())
 
     @require_vision
     @require_torch
     def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
@@ -152,11 +140,16 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             )
 
         dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_mask.float(), encoding_fast.pixel_mask.float())
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_pixel_values = encodings[reference_backend].pixel_values
+        reference_pixel_mask = encodings[reference_backend].pixel_mask.float()
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(reference_pixel_mask, encodings[backend_name].pixel_mask.float())

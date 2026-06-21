@@ -1,0 +1,69 @@
+<!---Copyright 2026 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+# Mixed precision training
+
+Full precision (fp32) training stores and computes everything in 32 bits. Mixed precision uses fp16 or bf16 for the compute-intensive forward and backward passes, while keeping an fp32 copy of the weights for the optimizer update. Compute is faster, weight and activation memory are reduced, and training stability is preserved.
+
+```text
+┌─────────────────────────────────────────────────────┐
+│           MIXED PRECISION TRAINING LOOP             │
+│                                                     │
+│  fp32 master weights ──cast──▶ fp16/bf16            │
+│         ▲                          │                │
+│         │                    FORWARD (autocast)     │
+│         │                    matmuls in fp16/bf16   │
+│         │                    reductions stay fp32   │
+│         │                          │ loss           │
+│         │                    LOSS SCALE ×S  ──fp16  │
+│         │                          │                │
+│         │                    BACKWARD               │
+│         │                    grads in fp16/bf16     │
+│         │                          │                │
+│         │                    UNSCALE ÷S    ──fp16   │
+│         │                    check inf/nan          │
+│         │                    cast grads → fp32      │
+│         └────────────────────────── optimizer.step  │
+└─────────────────────────────────────────────────────┘
+```
+
+Set [`~TrainingArguments.bf16`] or [`~TrainingArguments.fp16`] to `True` to enable mixed precision training. Both are 16-bit types, but bf16 has the same exponent range as fp32 so it almost never overflows. Use bf16 on Ampere or newer GPUs (A100, H100) and fall back to fp16 on older hardware like V100 or T4.
+
+> [!WARNING]
+> Load the model in fp32, otherwise [autocast](https://docs.pytorch.org/docs/stable/amp.html#autocasting) becomes a no-op. Loading in bf16 or fp16 leaves no fp32 master copy for the optimizer to update from.
+
+```py
+from transformers import TrainingArguments
+
+args = TrainingArguments(..., bf16=True)
+args = TrainingArguments(..., fp16=True)
+```
+
+If your model is numerically stable in bf16/fp16, you can skip mixed precision entirely and load and train directly in bf16/fp16. This avoids the fp32 copy of the weights in memory.
+
+## tf32
+
+[tf32](https://blogs.nvidia.com/blog/tensorfloat-32-precision-format/) is a compute mode on Ampere GPUs that uses 10-bit mantissa for matmuls instead of 23-bits. This can give you a speedup, especially when paired with bf16/fp16. PyTorch enables tf32 for matmuls by default on Ampere and newer GPUs, but setting it explicitly in [`TrainingArguments`] ensures it's active regardless of the PyTorch version or environment defaults.
+
+```py
+from transformers import TrainingArguments
+
+args = TrainingArguments(..., bf16=True, tf32=True)
+```
+
+## Next steps
+
+- See the [Kernels](./kernels) guide to learn how to speed up training with custom fused kernels.
+- See the [torch.compile](./torch_compile) guide to learn how to compile the forward and backward pass for additional throughput.

@@ -550,7 +550,9 @@ class MusicgenTester:
             tie_word_embeddings=False,
             audio_channels=self.audio_channels,
         )
-        config = MusicgenConfig(text_encoder_config, audio_encoder_config, decoder_config)
+        config = MusicgenConfig(
+            text_encoder=text_encoder_config, audio_encoder=audio_encoder_config, decoder=decoder_config
+        )
         return config
 
     def prepare_config_and_inputs_for_common(self):
@@ -1291,7 +1293,9 @@ class MusicgenIntegrationTests(unittest.TestCase):
 class MusicgenStereoIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-stereo-small").to(torch_device)
+        return MusicgenForConditionalGeneration.from_pretrained(
+            "facebook/musicgen-stereo-small", dtype=torch.float32
+        ).to(torch_device)
 
     @cached_property
     def processor(self):

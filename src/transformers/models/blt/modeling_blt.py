@@ -38,7 +38,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_blt import (
@@ -175,7 +174,6 @@ class BltTransformerLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
@@ -190,8 +188,6 @@ class BltTransformerLayer(GradientCheckpointingLayer):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
             past_key_values (`Cache`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence
             position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
@@ -210,7 +206,6 @@ class BltTransformerLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -321,7 +316,6 @@ class BltSelfAttention(nn.Module):
         attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor,
         past_key_values=None,
-        cache_position=None,
         **kwargs,
     ):
         bsz, q_len, _ = hidden_states.size()
@@ -338,9 +332,7 @@ class BltSelfAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -637,7 +629,6 @@ class BltLocalEncoder(BltPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         num_patches: int | None = None,
         patch_ids: torch.Tensor | None = None,
@@ -663,7 +654,6 @@ class BltLocalEncoder(BltPreTrainedModel):
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
             if idx == len(self.layers) - 1 or self.config.cross_attn_all_layers:
@@ -679,7 +669,7 @@ class BltLocalEncoder(BltPreTrainedModel):
                     attention_mask=encoder_attention_mask,
                     **kwargs,
                 )
-                patch_embeds = patch_embeds + cross_attention_output
+                patch_embeds = patch_embeds + cross_attention_output.to(patch_embeds.device)
         encoder_cross_states = patch_embeds
         return hidden_states, encoder_cross_states
 
@@ -750,7 +740,6 @@ class BltLocalDecoder(BltPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -786,7 +775,6 @@ class BltLocalDecoder(BltPreTrainedModel):
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
         logits = self.norm(hidden_states)
@@ -817,14 +805,12 @@ class BltGlobalTransformer(BltPreTrainedModel):
 
         self.post_init()
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def forward(
         self,
         inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = inputs_embeds.shape
@@ -841,7 +827,6 @@ class BltGlobalTransformer(BltPreTrainedModel):
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
         return hidden_states
@@ -918,7 +903,6 @@ class BltPatcher(BltPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         patch_size: int | None = None,
         threshold: float | None = None,
         max_patch_length: int | None = None,
@@ -933,20 +917,15 @@ class BltPatcher(BltPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -1225,7 +1204,6 @@ class BltModel(BltPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1276,19 +1254,16 @@ class BltModel(BltPreTrainedModel):
                     self.config.max_patch_length,
                 )
         patch_ids = self._patch_ids_from_lengths(patch_lengths, sequence_length)
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + encoder_embeds.shape[1], device=encoder_embeds.device
-            )
+
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(encoder_embeds.shape[1], device=encoder_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=encoder_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
             position_ids=position_ids,
         )
@@ -1313,13 +1288,12 @@ class BltModel(BltPreTrainedModel):
             **kwargs,
         )
         encoder_cross_states = encoder_cross_states.view(batch_size, patch_lengths.shape[1], -1)
-        global_cache_position = torch.arange(0, encoder_cross_states.shape[1], device=encoder_cross_states.device)
-        global_position_ids = global_cache_position.unsqueeze(0)
+        global_position_ids = torch.arange(0, encoder_cross_states.shape[1], device=encoder_cross_states.device)
+        global_position_ids = global_position_ids.unsqueeze(0)
         global_causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=encoder_cross_states,
             attention_mask=None,
-            cache_position=global_cache_position,
             past_key_values=None,
             position_ids=None,
         )
@@ -1346,7 +1320,6 @@ class BltModel(BltPreTrainedModel):
             attention_mask=causal_mask,
             position_ids=position_ids,
             past_key_values=past_key_values.cross_attention_cache if past_key_values is not None else None,
-            cache_position=cache_position,
             encoder_attention_mask=cross_attn_mask_dec,
             **kwargs,
         )
@@ -1408,7 +1381,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -1466,7 +1438,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

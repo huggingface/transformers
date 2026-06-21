@@ -13,15 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-11-27.*
+*This model was contributed to Hugging Face Transformers on 2025-11-27.*
 
 # NanoChat
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 [NanoChat](https://huggingface.co/karpathy/nanochat-d32) is a compact decoder-only transformer model designed for educational purposes and efficient training. The model features several fundamental architectural innovations which are common in modern transformer models. Therefore, it is a good model to use as a starting point to understand the principles of modern transformer models. NanoChat is a variant of the [Llama](https://huggingface.co/docs/transformers/en/model_doc/llama) architecture, with simplified attention mechanism and normalization layers.
 
@@ -35,14 +30,13 @@ The example below demonstrates how to use NanoChat for text generation with chat
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 chatbot = pipeline(
     task="text-generation",
     model="karpathy/nanochat-d32",
-    dtype=torch.bfloat16,
     device=0
 )
 
@@ -57,17 +51,17 @@ print(outputs[0]["generated_text"][-1]["content"])
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model_id = "karpathy/nanochat-d32"
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -81,7 +75,7 @@ inputs = tokenizer.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt"
-).to(device)
+).to(model.device)
 
 with torch.no_grad():
     outputs = model.generate(
@@ -92,13 +86,6 @@ with torch.no_grad():
 # Decode only the generated tokens (excluding the input prompt)
 generated_tokens = outputs[0, inputs["input_ids"].shape[1]:]
 print(tokenizer.decode(generated_tokens, skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e '{"role": "user", "content": "What is the capital of France?"}' | transformers run --task text-generation --model karpathy/nanochat-d32 --device 0
 ```
 
 </hfoption>

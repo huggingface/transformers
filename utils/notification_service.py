@@ -35,7 +35,7 @@ from slack_sdk import WebClient
 # `additional_files`.
 job_to_test_map = {
     "run_models_gpu": "Models",
-    "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
+    "run_trainer_and_fsdp_gpu": "Trainer & DDP & FSDP",
     "run_pipelines_torch_gpu": "PyTorch pipelines",
     "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
@@ -46,7 +46,7 @@ job_to_test_map = {
 # The values are used as the file names where to save the corresponding CI job results.
 test_to_result_name = {
     "Models": "model",
-    "Trainer & FSDP": "trainer_and_fsdp",
+    "Trainer & DDP & FSDP": "trainer_and_fsdp",
     "PyTorch pipelines": "torch_pipeline",
     "Examples directory": "example",
     "DeepSpeed": "deepspeed",
@@ -55,8 +55,9 @@ test_to_result_name = {
 }
 
 NON_MODEL_TEST_MODULES = [
+    "ddp",
     "deepspeed",
-    "extended",
+    "fsdp",
     "fixtures",
     "generation",
     "onnx",
@@ -65,7 +66,6 @@ NON_MODEL_TEST_MODULES = [
     "sagemaker",
     "trainer",
     "utils",
-    "fsdp",
     "quantization",
     "kernels",
 ]
@@ -586,7 +586,13 @@ class Message:
         for idx, (prev_workflow_run_id, prev_ci_artifacts) in enumerate(
             [self.prev_ci_artifacts] + self.other_ci_artifacts
         ):
-            # To save the dict of new failures and upload to hub repositories
+            # `include_all` is `True` when the CI is running on a pull request, so it treats all failing tests
+            # in the current CI run as "new failing tests". The `utils/check_bad_commit.py`, run in a later job,
+            # will analyze the scenario in depth, in particular if a failing test in the current run is a new
+            # failing test, or already failed before but with the same/different failing reason.
+            include_all = os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment", "pull_request"]
+            if include_all and prev_ci_artifacts is None:
+                prev_ci_artifacts = {}
             new_failures = self.get_new_failures(prev_ci_artifacts=prev_ci_artifacts)
             if new_failures:
                 filename = "new_failures"
@@ -1070,10 +1076,18 @@ if __name__ == "__main__":
         ci_title = ci_title.strip().split("\n")[0].strip()
 
         # Retrieve the PR title and author login to complete the report
+        github_token = os.environ.get("GITHUB_TOKEN")
+        github_headers = {"Authorization": f"token {github_token}"} if github_token else {}
+
         commit_number = ci_url.split("/")[-1]
         ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/commits/{commit_number}"
-        ci_details = requests.get(ci_detail_url).json()
-        ci_author = ci_details["author"]["login"]
+        ci_details = requests.get(ci_detail_url, headers=github_headers).json()
+
+        # We use `.get()` to avoid failures when the GitHub API returns an unexpected response (e.g. due to rate
+        # limiting, where the response won't contain the expected fields). It's preferred to continue the CI run
+        # without failing even if we can't retrieve the author info. That said, the GITHUB_TOKEN should always be
+        # set during CI runs to avoid hitting the rate limit in the first place.
+        ci_author = (ci_details.get("author") or {}).get("login")
 
         merged_by = None
         # Find the PR number (if any) and change the url to the actual PR page.
@@ -1081,12 +1095,13 @@ if __name__ == "__main__":
         if len(numbers) > 0:
             pr_number = numbers[0]
             ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/pulls/{pr_number}"
-            ci_details = requests.get(ci_detail_url).json()
+            ci_details = requests.get(ci_detail_url, headers=github_headers).json()
 
-            ci_author = ci_details["user"]["login"]
+            ci_author = ci_details.get("user", {}).get("login") or ci_author
             ci_url = f"https://github.com/{repository_full_name}/pull/{pr_number}"
 
-            merged_by = ci_details["merged_by"]["login"]
+            merged_by_info = ci_details.get("merged_by")
+            merged_by = merged_by_info.get("login") if merged_by_info is not None else None
 
         if merged_by is None:
             ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author}"
@@ -1505,16 +1520,6 @@ if __name__ == "__main__":
                 token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=other_workflow_id, commit_sha=ci_sha
             )
             other_workflow_run_ids.append(other_workflow_run_id)
-    # triggered via `issue_comment` for CI on pull requests (e.g. using the comment `run-slow:`)
-    elif os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment"]:
-        # TODO (ydshieh): Make this flexible once we implement `run-slow` for AMD CI and others.
-        # The id of the workflow `.github/workflows/self-scheduled-caller.yml` (not of a workflow run of it).
-        prev_workflow_id = "90575235"
-        # TODO (ydshieh): It's better to make sure using the last completed scheduled workflow run with the commit being a parent
-        #  of the PR's `merge_commit`.
-        prev_workflow_run_id = get_last_daily_ci_workflow_run_id(
-            token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=prev_workflow_id
-        )
     else:
         prev_workflow_run_id = os.environ["PREV_WORKFLOW_RUN_ID"]
         other_workflow_run_id = os.environ["OTHER_WORKFLOW_RUN_ID"]

@@ -66,6 +66,14 @@ The `.optimization` module provides:
 
 <img alt="" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/warmup_cosine_hard_restarts_schedule.png"/>
 
+### GreedyLR
+
+[[autodoc]] GreedyLR
+
+### get_greedy_schedule
+
+[[autodoc]] get_greedy_schedule
+
 ### get_linear_schedule_with_warmup
 
 [[autodoc]] get_linear_schedule_with_warmup

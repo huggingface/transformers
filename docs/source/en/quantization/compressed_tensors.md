@@ -16,14 +16,13 @@ rendered properly in your Markdown viewer.
 
 # compressed-tensors
 
-[compressed-tensors](https://github.com/neuralmagic/compressed-tensors) extends [safetensors](https://github.com/huggingface/safetensors) files to compressed tensor data types to provide a unified checkpoint format for storing and loading various quantization and sparsity formats such dense, int-quantized (int8), float-quantized (fp8), and pack-quantized (int4 or int8 weight-quantized packed into int32).
+[compressed-tensors](https://github.com/neuralmagic/compressed-tensors) extends [safetensors](https://github.com/huggingface/safetensors) files to compressed tensor data types to provide a unified checkpoint format for storing and loading various quantization formats such as dense, int-quantized (int8), float-quantized (fp8), and pack-quantized (int4 or int8 weight-quantized packed into int32).
 
 compressed-tensors supports fine-tuning with [PEFT](https://huggingface.co/docs/peft) and includes the following features as well.
 
 - fp8, int4, int8 weight and activation precisions.
 - Quantization scales and zero-points strategies for [tensor, channel, group, block, token](https://github.com/neuralmagic/compressed-tensors/blob/83b2e7a969d70606421a76b9a3d112646077c8de/src/compressed_tensors/quantization/quant_args.py#L43-L52).
 - Dynamic per-token activation quantization (or any static strategy).
-- Weight sparsity (unstructured or semi-structured like 2:4) can be composed with quantization for extreme compression.
 - Quantization of arbitrary modules, not just [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) modules.
 - Targeted support for specific modules by name or class.
 

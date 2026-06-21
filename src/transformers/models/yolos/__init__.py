@@ -20,8 +20,8 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_yolos import *
     from .feature_extraction_yolos import *
+    from .image_processing_pil_yolos import *
     from .image_processing_yolos import *
-    from .image_processing_yolos_fast import *
     from .modeling_yolos import *
 else:
     import sys

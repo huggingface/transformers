@@ -443,7 +443,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         past_buckets_states=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
         **kwargs,
     ):
         sequence_length = hidden_states.shape[1]
@@ -1369,7 +1368,7 @@ class ReformerAttention(nn.Module):
         orig_sequence_length=None,
         output_attentions=False,
         buckets=None,
-        cache_position=None,
+        **kwargs,
     ):
         hidden_states = self.layer_norm(hidden_states)
 
@@ -1382,7 +1381,6 @@ class ReformerAttention(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
             buckets=buckets,
-            cache_position=cache_position,
         )
 
         # add buckets if necessary
@@ -1860,12 +1858,12 @@ class ReformerPreTrainedModel(PreTrainedModel):
             init.constant_(module.mask_value_float32, -1e9)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ReformerModel`].
     """
 )
+@dataclass
 class ReformerModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_predict, hidden_size)`):
@@ -1888,12 +1886,12 @@ class ReformerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ReformerModelWithLMHead`].
     """
 )
+@dataclass
 class ReformerModelWithLMHeadOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
@@ -1983,7 +1981,7 @@ class ReformerModel(ReformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -2209,7 +2207,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for
             labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -2375,7 +2373,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         >>> loss = round(outputs.loss.item(), 2)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -2492,7 +2490,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         >>> loss = model(**inputs, labels=labels).loss
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.reformer(
             input_ids,
@@ -2609,7 +2607,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
 
             For more information, see `num_hashes` in [`ReformerConfig`].
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         reformer_outputs = self.reformer(
             input_ids,

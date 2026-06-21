@@ -34,7 +34,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
+    from transformers import PvtConfig, PvtForImageClassification, PvtImageProcessorPil, PvtModel
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
@@ -233,7 +233,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification(self):
         # only resize + normalize
-        image_processor = PvtImageProcessor.from_pretrained("Zetatech/pvt-tiny-224")
+        image_processor = PvtImageProcessorPil.from_pretrained("Zetatech/pvt-tiny-224")
         model = PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224").to(torch_device).eval()
 
         image = prepare_img()
@@ -260,7 +260,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
     def test_inference_model(self):
         model = PvtModel.from_pretrained("Zetatech/pvt-tiny-224").to(torch_device).eval()
 
-        image_processor = PvtImageProcessor.from_pretrained("Zetatech/pvt-tiny-224")
+        image_processor = PvtImageProcessorPil.from_pretrained("Zetatech/pvt-tiny-224")
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
@@ -293,7 +293,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
         """
         model = PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224", dtype=torch.float16)
         model.to(torch_device)
-        image_processor = PvtImageProcessor(size=224)
+        image_processor = PvtImageProcessorPil(size=224)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")

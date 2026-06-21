@@ -32,6 +32,7 @@ if is_torch_available():
         create_bidirectional_mask,
         create_causal_mask,
         create_chunked_causal_mask,
+        create_masks_for_generate,
         find_packed_sequence_indices,
     )
 
@@ -78,7 +79,6 @@ class MaskTest(unittest.TestCase):
 
         batch_size = 2
         sequence_length = 10
-        cache_position = torch.arange(sequence_length)
 
         # First batch has 3 packed sequences of 4, 2 and 4 tokens respectively, second has 2 of 6 and 4 tokens
         position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
@@ -88,7 +88,6 @@ class MaskTest(unittest.TestCase):
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
             inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
-            cache_position=cache_position,
             past_key_values=None,
             position_ids=position_ids,
         )
@@ -101,7 +100,6 @@ class MaskTest(unittest.TestCase):
 
         batch_size = 2
         sequence_length = 10
-        cache_position = torch.arange(sequence_length)
 
         # First batch has 3 packed sequences of 4, 2 and 4 tokens respectively, second has 2 of 6 and 4 tokens
         position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
@@ -111,7 +109,6 @@ class MaskTest(unittest.TestCase):
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
             inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
-            cache_position=cache_position,
             past_key_values=None,
             position_ids=position_ids,
         )
@@ -125,7 +122,6 @@ class MaskTest(unittest.TestCase):
 
         batch_size = 2
         sequence_length = 10
-        cache_position = torch.arange(sequence_length)
 
         # First batch has 3 packed sequences of 4, 2 and 4 tokens respectively, second has 2 of 6 and 4 tokens
         position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
@@ -135,7 +131,6 @@ class MaskTest(unittest.TestCase):
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
             inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
-            cache_position=cache_position,
             past_key_values=None,
             position_ids=position_ids,
         )
@@ -159,7 +154,6 @@ class MaskTest(unittest.TestCase):
 
         batch_size = 2
         sequence_length = 10
-        cache_position = torch.arange(sequence_length)
 
         # Non-packed sequences
         position_ids = torch.arange(sequence_length)[None, :]
@@ -169,7 +163,6 @@ class MaskTest(unittest.TestCase):
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
             inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
-            cache_position=cache_position,
             past_key_values=None,
             position_ids=position_ids,
         )
@@ -182,7 +175,6 @@ class MaskTest(unittest.TestCase):
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
             inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
-            cache_position=cache_position,
             past_key_values=None,
             position_ids=position_ids,
         )
@@ -202,17 +194,16 @@ class MaskTest(unittest.TestCase):
             [[0 if i < pad_tokens else 1 for i in range(sequence_length)], [1] * sequence_length]
         )
         inputs_embeds = torch.empty_like(input_ids, dtype=torch.float16)
-        cache_position = torch.arange(sequence_length)
-        position_ids = torch.empty(batch_size, sequence_length, dtype=cache_position.dtype)
+        positions = torch.arange(sequence_length)
+        position_ids = torch.empty(batch_size, sequence_length, dtype=positions.dtype)
         position_ids[0, :pad_tokens] = 1
         position_ids[0, pad_tokens:] = torch.arange(sequence_length - pad_tokens)
-        position_ids[1, :] = cache_position
+        position_ids[1, :] = positions
 
         chunked_attention_mask = create_chunked_causal_mask(
             config=config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=None,
             position_ids=position_ids,
         )
@@ -266,14 +257,12 @@ class MaskTest(unittest.TestCase):
             [[0 if i < pad_tokens else 1 for i in range(prefill_size + 1)], [1] * (prefill_size + 1)]
         )
         inputs_embeds = torch.empty_like(input_ids, dtype=torch.float16)
-        cache_position = torch.tensor([prefill_size], dtype=int)
         position_ids = torch.tensor([[prefill_size - pad_tokens], [prefill_size]])
 
         chunked_attention_mask = create_chunked_causal_mask(
             config=config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=cache,
             position_ids=position_ids,
         )
@@ -385,3 +374,26 @@ class MaskTest(unittest.TestCase):
 
         self.assertTrue(padded_mask[0] is not None)
         self.assertTrue(padded_mask[1] is not None)
+
+    def test_create_masks_for_generate_defers_for_unmapped_layer_types(self):
+        """
+        `create_masks_for_generate` pre-builds attention masks for compilable caches by mapping each
+        `config.layer_types` entry through `LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING`. Hybrid models with a layer type
+        that has no mask function (e.g. `linear_attention` in Qwen3.5 / Qwen3-Next, which build their own per-layer
+        masks in the forward) must not raise `KeyError` here; instead the raw attention mask is returned so the model
+        can build its own masks.
+        """
+        config = LlamaConfig(num_hidden_layers=2)
+        config.layer_types = ["full_attention", "linear_attention"]
+        attention_mask = torch.ones((1, 5), dtype=torch.long, device=torch_device)
+
+        # Must not raise (previously `KeyError: 'linear_attention'`), and defers the raw mask to the model.
+        out = create_masks_for_generate(
+            config, inputs_embeds=None, attention_mask=attention_mask, past_key_values=None
+        )
+        self.assertIs(out, attention_mask)
+
+        # `None` (no padding) is deferred too.
+        self.assertIsNone(
+            create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, past_key_values=None)
+        )

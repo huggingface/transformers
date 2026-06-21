@@ -18,14 +18,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import math
 from collections.abc import Callable
 from typing import Optional
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -39,14 +38,10 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.import_utils import is_tracing
 from ...utils.output_capturing import capture_outputs
 from .configuration_glm_moe_dsa import GlmMoeDsaConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -68,6 +63,78 @@ class GlmMoeDsaRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class GlmMoeDsaRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: GlmMoeDsaConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: GlmMoeDsaConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
@@ -96,55 +163,103 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    r"""
-    TODO let's just use the original freqcis computation to not have the view
-    transpose + reshape! This is not optimized!
-    Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
-            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
-            used to pass offsetted position ids when working with a KV-cache.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+class GlmMoeDsaIndexer(nn.Module):
     """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
+    DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
-    b, h, s, d = q.shape
-    q = q.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+    The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention,
+    and returns the additive top-k sparse mask directly (`0` at the selected tokens, `-inf` elsewhere);
+    the raw top-k indices are only ever scattered into that mask, so they are not surfaced.
 
-    b, h, s, d = k.shape
-    k = k.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+    **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
+    `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
+    `past_key_values.update_indexer()`.
+    """
 
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    def __init__(self, config: "GlmMoeDsaConfig", layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
 
+        self.hidden_size: int = config.hidden_size
+        self.n_heads: int = config.index_n_heads
+        self.head_dim: int = config.index_head_dim
+        self.qk_rope_head_dim: int = config.qk_rope_head_dim
+        self.index_topk: int = config.index_topk
+        self.q_lora_rank: int = config.q_lora_rank
 
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
+        self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
+        self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
+        self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
+        self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
+        self.softmax_scale = self.head_dim**-0.5
+
+    @torch.no_grad()
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        q_resid: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        position_ids: torch.Tensor,
+        past_key_values: Cache | None = None,
+    ) -> torch.Tensor:
+        """
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
+
+        This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
+        and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
+        are preserved: Hq·Hk = q·k), and FP8 quantization is a precision optimization, we skip both and compute
+        scores directly in bf16/fp32.
+
+        The scoring logic computes:
+            index_score[b,s,t] = Σ_h (weight[b,s,h] · softmax_scale · q[b,s,h,:] · k[b,t,:])
+
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
+            position_embeddings: `(cos, sin)` from RotaryEmbedding.
+            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
+            past_key_values: Cache object containing the indexer key cache for this layer.
+
+        Returns:
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
+                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+        """
+        batch_size, seq_len, _ = hidden_states.shape
+        cos, sin = position_embeddings
+        q = self.wq_b(q_resid)  # [B, S, H*D]
+        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
+        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+
+        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
+        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+
+        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention
+        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
+
+        if past_key_values is not None:
+            k = past_key_values.update_indexer(k, self.layer_idx)
+
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
+        scores = F.relu(scores)
+
+        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
+        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+        if attention_mask is not None:
+            index_scores = index_scores + attention_mask
+        else:
+            key_positions = torch.arange(index_scores.shape[-1], device=index_scores.device)
+            causal = key_positions[None, None, :] > position_ids[:, :, None]  # [B, S, T]
+            index_scores = index_scores.masked_fill(causal, float("-inf"))
+
+        topk = min(self.index_topk, index_scores.shape[-1])
+        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -184,16 +299,59 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    r"""
+    Applies interleaved Rotary Position Embedding to the query and key tensors.
+
+    DeepSeek lays the rotary dimensions out in interleaved pairs `(x0, x1), (x2, x3), ...`, each rotated by a
+    single frequency. We compute that rotation directly on the even/odd slices instead of de-interleaving with a
+    `view`/`transpose`/`reshape`; the output is bit-identical to the de-interleaved `rotate_half` formulation while
+    avoiding the extra contiguous copy.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`):
+            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
+            used to pass offsetted position ids when working with a KV-cache.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    # `cos`/`sin` are `cat(freqs, freqs)`; the first half holds the per-pair angle.
+    cos = cos[..., : cos.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    sin = sin[..., : sin.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+
+    q1, q2 = q[..., 0::2], q[..., 1::2]
+    k1, k2 = k[..., 0::2], k[..., 1::2]
+
+    q_embed = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
+    k_embed = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1)
+    return q_embed, k_embed
+
+
+def yarn_get_mscale(scale=1, mscale=1):
+    if scale <= 1:
+        return 1.0
+    return 0.1 * mscale * math.log(scale) + 1.0
+
+
 class GlmMoeDsaAttention(nn.Module):
     """
-    DeepSeek V3.2 sparse attention mechanism with indexer.
+    DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
 
-    This implements the native sparse attention from [DeepSeek V3.2](https://huggingface.co/deepseek-ai/DeepSeek-V3.2) which uses
-    an indexer to select top-k tokens for attention computation, making it more efficient for long sequences.
-
-    In GLM-5, the indexer RoPE uses neox_style = false. Therefore, we introduced the indexer_rope_interleave parameter:
-    when indexer_rope_interleave is set to True, RoPE is computed using the same neox_style = false behavior as in the
-    GlmMoeDsa model. This part has not yet been implemented in transformers.
+    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or
+    reuses the previous full layer's top-k selection (`"shared"`).
+    `next_skip_topk` signals that the *next* layer will reuse this
+    layer's top-k, so it is propagated upward via `prev_topk_indices`.
     """
 
     def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
@@ -210,11 +368,8 @@ class GlmMoeDsaAttention(nn.Module):
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
         self.qk_head_dim = config.qk_head_dim
-        self.index_topk = config.index_topk
 
         self.is_causal = True
-
-        # Query projection
         if self.q_lora_rank is None:
             self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         else:
@@ -222,7 +377,6 @@ class GlmMoeDsaAttention(nn.Module):
             self.q_a_layernorm = GlmMoeDsaRMSNorm(config.q_lora_rank)
             self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
-        # Key-Value projections
         self.kv_a_proj_with_mqa = nn.Linear(
             config.hidden_size,
             self.kv_lora_rank + self.qk_rope_head_dim,
@@ -235,18 +389,11 @@ class GlmMoeDsaAttention(nn.Module):
             bias=False,
         )
 
-        # Output projection
         self.o_proj = nn.Linear(
             self.num_heads * self.v_head_dim,
             config.hidden_size,
             bias=config.attention_bias,
         )
-
-        # Indexer components for sparse attention
-        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-        self.wk = nn.Linear(config.hidden_size, self.qk_head_dim, bias=config.attention_bias)
-        self.k_norm = GlmMoeDsaRMSNorm(self.qk_head_dim)
-        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
 
         self.scaling = self.qk_head_dim ** (-0.5)
         if self.config.rope_parameters.get("rope_type", "default") != "default":
@@ -255,6 +402,9 @@ class GlmMoeDsaAttention(nn.Module):
             if mscale_all_dim:
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
+        # Refer: https://arxiv.org/abs/2603.12201 for more details.
+        self.skip_topk = config.indexer_types[layer_idx] == "shared"
+        self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
 
     def forward(
         self,
@@ -262,80 +412,68 @@ class GlmMoeDsaAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        batch_size, seq_length = hidden_states.shape[:-1]
-
-        # For training or when index_topk is not effective, fall back to standard attention
-        # This is a simplified implementation - in practice, you'd implement the full sparse indexer
-        if self.training or seq_length <= self.index_topk:
-            if not is_tracing(hidden_states):
-                logger.warning_once(
-                    "DeepSeek V3.2 sparse attention is not fully implemented in this version. "
-                    "Falling back to standard attention. For production use, please use vLLM or "
-                    "other optimized inference engines.",
-                )
-            return self._standard_attention(
-                hidden_states, position_embeddings, attention_mask, past_key_values, cache_position, **kwargs
-            )
-
-        # Sparse attention implementation would go here
-        # This requires custom CUDA kernels for efficient top-k selection and indexing
-        return self._standard_attention(
-            hidden_states, position_embeddings, attention_mask, past_key_values, cache_position, **kwargs
-        )
-
-    def _standard_attention(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        """Standard attention fallback (same as DeepSeek V3)"""
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
-        if self.q_lora_rank is None:
-            q_states = self.q_proj(hidden_states)
-        else:
-            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-        q_states = q_states.view(query_shape).transpose(1, 2)
+        q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
+        q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-
         k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
         k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-
         cos, sin = position_embeddings
-        if self.config.rope_interleave:
-            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        else:
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
         key_states = torch.cat((k_pass, k_rot), dim=-1)
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
+        # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
+        if self.indexer is not None:
+            indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
+            topk_indices = self.indexer(
+                hidden_states,
+                q_resid,
+                position_embeddings,
+                indexer_mask,
+                position_ids,
+                past_key_values=past_key_values,
+            )  # [B, S, topk]
+        else:
+            if prev_topk_indices is None:
+                raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
+            topk_indices = prev_topk_indices
+
+        sparse_indices = None
+        if self.config._attn_implementation in ("eager", "sdpa"):
+            index_mask = (
+                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+                .scatter(-1, topk_indices.long(), False)
+                .unsqueeze(1)
+            )
+            if attention_mask is None:
+                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
+                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
+                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
+            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+        else:
+            sparse_indices = topk_indices
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -344,15 +482,13 @@ class GlmMoeDsaAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
             **kwargs,
         )
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
-
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+        return attn_output, attn_weights, topk_indices
 
 
 class GlmMoeDsaMLP(nn.Module):
@@ -467,7 +603,7 @@ class GlmMoeDsaMoE(nn.Module):
             .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
             .reshape(-1, self.n_routed_experts)
         )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
+        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
         topk_weights = router_logits.gather(1, topk_indices)
         if self.norm_topk_prob:
@@ -508,31 +644,30 @@ class GlmMoeDsaDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        prev_topk_indices: torch.Tensor | None = None,  # MAIN DIFF with DSV3.2
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _ = self.self_attn(
+        hidden_states, _, topk_indices = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
+            prev_topk_indices=prev_topk_indices,  # MAIN DIFF with DSV3.2
             **kwargs,
         )
         hidden_states = residual + hidden_states
 
-        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        return hidden_states
+        return hidden_states, topk_indices
 
 
 @auto_docstring
@@ -542,12 +677,11 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["GlmMoeDsaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = (
-        is_grouped_mm_available()
-    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
+    _supports_flex_attn = False
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": GlmMoeDsaDecoderLayer,
@@ -555,6 +689,7 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    _keep_in_fp32_modules = ["indexer.weights_proj"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -565,73 +700,6 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, GlmMoeDsaNaiveMoe):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-
-
-class GlmMoeDsaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: GlmMoeDsaConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: GlmMoeDsaConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim * partial_rotary_factor)
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 @auto_docstring
@@ -662,7 +730,6 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -675,20 +742,15 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = (
-                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -696,15 +758,16 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
+        topk_indices = None  # MAIN DIFF with DSV3.2
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = decoder_layer(
+            hidden_states, topk_indices = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
+                prev_topk_indices=topk_indices,  # MAIN DIFF with DSV3.2
                 **kwargs,
             )
 
@@ -741,7 +804,6 @@ class GlmMoeDsaForCausalLM(GlmMoeDsaPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -769,7 +831,6 @@ class GlmMoeDsaForCausalLM(GlmMoeDsaPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

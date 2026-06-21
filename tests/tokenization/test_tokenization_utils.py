@@ -352,3 +352,24 @@ class TokenizerUtilsTest(unittest.TestCase):
             new_tokenizer.decode(new_tokenizer.encode(text_with_nonspecial_tokens), skip_special_tokens=True)
             == text_with_nonspecial_tokens
         )
+
+    def test_import_protobuf_decode_error_without_protobuf(self):
+        from unittest.mock import patch
+
+        from transformers.tokenization_utils_base import import_protobuf_decode_error
+
+        with patch("transformers.tokenization_utils_base.is_protobuf_available", return_value=False):
+            result = import_protobuf_decode_error()
+            self.assertEqual(result, ())
+
+    def test_import_protobuf_decode_error_does_not_mask_exceptions(self):
+        from unittest.mock import patch
+
+        from transformers.tokenization_utils_base import import_protobuf_decode_error
+
+        with patch("transformers.tokenization_utils_base.is_protobuf_available", return_value=False):
+            with self.assertRaises(ValueError):
+                try:
+                    raise ValueError("real error")
+                except import_protobuf_decode_error():
+                    pass

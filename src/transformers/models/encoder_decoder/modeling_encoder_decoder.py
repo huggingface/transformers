@@ -327,7 +327,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqLMOutput:
         r"""
@@ -434,7 +433,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             return_dict=True,
             **kwargs_decoder,
         )

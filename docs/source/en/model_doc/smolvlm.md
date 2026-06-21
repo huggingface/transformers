@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-02-20 and added to Hugging Face Transformers on 2025-02-20.*
+*This model was published in HF papers on 2025-04-07 and contributed to Hugging Face Transformers on 2025-02-20.*
 
 # SmolVLM
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -56,13 +55,12 @@ This model was contributed by [orrzohar](https://huggingface.co/orrzohar).
 The model can accept both images and videos as input, but you should use only one of the modalities at a time. Here's an example code for that.
 
 ```python
-import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
 model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-    dtype=torch.bfloat16,
     device_map="auto"
 )
 
@@ -82,7 +80,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(model.device, dtype=torch.bfloat16)
+).to(model.device)
 
 output_ids = model.generate(**inputs, max_new_tokens=128)
 generated_texts = processor.batch_decode(output_ids, skip_special_tokens=True)
@@ -106,7 +104,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(model.device, dtype=torch.bfloat16)
+).to(model.device)
 
 generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
 generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
@@ -118,13 +116,12 @@ print(generated_texts[0])
 The model can batch inputs composed of several images/videos and text. Here is an example.
 
 ```python
-import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
 model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-    dtype=torch.bfloat16,
     device_map="auto"
 )
 
@@ -164,7 +161,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(model.device, dtype=torch.bfloat16)
+).to(model.device)
 
 generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
 generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
@@ -200,9 +197,9 @@ print(generated_texts[0])
 [[autodoc]] SmolVLMImageProcessor
     - preprocess
 
-## SmolVLMImageProcessorFast
+## SmolVLMImageProcessorPil
 
-[[autodoc]] SmolVLMImageProcessorFast
+[[autodoc]] SmolVLMImageProcessorPil
     - preprocess
 
 ## SmolVLMVideoProcessor

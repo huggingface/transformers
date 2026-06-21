@@ -17,6 +17,7 @@ import math
 import tempfile
 import unittest
 
+import huggingface_hub
 import pytest
 
 from transformers import AutoTokenizer, BitsAndBytesConfig, JambaConfig, is_torch_available
@@ -42,14 +43,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        JambaForCausalLM,
-        JambaForSequenceClassification,
-        JambaModel,
-    )
-    from transformers.models.jamba.modeling_jamba import (
-        HybridMambaAttentionDynamicCache,
-    )
+    from transformers import JambaForCausalLM, JambaForSequenceClassification, JambaModel
 
 
 class JambaConfigTester(ConfigTester):
@@ -70,9 +64,9 @@ class JambaConfigTester(ConfigTester):
         self._create_attn_config(attn_layer_offset=1, attn_layer_period=4)
         self._create_attn_config(attn_layer_offset=2, attn_layer_period=4)
         self._create_attn_config(attn_layer_offset=3, attn_layer_period=4)
-        with self.parent.assertRaises(ValueError):
+        with self.parent.assertRaises(huggingface_hub.errors.StrictDataclassClassValidationError):
             self._create_attn_config(attn_layer_offset=4, attn_layer_period=4)
-        with self.parent.assertRaises(ValueError):
+        with self.parent.assertRaises(huggingface_hub.errors.StrictDataclassClassValidationError):
             self._create_attn_config(attn_layer_offset=5, attn_layer_period=4)
 
     def test_expert_offsets(self):
@@ -80,9 +74,9 @@ class JambaConfigTester(ConfigTester):
         self._create_expert_config(expert_layer_offset=1, expert_layer_period=4)
         self._create_expert_config(expert_layer_offset=2, expert_layer_period=4)
         self._create_expert_config(expert_layer_offset=3, expert_layer_period=4)
-        with self.parent.assertRaises(ValueError):
+        with self.parent.assertRaises(huggingface_hub.errors.StrictDataclassClassValidationError):
             self._create_expert_config(expert_layer_offset=4, expert_layer_period=4)
-        with self.parent.assertRaises(ValueError):
+        with self.parent.assertRaises(huggingface_hub.errors.StrictDataclassClassValidationError):
             self._create_expert_config(expert_layer_offset=5, expert_layer_period=4)
 
     def test_jamba_offset_properties(self):
@@ -249,17 +243,7 @@ class JambaModelTester:
         model.to(torch_device)
         model.eval()
 
-        # first forward pass
-        # Attention: Jamba needs the cache to be initialized to return a cache!
-        past_key_values = HybridMambaAttentionDynamicCache(
-            config, input_ids.shape[0], model.dtype, device=model.device
-        )
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            past_key_values=past_key_values,
-            use_cache=True,
-        )
+        outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
         past_key_values = outputs.past_key_values
 
         # create hypothetical multiple next token and extent to next_input_ids
@@ -280,9 +264,6 @@ class JambaModelTester:
             attention_mask=next_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
-            cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
-            ),
         )["hidden_states"][0]
 
         # select random slice
@@ -341,47 +322,15 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else {}
     )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, HybridMambaAttentionDynamicCache)
+    def _get_conv_state_shape(self, batch_size: int, config):
+        return (batch_size, config.mamba_expand * config.hidden_size, config.mamba_d_conv)
 
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        attention_shape = (batch_size, num_heads, seq_length, head_dim)
-        conv_shape = (batch_size, config.mamba_expand * config.hidden_size, config.mamba_d_conv)
-        ssm_shape = (batch_size, config.mamba_expand * config.hidden_size, config.mamba_d_state)
-
-        self.assertTrue(config.num_hidden_layers, len(past_key_values))
-
-        for idx in range(len(past_key_values)):
-            if config.layers_block_type[idx] == "mamba":
-                self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
-                self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
-            else:
-                self.assertEqual(past_key_values.key_cache[idx].shape, attention_shape)
-                self.assertEqual(past_key_values.value_cache[idx].shape, attention_shape)
-
-    def _check_caches_are_equal(
-        self, cache1: HybridMambaAttentionDynamicCache, cache2: HybridMambaAttentionDynamicCache
-    ):
-        if not isinstance(cache1, HybridMambaAttentionDynamicCache) or not isinstance(
-            cache2, HybridMambaAttentionDynamicCache
-        ):
-            raise ValueError("The wrong cache is being used!")
-
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
-            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.mamba_expand * config.hidden_size, config.mamba_d_state)
 
     def setUp(self):
         self.model_tester = JambaModelTester(self)
-        self.config_tester = JambaConfigTester(self, config_class=JambaConfig, hidden_size=37)
+        self.config_tester = JambaConfigTester(self, config_class=JambaConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -585,6 +534,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
                 ("cuda", 7): "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
                 ("cuda", 8): "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
                 ("rocm", 9): "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew llam bb",
+                ("xpu", 3): "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
             }
         )
         # fmt: on
@@ -609,6 +559,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
                 ("cuda", 7): ["<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew cases Cats", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",],
                 ("cuda", 8): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a story about a woman who was born in the United States",],
                 ("rocm", 9): ["<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",],
+                ("xpu", 3): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|startoftext|>Tell me a story<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|>, I'm not sure, but I'"]
             }
         )
         # fmt: on
