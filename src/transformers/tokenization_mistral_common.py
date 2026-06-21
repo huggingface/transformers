@@ -1100,7 +1100,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         if add_generation_prompt and continue_final_message:
             raise ValueError("Cannot use both `add_generation_prompt` and `continue_final_message`.")
 
-        if isinstance(conversation, (list, tuple)) and (
+        if isinstance(conversation, (list, tuple)) and len(conversation) > 0 and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
         ):
             conversations = conversation

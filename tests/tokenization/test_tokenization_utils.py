@@ -324,6 +324,12 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         self.assertEqual(whole_conversation_tokens, tokens)
 
+    def test_apply_chat_template_empty_conversation(self):
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
+        # Should not raise IndexError
+        tokens = tokenizer.apply_chat_template([], tokenize=True, return_dict=False)
+        self.assertEqual(tokens, [])
+
     def test_encode_message_raises_on_add_generation_prompt(self):
         tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
         conversation = [
