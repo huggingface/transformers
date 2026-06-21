@@ -709,6 +709,9 @@ def flex_attention_mask(
         device (`torch.device` or `str`, optional):
             An optional device to create the mask on.
     """
+    # Ensure offsets are plain Python ints; callers may pass 0-dim tensors (e.g. from cache_position)
+    q_offset = int(q_offset)
+    kv_offset = int(kv_offset)
     # Potentially add the padding 2D mask
     if attention_mask is not None:
         # Older torch (2.5.x) cannot handle sequences not in multiples of 128 (default block size)
