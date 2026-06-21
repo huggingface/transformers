@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Download all artifacts
-        uses: ydshieh/download-artifact@rate_limit_friendly
+        uses: ydshieh/download-artifact@034d574170fc2fbcc74842d25304666dad52f1ad
         with:
           pattern: test-artifact-*
           path: downloaded/
