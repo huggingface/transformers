@@ -1029,6 +1029,7 @@ LAYER_TYPE_CACHE_MAPPING.update(
         "sliding_attention": DynamicSlidingWindowLayer,
         "chunked_attention": DynamicSlidingWindowLayer,
         # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
+        "conv": LinearAttentionLayer,
         "moe": LinearAttentionLayer,
         "linear_attention": LinearAttentionLayer,
         # Hybrid layers (e.g. zamba / zamba2) carry both a linear-attention state and a dynamic-attention state.
@@ -1595,8 +1596,8 @@ class StaticCache(Cache):
                 )
             elif layer_type in sliding_layer_types:
                 layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
-            # Recurrent-state-only layers — linear-attention and MoE — share the same static cache class.
-            elif layer_type in ("linear_attention", "moe"):
+            # Recurrent-state-only layers — linear-attention, conv, MoE — share the same static cache class.
+            elif layer_type in ("linear_attention", "conv", "moe"):
                 layer = LinearAttentionLayer()
             # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
             elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:

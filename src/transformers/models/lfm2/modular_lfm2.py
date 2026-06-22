@@ -339,7 +339,7 @@ class Lfm2Model(LlamaModel):
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention": create_linear_attention_mask(**mask_kwargs),
+                "conv": create_linear_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

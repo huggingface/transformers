@@ -66,6 +66,7 @@ ALLOWED_LAYER_TYPES = (
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
     "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
+    "conv",  # used in LFMv2
     "sparse",
     "dense",
     "hybrid",  # layers that combine attention + mamba in a single block (zamba2, falcon_h1)
@@ -78,11 +79,10 @@ ALLOWED_LAYER_TYPES = (
 
 # Legacy ``layer_types`` strings → current ``linear_attention`` / ``full_attention`` convention.
 # Configs call ``remap_legacy_layer_types`` in their ``__post_init__`` so checkpoints stored on
-# the Hub with the old names (``mamba``, ``attention``, ``conv``) load transparently.
+# the Hub with the old names (``mamba``, ``attention``) load transparently.
 _LEGACY_LAYER_TYPE_REMAP = {
     "mamba": "linear_attention",
     "attention": "full_attention",
-    "conv": "linear_attention",
 }
 
 
