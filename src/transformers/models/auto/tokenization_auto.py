@@ -844,6 +844,10 @@ class AutoTokenizer:
                     tokenizer_class_from_name(tokenizer_config_class)
                     or tokenizer_class_from_name(tokenizer_config_class + "Fast")
                 ).__module__.startswith("transformers.")
+                and not (
+                    tokenizer_class_from_name(tokenizer_config_class)
+                    or tokenizer_class_from_name(tokenizer_config_class + "Fast")
+                ).__module__.startswith("transformers_modules.")
             )
         )
         # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class

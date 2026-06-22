@@ -655,6 +655,7 @@ class AutoImageProcessor:
                 explicit_local_code = (
                     local_image_processor_class is not None
                     and not local_image_processor_class.__module__.startswith("transformers.")
+                    and not local_image_processor_class.__module__.startswith("transformers_modules.")
                 )
             class_ref = _resolve_auto_map_class_ref(image_processor_auto_map, backend)
             upstream_repo = class_ref.split("--")[0] if "--" in class_ref else None
