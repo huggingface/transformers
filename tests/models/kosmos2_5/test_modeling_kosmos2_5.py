@@ -501,25 +501,10 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model = Kosmos2_5ForConditionalGeneration(config).to(torch_device).eval()
 
         with torch.no_grad():
-            output_no_cache = model.generate(
-                **inputs_dict,
-                use_cache=False,
-                max_new_tokens=5,
-                do_sample=False,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-            output_with_cache = model.generate(
-                **inputs_dict,
-                use_cache=True,
-                max_new_tokens=5,
-                do_sample=False,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
+            output_no_cache = model.generate(**inputs_dict, use_cache=False, max_new_tokens=5, do_sample=False)
+            output_with_cache = model.generate(**inputs_dict, use_cache=True, max_new_tokens=5, do_sample=False)
 
-        self.assertEqual(output_no_cache.sequences.tolist(), output_with_cache.sequences.tolist())
-        # assert_similar_generate_outputs(output_no_cache, output_with_cache, atol=5e-2, rtol=5e-2)
+        self.assertEqual(output_no_cache.tolist(), output_with_cache.tolist())
 
     @pytest.mark.generate
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
