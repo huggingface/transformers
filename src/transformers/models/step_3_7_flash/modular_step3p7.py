@@ -39,7 +39,7 @@ from transformers.utils.generic import merge_with_config_defaults
 from transformers.utils.output_capturing import capture_outputs
 
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
-from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, StepRoboticsVisionEncoderConfig
+from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
 from ..mimi.modeling_mimi import MimiLayerScale
 from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention, MiniMaxM3VLDecoderLayer, MiniMaxM3VLRotaryEmbedding, MiniMaxM3VLDenseMLP, MiniMaxM3VLRMSNorm, MiniMaxM3VLSparseMoeBlock, MiniMaxM3VLTopKRouter, MiniMaxM3VLVisionMLP, MiniMaxM3VLVisionAttention, MiniMaxM3VLVisionEncoderLayer, rotate_half, apply_rotary_pos_emb, repeat_kv, eager_attention_forward
 
@@ -160,7 +160,7 @@ class Step3p7VisionMLP(MiniMaxM3VLVisionMLP):
 
 
 class Step3p7VisionAttention(MiniMaxM3VLVisionAttention):
-    def __init__(self, config: StepRoboticsVisionEncoderConfig):
+    def __init__(self, config: Step3p7VisionConfig):
         super().__init__(config)
 
     def forward(
@@ -188,7 +188,7 @@ class Step3p7VisionAttention(MiniMaxM3VLVisionAttention):
 
 
 class Step3p7VisionBlock(MiniMaxM3VLVisionEncoderLayer):
-    def __init__(self, config: StepRoboticsVisionEncoderConfig):
+    def __init__(self, config: Step3p7VisionConfig):
         super().__init__(config)
         self.self_attn = Step3p7VisionAttention(config)
         self.mlp = Step3p7VisionMLP(config)
@@ -207,15 +207,15 @@ class Step3p7VisionBlock(MiniMaxM3VLVisionEncoderLayer):
         return hidden_states
 
 
-class EncoderVisionTransformer(nn.Module):
+class Step3p7VisionEncoder(nn.Module):
     """Stack of vision encoder blocks; holds the shared 2-D RoPE."""
 
-    def __init__(self, config: StepRoboticsVisionEncoderConfig):
+    def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
-        self.resblocks = nn.ModuleList([Step3p7VisionBlock(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([Step3p7VisionBlock(config) for _ in range(config.num_hidden_layers)])
         head_dim = config.hidden_size // config.num_attention_heads
         grid = config.image_size // config.patch_size
-        self.rope = Step3p7VisionRope2D(
+        self.rotary_emb = Step3p7VisionRope2D(
             dim=head_dim,
             max_grid_height=grid,
             max_grid_width=grid,
@@ -226,15 +226,15 @@ class EncoderVisionTransformer(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor, grid_hw: tuple[int, int]) -> torch.Tensor:
-        cos, sin = self.rope.get_cos_sin(grid_hw, device=hidden_states.device, dtype=hidden_states.dtype)
-        for block in self.resblocks:
+        cos, sin = self.rotary_emb.get_cos_sin(grid_hw, device=hidden_states.device, dtype=hidden_states.dtype)
+        for block in self.layers:
             hidden_states = block(hidden_states, attention_mask=None, position_embeddings=(cos, sin))
         return hidden_states
 
 
-class StepRoboticsVisionEncoder(nn.Module):
+class Step3p7VisionModel(nn.Module):
     # both absolute position_embeddings (Clip, siglip) + 2d rope (like minimax)
-    def __init__(self, config: StepRoboticsVisionEncoderConfig):
+    def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -248,15 +248,14 @@ class StepRoboticsVisionEncoder(nn.Module):
             stride=self.patch_size,
             bias=False,
         )
-        self.ln_pre = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
+        self.pre_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
         self.posemb_grid_size = self.image_size // self.patch_size
         self.positional_embedding = nn.Parameter(
             (self.hidden_size**-0.5) * torch.randn(self.posemb_grid_size**2, self.hidden_size)
         )
         
-        # downsmapling
-        self.transformer = EncoderVisionTransformer(config)
+        self.model = Step3p7VisionEncoder(config)
         self.vit_downsampler1 = nn.Conv2d(self.hidden_size, self.hidden_size * 2, kernel_size=3, stride=2, padding=1)
         self.vit_downsampler2 = nn.Conv2d(
             self.hidden_size * 2, self.hidden_size * 4, kernel_size=3, stride=2, padding=1
@@ -278,8 +277,16 @@ class StepRoboticsVisionEncoder(nn.Module):
         hidden_state = self.conv1(pixel_values)
         hidden_state = hidden_state.flatten(2).transpose(1, 2)
         hidden_state = hidden_state + self.sample_abs_posemb(grid_h, grid_w)
-        hidden_state = self.ln_pre(hidden_state)
-        return self.transformer(hidden_state, grid_hw=(grid_h, grid_w))
+        hidden_state = self.pre_layernorm(hidden_state)
+        hidden_state = self.model(hidden_state, grid_hw=(grid_h, grid_w))
+
+        B, P = hidden_state.shape[:2]
+        HW = int(P**0.5)
+        hidden_state = hidden_state.permute(0, 2, 1).view(B, -1, HW, HW)
+        hidden_state = self.vit_downsampler1(hidden_state)
+        hidden_state = self.vit_downsampler2(hidden_state)
+        B, C, HW, HW = hidden_state.shape
+        return hidden_state.view(B, -1, HW * HW).permute(0, 2, 1)
 
 
 # Text model
@@ -329,9 +336,6 @@ class Step3p7PreTrainedModel(PreTrainedModel):
 
 class Step3p7RotaryEmbedding(MiniMaxM3VLRotaryEmbedding):
     def __init__(self, config: Step3p7TextConfig, device=None):
-        if not config.rope_parameters:
-            config = copy.copy(config)
-            config.rope_parameters = config.rope_scaling or {"rope_type": "default", "rope_theta": config.rope_theta}
         super().__init__(config, device=device)
 
     @staticmethod
@@ -426,12 +430,12 @@ class Step3p7Attention(MiniMaxM3VLAttention):
             config.rope_parameters = config.rope_scaling or {"rope_type": "default", "rope_theta": config.rope_theta}
         super().__init__(config, layer_idx)
         self.num_attention_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_attention_groups
+        self.num_key_value_heads = config.num_key_value_heads
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.q_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
-        self.indexer = None
+        self.indexer = None  # Step3p7 has no minimax_m3_sparse layers; prevents converter from copying MiniMaxM3VLIndexer
 
     def forward(
         self,
@@ -582,15 +586,14 @@ class Step3p7TextModel(Step3p7TextPreTrainedModel):
 
 class Step3p7Model(Step3p7PreTrainedModel):
     config: Step3p7Config
-    base_model_prefix = ""
 
     def __init__(self, config: Step3p7Config):
         Step3p7PreTrainedModel.__init__(self, config)
-        self.vision_model = StepRoboticsVisionEncoder(config.vision_config)
+        self.vision_model = Step3p7VisionModel(config.vision_config)
         self.language_model = Step3p7TextModel(config.text_config)
         self.vocab_size = config.text_config.vocab_size
-        self.vit_large_projector = nn.Linear(
-            config.vision_config.width * 4, config.text_config.hidden_size, bias=config.projector_bias
+        self.multi_modal_projector = nn.Linear(
+            config.vision_config.hidden_size * 4, config.text_config.hidden_size, bias=config.projector_bias
         )
         self.image_placeholder_token_id = config.image_token_id
 
@@ -625,18 +628,6 @@ class Step3p7Model(Step3p7PreTrainedModel):
         inputs_embeds = inputs_embeds.unsqueeze(0)
         return inputs_embeds
 
-    def _process_image_features(self, image_features: torch.Tensor) -> torch.Tensor:
-        B, P = image_features.shape[:2]
-        HW = int(P**0.5)
-        image_features = image_features.permute(0, 2, 1).view(B, -1, HW, HW)
-        image_features = self.vision_model.vit_downsampler1(image_features)
-        image_features = self.vision_model.vit_downsampler2(image_features)
-
-        B, C, HW, HW = image_features.shape
-        image_features = image_features.view(B, -1, HW * HW).permute(0, 2, 1)
-        image_features = self.vit_large_projector(image_features)
-        return image_features
-
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -650,11 +641,11 @@ class Step3p7Model(Step3p7PreTrainedModel):
             if patch_pixel_values.shape[0] == 0:
                 patch_pixel_values = None
 
-        image_features = self._process_image_features(
+        image_features = self.multi_modal_projector(
             self.vision_model(pixel_values.to(self.dtype).to(self.device))
         )
         patch_image_features = (
-            self._process_image_features(
+            self.multi_modal_projector(
                 self.vision_model(patch_pixel_values.to(self.dtype).to(self.device))
             )
             if patch_pixel_values is not None
@@ -694,7 +685,6 @@ class Step3p7Model(Step3p7PreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -708,7 +698,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
             elif image_embeds is not None:
                 if image_embeds.dim() < 2:
                     raise ValueError(f"Unexpected shape for image_embeds: {image_embeds.shape}")
-                processed = self._process_image_features(image_embeds.to(self.dtype).to(self.device))
+                processed = self.multi_modal_projector(image_embeds.to(self.dtype).to(self.device))
                 image_features = [processed[i].view(-1, processed.shape[-1]) for i in range(processed.shape[0])]
             else:
                 image_features = None
@@ -750,7 +740,11 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {
         "^vision_model": "model.vision_model",
         r"^model(?!\.(language_model|vision_model))": "model.language_model",
-        "^vit_large_projector": "model.vit_large_projector",
+        "^vit_large_projector": "model.multi_modal_projector",
+        "^multi_modal_projector": "model.multi_modal_projector",
+        ".transformer.resblocks.": ".model.layers.",
+        ".transformer.": ".model.",
+        ".ln_pre.": ".pre_layernorm.",
         ".ls_1.gamma": ".ls_1.scale",
         ".ls_2.gamma": ".ls_2.scale",
         ".mlp.c_fc.": ".mlp.fc1.",
@@ -798,6 +792,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -824,6 +819,8 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
+        if isinstance(logits_to_keep, int) and logits_to_keep > 0:
+            hidden_states = hidden_states[:, -logits_to_keep:]
         logits = self.lm_head(hidden_states)
 
         loss = None
