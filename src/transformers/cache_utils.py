@@ -1366,7 +1366,9 @@ class Cache:
     @property
     def max_batch_size(self) -> int:
         """Return the maximum batch size of the cache"""
-        values = [layer.max_batch_size for layer in self.layers]
+        # ``LinearAttentionLayer`` sets ``max_batch_size`` lazily — skip layers that haven't been
+        # initialized yet (``generate`` queries this on a fresh cache during cache-reuse checks).
+        values = [layer.max_batch_size for layer in self.layers if hasattr(layer, "max_batch_size")]
         if len(set(values)) > 1:
             raise ValueError(f"Max batch size is not consistent across layers: {values}")
         return values[0]
