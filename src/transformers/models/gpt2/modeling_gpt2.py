@@ -433,7 +433,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)
-        if isinstance(module, (nn.Linear, Conv1D)):
+        if isinstance(module, Conv1D):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)

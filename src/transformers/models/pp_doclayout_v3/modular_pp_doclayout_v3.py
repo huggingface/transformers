@@ -556,7 +556,7 @@ class PPDocLayoutV3PreTrainedModel(RTDetrPreTrainedModel):
             init.xavier_uniform_(module.decoder.class_embed.weight)
             init.constant_(module.decoder.class_embed.bias, bias)
 
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -564,15 +564,6 @@ class PPDocLayoutV3PreTrainedModel(RTDetrPreTrainedModel):
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-
-        if isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight.data[module.padding_idx])
 
 
 def mask_to_box_coordinate(mask, dtype):
