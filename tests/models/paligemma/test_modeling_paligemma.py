@@ -158,12 +158,15 @@ class PaliGemmaVisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, :16] = config.image_token_index
+        
+        # Important! prepare the mask after replacing adding more pad tokens
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -288,8 +291,6 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_attention_mask_with_token_types(self):
         """Test that attention masking works correctly both with and without token type IDs."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        # remove possible padding tokens so we get full bidirectional mask below
-        inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
 
         for model_class in self.all_model_classes:
             model = model_class._from_config(config, attn_implementation="eager")
