@@ -3225,3 +3225,116 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         self.delay_pattern -= self.active_batches[:, None].int()
 
         return scores
+
+
+class ForceWordsLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] that enforces that specified sequences of tokens appear in the generated output.
+    This processor works by checking whether the end of the already-generated tokens matches a prefix of an
+    unsatisfied forced word. When a prefix match is found, the next token is forced to be the continuation
+    of the matched prefix, effectively "completing" the forced word mid-sentence. Once a forced word is fully
+    generated, it is marked satisfied and no further forcing is applied.
+
+    The key behavioral improvement over naive biasing is proper state management: satisfied constraints
+    are removed from consideration, allowing normal autoregressive generation to resume naturally after a
+    forced phrase is produced.
+
+    Single-token forced words are biased (not force) to nudge the model toward including them naturally,
+    avoiding the "directly after input" issue. Multi-token forced words only force the continuation once
+    the model has naturally started generating their prefix, enabling natural mid-sentence placement.
+
+    Args:
+        force_words_ids (`list[list[int]]` or `list[list[list[int]]]`):
+            List of token ids that must be generated. If given a `list[list[int]]`, this is treated as a
+            simple list of words that must be included. If given a `list[list[list[int]]]`, this is treated
+            as a list of disjunctive groups, where at least one word from each group must be included.
+        num_beams (`int`):
+            Number of beams used in the generation method.
+        vocab_size (`int`, *optional*):
+            Size of the model vocabulary. Required for single-token bias initialization.
+        device (`str` or `torch.device`, *optional*, defaults to `"cpu"`):
+            Device to use for tensor operations.
+    """
+
+    def __init__(
+        self,
+        force_words_ids: list[list[int]] | list[list[list[int]]],
+        num_beams: int,
+    ):
+        self._num_beams = num_beams
+        self._build_disjunctive_groups(force_words_ids)
+
+    def _build_disjunctive_groups(self, force_words_ids):
+        if not force_words_ids:
+            self._disjunctive_groups = []
+            return
+        if isinstance(force_words_ids[0][0], list):
+            self._disjunctive_groups = [[tuple(word) for word in group] for group in force_words_ids]
+        else:
+            self._disjunctive_groups = [[tuple(word) for word in force_words_ids]]
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if not self._disjunctive_groups:
+            return scores
+
+        batch_size = input_ids.shape[0] // self._num_beams
+        mask = torch.zeros_like(scores)
+        bias = torch.zeros_like(scores)
+
+        for batch_id in range(batch_size):
+            for beam_id in range(self._num_beams):
+                idx = batch_id * self._num_beams + beam_id
+                sent = input_ids[idx].tolist()
+
+                for group in self._disjunctive_groups:
+                    if self._is_group_satisfied(sent, group):
+                        continue
+                    unsat_single_tokens = [
+                        word[0] for word in group
+                        if len(word) == 1 and not self._word_appears(sent, word)
+                    ]
+                    if unsat_single_tokens:
+                        bias[idx, unsat_single_tokens] = 50.0
+
+                    next_token = self._next_forced_token(sent, group)
+                    if next_token is not None:
+                        allowed = torch.full((scores.shape[-1],), -math.inf, device=scores.device)
+                        allowed[next_token] = 0.0
+                        mask[idx] += allowed
+                        break
+
+        scores = scores + mask + bias
+        return scores
+
+    def _is_group_satisfied(self, sent, group):
+        return any(self._word_appears(sent, word) for word in group)
+
+    def _word_appears(self, sent, word):
+        word_len = len(word)
+        if word_len == 0:
+            return True
+        for i in range(len(sent) - word_len + 1):
+            if tuple(sent[i : i + word_len]) == word:
+                return True
+        return False
+
+    def _next_forced_token(self, sent, group):
+        best_token = None
+        best_len = 0
+        for word in group:
+            if self._word_appears(sent, word):
+                continue
+            word_len = len(word)
+            for match_len in range(word_len - 1, 0, -1):
+                if len(sent) >= match_len and tuple(sent[-match_len:]) == word[:match_len]:
+                    if match_len > best_len:
+                        best_len = match_len
+                        best_token = word[match_len]
+                    break
+            else:
+                if word_len == 1 and best_len == 0:
+                    pass
+                elif word_len > 1 and best_len == 0:
+                    pass
+        return best_token

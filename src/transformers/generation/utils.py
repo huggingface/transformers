@@ -79,6 +79,7 @@ from .logits_process import (
     ExponentialDecayLengthPenalty,
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
+    ForceWordsLogitsProcessor,
     InfNanRemoveLogitsProcessor,
     LogitNormalization,
     LogitsProcessorList,
@@ -1160,6 +1161,13 @@ class GenerationMixin(ContinuousMixin):
                 NoBadWordsLogitsProcessor(
                     generation_config.bad_words_ids,
                     generation_config._eos_token_tensor,
+                )
+            )
+        if generation_config.force_words_ids is not None:
+            processors.append(
+                ForceWordsLogitsProcessor(
+                    generation_config.force_words_ids,
+                    generation_config.num_beams or 1,
                 )
             )
         if (
