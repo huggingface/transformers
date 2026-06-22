@@ -748,6 +748,19 @@ def infer_auto_device_map(
 
             # Assign tied modules if any.
             for tied_module_name in tied_module_names:
+                if tied_module_name in device_map and device_map[tied_module_name] != device:
+                    # This tied module was already assigned to a different device,
+                    # which would cause weights to be split across GPUs.
+                    # Move it to the current device to keep tied weights together.
+                    old_device = device_map[tied_module_name]
+                    module_size = module_sizes.get(tied_module_name, 0)
+                    device_memory_used[device] += module_size
+                    device_memory_used[old_device] -= module_size
+                    if verbose:
+                        print(
+                            f"  Moving tied module {tied_module_name} from device {old_device} "
+                            f"to {device} to keep tied weights together."
+                        )
                 if tied_module_name in [m[0] for m in modules_to_treat]:
                     # Find the index of the tied module in the list
                     tied_module_index = next(i for i, (n, _) in enumerate(modules_to_treat) if n == tied_module_name)
