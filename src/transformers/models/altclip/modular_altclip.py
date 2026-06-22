@@ -226,6 +226,7 @@ class AltCLIPVisionEmbeddings(CLIPVisionEmbeddings):
 
 
 class AltCLIPPreTrainedModel(CLIPPreTrainedModel):
+    _no_split_modules = ["AltRobertaEmbeddings", "AltRobertaLayer", "AltCLIPEncoderLayer", "AltCLIPVisionEmbeddings"]
     _can_record_outputs = {
         "hidden_states": AltCLIPEncoderLayer,
         "attentions": AltCLIPAttention,

@@ -32,6 +32,10 @@ class LagunaConfig(PreTrainedConfig):
     r"""
     num_attention_heads_per_layer (`list[int]`, *optional*):
         Per-layer override for ``num_attention_heads``. Length must equal ``num_hidden_layers``.
+    gating (`bool` or `str`, *optional*, defaults to `True`):
+        Softplus output-gate granularity. ``True`` or ``"per-head"`` applies one gate per head,
+        broadcast across ``head_dim``; ``"per-element"`` applies one gate per ``(head, head_dim)``
+        channel.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type — ``"dense"`` or ``"sparse"``. Length must equal
         ``num_hidden_layers``. Defaults to first layer dense, rest sparse.
@@ -61,29 +65,23 @@ class LagunaConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.g_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
-        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
-        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise_allreduce",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 100352
@@ -115,6 +113,7 @@ class LagunaConfig(PreTrainedConfig):
     # Laguna-specific attention
     head_dim: int = 128
     attention_bias: bool = False
+    gating: bool | str = True
     num_attention_heads_per_layer: list[int] | None = None
     # Laguna-specific MoE
     mlp_layer_types: list[str] | None = None

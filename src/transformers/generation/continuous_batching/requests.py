@@ -59,10 +59,9 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         allocated_memory = torch.xpu.memory_allocated(device)
     elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
         device = torch.device("mps")
-        # MPS memory reporting (PyTorch 2.0+)
-        total_memory = torch.mps.driver_allocated_memory()
-        allocated_memory = total_memory - getattr(torch.mps, "recommended_max_memory")()
-        reserved_memory = 0  # MPS does not track reserved separately
+        total_memory = torch.mps.recommended_max_memory()
+        allocated_memory = torch.mps.current_allocated_memory()
+        reserved_memory = torch.mps.driver_allocated_memory()
     else:
         device = torch.device("cpu")
         if is_psutil_available():
@@ -283,18 +282,21 @@ class RequestState:
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
         if self._true_initial_tokens:
-            self.generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
-            self.initial_tokens = self.initial_tokens[: self._true_initial_tokens]
+            generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
+            prompt_ids = self.initial_tokens[: self._true_initial_tokens]
+        else:
+            generated_tokens = self.generated_tokens[:]
+            prompt_ids = self.initial_tokens
         return GenerationOutput(
             request_id=self.request_id,
-            prompt_ids=self.initial_tokens,
-            generated_tokens=self.generated_tokens,
-            logprobs=self.logprobs,
+            prompt_ids=prompt_ids,
+            generated_tokens=generated_tokens,
+            logprobs=self.logprobs[:],
             error=self.error,
             status=self.status,
             created_time=self.created_time,
             lifespan=self.lifespan,
-            timestamps=self.timestamps,
+            timestamps=self.timestamps[:] if self.timestamps is not None else None,
         )
 
     def fork(self, new_request_id: str) -> "RequestState":

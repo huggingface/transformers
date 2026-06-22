@@ -22,9 +22,19 @@ import torch
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import CompileConfig, ContinuousBatchingConfig
 from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
+from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .requests import logger
 from .utils import WorkloadHints
+
+
+FALLBACK_DEFAULTS = {
+    "max_requests_per_batch": 1024,
+    "max_blocks_per_request": 32,
+    "q_padding_interval_size": 64,
+    "kv_padding_interval_size": 64 * 256,  # 64 blocks of 256 tokens ie. 16384 tokens
+    "max_cached_graphs": 32,
+}
 
 
 def resolve_continuous_batching_config(
@@ -75,25 +85,35 @@ def resolve_continuous_batching_config(
 
 
 def resolve_using_hints(cb_config: ContinuousBatchingConfig, workload_hints: WorkloadHints | None) -> None:
-    """Fills `max_blocks_per_request` from the workload hints, when the user did not set it explicitly."""
+    """Fills some attributes from the workload hints, when the user did not set it explicitly: `max_blocks_per_request`
+    and `max_requests_per_batch`."""
     # The max number of blocks per request is an even number large enough to hold the max request length
     if cb_config.max_blocks_per_request is None and workload_hints is not None:
         max_sequence_length = workload_hints.max_prompt_length + workload_hints.max_generated_length
         if max_sequence_length > 0:
             blocks_per_request = int(ceil(max_sequence_length / cb_config.block_size)) + 1
             cb_config.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
+    # The maximum number of requests per batch is the minimum of the workload hints and the fallback default
+    if cb_config.max_requests_per_batch is None and workload_hints is not None:
+        if workload_hints.num_requests > 0:  # guard against bad hints
+            max_requests_per_batch = min(workload_hints.num_requests, FALLBACK_DEFAULTS["max_requests_per_batch"])
+        else:
+            max_requests_per_batch = FALLBACK_DEFAULTS["max_requests_per_batch"]
+        cb_config.max_requests_per_batch = max_requests_per_batch
 
 
 def resolve_without_hints(cb_config: ContinuousBatchingConfig) -> None:
     """Fills any remaining unset/sentinel attribute with a fallback default."""
+    if cb_config.max_requests_per_batch is None:
+        cb_config.max_requests_per_batch = FALLBACK_DEFAULTS["max_requests_per_batch"]
     if cb_config.max_blocks_per_request is None:
-        cb_config.max_blocks_per_request = 32
+        cb_config.max_blocks_per_request = FALLBACK_DEFAULTS["max_blocks_per_request"]
     if cb_config.q_padding_interval_size == 0:
-        cb_config.q_padding_interval_size = 64
+        cb_config.q_padding_interval_size = FALLBACK_DEFAULTS["q_padding_interval_size"]
     if cb_config.kv_padding_interval_size == 0:
-        cb_config.kv_padding_interval_size = 64 * 256  # 64 blocks of 256 tokens ie. 16384 tokens
+        cb_config.kv_padding_interval_size = FALLBACK_DEFAULTS["kv_padding_interval_size"]
     if cb_config.max_cached_graphs == 0:
-        cb_config.max_cached_graphs = 32
+        cb_config.max_cached_graphs = FALLBACK_DEFAULTS["max_cached_graphs"]
 
 
 def ensure_decode_fast_path_is_available(
@@ -103,27 +123,31 @@ def ensure_decode_fast_path_is_available(
     available, and no user-provided max blocks per request, set it to the fallback default."""
     # Then, if the decode fast path is not turned off, check if it is available
     if cb_config.max_blocks_per_request != 0:
-        # NOTE: block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
-        if is_flash_attention_requested(config, version=3):
+        # NOTE: For CUDA, block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
+        cuda_available = torch.cuda.is_available()
+        fa_cuda = is_flash_attention_requested(config, version=3) and cuda_available
+        # XPU support is given through its kernel variation `kernels-community/flash-attn2`
+        xpu_available = is_torch_xpu_available()
+        fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
+        if fa_cuda or fa_xpu:  # Block table is only supported on these
             flash_attn_with_kvcache = lazy_import_paged_flash_attention(config._attn_implementation)[1]
-            conditions = [
-                torch.cuda.is_available(),  # Block table is only supported on CUDA
-                flash_attn_with_kvcache is not None,  # The `flash_attn_with_kvcache` fn is needed
-            ]
             # Throw a warning only if the decode fast path was requested by the user
-            if not all(conditions):
+            if flash_attn_with_kvcache is None:
                 if user_requested:
                     logger.warning(
                         f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
-                        f"because at least one condition is not met: {conditions}."
+                        f"because `flash_attn_with_kvcache` is not available for {config._attn_implementation = }."
                     )
                 cb_config.max_blocks_per_request = 0
-        # Specific warning for attn implementation other than FA3
+        # Specific warning for unsupported attention implementation/device combinations
         else:
             if user_requested:
                 logger.warning(
                     f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
-                    f"because the attention implementation is not FA3. Got {config._attn_implementation = }."
+                    "because the attention implementation and device combination is not supported. Supported "
+                    "combinations are Flash Attention 3 on CUDA, or Flash Attention 2 on XPU through "
+                    "`kernels-community/flash-attn2`. "
+                    f"Got {config._attn_implementation = }, {cuda_available = }, {xpu_available = }."
                 )
             cb_config.max_blocks_per_request = 0
 
@@ -136,14 +160,17 @@ def resolve_compile_configs(
 ) -> None:
     """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed.
     Default config use full compile over regional compile, because the throughput is significantly higher (~15%)"""
+    default_mode = "max-autotune-no-cudagraphs" if cb_config.default_compile_level >= 2 else "default"
+    default_dynamic = cb_config.default_compile_level <= 2
     # For each config, priority is: explicit config, default config, fallback config, None
     if cb_config.varlen_compile_config is None:
-        if cb_config.use_default_compile_configs:
+        if cb_config.default_compile_level > 0:
+            # TODO: now that max_seqlen_k is bucketted, is that still True?
             # We don't use compile with flash varlen, because max_seqlen_k is volatile and introduces recompilations
             if is_flash_attn:
                 varlen_config = None
             else:
-                varlen_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=True, dynamic=True)
+                varlen_config = CompileConfig(mode=default_mode, fullgraph=True, dynamic=default_dynamic)
         elif fallback_compile_config is not None:
             varlen_config = fallback_compile_config
         else:
@@ -152,9 +179,9 @@ def resolve_compile_configs(
         varlen_config = cb_config.varlen_compile_config
 
     if cb_config.decode_compile_config is None:
-        if cb_config.use_default_compile_configs:
+        if cb_config.default_compile_level > 0:
             # Paged attention is wrapped in @torch.compiler.disable so we can't use fullgraph
-            decode_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=False, dynamic=False)
+            decode_config = CompileConfig(mode=default_mode, fullgraph=False, dynamic=default_dynamic)
         elif fallback_compile_config is not None:
             decode_config = fallback_compile_config
         else:
@@ -249,3 +276,21 @@ def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_
 def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, has_logit_processors: bool) -> None:
     if cb_config.max_memory_percent is None:
         cb_config.max_memory_percent = 0.8 if has_logit_processors else 0.9
+
+
+def update_cb_config_after_cache_creation(
+    cb_config: ContinuousBatchingConfig,
+    num_blocks: int,
+    max_batch_tokens: int,
+    use_prefix_sharing: bool,
+) -> None:
+    """Updates the continuous batching config with the concrete values inferred during the creation of the cache."""
+    # Memoize concrete values
+    cb_config.num_blocks = num_blocks
+    cb_config.max_batch_tokens = max_batch_tokens
+    # Cap the number of max requests per batch to the max tokens per batch
+    cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, max_batch_tokens)
+    # And if there is no prefix sharing, we can cap the number of request per batch (1 request = 1 block at least)
+    if not use_prefix_sharing:
+        cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, num_blocks)
+    # TODO: should we align the max number of request per batch to a multiple of 32 ?

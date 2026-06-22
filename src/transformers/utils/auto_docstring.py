@@ -16,6 +16,7 @@ from __future__ import annotations
 import inspect
 import os
 from collections.abc import Mapping
+from dataclasses import is_dataclass as _is_python_dataclass
 from functools import lru_cache
 from pathlib import Path
 from types import UnionType
@@ -4202,7 +4203,27 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         is_dataclass = True
         doc_class = cls.__doc__
         if custom_args is None and doc_class:
-            custom_args = doc_class
+            # Normalize to 0 indent so it combines cleanly with parent args below
+            custom_args = set_min_indent(doc_class.strip("\n"), 0)
+
+        # Pass over docs from the direct parent, if it is a class from `modeling_outputs.py`
+        direct_ancestor = cls.__mro__[1]
+        if direct_ancestor.__name__ != "ModelOutput" and direct_ancestor.__doc__:
+            custom_args = "" if custom_args is None else custom_args
+            # Parse the ancestor's doc and rebuild args at 0 indent to avoid an indentation
+            # mismatch: the ancestor's __doc__ may have an Args: section at non-zero indent,
+            # which after set_min_indent leaves ancestor args at >0 indent so _re_param
+            # (which requires \s{0,0}) silently skips them.
+            _ancestor_params, _ = parse_docstring(direct_ancestor.__doc__)
+            if _ancestor_params:
+                _ancestor_text = "".join(
+                    f"{_k} ({_v['type']}{_v.get('additional_info') or ''}):{_v['description']}\n"
+                    for _k, _v in _ancestor_params.items()
+                )
+                custom_args = "\n" + _ancestor_text + custom_args
+            else:
+                custom_args = "\n" + set_min_indent(direct_ancestor.__doc__.strip("\n"), 0) + "\n" + custom_args
+
         docstring_args = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
@@ -4237,7 +4258,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
                 k for k, v in getattr(ancestor, "__annotations__", {}).items() if get_origin(v) is not ClassVar
             }
         allowed_params = own_config_params if own_config_params else None
-        docstring_init = auto_method_docstring(
+        docstring_args = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
             custom_args=custom_args,
@@ -4308,11 +4329,11 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             docstring += set_min_indent(f"\n{docstring_init}", indent_level)
         elif is_dataclass or is_config:
             # No init function, we have a data class
-            docstring += docstring_args if docstring_args else "\nArgs:\n"
+            docstring += set_min_indent(f"\n{docstring_args}", indent_level) if docstring_args else "\nArgs:\n"
             source_args_dict = get_args_doc_from_source(ModelOutputArgs)
             doc_class = cls.__doc__ if cls.__doc__ else ""
             documented_kwargs = parse_docstring(doc_class)[0]
-            for param_name, param_type_annotation in cls.__annotations__.items():
+            for param_name, param_type_annotation in [] if _is_python_dataclass(cls) else cls.__annotations__.items():
                 param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
                 # Check for default value
