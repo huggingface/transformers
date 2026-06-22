@@ -1458,6 +1458,7 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "chunked_attention": create_chunked_causal_mask,
     "compressed_sparse_attention": create_sliding_window_causal_mask,
     "heavily_compressed_attention": create_sliding_window_causal_mask,
+    "minimax_m3_sparse": create_causal_mask,
     "deepseek_sparse_attention": create_causal_mask,
 }
 
@@ -1519,6 +1520,9 @@ def create_masks_for_generate(
     # case we return a single mask.
     if hasattr(effective_config, "layer_types"):
         layer_patterns = set(effective_config.layer_types)
+        # Without a registered attention-mask function, defer to the model by returning the raw attention mask
+        if any(layer_type not in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING for layer_type in layer_patterns):
+            return attention_mask
         if len(layer_patterns) == 1:
             return LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[next(iter(layer_patterns))](**mask_kwargs)
         causal_masks = {}

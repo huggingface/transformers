@@ -741,6 +741,8 @@
         title: MiniMax
       - local: model_doc/minimax_m2
         title: MiniMax-M2
+      - local: model_doc/minimax_m3_vl
+        title: MiniMax-M3-VL
       - local: model_doc/ministral
         title: Ministral
       - local: model_doc/ministral3
@@ -851,6 +853,8 @@
         title: RWKV
       - local: model_doc/seed_oss
         title: Seed-Oss
+      - local: model_doc/smollm3
+        title: SmolLM3
       - local: model_doc/solar_open
         title: SolarOpen
       - local: model_doc/splinter
@@ -1113,6 +1117,8 @@
         title: MusicGen
       - local: model_doc/musicgen_melody
         title: MusicGen Melody
+      - local: model_doc/nemotron_asr_streaming
+        title: NemotronAsrStreaming
       - local: model_doc/parakeet
         title: Parakeet
       - local: model_doc/pe_audio
@@ -1175,6 +1181,8 @@
         title: V-JEPA 2
       - local: model_doc/videomae
         title: VideoMAE
+      - local: model_doc/videoprism
+        title: VideoPrism
       - local: model_doc/vivit
         title: ViViT
       title: Video models
@@ -1435,8 +1443,6 @@
         title: SLANet
       - local: model_doc/slanext
         title: SLANeXt
-      - local: model_doc/smollm3
-        title: SmolLM3
       - local: model_doc/smolvlm
         title: SmolVLM
       - local: model_doc/speech-encoder-decoder
