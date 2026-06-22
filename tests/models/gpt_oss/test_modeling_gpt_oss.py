@@ -30,6 +30,7 @@ from transformers import (
     AutoTokenizer,
     is_torch_available,
 )
+from transformers.utils import is_rocm_platform
 from transformers.testing_utils import (
     cleanup,
     require_deterministic_for_xpu,
@@ -250,7 +251,10 @@ class GptOssIntegrationTest(unittest.TestCase):
     @staticmethod
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
         """Generate a key for the restructured integration test results."""
-        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+        # Differentiate ROCm fixtures from CUDA ones — torch reports HIP as `cuda` so
+        # both backends would otherwise share the same fixture key.
+        device = "rocm" if is_rocm_platform() else torch_device
+        return f"device={device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -334,39 +338,45 @@ if __name__ == "__main__":
     # ------------------------
     # Shared parameterization
     # ------------------------
+    # FA3-style attention kernel — uses the AITER backend on ROCm (no vllm-flash-attn3 build there).
+    _FA3_KERNEL = (
+        "kernels-community/aiter-flash-attn"
+        if is_rocm_platform()
+        else "kernels-community/vllm-flash-attn3"
+    )
     PARAMETERS = [
         (False, "20b", False, "eager", "eval"),
         (False, "20b", False, "eager", "train"),
-        (False, "20b", False, "kernels-community/vllm-flash-attn3", "eval"),
-        (False, "20b", False, "kernels-community/vllm-flash-attn3", "train"),
+        (False, "20b", False, _FA3_KERNEL, "eval"),
+        (False, "20b", False, _FA3_KERNEL, "train"),
         (False, "20b", True, "eager", "eval"),
         (False, "20b", True, "eager", "train"),
-        (False, "20b", True, "kernels-community/vllm-flash-attn3", "eval"),
-        (False, "20b", True, "kernels-community/vllm-flash-attn3", "train"),
+        (False, "20b", True, _FA3_KERNEL, "eval"),
+        (False, "20b", True, _FA3_KERNEL, "train"),
         (True, "20b", False, "eager", "eval"),
         (True, "20b", False, "eager", "train"),
-        (True, "20b", False, "kernels-community/vllm-flash-attn3", "eval"),
-        (True, "20b", False, "kernels-community/vllm-flash-attn3", "train"),
+        (True, "20b", False, _FA3_KERNEL, "eval"),
+        (True, "20b", False, _FA3_KERNEL, "train"),
         (True, "20b", True, "eager", "eval"),
         (True, "20b", True, "eager", "train"),
-        (True, "20b", True, "kernels-community/vllm-flash-attn3", "eval"),
-        (True, "20b", True, "kernels-community/vllm-flash-attn3", "train"),
+        (True, "20b", True, _FA3_KERNEL, "eval"),
+        (True, "20b", True, _FA3_KERNEL, "train"),
         (False, "120b", False, "eager", "eval"),
         (False, "120b", False, "eager", "train"),
-        (False, "120b", False, "kernels-community/vllm-flash-attn3", "eval"),
-        (False, "120b", False, "kernels-community/vllm-flash-attn3", "train"),
+        (False, "120b", False, _FA3_KERNEL, "eval"),
+        (False, "120b", False, _FA3_KERNEL, "train"),
         (False, "120b", True, "eager", "eval"),
         (False, "120b", True, "eager", "train"),
-        (False, "120b", True, "kernels-community/vllm-flash-attn3", "eval"),
-        (False, "120b", True, "kernels-community/vllm-flash-attn3", "train"),
+        (False, "120b", True, _FA3_KERNEL, "eval"),
+        (False, "120b", True, _FA3_KERNEL, "train"),
         (True, "120b", False, "eager", "eval"),
         (True, "120b", False, "eager", "train"),
-        (True, "120b", False, "kernels-community/vllm-flash-attn3", "eval"),
-        (True, "120b", False, "kernels-community/vllm-flash-attn3", "train"),
+        (True, "120b", False, _FA3_KERNEL, "eval"),
+        (True, "120b", False, _FA3_KERNEL, "train"),
         (True, "120b", True, "eager", "eval"),
         (True, "120b", True, "eager", "train"),
-        (True, "120b", True, "kernels-community/vllm-flash-attn3", "eval"),
-        (True, "120b", True, "kernels-community/vllm-flash-attn3", "train"),
+        (True, "120b", True, _FA3_KERNEL, "eval"),
+        (True, "120b", True, _FA3_KERNEL, "train"),
     ]
 
     # ------------------------
@@ -383,6 +393,12 @@ if __name__ == "__main__":
 
         if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
             self.skipTest("flash attention 3 is not supported on XPU yet.")
+
+        if is_rocm_platform() and kernels:
+            self.skipTest(
+                f"kernels-community/megablocks has no ROCm build for torch=={torch.__version__}; "
+                "kernels=True skipped on ROCm."
+            )
 
         model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(

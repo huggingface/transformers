@@ -30,6 +30,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
+    is_rocm_platform,
     logging,
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
@@ -315,7 +316,13 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
 class GptOssPreTrainedModel(LlamaPreTrainedModel):
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
     _supports_sdpa = False
-    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    # `kernels-community/vllm-flash-attn3` and `flash_attention_4` have no ROCm builds;
+    # on ROCm route FA3-style attention to `kernels-community/aiter-flash-attn` instead.
+    _compatible_flash_implementations = (
+        ["kernels-community/aiter-flash-attn"]
+        if is_rocm_platform()
+        else ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    )
     _can_record_outputs = {
         "router_logits": OutputRecorder(GptOssTopKRouter, index=0),
         "hidden_states": GptOssDecoderLayer,
