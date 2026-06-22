@@ -24,7 +24,7 @@ specific language governing permissions and limitations under the License.
 ## Overview
 
 The InstructBLIP model was proposed in [InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning](https://huggingface.co/papers/2305.06500) by Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, Steven Hoi.
-InstructBLIP leverages the [BLIP-2](blip2) architecture for visual instruction tuning.
+InstructBLIP leverages the [BLIP-2](blip-2) architecture for visual instruction tuning.
 
 The abstract from the paper is the following:
 
@@ -40,7 +40,7 @@ The original code can be found [here](https://github.com/salesforce/LAVIS/tree/m
 
 ## Usage tips
 
-InstructBLIP uses the same architecture as [BLIP-2](blip2) with a tiny but important difference: it also feeds the text prompt (instruction) to the Q-Former.
+InstructBLIP uses the same architecture as [BLIP-2](blip-2) with a tiny but important difference: it also feeds the text prompt (instruction) to the Q-Former.
 
 > [!NOTE]
 > BLIP models after release v4.46 will raise warnings about adding `processor.num_query_tokens = {{num_query_tokens}}` and expand model embeddings layer to add special `<image>` token. It is strongly recommended to add the attributes to the processor if you own the model checkpoint, or open a PR if it is not owned by you. Adding these attributes means that BLIP will add the number of query tokens required per image and expand the text with as many `<image>` placeholders as there will be query tokens. Usually it is around 500 tokens per image, so make sure that the text is not truncated as otherwise there will be failure when merging the embeddings.

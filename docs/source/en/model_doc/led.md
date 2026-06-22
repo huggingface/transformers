@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 # LED
 
-[Longformer-Encoder-Decoder (LED)](https://huggingface.co/papers/2004.05150) is an encoder-decoder  transformer model for sequence-to-sequence tasks like summarization. It extends [Longformer](.longformer), an encoder-only model designed to handle long inputs, by adding a decoder layer. The decoder uses full self-attention on the encoded tokens and previously decoded locations. Because of Longformer's linear self-attention mechanism, LED is more efficient than standard encoder-decoder models when processing long sequences.
+[Longformer-Encoder-Decoder (LED)](https://huggingface.co/papers/2004.05150) is an encoder-decoder  transformer model for sequence-to-sequence tasks like summarization. It extends [Longformer](longformer), an encoder-only model designed to handle long inputs, by adding a decoder layer. The decoder uses full self-attention on the encoded tokens and previously decoded locations. Because of Longformer's linear self-attention mechanism, LED is more efficient than standard encoder-decoder models when processing long sequences.
 
 You can find all the original [LED] checkpoints under the [Ai2](https://huggingface.co/allenai/models?search=led) organization.
 

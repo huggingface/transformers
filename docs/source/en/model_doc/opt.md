@@ -69,7 +69,7 @@ tokenizer.batch_decode(generated_ids)[0]
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes](..quantization/bitsandbytes) to quantize the weights to 8-bits.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 8-bits.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
