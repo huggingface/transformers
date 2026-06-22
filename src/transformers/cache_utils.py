@@ -1600,9 +1600,8 @@ class StaticCache(Cache):
                 )
             elif layer_type in sliding_layer_types:
                 layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
-            # Recurrent-state-only layers (linear_attention) are already static by essence; conv / moe
-            # piggy-back on the same class (no per-token KV either — see the comment on DynamicCache).
-            elif LAYER_TYPE_CACHE_MAPPING.get(layer_type) is LinearAttentionLayer:
+            # Recurrent-state-only layers — linear-attention, conv, MoE — share the same static cache class.
+            elif layer_type in ("linear_attention", "conv", "moe"):
                 layer = LinearAttentionLayer()
             # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
             elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:

@@ -175,9 +175,6 @@ class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    # The eager experts forward still has a Python loop, but ``@use_experts_implementation``
-    # defaults to ``grouped_mm`` / ``batched_mm`` which are compilable. Users who explicitly opt
-    # into ``experts_implementation="eager"`` lose compile; that's a documented trade-off.
     _can_compile_fullgraph = True
 
     @torch.no_grad()

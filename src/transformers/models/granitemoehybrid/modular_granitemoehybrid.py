@@ -48,15 +48,16 @@ logger = logging.get_logger(__name__)
 
 
 class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
-    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+    """Hybrid variant that handles ``position_embeddings is None`` — granitemoe-hybrid configs can
+    opt out of RoPE via ``position_embedding_type=None``, in which case the model passes ``None``
+    instead of a ``(cos, sin)`` tuple."""
 
-    def forward(  # FIME: @ARTHUR this forward is also classic: attention nope
+    def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,  # None or rope embeddings
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -76,7 +77,6 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -87,7 +87,6 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
             scaling=self.scaling,
             **kwargs,
         )
-
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights

@@ -399,9 +399,6 @@ class GraniteMoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    # The eager experts forward still has a Python loop, but ``@use_experts_implementation``
-    # defaults to ``grouped_mm`` / ``batched_mm`` which are compilable. Users who explicitly opt
-    # into ``experts_implementation="eager"`` lose compile; that's a documented trade-off.
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {

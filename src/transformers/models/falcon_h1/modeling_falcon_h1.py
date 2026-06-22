@@ -1042,9 +1042,7 @@ class FalconH1PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _is_stateful = True
-    # ``_can_compile_fullgraph = True`` would require StaticCache support for ``"hybrid"`` layers:
-    # each layer is attention + mamba but the cache currently has no static counterpart that holds
-    # both K/V and SSM state.
+    _can_compile_fullgraph = False  # StaticCache has no entry for ``"hybrid"`` layers (KV + SSM state).
 
     _can_record_outputs = {
         "hidden_states": FalconH1DecoderLayer,
