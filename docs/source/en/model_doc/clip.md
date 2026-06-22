@@ -75,7 +75,17 @@ most_likely_idx = probs.argmax(dim=1).item()
 most_likely_label = labels[most_likely_idx]
 print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_likely_idx].item():.3f}")
 ```
+### Migration note (CLIP refactor compatibility)
 
+After recent internal refactors in Transformers (v5+), CLIP’s internal representation was updated to improve consistency across vision-language models. This may affect downstream projects that rely on legacy LoRA or checkpoint key structures.
+
+If you encounter compatibility issues:
+
+- Use updated `from_pretrained` loading with latest Transformers version
+- Ensure external conversion tools (e.g., LoRA/SD pipelines) support flattened CLIP key format
+- Refer to PEFT / SimpleTuner compatibility utilities for legacy checkpoint conversion
+
+This change improves long-term maintainability but may require minor migration steps for older workflows.
 </hfoption>
 </hfoptions>
 
