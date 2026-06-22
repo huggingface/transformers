@@ -18,7 +18,7 @@ Processor class for Pixtral.
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput, _normalize_images
 from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
@@ -47,16 +47,6 @@ class PixtralProcessorKwargs(ProcessingKwargs, total=False):
             "return_tensors": "pt",
         },
     }
-
-
-# Copied from transformers.models.idefics2.processing_idefics2.is_url
-def is_url(val) -> bool:
-    return isinstance(val, str) and val.startswith("http")
-
-
-# Copied from transformers.models.idefics2.processing_idefics2.is_image_or_image_url
-def is_image_or_image_url(elem):
-    return is_url(elem) or is_valid_image(elem)
 
 
 @auto_docstring
@@ -129,6 +119,7 @@ class PixtralProcessor(ProcessorMixin):
         patch_size = self.patch_size * self.spatial_merge_size
 
         if images is not None:
+            images = _normalize_images(images)
             output_kwargs["images_kwargs"]["patch_size"] = patch_size
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:

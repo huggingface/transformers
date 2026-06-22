@@ -574,6 +574,43 @@ def load_images(
         return load_image(images, timeout=timeout)
 
 
+def _normalize_images(
+    images: Union["PIL.Image.Image", np.ndarray, "torch.Tensor", str, list, tuple],
+    timeout: float | None = None,
+) -> list[list[Union["PIL.Image.Image", np.ndarray, "torch.Tensor"]]]:
+    """
+    Normalize image inputs to a consistent nested list format ``list[list[ImageInput]]``.
+    Handles single images, URLs, file paths, batched tensors, flat lists, and nested lists.
+    URLs and file paths are loaded via :func:`load_image` and returned as PIL Images.
+
+    Args:
+        images: A single image, URL string, file path, or (nested) list of images.
+        timeout: Timeout in seconds for URL requests.
+
+    Returns:
+        ``list[list[PIL.Image.Image | np.ndarray | torch.Tensor]]``: A nested list where
+        the outer list indexes batch items and the inner list indexes images per sample.
+    """
+    if isinstance(images, str):
+        return [[load_image(images, timeout=timeout)]]
+
+    if isinstance(images, (list, tuple)):
+        if len(images) == 0:
+            return []
+        if isinstance(images[0], (list, tuple)):
+            return [[load_image(img, timeout=timeout) if isinstance(img, str) else img for img in sublist] for sublist in images]
+        # Flat list: wrap in an outer list to form a single batch item
+        return [[load_image(img, timeout=timeout) if isinstance(img, str) else img for img in images]]
+
+    if is_valid_image(images):
+        return [[images]]
+
+    raise ValueError(
+        f"Invalid image input. Expected a PIL Image, numpy array, torch tensor, URL/path string, "
+        f"or (nested) list thereof. Got {type(images)}."
+    )
+
+
 def validate_preprocess_arguments(
     do_rescale: bool | None = None,
     rescale_factor: float | None = None,

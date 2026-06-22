@@ -18,7 +18,7 @@ Processor class for PaliGemma.
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput, _normalize_images, is_valid_image
 from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
@@ -162,6 +162,9 @@ class PaliGemmaProcessor(ProcessorMixin):
             )
             text = ""
 
+        # Normalize images: convert URLs/paths to PIL, ensure nested list format
+        images = _normalize_images(images)
+
         if _is_str_or_image(text):
             text = [text]
         elif isinstance(text, list) and _is_str_or_image(text[0]):
@@ -176,31 +179,19 @@ class PaliGemmaProcessor(ProcessorMixin):
                     "each text has and add special tokens."
                 )
 
-                if isinstance(text, list) and isinstance(images, list):
-                    if len(images) != len(text):
-                        raise ValueError(
-                            f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image or list of images."
-                        )
+                if len(images) != len(text):
+                    raise ValueError(
+                        f"Received {len(images)} image groups for {len(text)} prompts. Each prompt should be associated with an image or list of images."
+                    )
 
-                # make a nested list of lists to be able to iterate over the images and text below
-                if is_valid_image(images):
-                    images = [[images]]
-                elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-                    images = [[image] for image in images]
-                elif not (
-                    isinstance(images, (list, tuple))
-                    and isinstance(images[0], (list, tuple))
-                    and is_valid_image(images[0][0])
-                ):
-                    raise ValueError("images must be an image, list of images or list of list of images")
-
+                # images is already list[list[...]] after normalization
                 input_strings = [
                     build_string_from_input(
                         prompt=prompt,
                         bos_token=self.tokenizer.bos_token,
                         image_seq_len=self.image_seq_length,
                         image_token=IMAGE_TOKEN,
-                        num_images=len(image_list) if isinstance(image_list, list) else 1,
+                        num_images=len(image_list),
                     )
                     for prompt, image_list in zip(text, images)
                 ]

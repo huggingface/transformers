@@ -17,7 +17,7 @@ Processor class for LLaVa-NeXT.
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
-from ...image_utils import ImageInput, SizeDict, get_image_size, to_numpy_array
+from ...image_utils import ImageInput, SizeDict, _normalize_images, get_image_size, to_numpy_array
 from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
@@ -105,6 +105,7 @@ class LlavaNextProcessor(ProcessorMixin):
             **kwargs,
         )
         if images is not None:
+            images = _normalize_images(images)
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
