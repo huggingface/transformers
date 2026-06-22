@@ -601,6 +601,54 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
             _ = model(inputs_embeds=inputs_embeds)
             self.assertEqual(counter["call_count"], 1)
 
+    def test_attention_mask_composition(self):
+        from transformers.models.gemma4.modeling_gemma4 import create_masks_for_vision_model
+
+        config = self.model_tester.get_config()
+        config.text_config._attn_implementation = "eager"
+        
+        # Override sliding window to a known small value to test truncation
+        sliding_window = 4
+        config.text_config.sliding_window = sliding_window
+
+        # Create a sequence of 13 tokens: 0..4 text, 5..11 image (7 tokens), 12 text
+        # block_sequence_ids maps image tokens to group 0, and text tokens to -1
+        block_sequence_ids = torch.tensor([[-1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, -1]], dtype=torch.long)
+        attention_mask = torch.ones((1, 13), dtype=torch.bool)
+        position_ids = torch.arange(13).unsqueeze(0)
+        inputs_embeds = torch.randn(1, 13, config.text_config.hidden_size)
+
+        mask_dict = create_masks_for_vision_model(
+            config=config.text_config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=None,
+            position_ids=position_ids,
+            block_sequence_ids=block_sequence_ids,
+        )
+
+        full_mask = mask_dict["full_attention"]
+        sliding_mask = mask_dict["sliding_attention"]
+
+        min_val = torch.finfo(full_mask.dtype).min
+
+        # In full_attention, bidirectional image block (tokens 5-11) is fully visible
+        # (Both look-back and look-ahead are 0.0)
+        self.assertEqual(full_mask[0, 0, 5, 11].item(), 0.0)
+        self.assertEqual(full_mask[0, 0, 11, 5].item(), 0.0)
+
+        # In sliding_attention, look-back within the sliding window is visible bidirectionally
+        # Token 8 looking back at 5 (dist 3 < 4) -> VISIBLE
+        self.assertEqual(sliding_mask[0, 0, 8, 5].item(), 0.0)
+
+        # In sliding_attention, look-back outside the sliding window is strictly masked
+        # Token 11 looking back at 5 (dist 6 > 4) -> MASKED
+        self.assertLess(sliding_mask[0, 0, 11, 5].item(), -1000)
+
+        # Verify that causal masking still applies correctly to text
+        # Token 12 (text) looking ahead to Token 11 (image) is masked
+        self.assertLess(full_mask[0, 0, 11, 12].item(), -1000)
+
 
 @slow
 @require_torch_accelerator

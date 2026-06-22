@@ -27,10 +27,12 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import (
+    blockwise_overlay,
     create_bidirectional_mask,
     create_causal_mask,
     create_masks_for_generate,
     create_sliding_window_causal_mask,
+    sliding_window_overlay,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -57,6 +59,7 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3TextModel,
     Gemma3TextScaledWordEmbedding,
 )
+from ..gemma3.modeling_gemma3 import create_masks_for_vision_model  # noqa: F811
 from ..gemma3n.modeling_gemma3n import (
     Gemma3nCausalLMOutputWithPast,
     Gemma3nForConditionalGeneration,
@@ -2060,19 +2063,21 @@ class Gemma4Model(Gemma3nModel):
                 "position_ids": position_ids,
             }
 
-            # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-            # Smaller Gemma models use a conventional casual attention mask
-            if self.config.get_text_config().use_bidirectional_attention == "vision":
-                block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-                if mm_token_type_ids is not None:
-                    block_sequence_ids = get_block_sequence_ids_for_mask(
-                        mm_token_type_ids, device=inputs_embeds.device
-                    )
+            text_config = self.config.get_text_config()
+            use_bidir = text_config.use_bidirectional_attention == "vision"
 
-                mask_kwargs["block_sequence_ids"] = block_sequence_ids
-
-            # Create the masks
-            causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
+            if use_bidir and mm_token_type_ids is not None:
+                block_sequence_ids = get_block_sequence_ids_for_mask(
+                    mm_token_type_ids, device=inputs_embeds.device
+                )
+                causal_mask_mapping = create_masks_for_vision_model(
+                    block_sequence_ids=block_sequence_ids,
+                    **mask_kwargs,
+                )
+            else:
+                # Smaller Gemma models (use_bidirectional_attention=None) or
+                # text-only inputs use standard causal masking
+                causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
 
         outputs = self.language_model(
             per_layer_inputs=per_layer_inputs,
@@ -2249,14 +2254,17 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             "position_ids": position_ids,
         }
 
-        # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-        # Smaller Gemma models use a conventional casual attention mask
-        if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-            if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+        text_config = config.get_text_config()
+        use_bidir = getattr(text_config, "use_bidirectional_attention", None) == "vision"
 
-            mask_kwargs["block_sequence_ids"] = block_sequence_ids
+        if use_bidir and mm_token_type_ids is not None:
+            block_sequence_ids = get_block_sequence_ids_for_mask(
+                mm_token_type_ids, device=inputs_embeds.device
+            )
+            return create_masks_for_vision_model(
+                block_sequence_ids=block_sequence_ids,
+                **mask_kwargs,
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 
