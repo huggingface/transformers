@@ -41,12 +41,7 @@ from ...modeling_layers import (
     GenericForTokenClassification,
     GradientCheckpointingLayer,
 )
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -1978,18 +1973,6 @@ class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTra
     config: Qwen3_5Config
 
 
-@auto_docstring
-@dataclass
-class Qwen3_5CausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
 class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
@@ -2098,7 +2081,6 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
         >>> print(output_text)
         ```
         """
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
