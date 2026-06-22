@@ -145,12 +145,9 @@ class Exaone4_5_ModelTest(VLMModelTest, unittest.TestCase):
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip("Beam search with model parallel auto device_map is not stable for EXAONE 4.5 VLM yet.")
-    def test_model_parallel_beam_search(self):
-        pass
-
 
 @require_torch
+@slow
 class Exaone4_5_IntegrationTest(unittest.TestCase):
     model_id = "LGAI-EXAONE/EXAONE-4.5-33B"
     model = None
@@ -166,7 +163,6 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @require_deterministic_for_xpu
-    @slow
     def test_model_logits(self):
         input_ids = [70045, 1109, 115406, 16943, 11697, 115365, 19816, 12137, 375]
         input_ids = torch.tensor([input_ids]).to(torch_device)
@@ -199,7 +195,6 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE.get_expectation(), atol=1e-4, rtol=1e-4)
 
     @require_deterministic_for_xpu
-    @slow
     def test_model_generation_text_only(self):
         EXPECTED_TEXT = Expectations(
             {
@@ -229,7 +224,6 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
         self.assertEqual(text, EXPECTED_TEXT.get_expectation())
 
     @require_deterministic_for_xpu
-    @slow
     def test_model_generation_image_text(self):
         IMAGE_URL = (
             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"

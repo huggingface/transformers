@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import time
 from queue import Queue
 from typing import TYPE_CHECKING, Any, cast
 
@@ -41,12 +42,6 @@ class BaseStreamer:
 class TextStreamer(BaseStreamer):
     """
     Simple text streamer that prints the token(s) to stdout as soon as entire words are formed.
-
-    <Tip warning={true}>
-
-    The API for the streamer classes is still under development and may change in the future.
-
-    </Tip>
 
     Parameters:
         tokenizer (`AutoTokenizer`):
@@ -165,12 +160,6 @@ class TextIteratorStreamer(TextStreamer):
     useful for applications that benefit from accessing the generated text in a non-blocking way (e.g. in an interactive
     Gradio demo).
 
-    <Tip warning={true}>
-
-    The API for the streamer classes is still under development and may change in the future.
-
-    </Tip>
-
     Parameters:
         tokenizer (`AutoTokenizer`):
             The tokenizer used to decode the tokens.
@@ -239,12 +228,6 @@ class AsyncTextIteratorStreamer(TextStreamer):
     Streamer that stores print-ready text in a queue, to be used by a downstream application as an async iterator.
     This is useful for applications that benefit from accessing the generated text asynchronously (e.g. in an
     interactive Gradio demo).
-
-    <Tip warning={true}>
-
-    The API for the streamer classes is still under development and may change in the future.
-
-    </Tip>
 
     Parameters:
         tokenizer (`AutoTokenizer`):
@@ -326,3 +309,98 @@ class AsyncTextIteratorStreamer(TextStreamer):
                 raise StopAsyncIteration()
             else:
                 return value
+
+
+class TextDiffusionStreamer(TextStreamer):
+    """
+    Streamer that prints text diffusion outputs. Intermediate diffusion steps (drafts) are temporary
+    and overwritten by subsequent drafts, and removed when confirmed text is printed.
+
+    <Tip warning={true}>
+
+    If you're running on an environment like tmux, the draft text may fail to overwrite itself.
+
+    </Tip>
+
+
+    Parameters:
+        tokenizer (`AutoTokenizer`):
+            The tokenized used to decode the tokens.
+        skip_prompt (`bool`, *optional*, defaults to `False`):
+            Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
+        sleep_time (`float`, *optional*):
+            Time to sleep between diffusion drafts, which may be helpful to visualize intermediate outputs.
+        decode_kwargs (`dict`, *optional*):
+            Additional keyword arguments to pass to the tokenizer's `decode` method.
+
+    Examples:
+
+        ```python
+        >>> from transformers import DiffusionGemmaForBlockDiffusion, AutoProcessor, TextDiffusionStreamer
+
+        >>> model = DiffusionGemmaForBlockDiffusion.from_pretrained(
+        ...     "google/diffusiongemma-26B-A4B-it", device_map="auto",
+        ... )
+        >>> processor = AutoProcessor.from_pretrained("google/diffusiongemma-26B-A4B-it")
+
+        >>> chat = [{"role": "user", "content": "Why is the sky blue?"},]
+        >>> input_ids = processor.apply_chat_template(
+        ...     chat, tokenize=True, return_tensors="pt", add_generation_prompt=True
+        ... )
+        >>> streamer = TextDiffusionStreamer(tokenizer=processor.tokenizer)
+        >>> model.generate(input_ids.to(model.device), max_new_tokens=512, streamer=streamer)
+        ```
+    """
+
+    def __init__(
+        self,
+        tokenizer: PreTrainedTokenizerBase,
+        skip_prompt: bool = False,
+        sleep_time: float | None = None,
+        **decode_kwargs: Any,
+    ):
+        super().__init__(tokenizer, skip_prompt, **decode_kwargs)
+        self._has_draft = False
+        # `_takes_logits`: Overwrite this attribute if you want your new Streamer class to take the draft
+        # logits as an input to `put_draft`. On diffusion models, `logits` can be a very large tensor, so
+        # we recommend setting it to `False` by default.
+        self._takes_logits = False
+        self.sleep_time = sleep_time
+
+    def _clear_draft(self):
+        if self._has_draft:
+            # Restore cursor and clear to end of screen
+            print("\0338\033[J", end="", flush=True)
+            self._has_draft = False
+
+    def put_draft(self, value, **kwargs):
+        """
+        Receives the full sequence of draft tokens, decodes them, and prints them in yellow.
+        Overwrites previous draft.
+        """
+        self._clear_draft()
+
+        if len(value.shape) > 1 and value.shape[0] > 1:
+            raise ValueError("TextDiffusionStreamer only supports batch size 1")
+        elif len(value.shape) > 1:
+            value = value[0]
+
+        text = self.tokenizer.decode(value, **self.decode_kwargs)
+
+        # Save cursor position
+        print("\0337", end="", flush=True)
+        # Print draft in yellow
+        print(f"\033[33m{text}\033[0m", end="", flush=True)
+        self._has_draft = True
+        if self.sleep_time is not None:
+            time.sleep(self.sleep_time)
+
+    def put(self, value):
+        """Receives confirmed tokens, clears draft, and prints them permanently."""
+        self._clear_draft()
+        super().put(value)
+
+    def end(self):
+        """Flushes any remaining cache and prints a newline."""
+        self._clear_draft()
+        super().end()

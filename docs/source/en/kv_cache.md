@@ -88,6 +88,28 @@ tokenizer.batch_decode(out, skip_special_tokens=True)[0]
 "Hello, my name is [Your Name], and I am a [Your Profession] with [Number of Years] of"
 ```
 
+## Keep generation tensors on CPU
+
+Compiler backends like Neuron and TPU trace your model into a fixed computation graph. The generation loop maintains tensors (output sequence, `attention_mask`, `position_ids`) that grow by one token each step. The compiler retraces the graph whenever these tensors change shape on the accelerator, which slows generation.
+
+[`~GenerationMixin.generate`] moves only the tensors that `forward` consumes onto the model device, right before each `forward` call. The output is moved back to match the device of the input. Pass your inputs on CPU to keep the loop's growing tensor bookkeeping off the accelerator. The compiled graph stays stable, and because the output follows the input device, the generated output stays on CPU.
+
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", device_map="auto")
+
+# leave the inputs on CPU instead of calling .to(model.device).
+inputs = tokenizer("The French Bread Law states", return_tensors="pt")
+
+# generate runs forward on the model device but returns the output on the input_ids device.
+output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+print(output.device)
+cpu
+```
+
 ## Cache offloading
 
 The KV cache can occupy a significant portion of memory and become a [bottleneck](https://hf.co/blog/llama31#inference-memory-requirements) for long-context generation. Memory efficient caches focus on trading off speed for reduced memory usage. This is especially important for large language models (LLMs) and if your hardware is memory constrained.
