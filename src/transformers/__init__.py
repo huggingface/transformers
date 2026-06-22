@@ -861,3 +861,55 @@ if not is_torch_available():
     logger.warning_advice(
         "PyTorch was not found. Models won't be available and only tokenizers, configuration and file/data utilities can be used."
     )
+else:
+    # Workaround for MPS silent correctness issue in bidirectional attention (huggingface/transformers#44247)
+    # Upstream PyTorch bug: pytorch/pytorch#174861
+    try:
+        import torch
+        from packaging import version
+        from .utils.import_utils import get_torch_version, is_torch_mps_available
+
+        if is_torch_mps_available():
+            torch_version = version.parse(get_torch_version())
+            base_ver = version.parse(torch_version.base_version)
+            if version.parse("2.7.1") < base_ver < version.parse("2.11.0"):
+                _original_sdpa = torch.nn.functional.scaled_dot_product_attention
+
+                def _patched_sdpa(query, key, value, *args, **kwargs):
+                    attn_mask = args[0] if len(args) > 0 else kwargs.get("attn_mask", None)
+                    is_causal = args[2] if len(args) > 2 else kwargs.get("is_causal", False)
+
+                    q_len = query.size(-2)
+                    k_len = key.size(-2)
+                    head_dim = query.size(-1)
+                    num_q_heads = query.size(-3) if query.dim() >= 3 else 1
+                    num_k_heads = key.size(-3) if key.dim() >= 3 else 1
+
+                    is_vulnerable = (
+                        query.device.type == "mps"
+                        and query.dtype != torch.float32
+                        and (attn_mask is None or attn_mask.dtype == torch.bool)
+                        and not is_causal
+                        and q_len <= 8
+                        and q_len <= k_len
+                        and head_dim == value.size(-1)
+                        and head_dim in {64, 96, 128}
+                        and (k_len >= 1024 or (num_k_heads < num_q_heads and k_len >= 4096))
+                    )
+
+                    if is_vulnerable:
+                        orig_dtype = query.dtype
+                        query = query.to(torch.float32)
+                        key = key.to(torch.float32)
+                        value = value.to(torch.float32)
+                        attn_output = _original_sdpa(query, key, value, *args, **kwargs)
+                        return attn_output.to(orig_dtype)
+                    else:
+                        return _original_sdpa(query, key, value, *args, **kwargs)
+
+                torch.nn.functional.scaled_dot_product_attention = _patched_sdpa
+                if hasattr(torch, "scaled_dot_product_attention"):
+                    torch.scaled_dot_product_attention = _patched_sdpa
+    except Exception:
+        pass
+
