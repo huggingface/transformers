@@ -1127,11 +1127,11 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             Keys:   [A A A C C C C . .]
             Attention:
 
-                    A A A . . C C C C
-                C   1 1 1 0 0 1 1 1 1
-                C   1 1 1 0 0 1 1 1 1
-                C   1 1 1 0 0 1 1 1 1
-                C   1 1 1 0 0 1 1 1 1
+                    A A A C C C C . .
+                C   1 1 1 1 1 1 1 0 0
+                C   1 1 1 1 1 1 1 0 0
+                C   1 1 1 1 1 1 1 0 0
+                C   1 1 1 1 1 1 1 0 0
 
             A = cached KV
             C = canvas token
