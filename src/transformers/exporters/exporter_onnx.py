@@ -215,25 +215,6 @@ def _patch_unsqueeze(original):
     return patch
 
 
-@register_patch("onnx", "torch.nn.functional.scaled_dot_product_attention")
-def _patch_scaled_dot_product_attention(original):
-    """Drop ``enable_gqa=True`` when the head counts already match at the call site.
-
-    Some models (e.g. ``GlmAsr``) expand kv heads with ``repeat_kv`` *before* calling SDPA, so
-    the tensors arrive with ``q_num_heads == k_num_heads`` even though the config declares GQA.
-    Our dynamo SDPA wrapper sets ``enable_gqa = num_kv_heads != num_heads`` from the config and
-    is unaware of this in-model expansion — and onnxscript's SDPA translation hard-rejects
-    ``enable_gqa=True`` when ``q_num_heads == kv_num_heads`` with
-    ``AssertionError: SDPA (GQA or MQA) requires q_num_heads > kv_num_heads``."""
-
-    def patch(query, key, *args, enable_gqa: bool = False, **kwargs):
-        if enable_gqa and query.shape[1] == key.shape[1]:
-            enable_gqa = False
-        return original(query, key, *args, enable_gqa=enable_gqa, **kwargs)
-
-    return patch
-
-
 @register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
 def _patch_broadcast_mask_expansion(_original):
     """Replace vmap-based mask expansion with broadcast expansion."""
