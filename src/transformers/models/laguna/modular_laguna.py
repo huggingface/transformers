@@ -51,6 +51,10 @@ class LagunaConfig(Qwen2MoeConfig):
     r"""
     num_attention_heads_per_layer (`list[int]`, *optional*):
         Per-layer override for ``num_attention_heads``. Length must equal ``num_hidden_layers``.
+    gating (`bool` or `str`, *optional*, defaults to `True`):
+        Softplus output-gate granularity. ``True`` or ``"per-head"`` applies one gate per head,
+        broadcast across ``head_dim``; ``"per-element"`` applies one gate per ``(head, head_dim)``
+        channel.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type — ``"dense"`` or ``"sparse"``. Length must equal
         ``num_hidden_layers``. Defaults to first layer dense, rest sparse.
@@ -108,6 +112,7 @@ class LagunaConfig(Qwen2MoeConfig):
     # Laguna-specific attention
     head_dim: int = 128
     attention_bias: bool = False
+    gating: bool | str = True
     num_attention_heads_per_layer: list[int] | None = None
     # Laguna-specific MoE
     mlp_layer_types: list[str] | None = None
@@ -291,9 +296,10 @@ class LagunaAttention(AfmoeAttention):
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=config.attention_bias)
 
-        # Custom per-head gating
         del self.gate_proj
-        self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        self.gate_per_head = config.gating is True or config.gating == "per-head"
+        g_proj_dim = self.num_heads if self.gate_per_head else self.num_heads * self.head_dim
+        self.g_proj = nn.Linear(config.hidden_size, g_proj_dim, bias=False)
 
     def forward(
         self,
@@ -338,7 +344,12 @@ class LagunaAttention(AfmoeAttention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
 
         gate = F.softplus(self.g_proj(hidden_states).float()).to(attn_output.dtype)
-        attn_output = (attn_output.view(*input_shape, -1, self.head_dim) * gate.unsqueeze(-1)).view(*input_shape, -1)
+        if self.gate_per_head:
+            attn_output = (attn_output.view(*input_shape, -1, self.head_dim) * gate.unsqueeze(-1)).view(
+                *input_shape, -1
+            )
+        else:
+            attn_output = attn_output * gate
 
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
