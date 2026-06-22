@@ -16,17 +16,11 @@
 import contextlib
 import tempfile
 import unittest
-from functools import partial
-from unittest.mock import patch
 
 from parameterized import parameterized
 
 from transformers import LlamaConfig
-from transformers.integrations.heterogeneity.configuration_utils import apply_heterogeneous_config
 from transformers.utils import logging as transformers_logging
-
-
-apply_heterogeneous_config_explicit = partial(apply_heterogeneous_config, explicit=True)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -100,10 +94,47 @@ class TestHeterogeneousConfig(unittest.TestCase):
         # Other attributes are unaffected
         self.assertEqual(config.per_layer_config[0].hidden_size, 64)
 
-        # A single override should also preserve fallback for all other layers
-        config2 = _tiny_llama_config(per_layer_config={1: {"num_key_value_heads": 2}})
-        self.assertEqual(config2.per_layer_config[1].num_key_value_heads, 2)
-        self.assertEqual(config2.per_layer_config[0].num_key_value_heads, 4)
+    def test_per_layer_values_matching_global_are_removed_from_sparse_config(self):
+        config = _tiny_llama_config(
+            per_layer_config={
+                0: {"num_key_value_heads": 4},
+                1: {"num_key_value_heads": 2},
+                2: {"num_key_value_heads": 4},
+            }
+        )
+
+        self.assertEqual(config.to_dict()["per_layer_config"], {"1": {"num_key_value_heads": 2}})
+        self.assertEqual(config.per_layer_attributes, {"num_key_value_heads"})
+        self.assertEqual(config.per_layer_config[0].num_key_value_heads, 4)
+        self.assertEqual(config.per_layer_config[1].num_key_value_heads, 2)
+        self.assertEqual(config.per_layer_config[2].num_key_value_heads, 4)
+
+    def test_uniform_per_layer_values_do_not_overwrite_global(self):
+        per_layer = {layer_idx: {"num_key_value_heads": 2} for layer_idx in range(4)}
+        config = _tiny_llama_config(per_layer_config=per_layer)
+
+        self.assertEqual(object.__getattribute__(config, "num_key_value_heads"), 4)
+        self.assertEqual(
+            config.to_dict()["per_layer_config"],
+            {str(i): {"num_key_value_heads": 2} for i in range(4)},
+        )
+        for layer_idx in range(4):
+            self.assertEqual(config.per_layer_config[layer_idx].num_key_value_heads, 2)
+
+    def test_explicit_serialization_restores_pruned_global_values(self):
+        per_layer = {layer_idx: {"num_key_value_heads": 4} for layer_idx in range(4)}
+        sparse_config = _tiny_llama_config(per_layer_config=per_layer)
+        explicit_config = _tiny_llama_config(
+            per_layer_config=per_layer,
+            serialize_explicit_per_layer_config=True,
+        )
+
+        self.assertEqual(sparse_config.to_dict()["per_layer_config"], {})
+        self.assertEqual(sparse_config.per_layer_attributes, set())
+        self.assertEqual(
+            explicit_config.to_dict()["per_layer_config"],
+            {str(i): {"num_key_value_heads": 4} for i in range(4)},
+        )
 
     def test_per_layer_config_reflects_current_global_config_state(self):
         config = _tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
@@ -126,12 +157,6 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertNotIn("per_layer_config", layer_dict)
         self.assertEqual(layer_dict["hidden_size"], 96)
         self.assertEqual(layer_dict["intermediate_size"], 64)
-
-    def test_uniform_values_promoted_to_global(self):
-        per_layer = {i: {"num_key_value_heads": 2} for i in range(4)}
-        config = _tiny_llama_config(per_layer_config=per_layer)
-        self.assertEqual(config.num_key_value_heads, 2)
-        self.assertNotIn("num_key_value_heads", config.per_layer_attributes)
 
     def test_accessing_per_layer_attr_raises(self):
         config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
@@ -278,36 +303,21 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.per_layer_config[2].custom_attr, 30)
         self.assertEqual(config.per_layer_config[3].custom_attr, 40)
 
-    @patch(
-        "transformers.integrations.heterogeneity.configuration_utils.apply_heterogeneous_config",
-        apply_heterogeneous_config_explicit,
-    )
-    def test_explicit_fills_missing_layers_and_attributes(self):
-        """explicit=True creates per-layer overrides for missing layers and fills missing attrs from global."""
-        config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 1}})
+    def test_per_layer_config_can_serialize_explicit_layer_overrides(self):
+        sparse_config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 1}})
+        explicit_config = _tiny_llama_config(
+            per_layer_config={0: {"num_key_value_heads": 1}},
+            serialize_explicit_per_layer_config=True,
+        )
+        explicit_config_dict = explicit_config.to_dict()
 
+        self.assertEqual(sparse_config.to_dict()["per_layer_config"], {"0": {"num_key_value_heads": 1}})
         self.assertEqual(
-            config.to_dict()["per_layer_config"],
+            explicit_config_dict["per_layer_config"],
             {
                 "0": {"num_key_value_heads": 1},
                 "1": {"num_key_value_heads": 4},
                 "2": {"num_key_value_heads": 4},
                 "3": {"num_key_value_heads": 4},
             },
-        )
-
-    @patch(
-        "transformers.integrations.heterogeneity.configuration_utils.apply_heterogeneous_config",
-        apply_heterogeneous_config_explicit,
-    )
-    def test_explicit_does_not_promote_uniform_values(self):
-        """explicit=True keeps uniform values per-layer instead of promoting to global."""
-        per_layer = {i: {"num_key_value_heads": 2} for i in range(4)}
-        # Without explicit: promoted to global (tested in test_uniform_values_promoted_to_global)
-        # With explicit: stays per-layer
-        config = _tiny_llama_config(per_layer_config=per_layer)
-        self.assertIn("num_key_value_heads", config.per_layer_attributes)
-        self.assertEqual(
-            config.to_dict()["per_layer_config"],
-            {str(i): {"num_key_value_heads": 2} for i in range(4)},
         )

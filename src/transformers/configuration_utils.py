@@ -965,7 +965,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def __iter__(self):
-        # HeterogeneousConfigMixin: some keys of `self.__dict__` require hiding when using a heterogeneous config.
+        # HeterogeneousConfigMixin: keys of `self.__dict__` that are per-layer attributes
+        # may require hiding when using a heterogeneous config.
         yield from self._iter_config_keys_with_heterogeneous_adjustment(self.__dict__)
 
     def to_diff_dict(self) -> dict[str, Any]:
