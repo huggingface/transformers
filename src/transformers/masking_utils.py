@@ -1487,6 +1487,7 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "minimax_m3_sparse": create_causal_mask,
     "deepseek_sparse_attention": create_causal_mask,
     "linear_attention": create_recurrent_padding_mask,
+    "conv": create_recurrent_padding_mask,
 }
 
 

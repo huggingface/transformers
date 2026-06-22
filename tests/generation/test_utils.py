@@ -1610,9 +1610,13 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                             else gen_out.past_key_values
                         )
                         self.assertTrue(isinstance(decoder_cache, DynamicCache))
-                        self.assertFalse(decoder_cache.is_compileable)
-                        # our auto compile should NOT have been called
-                        self.assertFalse(hasattr(model_to_be_compiled, "_compiled_call"))
+                        # Recurrent / hybrid SSM models (mamba2, lfm2, ...) populate the default DynamicCache
+                        # with statically-shaped recurrent layers, so the cache is compileable by default and
+                        # auto-compile kicks in. Skip the "default cache is non-compileable" sanity check for
+                        # those models — they're tested under their compileable path further down.
+                        if not decoder_cache.is_compileable:
+                            # our auto compile should NOT have been called
+                            self.assertFalse(hasattr(model_to_be_compiled, "_compiled_call"))
 
             # 5. get compiled results -- relies on the automatic compilation triggered by specific compilable caches
             if not has_defined_cache_implementation:
@@ -1703,7 +1707,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 num_beams=1,
                 max_new_tokens=self.max_new_tokens,
                 min_new_tokens=self.max_new_tokens,
-                output_attentions=True,
+                output_attentions=self.has_attentions,
                 output_hidden_states=True,
                 output_scores=True,
                 output_logits=True,
