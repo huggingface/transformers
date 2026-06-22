@@ -2166,7 +2166,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Mask2FormerPixelDecoder):
             init.normal_(module.level_embed, std=0)
 
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)

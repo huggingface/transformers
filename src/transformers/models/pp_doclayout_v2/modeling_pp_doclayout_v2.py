@@ -802,10 +802,6 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.denoising_class_embed.weight)
         if isinstance(module, PPDocLayoutV2TextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        if isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight.data[module.padding_idx])
         if isinstance(module, PPDocLayoutV2PositionRelationEmbedding):
             inv_freq, _ = module.compute_default_rope_parameters(module.config, module.inv_freq.device)
             module.register_buffer("inv_freq", inv_freq, persistent=False)
