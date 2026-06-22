@@ -646,7 +646,9 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
 
         masked_lm_loss = None
         if labels is not None:
-            masked_lm_loss = self.loss_function(logits=prediction_scores, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            masked_lm_loss = self.loss_function(
+                logits=prediction_scores, labels=labels, vocab_size=self.config.vocab_size, **kwargs
+            )
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
