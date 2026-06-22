@@ -1399,8 +1399,13 @@ class Cache:
 
     @property
     def is_linear(self) -> list[bool]:
-        """Return whether the layers of the cache are linear attention (Mamba/SSM) layers"""
-        return [isinstance(layer, LinearAttentionCacheLayerMixin) for layer in self.layers]
+        """Return whether the layers of the cache are linear attention (Mamba/SSM) layers. Note that layers containing
+        both linear and full attention states will return False by this function"""
+        return [
+            isinstance(layer, LinearAttentionCacheLayerMixin)
+            and not isinstance(layer, LinearAttentionAndFullAttentionLayer)
+            for layer in self.layers
+        ]
 
     def __len__(self):
         """
