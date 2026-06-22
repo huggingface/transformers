@@ -4,14 +4,17 @@ from typing import Any
 from transformers.configuration_utils import PretrainedConfig
 
 
-class StepRoboticsVisionEncoderConfig(PretrainedConfig):
+class Step3p7VisionConfig(PretrainedConfig):
     model_type = "perception_encoder"
 
     def __init__(
         self,
-        width=1536,
-        layers=47,
-        heads=16,
+        hidden_size=1536,
+        num_hidden_layers=47,
+        num_attention_heads=16,
+        width=None,   # backward compat alias for hidden_size
+        layers=None,  # backward compat alias for num_hidden_layers
+        heads=None,   # backward compat alias for num_attention_heads
         num_channels=3,
         image_size=728,
         mlp_ratio=8960 / 1536,
@@ -27,17 +30,20 @@ class StepRoboticsVisionEncoderConfig(PretrainedConfig):
         ls_init_value=0.1,
         **kwargs,
     ):
-        self.width = width
-        self.hidden_size = width
-        self.layers = layers
-        self.num_hidden_layers = layers
-        self.heads = heads
-        self.num_attention_heads = heads
+        if width is not None:
+            hidden_size = width
+        if layers is not None:
+            num_hidden_layers = layers
+        if heads is not None:
+            num_attention_heads = heads
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
         self.mlp_ratio = mlp_ratio
-        self.intermediate_size = int(width * mlp_ratio)
+        self.intermediate_size = int(hidden_size * mlp_ratio)
         self.attention_dropout = 0.0
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
@@ -63,7 +69,8 @@ class Step3p7TextConfig(PretrainedConfig):
         hidden_size: int = 4096,
         intermediate_size: int = 11264,
         num_attention_heads: int = 64,
-        num_attention_groups: int = 8,
+        num_key_value_heads: int = 8,
+        num_attention_groups: int | None = None,  # backward compat alias for num_key_value_heads
         num_hidden_layers: int = 45,
         max_seq_len: int = 128000,
         vocab_size: int = 128815,
@@ -106,6 +113,8 @@ class Step3p7TextConfig(PretrainedConfig):
         torch_dtype = kwargs.get("torch_dtype")
         if isinstance(rope_scaling, dict):
             rope_scaling = dict(rope_scaling)
+        if num_attention_groups is not None:
+            num_key_value_heads = num_attention_groups
         if moe_num_experts is not None:
             n_routed_experts = moe_num_experts
         if moe_top_k is not None:
@@ -115,7 +124,7 @@ class Step3p7TextConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_attention_heads = num_attention_heads
-        self.num_attention_groups = num_attention_groups
+        self.num_key_value_heads = num_key_value_heads
         self.num_hidden_layers = num_hidden_layers
         self.max_seq_len = max_seq_len
         self.vocab_size = vocab_size
@@ -159,10 +168,7 @@ class Step3p7TextConfig(PretrainedConfig):
         super().__init__(**kwargs)
         if torch_dtype is not None:
             self.torch_dtype = torch_dtype
-
-    @property
-    def num_key_value_heads(self):
-        return self.num_attention_groups
+        self.rope_parameters = self.rope_scaling or {"rope_type": "default", "rope_theta": self.rope_theta}
 
     def to_dict(self):
         output = super().to_dict()
@@ -179,7 +185,7 @@ class Step3p7Config(PretrainedConfig):
 
     def __init__(
         self,
-        vision_config: dict | StepRoboticsVisionEncoderConfig | None = None,
+        vision_config: dict | Step3p7VisionConfig | None = None,
         text_config: dict | Step3p7TextConfig | None = None,
         understand_projector_stride: int = 2,
         projector_bias: bool = False,
@@ -191,9 +197,9 @@ class Step3p7Config(PretrainedConfig):
             shared_rope_scaling = dict(shared_rope_scaling)
 
         if vision_config is None:
-            vision_config = StepRoboticsVisionEncoderConfig()
+            vision_config = Step3p7VisionConfig()
         elif isinstance(vision_config, dict):
-            vision_config = StepRoboticsVisionEncoderConfig(**vision_config)
+            vision_config = Step3p7VisionConfig(**vision_config)
         self.vision_config = vision_config
 
         if text_config is None:
