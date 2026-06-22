@@ -1,0 +1,385 @@
+# Copyright 2026 the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from __future__ import annotations
+
+import os
+import re
+from typing import TYPE_CHECKING
+
+import torch
+from safetensors import safe_open
+from torch import nn
+
+from ..cache_utils import Cache
+from ..conversion_mapping import get_model_conversion_mapping
+from ..core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
+from ..masking_utils import create_causal_mask
+from ..modeling_utils import LoadStateDictConfig, PreTrainedModel, _get_resolved_checkpoint_files, local_torch_dtype
+from ..utils import logging
+from ..utils.loading_report import log_state_dict_report
+
+
+if TYPE_CHECKING:
+    from ..configuration_utils import PreTrainedConfig
+    from .logits_process import LogitsProcessorList
+
+
+logger = logging.get_logger(__name__)
+
+
+class MtpLayer(nn.Module):
+    def __init__(
+        self, config: PreTrainedConfig, decoder_layer_cls: type[nn.Module], norm_cls: type[nn.Module], layer_idx: int
+    ):
+        super().__init__()
+        self.config = config
+        self.enorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
+        self.hnorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
+        self.eh_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
+        self.mtp_block = decoder_layer_cls(config, layer_idx)
+        self.post_norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        inputs_embeds: torch.Tensor,
+        previous_hidden_state: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        position_ids: torch.Tensor | None,
+        past_key_values: Cache | None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        eh_cat = torch.cat([self.enorm(inputs_embeds), self.hnorm(previous_hidden_state)], dim=-1)
+        hidden_states = self.eh_proj(eh_cat)
+        hidden_states = self.mtp_block(
+            hidden_states,
+            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            **kwargs,
+        )
+        hidden_states = self.post_norm(hidden_states)
+
+        return hidden_states
+
+
+class MtpLayerStack(PreTrainedModel):
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_flash_attn = True
+    # Since the embedding/head are shared with main model, silence any warning if they are provided again
+    _keys_to_ignore_on_load_unexpected = ["shared_head.head.weight", "embed_tokens.weight"]
+    # Silence as well when not provided, since one again we take them from main model
+    _keys_to_ignore_on_load_missing = ["shared_head.weight", "embed_tokens.weight"]
+
+    def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
+        super().__init__(main_model.config.get_text_config())
+        self.num_mtp_layers = num_mtp_layers
+        # Infer the type of the layers based on the main model
+        layer_cls = type(main_model.base_model.layers[0])
+        norm_cls = next(
+            type(module)
+            for name, module in main_model.base_model.layers[0].named_modules()  # type: ignore
+            if "norm" in name
+        )
+        # Instantiate new mtp layers
+        self.layers = nn.ModuleList(
+            [
+                MtpLayer(self.config, layer_cls, norm_cls, self.config.num_hidden_layers + k)
+                for k in range(num_mtp_layers)
+            ]
+        )
+        # The embeddings and head are shared between main model and each MTP layer
+        self.embed_tokens = main_model.get_input_embeddings()
+        self.shared_head = main_model.lm_head
+        # Use the same rotary class (it only has non-persistent buffers)
+        self.rotary_emb = main_model.base_model.rotary_emb
+        self.post_init()
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        last_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        position_ids: torch.Tensor | None,
+        past_key_values: Cache | None,
+        # Control how we sample the new token from each layer
+        do_sample: bool = False,
+        logits_processor: LogitsProcessorList | None = None,
+        full_input_ids: torch.Tensor | None = None,  # needed as input for the logits_processor
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Sample 1 new token for each mtp layers present in this model. Note that the inputs are assumed to be
+        already sliced and correct here, i.e. if the main model just processed inputs corresponding to tokens
+        at positions [N-1, N] in the sequence, then from it you draft a new token for position N+1, and the
+        `input_ids`/`position_ids`/`attention_mask` here are assumed to correspond to data for tokens at positions
+        [N, N+1], i.e. shifted by 1 from the main model, by the newly drafted token. The `last_hidden_states` though
+        will correspond to the same as the main model, i.e. positions [N-1, N] in the sequence length dimension.
+        `full_input_ids` correspond to the full sequence of `input_ids`, which is used in case we have any `logits_processor`
+        as some processors may require to check the length/value of the full previous sequence of ids.
+        """
+        batch_size = input_ids.shape[0]
+        # We create this dummy cache simply to create the masks correctly, since they rely on the sizes of layer 0 of
+        # the cache. Note that it does not create any copy of data, it simply keep a ref to internal tensors
+        dummy_cache_for_masking = (
+            Cache(layers=past_key_values.layers[self.config.num_hidden_layers :])  # type: ignore
+            if past_key_values is not None
+            else None
+        )
+        drafted_logits = []
+        drafted_tokens = []
+        for mtp_layer in self.layers:
+            # We need to recompute those every layer since they change
+            inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
+            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=dummy_cache_for_masking,
+            )
+            last_hidden_states = mtp_layer(
+                inputs_embeds,
+                last_hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                **kwargs,
+            )
+            # Only compute logits for next drafted token
+            logits = self.shared_head(last_hidden_states[:, -1:, :])
+            # Append the drafted logits
+            drafted_logits.append(logits)
+            # Decode one token
+            next_token_logits = logits[:, -1, :].to(device=input_ids.device)
+            if logits_processor is not None and full_input_ids is not None:
+                next_token_scores = logits_processor(full_input_ids, next_token_logits.to(torch.float32))
+            if do_sample:
+                probs = nn.functional.softmax(next_token_scores, dim=-1, dtype=torch.float32)
+                next_mtp_token = torch.multinomial(probs, num_samples=1)
+            else:
+                next_mtp_token = torch.argmax(next_token_scores, dim=-1, keepdim=True)
+            drafted_tokens.append(next_mtp_token)
+            # Roll by 1 and append for next layer
+            input_ids = torch.cat([input_ids[:, 1:], next_mtp_token], dim=-1)
+            attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)  # type: ignore
+            position_ids = torch.cat([position_ids[:, 1:], position_ids[:, -1:] + 1], dim=-1)
+            # Need to cat ful_ids as well for the processors
+            if full_input_ids is not None:
+                full_input_ids = torch.cat([full_input_ids, next_mtp_token], dim=-1)
+        new_candidate_ids = torch.cat(drafted_tokens, dim=1)
+        candidate_logits = torch.cat(drafted_logits, dim=1)
+        return new_candidate_ids, candidate_logits
+
+    def compute_mtp_loss(
+        self,
+        input_ids: torch.Tensor,
+        main_hidden_states: torch.Tensor,
+        labels: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        loss_function=None,
+        vocab_size: int | None = None,
+        pad_token_id: int = 0,
+    ) -> torch.Tensor:
+        """Compute the MTP auxiliary loss over the full sequence for training.
+
+        Each MTP layer predicts tokens shifted by ``i+1`` positions ahead. The loss
+        is the mean cross-entropy across all MTP layers. Does not support packed
+        sequences — position_ids and attention_mask must correspond to a single
+        contiguous sequence per batch element.
+
+        Args:
+            input_ids: Full input token ids, shape ``(batch, seq_len)``.
+            main_hidden_states: Last hidden states from the main model, same shape.
+            labels: Target labels for the main LM loss, shape ``(batch, seq_len)``.
+            attention_mask: Optional attention mask.
+            position_ids: Optional position ids. For mrope models these should be
+                the 3D ``(3, batch, seq_len)`` tensor; the text dimension is used
+                for the MTP layers.
+            loss_function: Callable with ``(logits, labels, vocab_size)`` signature,
+                e.g. ``ForCausalLMLoss``.
+            vocab_size: Passed to ``loss_function``.
+            pad_token_id: Used to pad shifted input ids at the right edge.
+
+        Returns:
+            Scalar loss tensor (mean across MTP layers).
+        """
+        if loss_function is None or vocab_size is None:
+            raise ValueError("loss_function and vocab_size are required for compute_mtp_loss")
+
+        # Prepare position embeddings for the full sequence
+        inputs_embeds_full = self.embed_tokens(input_ids)
+
+        # Handle mrope (3D position_ids) vs standard (2D)
+        if position_ids is None:
+            pos = torch.arange(inputs_embeds_full.shape[1], device=inputs_embeds_full.device)
+            pos = pos.view(1, 1, -1).expand(4, inputs_embeds_full.shape[0], -1)
+        elif position_ids.ndim == 2:
+            pos = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
+        else:
+            pos = position_ids
+
+        if pos.ndim == 3 and pos.shape[0] == 4:
+            text_position_ids = pos[0]
+            mrope_position_ids = pos[1:]
+        else:
+            text_position_ids = None
+            mrope_position_ids = pos
+
+        position_embeddings = self.rotary_emb(inputs_embeds_full, mrope_position_ids)
+
+        total_loss = torch.tensor(0.0, device=main_hidden_states.device, dtype=main_hidden_states.dtype)
+        current_hidden = main_hidden_states
+
+        for i in range(len(self.layers)):
+            # Shift input ids by 1: predict token t+1 from hidden state at position t
+            shifted_input_ids = input_ids[:, 1:]
+            shifted_input_ids = nn.functional.pad(shifted_input_ids, (0, 1), value=pad_token_id)
+            input_embeds = self.embed_tokens(shifted_input_ids)
+
+            # Shift position ids to match the shifted input
+            if text_position_ids is not None:
+                mtp_position_ids = torch.roll(text_position_ids, -1, dims=-1).clone()
+                mtp_position_ids[:, -1] = text_position_ids[:, -1]
+            else:
+                mtp_position_ids = None
+
+            # Build causal mask for the full sequence
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=input_embeds,
+                attention_mask=attention_mask,
+                past_key_values=None,
+            )
+
+            # Run the MTP layer: combine embedding + previous hidden, then decoder block
+            current_hidden = self.layers[i](
+                inputs_embeds=input_embeds,
+                previous_hidden_state=current_hidden,
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask,
+                position_ids=mtp_position_ids,
+                past_key_values=None,
+            )
+
+            # Compute logits and loss for this layer
+            mtp_logits = self.shared_head(current_hidden)
+
+            # Labels are shifted by (i+1): layer 0 predicts t+1, layer 1 predicts t+2, ...
+            shift = i + 1
+            shifted_labels = torch.roll(labels, -shift, dims=1).clone()
+            shifted_labels[:, -shift:] = -100
+
+            layer_loss = loss_function(
+                logits=mtp_logits,
+                labels=shifted_labels,
+                vocab_size=vocab_size,
+            )
+            total_loss = total_loss + layer_loss
+
+        return total_loss / len(self.layers)
+
+    @classmethod
+    def from_pretrained(cls, main_model: PreTrainedModel, device_map=None, **kwargs) -> MtpLayerStack:
+        pretrained_model_name_or_path = main_model.config.name_or_path
+        num_hidden_layers = main_model.config.get_text_config().num_hidden_layers
+        # Heuristic: the main model should have the mtp layer patterns under `_keys_to_ignore_on_load_unexpected` to avoid
+        # loading them by default, so use it to later load the correct keys from the checkpoints
+        mtp_patterns = main_model._keys_to_ignore_on_load_unexpected.copy()  # type: ignore
+        # Due to different released checkpoints, only keep the ones with layer number >= num_hidden_layers - otherwise
+        # mtp layers in a smaller checkpoints could be wrongly added as a 2nd mtp layer of a bigger checkpoint
+        final_mtp_patterns = []
+        for pattern in mtp_patterns:
+            match_object = re.search(r"\.(\d+)", pattern)
+            if match_object is not None and int(match_object.group(1)) < num_hidden_layers:
+                continue
+            final_mtp_patterns.append(pattern)
+        if len(final_mtp_patterns) == 0:
+            raise ValueError(f"{main_model.__class__.__name__} does not seem to register any known MTP layer patterns")
+        mtp_regex = re.compile("|".join(rf"({pattern})" for pattern in final_mtp_patterns))
+        # Get the number of layers in the checkpoint
+        num_mtp_layers = main_model.config.get_text_config().num_mtp_layers
+        # Since we need to share some modules, let's not instantiate on meta device, but we still need the dtype context
+        with local_torch_dtype(main_model.config.dtype, cls.__name__):
+            mtp_model = cls(main_model, num_mtp_layers)
+        # Now, let's scan the index to obtain the mtp-specific files and weights
+        checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
+            variant=None,
+            gguf_file=None,
+            use_safetensors=True,
+            user_agent=None,
+            is_remote_code=False,
+        )
+        # Filter out only the files containing mtp weights
+        mtp_weight_map = {k: v for k, v in sharded_metadata["weight_map"].items() if mtp_regex.search(k) is not None}
+        mtp_files = [file for file in checkpoint_files if os.path.basename(file) in mtp_weight_map.values()]
+        # Open the files, get the slices corresponding only to mtp weights, rename them, and load them
+        mtp_state_dict = {}
+        all_pointer = set()
+        for file in mtp_files:
+            file_pointer = safe_open(file, framework="pt", device="cpu")
+            all_pointer.add(file_pointer)
+            for k in file_pointer.keys():
+                # It's one of the mtp weights
+                if k in mtp_weight_map.keys():
+                    mtp_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+        # For the correct conversions, we need first the mtp-specific renamings, then the main_model conversions
+        # Note that since the layer numbers are dynamic, we cannot register those conversions - we also add the `mtp_block`
+        # part for all weights since we cannot distinguish easily those that are under the main model's block or not. It will
+        # be removed after for the few that should not have it
+        weight_conversions = [
+            WeightRenaming(
+                source_patterns=f"layers.{N}.", target_patterns=f"layers.{N - num_hidden_layers}.mtp_block."
+            )
+            for N in range(num_hidden_layers, num_hidden_layers + num_mtp_layers)
+        ]
+        weight_conversions.extend(get_model_conversion_mapping(mtp_model, add_legacy=False))
+        weight_conversions.extend(main_model._weight_conversions)
+        # Load the weights
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model=mtp_model,
+            state_dict=mtp_state_dict,
+            load_config=LoadStateDictConfig(
+                weight_mapping=weight_conversions, device_map=device_map, dtype=main_model.config.dtype
+            ),
+            tp_plan=None,
+        )
+        # Maybe remove the shared head/embedding from unexpected
+        mtp_model._adjust_missing_and_unexpected_keys(loading_info)
+        # finally close all opened file pointers
+        for k in all_pointer:
+            k.__exit__(None, None, None)
+        log_state_dict_report(
+            model=mtp_model,
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
+            ignore_mismatched_sizes=False,
+            loading_info=loading_info,
+            logger=logger,
+        )
+        return mtp_model
+
+    @classmethod
+    def _can_set_attn_implementation(cls) -> bool:
+        # Assume we always can
+        return True
+
+    @classmethod
+    def _can_set_experts_implementation(cls) -> bool:
+        # Assume we always can
+        return True
