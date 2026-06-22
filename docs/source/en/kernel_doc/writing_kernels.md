@@ -27,10 +27,10 @@ For basic kernels (stateless `forward` replacements with no parameter changes), 
 
 Any kernel that carries its own parameters follows a two-class pattern.
 
-- `KernelName`: contains only the `forward` pass. The `kernels` library uses this class to kernelize the model. It must be stateless — the library does not allow stateful kernel classes.
-- `KernelNameLayout`: an `nn.Module` that holds the parameters and monkey-patches the original module before the checkpoint is loaded. At runtime, `kernelize` replaces its `forward` with `KernelName`'s `forward`.
+- `KernelName`: contains only the `forward` pass. The `kernels` library uses this class to kernelize the model. It must be stateless as the library does not allow stateful kernel classes.
+- `KernelNameLayout`: an `nn.Module` that holds the parameters and monkey-patches the original module before the checkpoint is loaded. At runtime, `kernelize` replaces its `forward` with `KernelName`'s `forward`. You do not need to define `forward`, Transformers injects one automatically with the same signature as `KernelName.forward`.
 
-The naming convention is strict: the layout class must be named `{KernelName}Layout` and defined in the same module as `KernelName`. Transformers discovers it automatically.
+**The naming convention is strict: the layout class must be named `{KernelName}Layout` and defined in the same module as `KernelName`. Transformers discovers it automatically.**
 
 ## Parameter transformation
 
@@ -49,9 +49,6 @@ class CustomRMSNormLayout(nn.Module):
         super().__init__()
         self.scale = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        pass  # replaced at runtime by kernelize
 
 
 class CustomRMSNorm(nn.Module):
@@ -108,15 +105,18 @@ class RMSNormMLPLayout(nn.Module):
         self.gate_up_proj = nn.Linear(
             mlp.gate_proj.in_features,
             mlp.gate_proj.out_features + mlp.up_proj.out_features,
-            bias=False,
+            bias=mlp.gate_proj.bias is not None,
             device=mlp.gate_proj.weight.device,
             dtype=mlp.gate_proj.weight.dtype,
         )
-        self.down_proj = mlp.down_proj
+        self.down_proj = nn.Linear(
+            mlp.down_proj.in_features,
+            mlp.down_proj.out_features,
+            bias=mlp.down_proj.bias is not None,
+            device=mlp.down_proj.weight.device,
+            dtype=mlp.down_proj.weight.dtype,
+        )
         self.act_fn = mlp.act_fn
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        pass  # replaced at runtime by kernelize
 
 
 class RMSNormMLP(nn.Module):
