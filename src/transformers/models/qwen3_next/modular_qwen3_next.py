@@ -463,6 +463,9 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         mixed_qkv = torch.cat((query, key, value), dim=-1)
         mixed_qkv = mixed_qkv.transpose(1, 2)
 
+        conv1d_hook = getattr(self.conv1d, "_hf_hook", None)
+        if conv1d_hook is not None:
+            conv1d_hook.pre_forward(self.conv1d)
         if use_precomputed_states and seq_len == 1:
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = self.causal_conv1d_update(
