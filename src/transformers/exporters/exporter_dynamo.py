@@ -199,6 +199,26 @@ def _patch_classifier_cast(_original):
     return lambda self, *args, **kwargs: None
 
 
+@register_patch(
+    "dynamo",
+    # Canonical definition + the public re-export.
+    "transformers.utils.import_utils.is_kernels_available",
+    "transformers.utils.is_kernels_available",
+    # Local `from ...utils import is_kernels_available` rebinds in modeling modules
+    # — each one needs its own override since the name is looked up there.
+    "transformers.modeling_utils.is_kernels_available",
+    "transformers.models.sam3_video.modeling_sam3_video.is_kernels_available",
+    "transformers.models.mra.modeling_mra.is_kernels_available",
+    "transformers.models.rwkv.modeling_rwkv.is_kernels_available",
+    "transformers.models.yoso.modeling_yoso.is_kernels_available",
+)
+def _patch_is_kernels_available(_original):
+    """Force-disable the optional ``kernels`` library during export — its kernels
+    call into native code that ``torch.export`` cannot trace, and the pure-PyTorch
+    fallbacks in each model are always traceable."""
+    return lambda *args, **kwargs: False
+
+
 # --- Chunked vision/audio attention ─────────────────────────────────────────
 # Sub-encoders that pack multiple variable-length sequences into one flat tensor
 # with `cu_seqlens` markers fall back to `split → per-segment SDPA → cat` in the
