@@ -36,7 +36,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...integrations.hub_kernels import lazy_load_kernel
-from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
+from ...masking_utils import create_causal_mask, create_linear_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -1132,7 +1132,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_linear_attention_mask(**mask_kwargs),
             }
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
@@ -1243,7 +1243,7 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         }
         return {
             "full_attention": create_causal_mask(**mask_kwargs),
-            "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
+            "linear_attention": create_linear_attention_mask(**mask_kwargs),
         }
 
     def prepare_inputs_for_generation(

@@ -920,14 +920,11 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
     def lazy_initialization(
         self, conv_states: torch.Tensor | None = None, recurrent_states: torch.Tensor | None = None
     ) -> None:
-        # Capture dtype/device/batch from whichever state is initializing the layer — the two
-        # update functions arrive independently, so we may see ``recurrent_states`` first.
-        first_state = conv_states if conv_states is not None else recurrent_states
-        if first_state is not None and not (self.is_conv_states_initialized or self.is_recurrent_states_initialized):
-            self.dtype, self.device = first_state.dtype, first_state.device
-            self.max_batch_size = first_state.shape[0]
         if conv_states is not None:
-            # Even if prefill is larfer/shorter than the conv_size, the tensor is always either padded or truncated
+            if not self.is_conv_states_initialized:
+                self.dtype, self.device = conv_states.dtype, conv_states.device
+                self.max_batch_size = conv_states.shape[0]
+            # Even if prefill is larger/shorter than the conv_size, the tensor is always either padded or truncated
             self.conv_kernel_size = conv_states.shape[-1]
             # The shape is always static, so we init as such
             self.conv_states = torch.zeros_like(conv_states, dtype=self.dtype, device=self.device)
@@ -1032,7 +1029,6 @@ LAYER_TYPE_CACHE_MAPPING.update(
         "sliding_attention": DynamicSlidingWindowLayer,
         "chunked_attention": DynamicSlidingWindowLayer,
         # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
-        "conv": LinearAttentionLayer,
         "moe": LinearAttentionLayer,
         "linear_attention": LinearAttentionLayer,
         # Hybrid layers (e.g. zamba / zamba2) carry both a linear-attention state and a dynamic-attention state.
@@ -1369,8 +1365,7 @@ class Cache:
     @property
     def max_batch_size(self) -> int:
         """Return the maximum batch size of the cache"""
-        # Each layer sets ``max_batch_size`` in its ``lazy_initialization`` — skip ones that haven't run yet.
-        values = [layer.max_batch_size for layer in self.layers if hasattr(layer, "max_batch_size")]
+        values = [layer.max_batch_size for layer in self.layers]
         if len(set(values)) > 1:
             raise ValueError(f"Max batch size is not consistent across layers: {values}")
         return values[0]
@@ -1600,8 +1595,8 @@ class StaticCache(Cache):
                 )
             elif layer_type in sliding_layer_types:
                 layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
-            # Recurrent-state-only layers — linear-attention, conv, MoE — share the same static cache class.
-            elif layer_type in ("linear_attention", "conv", "moe"):
+            # Recurrent-state-only layers — linear-attention and MoE — share the same static cache class.
+            elif layer_type in ("linear_attention", "moe"):
                 layer = LinearAttentionLayer()
             # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
             elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:

@@ -27,7 +27,7 @@ from torch import nn
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
+from ...masking_utils import create_causal_mask, create_linear_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -533,7 +533,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "conv": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_linear_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

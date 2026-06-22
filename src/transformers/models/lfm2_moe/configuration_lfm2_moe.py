@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...utils import auto_docstring
 
 
@@ -77,6 +77,8 @@ class Lfm2MoeConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
+        if self.layer_types is not None:
+            self.layer_types = remap_legacy_layer_types(self.layer_types)
         self.tie_word_embeddings = kwargs.pop("tie_embedding", self.tie_word_embeddings)
         super().__post_init__(**kwargs)
 

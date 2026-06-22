@@ -18,7 +18,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
+from ...masking_utils import create_causal_mask, create_linear_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -339,7 +339,7 @@ class Lfm2Model(LlamaModel):
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "conv": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_linear_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

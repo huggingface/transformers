@@ -36,7 +36,7 @@ from ...integrations import (
     use_kernelized_func,
 )
 from ...integrations.hub_kernels import lazy_load_kernel
-from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
+from ...masking_utils import create_causal_mask, create_linear_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -1134,7 +1134,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_linear_attention_mask(**mask_kwargs),
             }
 
         # embed positions

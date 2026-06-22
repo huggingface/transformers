@@ -19,7 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
+from ...masking_utils import create_causal_mask, create_linear_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -244,7 +244,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention": create_recurrent_padding_mask(**mask_kwargs),
+                "linear_attention": create_linear_attention_mask(**mask_kwargs),
             }
 
         # embed positions
