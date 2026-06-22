@@ -1253,6 +1253,18 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if not isinstance(new_tokens, (list, tuple)):
             new_tokens = [new_tokens]
+
+        if not special_tokens:
+            # Warn about tokens that conflict with existing special tokens, as they
+            # will be silently skipped by _add_tokens and won't increase the vocab size.
+            special_tokens_set = set(self.all_special_tokens)
+            conflicting = [str(tok) for tok in new_tokens if str(tok) in special_tokens_set]
+            if conflicting:
+                logger.warning(
+                    f"The following tokens are already defined as special tokens and will not be added as"
+                    f" regular tokens: {conflicting}. If you want to add them, set `special_tokens=True`."
+                )
+
         return self._add_tokens(new_tokens, special_tokens=special_tokens)
 
     def _add_tokens(self, new_tokens: list[str] | list[AddedToken], special_tokens: bool = False) -> int:
