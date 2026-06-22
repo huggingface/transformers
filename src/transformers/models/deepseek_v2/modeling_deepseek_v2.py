@@ -82,48 +82,58 @@ class DeepseekV2Experts(nn.Module):
         return final_hidden_states
 
 
-class DeepseekV2Moe(nn.Module):
+class DeepseekV2TopkRouter(nn.Module):
     def __init__(self, config: DeepseekV2Config):
         super().__init__()
         self.config = config
-        self.experts = DeepseekV2Experts(config)
-        self.gate = nn.Linear(config.hidden_size, config.n_routed_experts, bias=False)
-        if config.n_shared_experts is not None:
-            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-            self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
+        self.n_routed_experts = config.n_routed_experts
+        self.num_experts = config.n_routed_experts
+        self.top_k = config.num_experts_per_tok
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
         self.num_group = config.n_group
-        self.top_k = config.num_experts_per_tok
         self.topk_group = config.topk_group
+        # Named `weight` (not wrapped in `nn.Linear`) so the parameter key stays `mlp.gate.weight`.
+        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
 
-    def route_tokens_to_experts(self, router_logits):
-        batch_size, seq_len, hidden_dim = router_logits.shape
-        router_logits = router_logits.view(-1, hidden_dim)
-        router_logits = router_logits.softmax(dim=-1, dtype=torch.float32)
+    def forward(self, hidden_states):
+        # Top-k selection lives in the router (not the MoE block) so the `ep_router`
+        # tensor-parallel hook can remap global → local expert ids on the returned indices.
+        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        scores = router_logits.softmax(dim=-1, dtype=torch.float32)
         if self.topk_method == "greedy":
-            topk_weight, topk_idx = torch.topk(router_logits, k=self.top_k, dim=-1, sorted=False)
+            topk_weights, topk_indices = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = router_logits.view(batch_size * seq_len, self.num_group, -1).max(dim=-1).values
+            group_scores = scores.view(-1, self.num_group, self.n_routed_experts // self.num_group).max(dim=-1).values
             group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
             group_mask = torch.zeros_like(group_scores)
             group_mask.scatter_(1, group_idx, 1)
             score_mask = (
                 group_mask.unsqueeze(-1)
-                .expand(batch_size * seq_len, self.num_group, self.num_experts // self.num_group)
-                .reshape(batch_size * seq_len, -1)
+                .expand(-1, self.num_group, self.n_routed_experts // self.num_group)
+                .reshape(-1, self.n_routed_experts)
             )
-            tmp_scores = router_logits.masked_fill(~score_mask.bool(), 0.0)
-            topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
+            scores = scores.masked_fill(~score_mask.bool(), 0.0)
+            topk_weights, topk_indices = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return router_logits, topk_weights, topk_indices
 
-        topk_weight = topk_weight * self.routed_scaling_factor
-        return topk_idx, topk_weight
+
+class DeepseekV2Moe(nn.Module):
+    def __init__(self, config: DeepseekV2Config):
+        super().__init__()
+        self.config = config
+        self.experts = DeepseekV2Experts(config)
+        self.gate = DeepseekV2TopkRouter(config)
+        if config.n_shared_experts is not None:
+            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
+            self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = nn.functional.linear(hidden_states.type(torch.float32), self.gate.weight.type(torch.float32))
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
+        _, topk_weights, topk_indices = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
@@ -459,7 +469,9 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, DeepseekV2Experts):
+        if isinstance(module, DeepseekV2TopkRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, DeepseekV2Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 

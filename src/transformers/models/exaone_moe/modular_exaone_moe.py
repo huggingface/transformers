@@ -15,7 +15,6 @@
 """LG AI Research EXAONE Lab"""
 
 import torch
-import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
@@ -80,6 +79,14 @@ class ExaoneMoeConfig(Exaone4Config):
     >>> configuration = model.config
     ```"""
 
+    # Exaone-MoE names its expert config fields `num_experts` / `num_shared_experts`; alias the
+    # DeepSeek-V3 names so the inherited router / MoE / experts read them without per-class overrides.
+    attribute_map = {
+        "n_routed_experts": "num_experts",
+        "num_local_experts": "num_experts",
+        "n_shared_experts": "num_shared_experts",
+    }
+
     vocab_size: int = 102400
     hidden_size: int = 4096
     intermediate_size: int = 16384
@@ -129,24 +136,11 @@ class ExaoneMoeMLP(Qwen2MoeMLP):
 
 
 class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
-    def __init__(self, config):
-        nn.Module.__init__(self)
-        self.config = config
-        self.top_k = config.num_experts_per_tok
-        self.n_routed_experts = config.num_experts
-        self.num_experts = config.num_experts
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.weight = nn.Parameter(torch.empty((config.num_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_experts))
+    pass
 
 
 class ExaoneMoeExperts(DeepseekV3NaiveMoe):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_experts = config.num_experts
+    pass
 
 
 class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
@@ -156,7 +150,6 @@ class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
         self.shared_experts = ExaoneMoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
         )
-        self.n_routed_experts = config.num_experts
 
 
 class ExaoneMoeDecoderLayer(OlmoeDecoderLayer):

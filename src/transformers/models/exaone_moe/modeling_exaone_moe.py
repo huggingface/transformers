@@ -229,14 +229,15 @@ class ExaoneMoeTopkRouter(nn.Module):
         super().__init__()
         self.config = config
         self.top_k = config.num_experts_per_tok
-        self.n_routed_experts = config.num_experts
-        self.num_experts = config.num_experts
+        self.n_routed_experts = config.n_routed_experts
+        self.num_experts = config.n_routed_experts
         self.routed_scaling_factor = config.routed_scaling_factor
         self.n_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.weight = nn.Parameter(torch.empty((config.num_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_experts))
+
+        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
     def forward(self, hidden_states):
         # Top-k selection lives in the router (not the MoE block) so the `ep_router`
@@ -274,7 +275,7 @@ class ExaoneMoeExperts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
@@ -321,9 +322,8 @@ class ExaoneMoeSparseMoEBlock(nn.Module):
         self.shared_experts = ExaoneMoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
         )
-        self.n_routed_experts = config.num_experts
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
         _, topk_weights, topk_indices = self.gate(hidden_states)

@@ -703,7 +703,7 @@ class NemotronHMoE(nn.Module):
             self.fc1_latent_proj = nn.Identity()
             self.fc2_latent_proj = nn.Identity()
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
         _, topk_weights, topk_indices = self.gate(hidden_states)

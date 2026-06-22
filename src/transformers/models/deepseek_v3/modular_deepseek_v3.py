@@ -13,6 +13,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
 from ...utils.generic import is_flash_attention_requested
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Moe, DeepseekV2TopkRouter
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
@@ -88,9 +89,9 @@ def yarn_get_mscale(scale=1, mscale=1):
     return 0.1 * mscale * math.log(scale) + 1.0
 
 
-class DeepseekV3TopkRouter(nn.Module):
+class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
     def __init__(self, config):
-        super().__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts
@@ -140,28 +141,19 @@ class DeepseekV3NaiveMoe(MixtralExperts):
         self.intermediate_dim = config.moe_intermediate_size
 
 
-class DeepseekV3MoE(nn.Module):
+class DeepseekV3MoE(DeepseekV2Moe):
     """
     A mixed expert module containing shared experts.
     """
 
     def __init__(self, config):
-        super().__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.experts = DeepseekV3NaiveMoe(config)
         self.gate = DeepseekV3TopkRouter(config)
         self.shared_experts = DeepseekV3MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
-
-    def forward(self, hidden_states):
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
 
 
 class DeepseekV3Attention(nn.Module):

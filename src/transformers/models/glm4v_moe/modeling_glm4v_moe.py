@@ -308,7 +308,7 @@ class Glm4vMoeTextMoE(nn.Module):
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
         _, topk_weights, topk_indices = self.gate(hidden_states)
