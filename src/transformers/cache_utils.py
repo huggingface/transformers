@@ -1006,6 +1006,14 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         if len(args) == 0 and len(kwargs) == 1:
             LinearAttentionLayer.lazy_initialization(self, **kwargs)
 
+    def offload(self):
+        DynamicLayer.offload(self)
+        LinearAttentionLayer.offload(self)
+
+    def prefetch(self):
+        DynamicLayer.prefetch(self)
+        LinearAttentionLayer.prefetch(self)
+
     def reset(self) -> None:
         LinearAttentionLayer.reset(self)
         DynamicLayer.reset(self)
