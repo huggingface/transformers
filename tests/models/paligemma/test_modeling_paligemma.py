@@ -158,12 +158,15 @@ class PaliGemmaVisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, :16] = config.image_token_index
+
+        # Important! prepare the mask after adding more pad tokens
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,

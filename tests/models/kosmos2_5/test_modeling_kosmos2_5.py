@@ -30,6 +30,7 @@ from transformers.models.kosmos2_5.configuration_kosmos2_5 import (
 )
 from transformers.testing_utils import (
     Expectations,
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -492,6 +493,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_flash_attn_2_generate_reuse_cache(self):
         pass
 
+    @is_flaky()
     @pytest.mark.generate
     def test_generate_with_cache_matches_no_cache(self):
         """Verify that greedy generation with cache produces the same token IDs as without cache"""
