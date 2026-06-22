@@ -115,8 +115,11 @@ class CamembertTokenizer(TokenizersBackend):
 
         if vocab is not None:
             self._vocab = vocab
-            unk_index = next((i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token)), 0)
-            self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=unk_index, byte_fallback=False))
+        elif vocab_file is not None:
+            import sentencepiece as spm
+
+            sp = spm.SpmModel.load(vocab_file)
+            self._vocab = [(sp.get_piece(i), sp.get_score(i)) for i in range(sp.get_piece_size())]
         else:
             self._vocab = [
                 ("<s>NOTUSED", 0.0),
@@ -126,7 +129,9 @@ class CamembertTokenizer(TokenizersBackend):
                 ("<unk>NOTUSED", -100),
                 (str(mask_token), 0.0),
             ]
-            self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
+
+        unk_index = next((i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token)), 0)
+        self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=unk_index, byte_fallback=False))
 
         self._tokenizer.normalizer = normalizers.Sequence(
             [
