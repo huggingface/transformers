@@ -23,7 +23,7 @@ from torch import nn
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...tokenization_utils_tokenizers import TokenizersBackend

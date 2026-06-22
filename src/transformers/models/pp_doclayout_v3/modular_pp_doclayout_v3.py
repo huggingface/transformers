@@ -33,6 +33,7 @@ from ...image_transforms import (
 )
 from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
@@ -525,6 +526,7 @@ class PPDocLayoutV3PreTrainedModel(RTDetrPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, PPDocLayoutV3MultiscaleDeformableAttention):
             init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
