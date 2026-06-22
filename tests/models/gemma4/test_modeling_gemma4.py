@@ -468,7 +468,7 @@ class Gemma4Vision2TextModelTester:
 class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma4Model, Gemma4ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma4ForConditionalGeneration,) if is_torch_available() else ()
-    additional_model_inputs = ["mm_token_type_ids"]
+    additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
     model_split_percents = [0.85, 0.9]
 
     def setUp(self):
