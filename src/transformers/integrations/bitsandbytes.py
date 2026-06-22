@@ -55,7 +55,9 @@ class Bnb4bitQuantize(ConversionOps):
                 value = value.T
 
             old_value = model.get_parameter_or_buffer(param_name)
-            new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
+            params_kwargs = old_value.__dict__.copy()
+            params_kwargs.pop("_is_hf_initialized", None)
+            new_value = bnb.nn.Params4bit(value, requires_grad=False, **params_kwargs).to(value.device)
             module._is_hf_initialized = True
             result[param_name] = new_value
         return result
@@ -118,8 +120,9 @@ class Bnb8bitQuantize(ConversionOps):
             if issubclass(module.source_cls, Conv1D):
                 value = value.T
             value_device = value.device
-            params_kwargs = model.get_parameter_or_buffer(param_name).__dict__
+            params_kwargs = model.get_parameter_or_buffer(param_name).__dict__.copy()
             params_kwargs.pop("SCB", None)
+            params_kwargs.pop("_is_hf_initialized", None)
             new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **params_kwargs).to(value_device)
             result[param_name] = new_value
         return result
@@ -152,8 +155,9 @@ class Bnb8bitDeserialize(ConversionOps):
 
         key_weight = "weight"
         weight = input_dict[key_weight]
-        kwargs = model.get_parameter_or_buffer(full_layer_name).__dict__
+        kwargs = model.get_parameter_or_buffer(full_layer_name).__dict__.copy()
         kwargs["SCB"] = input_dict["SCB"]
+        kwargs.pop("_is_hf_initialized", None)
         new_value = bnb.nn.Int8Params(weight, requires_grad=False, **kwargs).to(weight.device)
         module._is_hf_initialized = True
         return {key_weight: new_value}
