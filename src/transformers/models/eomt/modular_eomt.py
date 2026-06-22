@@ -345,9 +345,6 @@ class EomtPreTrainedModel(PreTrainedModel):
                 fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 init.uniform_(module.bias, -bound, bound)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=1)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag

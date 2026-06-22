@@ -1303,10 +1303,6 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                 wang_init_method(dim=self.config.hidden_size, n_layers=self.config.num_hidden_layers)(module.weight)
             elif module.weight is not None:
                 small_init_method(self.config.hidden_size)(module.weight)
-        elif isinstance(module, xLSTMRMSNorm) or hasattr(module, "_layer_normalize"):
-            init.ones_(module.weight)
-            if hasattr(module, "bias") and module.bias is not None:
-                init.zeros_(module.bias)
 
 
 class xLSTMCache:

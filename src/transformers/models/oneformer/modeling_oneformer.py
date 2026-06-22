@@ -2813,7 +2813,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.MultiheadAttention):
             init.normal_(module.in_proj_weight, mean=0.0, std=std)
             init.zeros_(module.in_proj_bias)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)

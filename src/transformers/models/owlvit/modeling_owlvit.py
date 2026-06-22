@@ -565,10 +565,6 @@ class OwlViTPreTrainedModel(PreTrainedModel):
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
         elif isinstance(module, OwlViTForObjectDetection):
             init.copy_(module.box_bias, module.compute_box_bias(module.num_patches_height, module.num_patches_width))
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=factor)
-            if module.bias is not None:
-                init.zeros_(module.bias)
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->OwlViT
