@@ -19,7 +19,7 @@ import math
 import os
 import re
 import traceback
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -80,7 +80,7 @@ def build_glob_alternation(
     return alternation, src_group_to_glob, tgt_group_to_glob
 
 
-class ConversionOps:
+class ConversionOps(ABC):
     """Base class for weight conversion operations."""
 
     def __repr__(self):
@@ -1429,9 +1429,14 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
+                    # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
+                    # distributed op selects whole experts. The signal is a `MergeModulelist`
+                    # in the chain; it isn't always `operations[0]` (e.g. an FP8 quantizer
+                    # prepends a scale-decode op), so scan the whole chain rather than just the head.
                     shard_index = (
                         len(mapping.collected_tensors.get(source_pattern, []))
-                        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
+                        if isinstance(mapping, WeightConverter)
+                        and any(isinstance(op, MergeModulelist) for op in mapping.operations)
                         else None
                     )
                     future_or_tensor = spawn_tp_materialize(
