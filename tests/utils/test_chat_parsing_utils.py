@@ -281,15 +281,14 @@ class ChatSchemaParserTest(unittest.TestCase):
         tokenizer_parsed_chat = tokenizer.parse_response(model_out)
         self.assertEqual(tokenizer_parsed_chat, parsed_chat)
 
-    def test_batched_inputs_raise(self):
-        # Batched parsing is no longer supported: `parse_response` accepts a single sequence only
+    def test_batched_inputs(self):
+        # Batched parsing returns one parsed dict per item, mirroring the input shape.
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
         tokenizer.response_schema = cohere_schema
-        with self.assertRaises(ValueError):
-            tokenizer.parse_response([model_out])
-        with self.assertRaises(ValueError):
-            tokenizer.parse_response([model_out] * 2)
+        single = tokenizer.parse_response(model_out)
+        self.assertEqual(tokenizer.parse_response([model_out]), [single])
+        self.assertEqual(tokenizer.parse_response([model_out] * 2), [single, single])
 
     def test_token_id_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")  # Need an actual tokenizer to encode
@@ -298,11 +297,9 @@ class ChatSchemaParserTest(unittest.TestCase):
         parsed_chat = tokenizer.parse_response(model_out)
         tokenized_out = tokenizer(model_out).input_ids
         self.assertEqual(tokenizer.parse_response(tokenized_out), parsed_chat)
-        # Batched token-id inputs are no longer supported
-        with self.assertRaises(ValueError):
-            tokenizer.parse_response([tokenized_out])
-        with self.assertRaises(ValueError):
-            tokenizer.parse_response([tokenized_out] * 2)
+        # Batched token-id inputs return a list of parsed dicts, one per sequence
+        self.assertEqual(tokenizer.parse_response([tokenized_out]), [parsed_chat])
+        self.assertEqual(tokenizer.parse_response([tokenized_out] * 2), [parsed_chat, parsed_chat])
 
     def test_numpy_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")  # Need an actual tokenizer to encode
@@ -310,10 +307,9 @@ class ChatSchemaParserTest(unittest.TestCase):
         tokenizer.response_schema = cohere_schema
         parsed_chat = tokenizer.parse_response(model_out)
         tokenized_out = tokenizer(model_out, return_tensors="np").input_ids
-        # A single (1D) sequence works; 2D (batched) input raises
+        # A single (1D) sequence works; 2D (batched) input returns a list of parsed dicts
         self.assertEqual(tokenizer.parse_response(tokenized_out[0]), parsed_chat)
-        with self.assertRaises(ValueError):
-            tokenizer.parse_response(tokenized_out)
+        self.assertEqual(tokenizer.parse_response(tokenized_out), [parsed_chat])
 
     def test_tensor_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")  # Need an actual tokenizer to encode
@@ -321,10 +317,9 @@ class ChatSchemaParserTest(unittest.TestCase):
         tokenizer.response_schema = cohere_schema
         parsed_chat = tokenizer.parse_response(model_out)
         tokenized_out = tokenizer(model_out, return_tensors="pt").input_ids
-        # A single (1D) sequence works; 2D (batched) input raises
+        # A single (1D) sequence works; 2D (batched) input returns a list of parsed dicts
         self.assertEqual(tokenizer.parse_response(tokenized_out[0]), parsed_chat)
-        with self.assertRaises(ValueError):
-            tokenizer.parse_response(tokenized_out)
+        self.assertEqual(tokenizer.parse_response(tokenized_out), [parsed_chat])
 
     def test_cohere_template(self):
         model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'

@@ -134,6 +134,7 @@ def _validate_template_shape(spec: dict) -> None:
     if not isinstance(fields_raw, dict) or not fields_raw:
         raise ValueError("response_template.fields must be a non-empty dict")
 
+
 def _build_field(name: str, field: dict) -> ResponseTemplateField:
     """Validate a single field spec and compile it into a `ResponseTemplateField`."""
 

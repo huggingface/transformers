@@ -34,7 +34,7 @@ templates allow users to ignore the messy details of what specific formats and c
 and use a universal API of message dicts that works with any model.
 
 The best way to understand response templates is to see them in action. The main entry point is the
-[`~PreTrainedTokenizerBase.parse_response`] method:
+[`~PreTrainedTokenizerBase.parse_response`] method, which accepts either a single sequence or a batch:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer

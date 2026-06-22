@@ -212,6 +212,32 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         tokenized = tokenizer(model_out).input_ids
         self.assertEqual(tokenizer.parse_response(tokenized), parsed)
 
+    def test_batched_response(self):
+        """A batch of responses (list of strings or list of token-id sequences) returns one parsed
+        dict per item; a single-item batch still returns a one-element list, not a bare dict."""
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer.response_template = cohere_template
+        out_a = (
+            "<|START_THINKING|>Think A.<|END_THINKING|>"
+            '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "tool_a", '
+            '"parameters": {"x": "1"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        )
+        out_b = (
+            "<|START_THINKING|>Think B.<|END_THINKING|>"
+            '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "tool_b", '
+            '"parameters": {"y": "2"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        )
+        single_a = tokenizer.parse_response(out_a)
+        single_b = tokenizer.parse_response(out_b)
+        self.assertNotEqual(single_a, single_b)
+        # A list of strings is parsed as a batch, one dict per item.
+        self.assertEqual(tokenizer.parse_response([out_a, out_b]), [single_a, single_b])
+        # Batched token-id input (list of token-id sequences) parses the same way.
+        ids = [tokenizer(out_a).input_ids, tokenizer(out_b).input_ids]
+        self.assertEqual(tokenizer.parse_response(ids), [single_a, single_b])
+        # A single-item batch returns a one-element list, not a bare dict.
+        self.assertEqual(tokenizer.parse_response([out_a]), [single_a])
+
     def test_cohere(self):
         model_out = (
             "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
@@ -1163,6 +1189,25 @@ class PrefixAndTruncationTest(unittest.TestCase):
         from_str = tokenizer.parse_response("hi</think>", prefix=prefix_text)
         from_ids = tokenizer.parse_response("hi</think>", prefix=prefix_ids)
         self.assertEqual(from_str, from_ids)
+
+    def test_batched_parse_response_with_prefix(self):
+        """Batched `parse_response`: a single prefix is broadcast to every item, a per-item prefix
+        list is matched positionally, and a prefix count that doesn't match the batch raises."""
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer.response_template = qwen3_template
+        prefix = "<|im_start|>assistant\n<think>\n"
+        gen_a, gen_b = "thinking A</think>answer A", "thinking B</think>answer B"
+        single_a = tokenizer.parse_response(gen_a, prefix=prefix)
+        single_b = tokenizer.parse_response(gen_b, prefix=prefix)
+        self.assertNotEqual(single_a, single_b)
+
+        # A single prefix is broadcast across the whole batch.
+        self.assertEqual(tokenizer.parse_response([gen_a, gen_b], prefix=prefix), [single_a, single_b])
+        # One prefix per item (here identical) is matched up positionally.
+        self.assertEqual(tokenizer.parse_response([gen_a, gen_b], prefix=[prefix, prefix]), [single_a, single_b])
+        # A prefix batch whose length doesn't match the responses is an error.
+        with self.assertRaises(ValueError):
+            tokenizer.parse_response([gen_a, gen_b], prefix=[prefix])
 
     def test_tokenizer_get_response_parser_with_prefix(self):
         """`tokenizer.get_response_parser(prefix=...)` returns a stream that
