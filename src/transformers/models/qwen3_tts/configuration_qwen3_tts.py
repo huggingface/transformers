@@ -56,32 +56,21 @@ class Qwen3TTSSpeakerEncoderConfig(PreTrainedConfig):
             The sample rate of the audio.
     """
 
+    # Set an explicit `model_type` so the converter does not derive a mangled value from the class name; this follows
+    # the qwen2_5_omni convention where every sub-config carries a descriptive (unregistered) `model_type`.
+    model_type = "qwen3_tts_speaker_encoder"
+
+    # ECAPA-TDNN fields kept from the DiT config, re-declared with the Qwen3-TTS speaker encoder defaults.
+    mel_dim: int = 128
+    enc_dim: int = 1024
+    enc_channels: list[int] | tuple[int, ...] = (512, 512, 512, 512, 1536)
+    enc_kernel_sizes: list[int] | tuple[int, ...] = (5, 3, 3, 3, 1)
+    enc_dilations: list[int] | tuple[int, ...] = (1, 2, 3, 4, 1)
+    enc_attention_channels: int = 128
+    enc_res2net_scale: int = 8
+    enc_se_channels: int = 128
     base_config_key = "speaker_encoder_config"
-
-    def __init__(
-        self,
-        mel_dim: int | None = 128,
-        enc_dim: int | None = 1024,
-        enc_channels: list[int] | None = None,
-        enc_kernel_sizes: list[int] | None = None,
-        enc_dilations: list[int] | None = None,
-        enc_attention_channels: int | None = 128,
-        enc_res2net_scale: int | None = 8,
-        enc_se_channels: int | None = 128,
-        sample_rate: int | None = 24000,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.mel_dim = mel_dim
-        self.enc_dim = enc_dim
-        self.enc_channels = enc_channels if enc_channels is not None else [512, 512, 512, 512, 1536]
-        self.enc_kernel_sizes = enc_kernel_sizes if enc_kernel_sizes is not None else [5, 3, 3, 3, 1]
-        self.enc_dilations = enc_dilations if enc_dilations is not None else [1, 2, 3, 4, 1]
-        self.enc_attention_channels = enc_attention_channels
-        self.enc_res2net_scale = enc_res2net_scale
-        self.enc_se_channels = enc_se_channels
-        self.sample_rate = sample_rate
+    sample_rate: int = 24000
 
 
 @strict
