@@ -88,9 +88,13 @@ class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
         shared_kv_states (`dict`, *optional*):
             Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
             Used to pass shared KV states between layers during KV sharing.
+        router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+            Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length,
+            num_experts)`, i.e. the raw router logits used to compute the load balancing loss.
     """
 
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -116,9 +120,14 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
     audio_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
+    aux_loss (`torch.FloatTensor`, *optional*, returned when `output_router_logits=True` is passed):
+        Load balancing loss for the MoE experts.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`,
+        i.e. the raw router logits used to compute the load balancing loss.
     """
 
     loss: torch.FloatTensor | None = None
@@ -130,7 +139,9 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
 
     audio_hidden_states: torch.FloatTensor | None = None
 
+    aux_loss: torch.FloatTensor | None = None
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(

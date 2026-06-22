@@ -188,6 +188,8 @@ class Gemma4TextConfig(PreTrainedConfig):
     num_experts: int | None = None
     top_k_experts: int | None = None
     moe_intermediate_size: int | None = None
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
 
     def __post_init__(self, **kwargs):
         if self.use_bidirectional_attention == "all":
