@@ -51,6 +51,13 @@ class Glm5NextConfig(PreTrainedConfig):
         Number of DSA indexer heads.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of sparse-attention positions selected by the DSA indexer.
+    index_kpool (`int`, *optional*, defaults to 1):
+        DSA serving-cache key pooling factor. Values greater than 1 enable
+        checkpoint-compatible index-pool compression parameters.
+    index_kpool_compress (`bool`, *optional*, defaults to `False`):
+        Whether DSA index-pool compression parameters are present.
+    indexer_rope_interleave (`bool`, *optional*, defaults to `False`):
+        Whether DSA indexer RoPE uses interleaved pairs instead of NeoX half rotation.
     index_dsa_use_layernorm (`bool`, *optional*):
         Whether DSA indexer keys include `indexer.k_norm.*`. If this field is
         absent, GLM5-Next keeps the legacy no-indexer path.
@@ -130,6 +137,9 @@ class Glm5NextConfig(PreTrainedConfig):
     index_head_dim: int = 128
     index_n_heads: int = 32
     index_topk: int | None = 2048
+    index_kpool: int = 1
+    index_kpool_compress: bool = False
+    indexer_rope_interleave: bool = False
     index_dsa_use_layernorm: bool | None = None
     index_skip_topk_offset: int | None = 1
     index_topk_freq: int | None = 1

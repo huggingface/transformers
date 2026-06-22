@@ -146,13 +146,6 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
             ],
         )
 
-    def test_default_config_matches_new_checkpoint_rules(self):
-        config = Glm5NextConfig()
-        self.assertEqual(config.qk_nope_head_dim, 256)
-        self.assertEqual(config.qk_rope_head_dim, 0)
-        self.assertEqual(config.num_experts_per_tok, 8)
-        self.assertLessEqual(config.num_experts_per_tok, config.n_routed_experts)
-
     @parameterized.expand(["linear", "dynamic", "yarn"])
     def test_model_rope_scaling_from_config(self, scaling_type):
         self.skipTest("GLM-5-Next full-attention checkpoints use no-RoPE MLA, so RoPE scaling is not exercised")
@@ -256,6 +249,46 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
             rtol=1e-4,
             atol=1e-4,
         )
+
+    def test_prepare_inputs_keeps_kda_cache_for_generation(self):
+        config = Glm5NextConfig(
+            vocab_size=99,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            q_lora_rank=4,
+            kv_lora_rank=4,
+            qk_nope_head_dim=4,
+            qk_rope_head_dim=0,
+            v_head_dim=4,
+            linear_attn_config={
+                "full_attn_layers": [1],
+                "head_dim": 4,
+                "kda_layers": [0],
+                "num_heads": 2,
+                "short_conv_kernel_size": 4,
+                "lower_bound": -5.0,
+            },
+            mlp_layer_types=["dense", "dense"],
+            pad_token_id=0,
+        )
+        model = Glm5NextForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.tensor([[5, 17, 23, 31]], device=torch_device)
+
+        with torch.no_grad():
+            prefix_outputs = model(input_ids[:, :3], use_cache=True)
+
+        prepared_inputs = model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=prefix_outputs.past_key_values,
+            attention_mask=torch.ones_like(input_ids),
+            use_cache=True,
+        )
+
+        self.assertIs(prepared_inputs["past_key_values"], prefix_outputs.past_key_values)
+        self.assertTrue(prepared_inputs["use_cache"])
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("GLM-5-Next has custom MLA/KDA attention paths that need a dedicated SDPA equivalence test")

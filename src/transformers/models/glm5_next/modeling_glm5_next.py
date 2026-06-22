@@ -423,8 +423,20 @@ def apply_rotary_pos_emb_to_single(
     cos: torch.Tensor,
     sin: torch.Tensor,
     unsqueeze_dim: int = 1,
+    interleaved: bool = False,
 ) -> torch.Tensor:
-    return apply_rotary_pos_emb(x, x, cos, sin, unsqueeze_dim=unsqueeze_dim)[0]
+    if not interleaved:
+        return apply_rotary_pos_emb(x, x, cos, sin, unsqueeze_dim=unsqueeze_dim)[0]
+
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    rotary_dim = x.shape[-1]
+    cos = cos[..., : rotary_dim // 2].repeat_interleave(2, dim=-1)
+    sin = sin[..., : rotary_dim // 2].repeat_interleave(2, dim=-1)
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    rotated = torch.stack((-x2, x1), dim=-1).flatten(-2)
+    return (x * cos) + (rotated * sin)
 
 
 # =============================================================================
@@ -453,6 +465,16 @@ class Glm5NextIndexer(nn.Module):
         self.qk_rope_head_dim: int = config.qk_rope_head_dim
         self.index_topk: int = config.index_topk
         self.q_lora_rank: int = config.q_lora_rank
+        self.index_kpool: int = config.index_kpool
+        self.index_kpool_compress: bool = config.index_kpool_compress
+        self.indexer_rope_interleave: bool = config.indexer_rope_interleave
+
+        if self.index_kpool > 1 and self.index_kpool_compress:
+            self.index_kpool_compress_ape = nn.Parameter(torch.zeros(self.index_kpool, self.head_dim))
+            self.index_kpool_compress_gate = nn.Parameter(torch.zeros(self.head_dim, self.hidden_size))
+        else:
+            self.register_parameter("index_kpool_compress_ape", None)
+            self.register_parameter("index_kpool_compress_gate", None)
 
         self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
@@ -527,12 +549,16 @@ class Glm5NextIndexer(nn.Module):
             q = self.wq_b(q_resid)
             q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)
             q_pe, q_nope = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-            q_pe = apply_rotary_pos_emb_to_single(q_pe, cos, sin, unsqueeze_dim=2)
+            q_pe = apply_rotary_pos_emb_to_single(
+                q_pe, cos, sin, unsqueeze_dim=2, interleaved=self.indexer_rope_interleave
+            )
             q = torch.cat([q_pe, q_nope], dim=-1)
 
             k = self.k_norm(self.wk(hidden_states))
             k_pe, k_nope = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-            k_pe = apply_rotary_pos_emb_to_single(k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2).squeeze(2)
+            k_pe = apply_rotary_pos_emb_to_single(
+                k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2, interleaved=self.indexer_rope_interleave
+            ).squeeze(2)
             k = torch.cat([k_pe, k_nope], dim=-1)
             k_cached = self._update_key_cache(k, past_key_values)
 
@@ -1287,11 +1313,6 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
         is_first_iteration: bool | None = False,
         **kwargs,
     ):
-        if bool((getattr(self.config, "linear_attn_config", None) or {}).get("kda_layers")):
-            kwargs["use_cache"] = False
-            next_sequence_length = None
-            past_key_values = None
-
         return super().prepare_inputs_for_generation(
             input_ids=input_ids,
             next_sequence_length=next_sequence_length,
