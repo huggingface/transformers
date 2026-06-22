@@ -100,10 +100,10 @@ class DiaTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (string) in a single string."""
         bstring = b""
         for token in tokens:
-            if token in self.added_tokens_decoder:
-                added_token_obj = self.added_tokens_decoder[token]
+            if token in self._added_tokens_decoder:
+                added_token_obj = self._added_tokens_decoder[token]
                 tok_string = str(added_token_obj).encode("utf-8")
-            elif token in self.added_tokens_encoder:
+            elif token in self._added_tokens_encoder:
                 tok_string = token.encode("utf-8")
             else:
                 tok_string = token.encode("utf-8")  # Assume general string token
