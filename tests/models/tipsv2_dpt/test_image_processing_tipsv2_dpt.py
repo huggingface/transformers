@@ -17,7 +17,11 @@ import unittest
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
@@ -42,6 +46,7 @@ class Tipsv2DptImageProcessingTester:
         rescale_factor=1 / 255,
         do_normalize=False,
         do_convert_rgb=True,
+        num_labels=3,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -54,6 +59,7 @@ class Tipsv2DptImageProcessingTester:
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
+        self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
         return {
@@ -79,10 +85,30 @@ class Tipsv2DptImageProcessingTester:
             torchify=torchify,
         )
 
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {
+            "outputs": SemanticSegmenterOutput(
+                logits=torch.randn(
+                    self.batch_size,
+                    self.num_labels,
+                    self.size["height"],
+                    self.size["width"],
+                )
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.size["height"],
+            "width": self.size["width"],
+        }
+        return inputs, expected_shape
+
 
 @require_torch
 @require_vision
-class Tipsv2DptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class Tipsv2DptImageProcessingTest(
+    ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
+):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = Tipsv2DptImageProcessingTester(self)
@@ -155,26 +181,3 @@ class Tipsv2DptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # mismatched batch size raises ValueError
         with self.assertRaises(ValueError):
             image_processor.post_process_normal_estimation(outputs, target_sizes=[(100, 100)])
-
-    def test_post_process_semantic_segmentation(self):
-        image_processor = Tipsv2DptImageProcessor()
-
-        batch_size = 2
-        num_labels = 3
-        height = width = 16
-        outputs = SemanticSegmenterOutput(logits=torch.randn(batch_size, num_labels, height, width))
-
-        # without target_sizes: argmax at decoder resolution
-        segmentation = image_processor.post_process_semantic_segmentation(outputs)
-        self.assertEqual(len(segmentation), batch_size)
-        self.assertEqual(segmentation[0].shape, torch.Size([height, width]))
-
-        # with target_sizes: logits resized before argmax
-        target_sizes = [(height * 2, width * 2)] * batch_size
-        segmentation = image_processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
-        self.assertEqual(len(segmentation), batch_size)
-        self.assertEqual(segmentation[0].shape, torch.Size([height * 2, width * 2]))
-
-        # mismatched batch size raises ValueError
-        with self.assertRaises(ValueError):
-            image_processor.post_process_semantic_segmentation(outputs, target_sizes=[(100, 100)])

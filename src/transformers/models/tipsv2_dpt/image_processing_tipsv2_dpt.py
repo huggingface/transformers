@@ -23,6 +23,7 @@ import torch
 from torch import nn
 
 from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_utils import PILImageResampling
 from ...utils import TensorType, auto_docstring
 
@@ -113,7 +114,8 @@ class Tipsv2DptImageProcessor(TorchvisionBackend):
         self,
         outputs,
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
-    ) -> list[torch.Tensor]:
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
         Converts the output of [`Tipsv2DptForSemanticSegmentation`] or [`Tipsv2DptModel`] into semantic segmentation maps.
 
@@ -123,11 +125,18 @@ class Tipsv2DptImageProcessor(TorchvisionBackend):
             target_sizes [([`TensorType`] or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
         Returns:
-            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
         try:
             logits = outputs.segmentation_logits  # DptOutput
@@ -142,7 +151,15 @@ class Tipsv2DptImageProcessor(TorchvisionBackend):
             logit = logits[idx].unsqueeze(0)
             if target_sizes is not None:
                 logit = nn.functional.interpolate(logit, size=target_sizes[idx], mode="bilinear", align_corners=False)
-            semantic_segmentation.append(logit[0].argmax(dim=0))
+            semantic_segmentation.append(
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": logit[0].argmax(dim=0), "segmentation_scores": logit[0]}
+                )
+            )
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
+
         return semantic_segmentation
 
 
