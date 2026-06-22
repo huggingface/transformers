@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import functools
 import os
 import re
 import sys
@@ -739,6 +740,14 @@ def register_kernel_replacements_and_fusions(
 
         kernel_mod = sys.modules.get(kernel_cls.__module__)
         layout_cls = getattr(kernel_mod, f"{kernel_cls.__name__}Layout", None) if kernel_mod else None
+
+        if layout_cls is not None and "forward" not in layout_cls.__dict__:
+
+            @functools.wraps(kernel_cls.forward)
+            def _noop_forward(self, *args, **kwargs):
+                pass
+
+            layout_cls.forward = _noop_forward
 
         # Case 1: no fusion.
         if isinstance(layer_name, str):
