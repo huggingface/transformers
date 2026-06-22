@@ -3395,47 +3395,39 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 "`prefix=` is only supported with new-style `response_template` specs, not legacy `response_schema`."
             )
 
-        responses, batched = self._decode_parse_input(response)
+        if isinstance(response, str):
+            responses, batched = [response], False
+        elif isinstance(response, (list, tuple)) and (not response or isinstance(response[0], str)):
+            responses, batched = list(response), True  # a list of (already-decoded) strings is a batch
+        else:
+            decoded = self.decode(response)
+            responses, batched = ([decoded], False) if isinstance(decoded, str) else (decoded, True)
 
         if prefix is None:
             prefixes: list[str | None] = [None] * len(responses)
         else:
-            prefix_texts, prefix_batched = self._decode_parse_input(prefix)
-            if prefix_batched and len(prefix_texts) != len(responses):
+            if isinstance(prefix, str):
+                prefix_texts, prefix_batched = [prefix], False
+            elif isinstance(prefix, (list, tuple)) and (not prefix or isinstance(prefix[0], str)):
+                prefix_texts, prefix_batched = list(prefix), True
+            else:
+                decoded = self.decode(prefix)
+                prefix_texts, prefix_batched = ([decoded], False) if isinstance(decoded, str) else (decoded, True)
+            if not prefix_batched:
+                prefixes = prefix_texts * len(responses)  # broadcast the single prefix to every response
+            elif len(prefix_texts) != len(responses):
                 raise ValueError(
                     f"Got {len(responses)} response(s) but {len(prefix_texts)} prefix(es); `prefix` must be "
                     "`None`, a single sequence (broadcast to every response), or one prefix per response."
                 )
-            # A single prefix is broadcast across the batch; a batched prefix is matched per-item.
-            prefixes = list(prefix_texts) * len(responses) if not prefix_batched else list(prefix_texts)
+            else:
+                prefixes = prefix_texts
 
-        def _parse_one(text: str, item_prefix: str | None):
-            # Matt: This is a little ugly but we can drop it as soon as we get rid of the old schemas
-            if use_new_template:
-                return _template_parse_response(text, schema, prefix=item_prefix)
-            return recursive_parse(text, schema)
-
-        if not batched:
-            return _parse_one(responses[0], prefixes[0])
-        return [_parse_one(text, item_prefix) for text, item_prefix in zip(responses, prefixes)]
-
-    def _decode_parse_input(
-        self, value: str | list[int] | list[str] | np.ndarray | torch.Tensor
-    ) -> tuple[list[str], bool]:
-        """Normalize a `parse_response` input (the response or the prefix) into a list of decoded strings
-        plus a flag indicating whether the input was batched. Mirrors `decode`'s single-vs-batch contract:
-        a bare string or a single token-id sequence is a single item, while a list of strings or a batch of
-        token-id sequences (list of lists / 2D tensor / 2D array) is batched. An empty list is a zero-length
-        batch."""
-        if isinstance(value, str):
-            return [value], False
-        if isinstance(value, (list, tuple)) and (len(value) == 0 or isinstance(value[0], str)):
-            # A list of strings is a batch of already-decoded sequences; decode() can't take strings.
-            return list(value), True
-        decoded = self.decode(value)
-        if isinstance(decoded, str):
-            return [decoded], False
-        return decoded, True
+        if use_new_template:
+            parsed = [_template_parse_response(text, schema, prefix=pfx) for text, pfx in zip(responses, prefixes)]
+        else:
+            parsed = [recursive_parse(text, schema) for text in responses]
+        return parsed if batched else parsed[0]
 
     def get_response_parser(
         self,
