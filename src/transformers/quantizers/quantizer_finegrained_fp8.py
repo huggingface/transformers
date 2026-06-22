@@ -135,25 +135,24 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        # Normalize all `scale_fmt="ue8m0"` block scales to the `uint8` UE8M0 exponent byte the
-        # runtime expects, regardless of how the checkpoint stored them. The loader keeps the
-        # on-disk dtype for these (renamed `.scale` keys), which is one of:
-        #   - `float32` container of power-of-two values (e.g. dsv4-flash-base) → encode the exponent;
-        #   - 1-byte float8 E8M0 (e.g. dsv4-flash) → bit-identical to the byte, so just reinterpret.
+        # dsv4-flash-base stores its (power-of-two) ue8m0 scales in a float32 container under
+        # `.scale`; those renamed keys keep the on-disk float32 dtype, so cast them to the UE8M0
+        # dtype the kernels expect (exact, since the values are powers of two). Checkpoints that
+        # already ship the native float8 E8M0 dtype (e.g. dsv4-flash) are left untouched.
         if self.quantization_config.scale_fmt == "ue8m0":
-            from ..integrations.finegrained_fp8 import _encode_ue8m0
+            from ..integrations.finegrained_fp8 import _get_ue8m0_dtype
 
-            scale_names = [name for name, _ in model.named_parameters() if name.endswith("_scale_inv")]
-            for name in scale_names:
+            ue8m0 = _get_ue8m0_dtype()
+            float32_scales = [
+                name
+                for name, param in model.named_parameters()
+                if name.endswith("_scale_inv") and param.dtype == torch.float32
+            ]
+            for name in float32_scales:
                 module_name, _, attr = name.rpartition(".")
-                data = getattr(model.get_submodule(module_name), attr).data
-                if data.dtype == torch.float32:
-                    new = _encode_ue8m0(data)
-                elif data.element_size() == 1 and data.dtype != torch.uint8:
-                    new = data.view(torch.uint8)  # 1-byte float8 E8M0 → raw exponent byte
-                else:
-                    continue  # already uint8 (or a dtype we don't touch)
-                setattr(model.get_submodule(module_name), attr, torch.nn.Parameter(new, requires_grad=False))
+                module = model.get_submodule(module_name)
+                scale = getattr(module, attr)
+                setattr(module, attr, torch.nn.Parameter(scale.data.to(ue8m0), requires_grad=False))
         return model
 
     def update_tp_plan(self, config):

@@ -50,12 +50,19 @@ _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 
-def _encode_ue8m0(scale: torch.Tensor) -> torch.Tensor:
-    """Encode positive scales as raw UE8M0 exponent bytes (``value == 2 ** (byte - 127)``),
-    stored as ``uint8``. Exact for powers of two. A plain ``.to(torch.uint8)`` would truncate
-    the *value* rather than the exponent, so encode the biased exponent explicitly."""
-    exponent = torch.log2(scale.float().clamp_min(torch.finfo(torch.float32).tiny)).round()
-    return (exponent + 127.0).clamp_(0, 255).to(torch.uint8)
+@functools.cache
+def _get_ue8m0_dtype() -> torch.dtype:
+    """Return ``torch.float8_e8m0fnu`` or raise a clear error on torch without FP8 support.
+
+    UE8M0 scales are always stored/consumed as this single dtype — the kernels (Triton
+    finegrained + DeepGEMM) read it natively, and supporting the same scales in mixed
+    container dtypes would be a mess — so fail loudly rather than fall back."""
+    if not hasattr(torch, "float8_e8m0fnu"):
+        raise RuntimeError(
+            "scale_fmt='ue8m0' requires torch.float8_e8m0fnu, which is only available in "
+            f"PyTorch >= 2.7 (found {torch.__version__}). Upgrade torch to use UE8M0 FP8 checkpoints."
+        )
+    return torch.float8_e8m0fnu
 
 
 def _first_attr(obj, *names):
@@ -219,8 +226,8 @@ def fp8_linear(
     Args:
         input: (..., K) bf16/fp16 activations.
         weight: (N, K) `float8_e4m3fn` or (N, K // 2) `int8` (FP4-packed).
-        weight_scale_inv: per-block weight scales — `float32` (V3-style) or `uint8` UE8M0
-            exponent bytes (V4-style; packed to int32 at the DeepGEMM kernel boundary).
+        weight_scale_inv: per-block weight scales — `float32` (V3-style) or `float8_e8m0fnu`
+            (V4-style; reinterpreted as int32 at the DeepGEMM kernel boundary).
         block_size: [block_n, block_k] for FP8 block-wise quant, or None/[N, K] for per-tensor.
             Ignored for FP4 weights (the kernel infers SF granularity from the dtype).
         bias: optional bias added to the matmul output.
@@ -288,7 +295,7 @@ class FP8Linear(nn.Linear):
             # If block size is None, it means that we are doing per-tensor quantization
             self.weight_scale_inv = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
         else:
-            sf_dtype = torch.uint8 if scale_fmt == "ue8m0" else torch.float32
+            sf_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
             scale_out_features = (out_features + self.block_size[0] - 1) // self.block_size[0]
             scale_in_features = (in_features + self.block_size[1] - 1) // self.block_size[1]
             self.weight_scale_inv = nn.Parameter(
@@ -612,7 +619,7 @@ class FP8Experts(nn.Module):
         #   - weight is `int8`, K dim halved (2 e2m1 values per byte).
         #   - per-row SF at gran_k=32 (no block-wise SF; `block_size` ignored).
         is_fp4 = getattr(config, "expert_dtype", "fp8") == "fp4"
-        sf_dtype = torch.uint8 if scale_fmt == "ue8m0" else torch.float32
+        sf_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
         if is_fp4:
             alloc_kwargs = {
                 "weight_dtype": torch.int8,
@@ -871,12 +878,12 @@ class Fp8Quantize(ConversionOps):
         quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
         quantized = quantized.reshape(original_shape)
         inv_scales = (1.0 / scales).to(torch.float32)
-        # DeepSeek V4-style storage (`scale_fmt="ue8m0"`): round inv_scales up to UE8M0-representable
-        # values (powers of 2), then encode as the raw UE8M0 exponent byte so the dtype matches the
-        # `uint8` scale allocation in `FP8Linear`/`FP8Experts`.
+        # DeepSeek V4-style storage (`scale_fmt="ue8m0"`): round inv_scales to UE8M0-representable
+        # values (powers of 2) and cast to the UE8M0 byte storage so the on-disk dtype matches the
+        # parameter allocation in `FP8Linear`/`FP8Experts`.
         if self.hf_quantizer.quantization_config.scale_fmt == "ue8m0":
             inv_scales = torch.pow(2.0, torch.ceil(torch.log2(inv_scales.clamp(min=torch.finfo(torch.float32).tiny))))
-            inv_scales = _encode_ue8m0(inv_scales)
+            inv_scales = inv_scales.to(_get_ue8m0_dtype())
         scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith(".weight") else key + "_scale_inv"
         return {key: quantized, scale_key: inv_scales}
 
@@ -967,9 +974,10 @@ class Fp8Dequantize(ConversionOps):
             )
         block_m = rows // scale_rows
         block_n = cols // scale_cols
-        # UE8M0 scales are raw exponent bytes (``uint8``), not directly usable as multipliers.
-        # Promote both sides to fp32 for the math; prefer the destination parameter's dtype when
-        # known so eager modules (e.g. plain ``nn.Linear``) keep the model's compute dtype after load.
+        # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
+        # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
+        # the math; prefer the destination parameter's dtype when known so eager modules
+        # (e.g. plain ``nn.Linear``) keep the model's compute dtype after load.
         if output_dtype is None:
             output_dtype = (
                 scales.dtype if scales.dtype.is_floating_point and scales.element_size() >= 2 else torch.bfloat16
