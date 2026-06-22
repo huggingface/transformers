@@ -64,25 +64,24 @@ class Mistral4TopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts
+        self.num_experts = config.n_routed_experts
+        self.n_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.routed_scaling_factor = config.routed_scaling_factor
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
 
     def forward(self, hidden_states):
+        # Mistral4 routes on softmax scores (no sigmoid / score-correction bias); top-k
+        # selection lives here so the `ep_router` hook can remap the returned indices.
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
         router_logits = F.linear(hidden_states, self.weight)
-        return router_logits
-
-
-class Mistral4NaiveMoe(DeepseekV3NaiveMoe):
-    pass
-
-
-class Mistral4MoE(DeepseekV3MoE):
-    def route_tokens_to_experts(self, router_logits: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        router_logits = router_logits.softmax(-1)
+        scores = router_logits.softmax(-1)
         group_scores = (
-            router_logits.view(-1, self.n_group, self.n_routed_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
+            scores.view(-1, self.n_group, self.n_routed_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
         )
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
@@ -92,14 +91,22 @@ class Mistral4MoE(DeepseekV3MoE):
             .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
             .reshape(-1, self.n_routed_experts)
         )
-        scores_for_choice = router_logits.masked_fill(~score_mask.bool(), 0.0)
+        scores_for_choice = scores.masked_fill(~score_mask.bool(), 0.0)
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = router_logits.gather(1, topk_indices)
+        topk_weights = scores.gather(1, topk_indices)
         if self.norm_topk_prob:
             denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
             topk_weights /= denominator
         topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
+        return router_logits, topk_weights, topk_indices
+
+
+class Mistral4NaiveMoe(DeepseekV3NaiveMoe):
+    pass
+
+
+class Mistral4MoE(DeepseekV3MoE):
+    pass
 
 
 class Mistral4Attention(DeepseekV3Attention):

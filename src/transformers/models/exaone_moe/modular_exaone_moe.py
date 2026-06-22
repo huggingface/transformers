@@ -130,8 +130,15 @@ class ExaoneMoeMLP(Qwen2MoeMLP):
 
 class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
+        self.top_k = config.num_experts_per_tok
+        self.n_routed_experts = config.num_experts
+        self.num_experts = config.num_experts
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.n_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
         self.weight = nn.Parameter(torch.empty((config.num_experts, config.hidden_size)))
         self.register_buffer("e_score_correction_bias", torch.zeros(config.num_experts))
 

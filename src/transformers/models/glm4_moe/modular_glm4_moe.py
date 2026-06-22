@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch GLM-4-MOE model."""
 
-import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
@@ -161,18 +160,7 @@ class Glm4MoeMLP(DeepseekV3MLP):
 
 
 class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
-    def __init__(self, config: Glm4MoeConfig):
-        nn.Module.__init__(self)
-        self.config = config
-        self.top_k = config.num_experts_per_tok
-        self.n_routed_experts = config.n_routed_experts
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts), dtype=torch.float32))
+    pass
 
 
 class Glm4MoeRMSNorm(DeepseekV3RMSNorm):

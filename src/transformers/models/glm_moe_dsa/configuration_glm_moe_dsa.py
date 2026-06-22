@@ -82,6 +82,16 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    # Expert-only EP plan: shard only the routed experts, leaving attention and the
+    # shared expert replicated (FSDP2 handles their distribution). Route on the gate,
+    # run the routed experts as an expert-axis grouped-GEMM and all-reduce the experts
+    # module output across ranks.
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
 
     attribute_map = {
         "num_local_experts": "n_routed_experts",

@@ -150,11 +150,12 @@ class LongcatFlashTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
         self.top_k = config.moe_topk
+        self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
+        self.num_experts = config.n_routed_experts
         self.routed_scaling_factor = config.routed_scaling_factor
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
         self.router_bias = getattr(config, "router_bias", False)
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
 

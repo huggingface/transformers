@@ -186,6 +186,28 @@ def _is_sm100(device: torch.device) -> bool:
     return torch.cuda.get_device_capability(device)[0] >= 10
 
 
+def _assert_sm100_scales_are_ue8m0(experts: torch.nn.Module, device: torch.device) -> None:
+    """On B200 (SM100) DeepGEMM only supports UE8M0 (power-of-two) scales; the float32 scales
+    that work on H100 (SM90) have no SM100 path. ``scale_fmt="ue8m0"`` scales are powers of two,
+    so ``_coerce_sf_for_kernel``'s round to UE8M0 is a no-op (even when they're stored in a
+    float32 container, e.g. dsv4-flash-base); ``scale_fmt="float"`` scales are not, so fail loud
+    rather than silently rounding them and corrupting the output.
+    """
+    if not _is_sm100(device):
+        return  # SM90 consumes float32 SFs directly (no UE8M0 round).
+    if getattr(experts, "scale_fmt", "float") == "ue8m0":
+        return
+    raise ValueError(
+        "DeepGEMM's Blackwell (SM100) experts kernel requires power-of-two (UE8M0) scale "
+        "factors, but this checkpoint ships plain float32 block scales "
+        "(quantization_config.scale_fmt='float'). Rounding them to UE8M0 would scale the "
+        "dequantized expert weights incorrectly and silently corrupt the output. Use a "
+        "checkpoint quantized with scale_fmt='ue8m0', or an experts implementation that "
+        "consumes float32 block scales directly, e.g. "
+        "`model.set_experts_implementation('grouped_mm')`."
+    )
+
+
 _DEEPGEMM_VISITED_DEVICES: set[int] = set()
 
 
@@ -243,11 +265,10 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
     (`stride(-2) == 1`) and TMA-aligned (`stride(-1) == align(mn, 16/esize)`).
 
     Inputs come in three flavors:
-      - `float8_e8m0fnu` on SM100: raw UE8M0 bytes — pack 4 K-bytes → int32
-        (last dim /4) for the kernel's `(INT, 1, gran_k)` path.
-      - `float8_e8m0fnu` on SM90: SM90 dispatch only accepts FP32 SFs, so cast
-        UE8M0 → FP32 (exact upcast — UE8M0 is the biased-exponent half of a
-        pow-of-2 FP32, so `.float()` rebuilds the original FP32 scale exactly).
+      - `uint8` UE8M0 exponent bytes on SM100: pack 4 K-bytes → int32 (last dim /4)
+        for the kernel's `(INT, 1, gran_k)` path.
+      - `uint8` UE8M0 exponent bytes on SM90: SM90 dispatch only accepts FP32 SFs, so decode
+        UE8M0 → FP32 (`2 ** (byte - 127)`; exact, since UE8M0 is the biased exponent of a pow-of-2).
       - `float32`: per-token / per-block SFs from `per_token_cast_to_fp8` or
         on-disk weights — round to UE8M0 on SM100 (see `_ceil_to_ue8m0`).
       - `int32`: already-packed UE8M0 — pass through.
@@ -259,14 +280,14 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
     the kernel only handles FP32 SFs and would otherwise reject our INT SF here.
     """
     is_sm100 = _is_sm100(sf.device)
-    if sf.dtype == torch.float8_e8m0fnu:
+    if sf.dtype == torch.uint8:
         if expected_mn is not None and sf.size(-2) < expected_mn:
             gran_mn = expected_mn // sf.size(-2)
             sf = sf.repeat_interleave(gran_mn, dim=-2)
         if is_sm100:
-            sf = sf.contiguous().view(torch.int32)
+            sf = sf.contiguous().view(torch.int32)  # pack 4 exponent bytes → int32
         else:
-            sf = sf.float()
+            sf = (sf.float() - 127.0).exp2()  # SM90: decode the exponent byte to its fp32 value
     elif sf.dtype == torch.float32 and is_sm100:
         sf = _ceil_to_ue8m0(sf)
 
@@ -309,7 +330,7 @@ def _select_fp8_cast_kwargs(
     block_size = tuple(block_size)
     if block_size not in ((128, 128), (1, 128)):
         raise ValueError(f"DeepGEMM requires `block_size` ∈ {{(128, 128), (1, 128)}}, got {block_size}.")
-    if weight_scale_inv.dtype == torch.float8_e8m0fnu and is_sm100:
+    if weight_scale_inv.dtype == torch.uint8 and is_sm100:  # UE8M0 exponent bytes
         return {"use_ue8m0": True, "gran_k": 128, "use_packed_ue8m0": True}
     return {"use_ue8m0": False, "gran_k": 128}
 
@@ -555,7 +576,9 @@ def deepgemm_fp8_fp4_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    _assert_single_device(hidden_states.device, context="experts")
+    device = hidden_states.device
+    _assert_single_device(device, context="experts")
+    _assert_sm100_scales_are_ue8m0(self, device)
 
     if self.activation_scheme == "static":
         raise NotImplementedError("DeepGEMM experts dispatch does not support static activation quantization.")
@@ -567,7 +590,6 @@ def deepgemm_fp8_fp4_experts_forward(
         deepgemm.grouped_fp8_fp4_matmul_nn if self.is_transposed else deepgemm.grouped_fp8_fp4_matmul_nt
     )
 
-    device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
@@ -715,6 +737,8 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
       `transform_weights_for_mega_moe((gate_up, gate_up_sf), (down, down_sf))`.
       - `config.swiglu_limit` (optional): SwiGLU clamp; absent → unclamped.
     """
+    _assert_sm100_scales_are_ue8m0(self, hidden_states.device)
+
     if self.gate_up_proj.dtype != torch.int8:
         raise RuntimeError(
             f"DeepGEMM Mega MoE requires FP4-packed expert weights (dtype=`int8`), got "

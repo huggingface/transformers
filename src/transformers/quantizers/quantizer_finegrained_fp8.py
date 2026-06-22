@@ -134,6 +134,28 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
+    def _process_model_after_weight_loading(self, model, **kwargs):
+        # `scale_fmt="ue8m0"` scales are powers of two, but some checkpoints store them in a
+        # float32 container under `.scale` (e.g. dsv4-flash-base). Those keys get renamed during
+        # loading, which makes the loader keep the on-disk float32 dtype instead of the module's
+        # UE8M0 allocation. Cast them back to the allocated dtype here so the load respects the
+        # quant config (and the SM100 DeepGEMM path takes its native UE8M0 branch). The cast is
+        # exact — the values are already powers of two.
+        if self.quantization_config.scale_fmt == "ue8m0":
+            from ..integrations.finegrained_fp8 import _encode_ue8m0
+
+            float32_scales = [
+                name
+                for name, param in model.named_parameters()
+                if name.endswith("_scale_inv") and param.dtype == torch.float32
+            ]
+            for name in float32_scales:
+                module_name, _, attr = name.rpartition(".")
+                module = model.get_submodule(module_name)
+                scale = getattr(module, attr)
+                setattr(module, attr, torch.nn.Parameter(_encode_ue8m0(scale.data), requires_grad=False))
+        return model
+
     def update_tp_plan(self, config):
         if "Qwen3" in config.__class__.__name__:
             text_plan = {
@@ -204,41 +226,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             ]
         return []
 
-    def _is_mxfp8(self) -> bool:
-        """MXFP8 checkpoints ship E8M0 (uint8) per-block scales; plain FP8 ships float32."""
-        quant_method = getattr(self.quantization_config, "quant_method", None)
-        return quant_method == "mxfp8"
-
-    def _update_weight_conversions_mxfp8(self, weight_conversions):
-        """
-        Native MXFP8 path: prepend a `Fp8DecodeScale` op so the uint8 E8M0
-        scales are decoded to float32 `2 ** (byte - 127)` *before* any merge/concat op
-        and add a generic fallback converter that decodes the scales of plain `FP8Linear` weights (attention / dense projections)
-        which have no model-specific converter.
-        """
-        from ..core_model_loading import WeightConverter
-        from ..integrations.finegrained_fp8 import Fp8DecodeScale
-
-        updated: list = []
-        for conv in weight_conversions:
-            if isinstance(conv, WeightConverter) and any(p.endswith(".weight") for p in conv.source_patterns):
-                conv = WeightConverter(
-                    source_patterns=conv.source_patterns,
-                    target_patterns=conv._original_target_patterns,
-                    operations=[Fp8DecodeScale(self)] + list(conv.operations),
-                )
-            updated.append(conv)
-        # Generic fallback for plain ``nn.Linear`` scales with no model-specific converter.
-        # Listed last so the model converters above win the first-match for expert/dense scales.
-        updated.append(
-            WeightConverter(
-                source_patterns=["weight_scale_inv"],
-                target_patterns="weight_scale_inv",
-                operations=[Fp8DecodeScale(self)],
-            )
-        )
-        return updated
-
     def update_weight_conversions(self, weight_conversions):
         """When loading with ``dequantize=True``, attach an :class:`Fp8Dequantize` op to
         every existing :class:`WeightConverter` so that per-block scales are folded into
@@ -270,9 +257,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         weight_conversions = [scale_rename] + list(weight_conversions)
 
         if not (self.pre_quantized and self.quantization_config.dequantize):
-            if self.pre_quantized and self._is_mxfp8():
-                # mxfp8 needs a pre-processing on the scales when not dequantizing
-                return self._update_weight_conversions_mxfp8(weight_conversions)
             return weight_conversions + self.get_weight_conversions()
 
         updated: list = []
