@@ -276,7 +276,6 @@ class VoxtralRealtimePreTrainedModel(VoxtralPreTrainedModel, PreTrainedModel):
     _can_compile_fullgraph = False
     _keep_in_fp32_modules_strict = None
 
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)

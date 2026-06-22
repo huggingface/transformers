@@ -144,7 +144,6 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""

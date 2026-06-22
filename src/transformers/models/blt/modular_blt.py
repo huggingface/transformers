@@ -368,7 +368,6 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
     # (or 1 / sqrt(hidden_dim) for FFN outputs), and unit initialization for normalization layers.
     # We follow the same scheme here, but expressed in the Transformers APIs.
 
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         """

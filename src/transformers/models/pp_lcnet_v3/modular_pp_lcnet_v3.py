@@ -233,7 +233,6 @@ class PPLCNetV3DepthwiseSeparableConvLayer(PPLCNetDepthwiseSeparableConvLayer):
 
 
 class PPLCNetV3PreTrainedModel(PPLCNetPreTrainedModel):
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)

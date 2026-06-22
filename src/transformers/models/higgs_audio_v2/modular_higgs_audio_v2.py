@@ -177,7 +177,6 @@ class HiggsAudioV2Embeddings(CsmBackboneModelEmbeddings):
 
 
 class HiggsAudioV2PreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)

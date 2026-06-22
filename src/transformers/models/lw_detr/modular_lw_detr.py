@@ -316,7 +316,6 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
         "attentions": LwDetrViTAttention,
     }
 
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module) -> None:
         PreTrainedModel._init_weights(self, module)

@@ -205,7 +205,6 @@ class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
     _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4DecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
-    # trf-ignore: TRF018
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
         if isinstance(module, Exaone4_5_VisionRotaryEmbedding):

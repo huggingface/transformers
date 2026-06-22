@@ -1290,7 +1290,6 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
 
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)

@@ -270,7 +270,6 @@ class PPFormulaNetPreTrainedModel(SLANeXtPreTrainedModel):
     # Note this goes for the decoder only, the encoder will inherently always use eager attention
     _supports_sdpa = True
 
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
