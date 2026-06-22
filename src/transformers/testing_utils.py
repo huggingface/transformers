@@ -1146,6 +1146,11 @@ def require_torch_mps(test_case):
     return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
 
 
+def require_rocm(test_case):
+    """Decorator marking a test that requires a ROCm (AMD) GPU and PyTorch."""
+    return unittest.skipUnless(torch_device == "cuda" and IS_ROCM_SYSTEM, "test requires a ROCm (AMD) GPU")(test_case)
+
+
 def require_large_cpu_ram(test_case, memory: float = 80):
     """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
     if not is_psutil_available():
