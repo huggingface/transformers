@@ -231,5 +231,8 @@ class TorchAoDeserialize(ConversionOps):
         # Add repr to the module
         if isinstance(module, torch.nn.Linear):
             module.extra_repr = types.MethodType(_linear_extra_repr, module)
+        module._is_hf_initialized = True
+        for param in module.parameters(recurse=False):
+            param._is_hf_initialized = True
 
         return {full_layer_name: new_param}

@@ -51,7 +51,12 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import accepts_precomputed_kwargs, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    maybe_autocast,
+    merge_with_config_defaults,
+    no_inherit_decorator,
+)
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..ernie4_5_moe.configuration_ernie4_5_moe import Ernie4_5_MoeConfig
@@ -348,6 +353,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed.to(original_dtype), k_embed.to(original_dtype)
 
 
+@no_inherit_decorator
 class Ernie4_5_VLMoeTextAttention(Ernie4_5_MoeAttention):
     pass
 

@@ -569,6 +569,8 @@ class ModelUtilsTest(TestCasePlus):
 
         model = AutoModel.from_config(config, dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
+        # the resolved dtype is kept on the config so it matches the actual weights (see #46512)
+        self.assertEqual(model.config.dtype, torch.float16)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
