@@ -70,11 +70,14 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from .integrations.hub_kernels import use_image_kernel
+    from .integrations.hub_kernels import register_processing_kernel, run_processing_kernel
 else:
 
-    def use_image_kernel(name):
-        return lambda method: method
+    def register_processing_kernel(name, repo_id, version=None, revision=None):
+        return lambda adapter: adapter
+
+    def run_processing_kernel(name, *args, **kwargs):
+        return None
 
 
 if is_torchvision_available():
@@ -87,6 +90,55 @@ else:
 
 
 logger = logging.get_logger(__name__)
+
+
+def _resample_to_interpolation(resample):
+    if resample is None:
+        return None
+    try:
+        return {2: "bilinear", 3: "bicubic"}.get(int(resample))
+    except (TypeError, ValueError):
+        name = getattr(resample, "name", str(resample)).upper()
+        return "bicubic" if "BICUBIC" in name else "bilinear" if "BILINEAR" in name else None
+
+
+def _resize_normalize_target(size, crop):
+    if size.shortest_edge and not size.longest_edge:
+        if crop is None or not (crop.height and crop.width):
+            return None
+        return size.shortest_edge, (crop.height, crop.width), "shortest_edge"
+    if size.height and size.width:
+        cropped = crop is not None and (crop.height, crop.width) != (size.height, size.width)
+        return (size.height, size.width), (crop.height, crop.width) if cropped else None, "square"
+    return None
+
+
+@register_processing_kernel("resize_normalize", repo_id="kernels-community/kernel_image_resize", version=1)
+def _resize_normalize_kernel(kernel, images, **kwargs):
+    if not (images and torch.cuda.is_available() and images[0].dtype == torch.uint8):
+        return None
+    if kwargs.get("do_pad") or not (kwargs.get("do_resize") and kwargs.get("do_normalize")):
+        return None
+    interpolation = _resample_to_interpolation(kwargs.get("resample"))
+    target = _resize_normalize_target(
+        kwargs["size"], kwargs.get("crop_size") if kwargs.get("do_center_crop") else None
+    )
+    if interpolation is None or target is None:
+        return None
+    resize_size, crop_size, resize_mode = target
+    rescale_factor = float(kwargs["rescale_factor"]) if kwargs.get("do_rescale") else 1.0
+    pixel_values = kernel.resize_normalize(
+        list(images),
+        resize_size,
+        kwargs.get("image_mean"),
+        kwargs.get("image_std"),
+        rescale_factor=rescale_factor,
+        resample=interpolation,
+        antialias=True,
+        crop_size=crop_size,
+        resize_mode=resize_mode,
+    )
+    return BatchFeature(data={"pixel_values": list(pixel_values)}, tensor_type=kwargs.get("return_tensors"))
 
 
 @requires(backends=("torch", "torchvision"))
@@ -385,7 +437,6 @@ class TorchvisionBackend(BaseImageProcessor):
         crop_left = int((image_width - crop_width) / 2.0)
         return tvF.crop(image, crop_top, crop_left, crop_height, crop_width)
 
-    @use_image_kernel("resize_normalize")
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -406,6 +457,26 @@ class TorchvisionBackend(BaseImageProcessor):
         **kwargs,
     ) -> BatchFeature:
         """Preprocess using Torchvision backend (fast, GPU-accelerated)."""
+        if self.use_kernels:
+            pixel_values = run_processing_kernel(
+                "resize_normalize",
+                images,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_center_crop=do_center_crop,
+                crop_size=crop_size,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                do_pad=do_pad,
+                return_tensors=return_tensors,
+            )
+            if pixel_values is not None:
+                return pixel_values
+
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
