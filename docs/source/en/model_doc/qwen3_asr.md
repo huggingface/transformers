@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2026-01-29 and contributed to Hugging Face Transformers on 2026-06-17.*
+*This model was published in HF papers on 2026-01-29 and contributed to Hugging Face Transformers on 2026-06-22.*
 
 # Qwen3 ASR
 
@@ -29,9 +29,9 @@ Qwen3 ASR is an automatic speech recognition model from Alibaba's Qwen team that
 A forced aligner model is also included. It can be used to timestamp a provided transcript and its audio. It uses the same audio encoder model with a classification head that predicts a word's length. This model can be used with the transcript from any ASR model (see the example below with Parakeet CTC).
 
 Available checkpoints:
-- [bezzam/Qwen3-ASR-1.7B](https://huggingface.co/bezzam/Qwen3-ASR-1.7B)
-- [bezzam/Qwen3-ASR-0.6B](https://huggingface.co/bezzam/Qwen3-ASR-0.6B)
-- [bezzam/Qwen3-ForcedAligner-0.6B](https://huggingface.co/bezzam/Qwen3-ForcedAligner-0.6B)
+- [bezzam/Qwen3-ASR-1.7B-hf](https://huggingface.co/bezzam/Qwen3-ASR-1.7B-hf)
+- [bezzam/Qwen3-ASR-0.6B-hf](https://huggingface.co/bezzam/Qwen3-ASR-0.6B-hf)
+- [bezzam/Qwen3-ForcedAligner-0.6B-hf](https://huggingface.co/bezzam/Qwen3-ForcedAligner-0.6B-hf)
 
 The following languages are supported:
 - `Qwen3-ASR-1.7B` and `Qwen3-ASR-0.6B`: Chinese (zh), English (en), Cantonese (yue), Arabic (ar), German (de), French (fr), Spanish (es), Portuguese (pt), Indonesian (id), Italian (it), Korean (ko), Russian (ru), Thai (th), Vietnamese (vi), Japanese (ja), Turkish (tr), Hindi (hi), Malay (ms), Dutch (nl), Swedish (sv), Danish (da), Finnish (fi), Polish (pl), Czech (cs), Filipino (fil), Persian (fa), Greek (el), Hungarian (hu), Macedonian (mk), Romanian (ro).
@@ -50,7 +50,7 @@ The simplest way to transcribe audio is with `apply_transcription_request`, whic
 ```python
 from transformers import AutoProcessor, AutoModelForMultimodalLM
 
-model_id = "bezzam/Qwen3-ASR-1.7B"
+model_id = "bezzam/Qwen3-ASR-1.7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 print(f"Model loaded on {model.device} with dtype {model.dtype}")
@@ -88,7 +88,7 @@ You can provide a language hint to guide the model.
 ```python
 from transformers import AutoProcessor, AutoModelForMultimodalLM
 
-model_id = "bezzam/Qwen3-ASR-1.7B"
+model_id = "bezzam/Qwen3-ASR-1.7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
@@ -117,7 +117,7 @@ Batch inference is possible by passing a list of audios and, if provided, a list
 ```python
 from transformers import AutoProcessor, AutoModelForMultimodalLM
 
-model_id = "bezzam/Qwen3-ASR-1.7B"
+model_id = "bezzam/Qwen3-ASR-1.7B-hf"
 audio = [
     "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
     "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
@@ -145,7 +145,7 @@ Qwen3 ASR also accepts chat template inputs. The `apply_transcription_request` u
 ```python
 from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
 
-model_id = "bezzam/Qwen3-ASR-1.7B"
+model_id = "bezzam/Qwen3-ASR-1.7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
@@ -194,7 +194,7 @@ Qwen3 ASR can be trained with the loss outputted by the model.
 ```python
 from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
 
-model_id = "bezzam/Qwen3-ASR-1.7B"
+model_id = "bezzam/Qwen3-ASR-1.7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.train()
@@ -243,8 +243,8 @@ pip install nagisa soynlp
 import torch
 from transformers import AutoProcessor, AutoModelForMultimodalLM, AutoModelForTokenClassification
 
-asr_model_id = "bezzam/Qwen3-ASR-0.6B"
-aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
+asr_model_id = "bezzam/Qwen3-ASR-0.6B-hf"
+aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B-hf"
 
 asr_processor = AutoProcessor.from_pretrained(asr_model_id)
 asr_model = AutoModelForMultimodalLM.from_pretrained(asr_model_id, device_map="auto")
@@ -313,7 +313,7 @@ parakeet_model = AutoModelForCTC.from_pretrained(
     "nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="cuda",
 )
 
-aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
+aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B-hf"
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
 aligner_model = AutoModelForTokenClassification.from_pretrained(
     aligner_model_id, dtype=torch.bfloat16, device_map="cuda",
@@ -368,7 +368,7 @@ On an A100, we observed a speed-up of ~2.5 for a batch size of 4 ([script](https
 import torch
 from transformers import AutoProcessor, AutoModelForTokenClassification
 
-model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
+model_id = "bezzam/Qwen3-ForcedAligner-0.6B-hf"
 num_warmup = 5
 batch_size = 4
 
@@ -405,7 +405,7 @@ On an A100, we observed a speed-up of 2.37 for a batch size of 4 ([script](https
 import torch
 from transformers import AutoProcessor, AutoModelForMultimodalLM
 
-model_id = "bezzam/Qwen3-ASR-1.7B"
+model_id = "bezzam/Qwen3-ASR-1.7B-hf"
 num_warmup = 3
 max_new_tokens = 256
 
@@ -437,7 +437,7 @@ print(f"Output:  {text_compiled}")
 ```python
 from transformers import pipeline
 
-model_id = "bezzam/Qwen3-ASR-1.7B"
+model_id = "bezzam/Qwen3-ASR-1.7B-hf"
 pipe = pipeline("any-to-any", model=model_id, device_map="auto")
 
 chat_template = [

@@ -120,7 +120,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cleanup(torch_device, gc_collect=True)
-        cls.checkpoint = "bezzam/Qwen3-ASR-0.6B"
+        cls.checkpoint = "bezzam/Qwen3-ASR-0.6B-hf"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
 
     def tearDown(self):
@@ -231,7 +231,7 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cleanup(torch_device, gc_collect=True)
-        cls.aligner_checkpoint = "bezzam/Qwen3-ForcedAligner-0.6B"
+        cls.aligner_checkpoint = "bezzam/Qwen3-ForcedAligner-0.6B-hf"
         cls.aligner_processor = AutoProcessor.from_pretrained(cls.aligner_checkpoint)
 
     def tearDown(self):

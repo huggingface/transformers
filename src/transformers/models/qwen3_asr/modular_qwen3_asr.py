@@ -40,7 +40,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
 from ..voxtral.modeling_voxtral import VoxtralMultiModalProjector
 
 
-@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
+@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B-hf")
 @strict
 class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     r"""
@@ -67,7 +67,7 @@ class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     conv_chunksize = AttributeError()
 
 
-@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
+@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B-hf")
 @strict
 class Qwen3ASRConfig(PreTrainedConfig):
     r"""
