@@ -1452,6 +1452,16 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
     mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
 
+    # Aligns Qwen3_5MtpLayerStack with the generic MtpLayerStack conversions in #46229.
+    mapping["Qwen3_5MtpLayerStack"] = [
+        PrefixChange(prefix_to_remove="model"),
+        WeightRenaming(source_patterns=".shared_head.norm.", target_patterns=".post_norm."),
+        WeightRenaming(source_patterns=".mtp_block.enorm.", target_patterns=".enorm."),
+        WeightRenaming(source_patterns=".mtp_block.hnorm.", target_patterns=".hnorm."),
+        WeightRenaming(source_patterns=".mtp_block.eh_proj.", target_patterns=".eh_proj."),
+        WeightRenaming(source_patterns=".mtp_block.post_norm.", target_patterns=".post_norm."),
+    ]
+
     mapping["laguna"] = mapping["qwen2_moe"].copy()
     mapping["laguna"] += [
         WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
