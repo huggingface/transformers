@@ -127,10 +127,13 @@ from .trainer_utils import (
     TrainerMemoryTracker,
     TrainOutput,
     _is_peft_model,
+    _re_checkpoint,
     align_special_tokens,
     compare_trainer_and_checkpoint_args,
     default_compute_objective,
     denumpify_detensorize,
+    download_checkpoint_from_bucket,
+    download_latest_checkpoint_from_bucket,
     enable_full_determinism,
     find_executable_batch_size,
     get_last_checkpoint,
@@ -142,6 +145,7 @@ from .trainer_utils import (
     set_seed,
     sort_checkpoints,
     speed_metrics,
+    split_bucket_id,
     suppress_progress_bars,
     unwrap_peft_model,
     validate_quantization_for_training,
@@ -573,8 +577,20 @@ class Trainer:
 
         # ---- 9. Hub & output ---------------------------------------------------------
         self.hub_model_id = None  # Set by init_hf_repo() when push_to_hub is enabled
+        self._bucket_id = None  # Canonical id of the checkpoint bucket when push_to_bucket is enabled
+        self._bucket_prefix = ""  # Optional sub-path inside the bucket (from `args.bucket_id` extra components)
+        self.push_in_progress = None  # Tracks the in-flight push (repo and/or bucket)
         if self.args.push_to_hub:
             self.init_hf_repo()
+        if self.args.push_to_bucket and self.is_world_process_zero():
+            # `bucket_id` may carry a sub-path ("ns/name/expt-1"): the bucket is the first two components,
+            # the rest is a prefix the checkpoints are sync'd under (several runs can share one bucket).
+            bucket, self._bucket_prefix = split_bucket_id(self.args.bucket_id)
+            self._bucket_id = (
+                hf_api()
+                .create_bucket(bucket, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
+                .bucket_id
+            )
         if self.args.should_save:
             os.makedirs(self.args.output_dir, exist_ok=True)
 
@@ -1339,9 +1355,14 @@ class Trainer:
 
         Args:
             resume_from_checkpoint (`str` or `bool`, *optional*):
-                If a `str`, local path to a saved checkpoint as saved by a previous instance of [`Trainer`]. If a
-                `bool` and equals `True`, load the last checkpoint in *args.output_dir* as saved by a previous instance
-                of [`Trainer`]. If present, training will resume from the model/optimizer/scheduler states loaded here.
+                If a `str`, local path to a saved checkpoint as saved by a previous instance of [`Trainer`]. A bucket
+                handle resumes from a [bucket](https://huggingface.co/docs/huggingface_hub/guides/buckets) instead:
+                `"hf://buckets/namespace/name"` downloads the latest checkpoint in that bucket, and
+                `"hf://buckets/namespace/name/checkpoint-500"` downloads that specific one. Both forms accept a
+                sub-path inside the bucket (e.g. `"hf://buckets/namespace/name/expt-1"` for the latest checkpoint
+                synced with `bucket_id="namespace/name/expt-1"`). If a `bool` and equals
+                `True`, load the last checkpoint in *args.output_dir* as saved by a previous instance of [`Trainer`].
+                If present, training will resume from the model/optimizer/scheduler states loaded here.
             trial (`optuna.Trial` or `dict[str, Any]`, *optional*):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
             ignore_keys_for_eval (`list[str]`, *optional*)
@@ -1407,8 +1428,28 @@ class Trainer:
             else:
                 DebugUnderflowOverflow(self.model)
 
-        # Load potential model checkpoint
-        if isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
+        # Load potential model checkpoint. Resume from a bucket via its handle:
+        #   - "hf://buckets/<ns>/<name>[/<prefix>]"                   -> latest checkpoint under that path
+        #   - "hf://buckets/<ns>/<name>[/<prefix>]/checkpoint-<step>" -> that specific checkpoint
+        # Only the main process downloads (ranks share the filesystem); the others wait at the barrier.
+        if isinstance(resume_from_checkpoint, str) and resume_from_checkpoint.startswith("hf://buckets/"):
+            body = resume_from_checkpoint.removeprefix("hf://buckets/").rstrip("/")
+            # A specific checkpoint ends in "checkpoint-<step>"; anything else is a bucket(/prefix) handle.
+            is_specific = _re_checkpoint.search(body.rsplit("/", 1)[-1]) is not None
+            if self.is_world_process_zero():
+                if is_specific:
+                    download_checkpoint_from_bucket(resume_from_checkpoint, args.output_dir, token=args.hub_token)
+                else:
+                    download_latest_checkpoint_from_bucket(body, args.output_dir, token=args.hub_token)
+            self.accelerator.wait_for_everyone()
+            resume_from_checkpoint = (
+                os.path.join(args.output_dir, os.path.basename(body))
+                if is_specific
+                else get_last_checkpoint(args.output_dir)
+            )
+            if resume_from_checkpoint is None:
+                raise ValueError(f"No checkpoint found in bucket {body}.")
+        elif isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
             resume_from_checkpoint = get_last_checkpoint(args.output_dir)
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
@@ -3113,7 +3154,7 @@ class Trainer:
                     self.state.stateful_callbacks[cb_name] = cb_state
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
-        if self.args.push_to_hub:
+        if self.args.push_to_hub or self.args.push_to_bucket:
             self._push_from_checkpoint(output_dir)
 
         # Maybe delete some older checkpoints.
@@ -4102,15 +4143,23 @@ class Trainer:
         )
 
     def _push_from_checkpoint(self, checkpoint_folder: str) -> None:
-        """Push model and checkpoint files to the Hub from a checkpoint folder."""
-        if not self.is_world_process_zero() or self.args.hub_strategy == HubStrategy.END:
+        """Push model files to the repo and/or sync the checkpoint to the bucket, from a checkpoint folder."""
+        if not self.is_world_process_zero():
             return
         # If we haven't finished the last push, we don't do this one unless args.hub_always_push=True.
         if not self.args.hub_always_push and self.push_in_progress is not None and not self.push_in_progress.is_done():
             return
 
+        push_to_repo = self.args.push_to_hub and (
+            self.args.hub_strategy != HubStrategy.END or self.control.should_training_stop
+        )
+        if not push_to_repo and not self.args.push_to_bucket:
+            return
+
         self.callback_handler.on_push_begin(self.args, self.state, self.control)
-        output_dir = self.args.output_dir
+        push_jobs = []
+
+        # ---- Prepare the loadable model snapshot at output_dir root (for the repo and/or the bucket) ----
         # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
         modeling_files = [CONFIG_NAME, GENERATION_CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
         #  Add sharded checkpoints if we have an index
@@ -4126,45 +4175,71 @@ class Trainer:
             modeling_files.extend([ADAPTER_CONFIG_NAME, ADAPTER_WEIGHTS_NAME, ADAPTER_SAFE_WEIGHTS_NAME])
         for modeling_file in modeling_files:
             if os.path.isfile(os.path.join(checkpoint_folder, modeling_file)):
-                shutil.copy(os.path.join(checkpoint_folder, modeling_file), os.path.join(output_dir, modeling_file))
+                shutil.copy(
+                    os.path.join(checkpoint_folder, modeling_file), os.path.join(self.args.output_dir, modeling_file)
+                )
         # Saving the processing class is fast and we don't know how many files it may have spawned, so we resave it to be sure.
         if self.processing_class is not None:
-            self.processing_class.save_pretrained(output_dir)
+            self.processing_class.save_pretrained(self.args.output_dir)
         # Same for the training arguments
-        torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
+        torch.save(self.args, os.path.join(self.args.output_dir, TRAINING_ARGS_NAME))
 
-        if self.args.save_strategy == SaveStrategy.STEPS:
-            commit_message = f"Training in progress, step {self.state.global_step}"
-        else:
-            commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
+        if push_to_repo:
+            if self.args.save_strategy == SaveStrategy.STEPS:
+                commit_message = f"Training in progress, step {self.state.global_step}"
+            else:
+                commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
 
-        model_push_job = hf_api().upload_folder(
-            repo_id=self.hub_model_id,
-            folder_path=output_dir,
-            commit_message=commit_message,
-            token=self.args.hub_token,
-            run_as_future=True,
-            ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
-            revision=self.args.hub_revision,
-        )
-
-        push_jobs = [model_push_job]
-
-        if self.args.hub_strategy in [HubStrategy.CHECKPOINT, HubStrategy.ALL_CHECKPOINTS]:
-            path_in_repo = (
-                "last-checkpoint" if self.args.hub_strategy == HubStrategy.CHECKPOINT else Path(checkpoint_folder).name
+            # Model snapshot
+            push_jobs.append(
+                hf_api().upload_folder(
+                    repo_id=self.hub_model_id,
+                    folder_path=self.args.output_dir,
+                    commit_message=commit_message,
+                    token=self.args.hub_token,
+                    run_as_future=True,
+                    ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
+                    revision=self.args.hub_revision,
+                )
             )
-            checkpoint_push = hf_api().upload_folder(
-                repo_id=self.hub_model_id,
-                folder_path=checkpoint_folder,
-                path_in_repo=path_in_repo,
-                commit_message=commit_message + ", checkpoint",
-                token=self.args.hub_token,
-                run_as_future=True,
-                revision=self.args.hub_revision,
-            )
-            push_jobs.append(checkpoint_push)
 
+            # Full checkpoint
+            if self.args.hub_strategy in [HubStrategy.CHECKPOINT, HubStrategy.ALL_CHECKPOINTS]:
+                repo_leaf = (
+                    "last-checkpoint"
+                    if self.args.hub_strategy == HubStrategy.CHECKPOINT
+                    else Path(checkpoint_folder).name
+                )
+                push_jobs.append(
+                    hf_api().upload_folder(
+                        repo_id=self.hub_model_id,
+                        folder_path=checkpoint_folder,
+                        path_in_repo=repo_leaf,
+                        commit_message=commit_message + ", checkpoint",
+                        token=self.args.hub_token,
+                        run_as_future=True,
+                        revision=self.args.hub_revision,
+                    )
+                )
+
+        # Sync output_dir (model snapshot + checkpoints), under the bucket prefix when one was given
+        if self.args.push_to_bucket:
+            bucket_dest = f"hf://buckets/{self._bucket_id}"
+            if self._bucket_prefix:
+                bucket_dest = f"{bucket_dest}/{self._bucket_prefix}"
+            push_jobs.append(
+                hf_api().run_as_future(
+                    hf_api().sync_bucket,
+                    self.args.output_dir,
+                    bucket_dest,
+                    delete=False,
+                    token=self.args.hub_token,
+                    quiet=True,
+                )
+            )
+
+        if not push_jobs:
+            return
         if self.push_in_progress is None or self.push_in_progress.is_done():
             self.push_in_progress = PushInProgress(push_jobs)
         else:
