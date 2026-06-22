@@ -425,7 +425,14 @@ class Qwen3_5VLCausalLMOutputWithPast(ModelOutput):
     rope_deltas: torch.LongTensor | None = None
 
 
-class Qwen3_5MTPLayer(nn.Module):
+class Qwen3_5MtpLayer(nn.Module):
+    """A single Qwen3.5 MTP layer.
+
+    Equivalent to one decoder block on top of the main model's last hidden states.
+    Kept here until the generic ``MtpLayer`` from #46229 lands; once it does, this
+    class can be replaced by ``MtpLayer(config, decoder_layer_cls=Qwen3_5DecoderLayer, ...)``.
+    """
+
     def __init__(self, config: Qwen3_5TextConfig, layer_idx: int):
         super().__init__()
         mtp_config = copy.copy(config)
@@ -466,7 +473,18 @@ class Qwen3_5MTPLayer(nn.Module):
         return hidden_states
 
 
-class Qwen3_5MTP(nn.Module):
+class Qwen3_5MtpLayerStack(nn.Module):
+    """Stack of Qwen3.5 MTP layers attached to the main model.
+
+    Mirrors the shape and naming style of the generic ``MtpLayerStack`` in
+    #46229. Once that PR lands, this class can be replaced by
+    ``MtpLayerStack.from_pretrained(main_model, ...)``.
+    """
+
+    # Mirrors the unexpected-key filter used by the generic MtpLayerStack in #46229
+    # so checkpoints that bundle shared head/embedding weights do not warn.
+    _keys_to_ignore_on_load_unexpected = ["shared_head.head.weight", "embed_tokens.weight"]
+
     def __init__(self, config):
         super().__init__()
         text_config = getattr(config, "text_config", config)
@@ -478,7 +496,7 @@ class Qwen3_5MTP(nn.Module):
         mtp_num_layers = getattr(config, "num_mtp_layers", 1)
 
         self.layers = nn.ModuleList(
-            [Qwen3_5MTPLayer(text_config, layer_idx=text_config.num_hidden_layers + i) for i in range(mtp_num_layers)]
+            [Qwen3_5MtpLayer(text_config, layer_idx=text_config.num_hidden_layers + i) for i in range(mtp_num_layers)]
         )
         self.norm = Qwen3_5RMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
 
@@ -508,7 +526,7 @@ class Qwen3_5MTP(nn.Module):
 
 
 def _compute_qwen35_mtp_loss(
-    mtp: Qwen3_5MTP,
+    mtp: Qwen3_5MtpLayerStack,
     embed_tokens: nn.Embedding,
     rotary_emb: Qwen3_5TextRotaryEmbedding,
     lm_head: nn.Linear,
@@ -637,7 +655,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
 
 class Qwen3_5PreTrainedModel(Qwen3NextPreTrainedModel):
     config: Qwen3_5Config
-    _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock", "Qwen3_5MTPLayer"]
+    _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock", "Qwen3_5MtpLayer"]
     _can_record_outputs = {
         "hidden_states": Qwen3_5DecoderLayer,
         "attentions": Qwen3_5Attention,
@@ -904,7 +922,7 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
         self.model = Qwen3_5TextModel(config)
 
         if getattr(config, "num_mtp_layers", 0) > 0:
-            self.mtp = Qwen3_5MTP(config)
+            self.mtp = Qwen3_5MtpLayerStack(config)
 
     @can_return_tuple
     @auto_docstring
@@ -1019,7 +1037,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
         super().__init__(config)
 
         if getattr(config, "num_mtp_layers", 0) > 0:
-            self.mtp = Qwen3_5MTP(config)
+            self.mtp = Qwen3_5MtpLayerStack(config)
 
     def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
         return super().get_video_features(**super_kwargs)
@@ -1164,7 +1182,7 @@ __all__ = [
     "Qwen3_5ForTokenClassification",
     "Qwen3_5ForConditionalGeneration",
     "Qwen3_5PreTrainedModel",
-    "Qwen3_5MTP",
+    "Qwen3_5MtpLayerStack",
     "Qwen3_5CausalLMOutputWithPast",
     "Qwen3_5VLCausalLMOutputWithPast",
 ]
