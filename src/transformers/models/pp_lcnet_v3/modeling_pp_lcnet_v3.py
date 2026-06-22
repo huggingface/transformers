@@ -310,7 +310,6 @@ class PPLCNetV3PreTrainedModel(PreTrainedModel):
         "hidden_states": PPLCNetV3Block,
     }
 
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)

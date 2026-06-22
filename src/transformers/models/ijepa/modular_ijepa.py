@@ -92,7 +92,6 @@ class IJepaEmbeddings(ViTEmbeddings):
 
 @auto_docstring
 class IJepaPreTrainedModel(ViTPreTrainedModel):
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""

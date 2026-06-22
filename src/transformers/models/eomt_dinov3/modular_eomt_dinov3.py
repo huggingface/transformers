@@ -210,7 +210,6 @@ class EomtDinov3PreTrainedModel(EomtPreTrainedModel):
         "attentions": EomtDinov3Attention,
     }
 
-    # trf-ignore: TRF018
     def _init_weights(self, module: nn.Module) -> None:
         PreTrainedModel._init_weights(module)
         std = self.config.initializer_range

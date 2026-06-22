@@ -364,7 +364,6 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
         "attentions": DINOv3ViTAttention,
     }
 
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""

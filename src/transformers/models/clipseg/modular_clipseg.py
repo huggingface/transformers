@@ -249,7 +249,6 @@ class CLIPSegPreTrainedModel(CLIPPreTrainedModel):
         "attentions": CLIPSegAttention,
     }
 
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""

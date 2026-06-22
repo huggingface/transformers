@@ -352,7 +352,6 @@ class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 
-    # trf-ignore: TRF018
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
