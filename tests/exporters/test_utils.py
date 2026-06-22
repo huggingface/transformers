@@ -90,12 +90,6 @@ ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES = {
     "LayoutLMv2ForSequenceClassification",
     "LayoutLMv2ForTokenClassification",
     "LayoutLMv2ForQuestionAnswering",
-    # SplitToSequence constant folding crashes with "'NoneType' object has no attribute 'ndim'".
-    "ProphetNetModel",
-    "ProphetNetForConditionalGeneration",
-    "ProphetNetDecoder",
-    "ProphetNetForCausalLM",
-    "ZoeDepthForDepthEstimation",
     # Onnxscript optimizer pass exceeds 1000s on the YOLOS detection graph (many small Concat /
     # Slice nodes — verified: `optimize=False` exports in 2s, `optimize=True` runs past 6 minutes
     # before being killed). TODO: revisit when onnxscript's optimizer gets faster on dense
@@ -108,6 +102,19 @@ ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES = {
     "PixioModel",
     "SegGptModel",
     "SegGptForImageSegmentation",
+}
+
+
+# Model classes where ONNX optimization must be disabled only for dynamic-shape export.
+# Static export benefits from optimization; dynamic still trips onnxscript's `SplitToSequence`
+# constant folding ('NoneType' object has no attribute 'ndim'). The modeling rewrites in this
+# PR (vectorized prophetnet `ngram_attention_bias`, etc.) cleared the static path.
+ONNX_DYNAMIC_DISABLE_OPTIMIZE_MODEL_CLASSES = {
+    "ProphetNetModel",
+    "ProphetNetForConditionalGeneration",
+    "ProphetNetDecoder",
+    "ProphetNetForCausalLM",
+    "ZoeDepthForDepthEstimation",
 }
 
 
@@ -323,7 +330,9 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="onnx"):
                 continue
 
-            optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES
+            optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES and not (
+                dynamic and model_class.__name__ in ONNX_DYNAMIC_DISABLE_OPTIMIZE_MODEL_CLASSES
+            )
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
@@ -444,7 +453,9 @@ class ExportGenerateTesterMixin:
             if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="onnx"):
                 continue
 
-            optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES
+            optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES and not (
+                dynamic and model_class.__name__ in ONNX_DYNAMIC_DISABLE_OPTIMIZE_MODEL_CLASSES
+            )
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
