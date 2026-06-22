@@ -1,0 +1,35 @@
+name: Nightly integration-failure triage
+
+# Caller workflow — runs once a day and delegates to the reusable
+# integration-failure-triage workflow in transformers-ci, which computes the
+# failure triage report from the daily CI dataset and dispatches one Serge
+# fix task per failure group against this repo (huggingface/transformers).
+#
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  # Temporary: lets us exercise the new workflow from this PR's branch.
+  push:
+    branches:
+      - tarek-ziade-ai-reviews
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Compute the report but do not dispatch to Serge"
+        type: boolean
+        default: false
+
+# Permissions are granted here and bound the reusable workflow's job token.
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+  id-token: write
+
+jobs:
+  triage:
+    # DON'T use a commit sha here before the CI migration is finished
+    uses: huggingface/transformers-ci/.github/workflows/integration-failure-triage.yml@main # main
+    with:
+      dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    secrets: inherit
