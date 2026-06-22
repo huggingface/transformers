@@ -800,10 +800,8 @@ class CanineModel(CaninePreTrainedModel):
             poolable_char_mask.float()
         )
 
-        # finally, squeeze to get tensor of shape (batch_size, mol_seq_len)
-        molecule_attention_mask = torch.squeeze(pooled_molecule_mask, dim=-1)
-
-        return molecule_attention_mask
+        # drop the channel dim added for MaxPool1d to get tensor of shape (batch_size, mol_seq_len)
+        return pooled_molecule_mask.squeeze(dim=1)
 
     def _repeat_molecules(self, molecules: torch.Tensor, char_seq_length: int) -> torch.Tensor:
         """Repeats molecules to make them the same length as the char sequence."""
