@@ -274,7 +274,7 @@ scores = results[0]["scores"]
 
 </hfoption>
 
-<hfoption id="Supervised fine-tuning (Pose estimation)">
+<hfoption id="Pose estimation training">
 
 The example below shows how to compute the supervised Masked Mean Squared Error (MSE) loss with [`Sapiens2ForPoseEstimation`] by passing `labels` and optional `label_weights`. This is useful for fine-tuning using the `Trainer` API.
 
@@ -295,7 +295,7 @@ inputs = image_processor(image, boxes=boxes, return_tensors="pt").to(model.devic
 # Create dummy labels (heatmaps) and visibility weights to simulate ground truth
 # 1.0 for visible keypoints, 0.0 for occluded/invisible keypoints
 batch_size, num_keypoints = 1, 308
-heatmap_height, heatmap_width = 256, 192
+heatmap_height, heatmap_width = 1024, 768
 labels = torch.randn(batch_size, num_keypoints, heatmap_height, heatmap_width, device=model.device)
 label_weights = torch.ones(batch_size, num_keypoints, 1, 1, device=model.device)
 
