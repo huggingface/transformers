@@ -13,9 +13,7 @@
 # limitations under the License.
 
 import torch
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
-from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -26,8 +24,10 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v2.modeling_deepseek_v2 import (
-    DeepseekV2Moe,
+from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3MoE,
+    DeepseekV3NaiveMoe,
+    DeepseekV3TopkRouter,
 )
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -40,7 +40,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralModel,
     load_balancing_loss_func,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 
 
@@ -108,6 +108,9 @@ class Param2MoEConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
     vocab_size: int = 128008
     hidden_size: int = 2048
@@ -128,7 +131,7 @@ class Param2MoEConfig(PreTrainedConfig):
     head_dim: int | None = 64
     first_k_dense_replace: int = 1
     n_group: int | None = 1
-    num_experts: int = 64
+    n_routed_experts: int = 64
     n_shared_experts: int = 2
     routed_scaling_factor: float = 2.5
     topk_group: int | None = 1
@@ -155,54 +158,16 @@ class Param2MoEConfig(PreTrainedConfig):
             )
 
 
-class Param2MoEExperts(Qwen2MoeExperts):
+class Param2MoENaiveMoe(DeepseekV3NaiveMoe):
     pass
 
 
-class Param2MoERouter(nn.Module):
-    """
-    Sigmoid-based top-k router with per-expert learnable bias.
-
-    Unlike softmax routers, sigmoid gives independent per-expert probabilities.
-    The expert_bias shifts routing decisions only; output weights use unbiased
-    scores to preserve gradient flow through expert outputs.
-    """
-
-    def __init__(self, config: Param2MoEConfig):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.weight = nn.Parameter(torch.zeros(config.num_experts, config.hidden_size))
-        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts))
-
-    def forward(self, hidden_states: torch.Tensor):
-        router_logits = F.linear(hidden_states.float(), self.weight.float())
-        scores = torch.sigmoid(router_logits)
-        _, topk_idx = torch.topk(scores + self.expert_bias.float(), k=self.top_k, dim=-1, sorted=False)
-        topk_weights = scores.gather(1, topk_idx)
-        if self.norm_topk_prob:
-            topk_weights = topk_weights / (topk_weights.sum(dim=-1, keepdim=True) + 1e-9)
-        topk_weights = (topk_weights * self.routed_scaling_factor).to(hidden_states.dtype)
-        return router_logits, topk_weights, topk_idx
+class Param2MoETopkRouter(DeepseekV3TopkRouter):
+    pass
 
 
-class Param2MoESparseMoeBlock(DeepseekV2Moe):
-    def __init__(self, config: Param2MoEConfig):
-        super().__init__(config)
-        self.gate = Param2MoERouter(config)
-        self.experts = Param2MoEExperts(config)
-        self.shared_experts = Param2MoEMLP(
-            config,
-            intermediate_size=config.moe_intermediate_size * config.n_shared_experts,
-        )
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = hidden_states
-        batch_size, seq_len, hidden_dim = hidden_states.shape
-        _, routing_weights, selected_experts = self.gate(hidden_states.view(-1, hidden_dim))
-        hidden_states = self.experts(hidden_states.view(-1, hidden_dim), selected_experts, routing_weights)
-        return hidden_states.view(batch_size, seq_len, hidden_dim) + self.shared_experts(residual)
+class Param2MoESparseMoeBlock(DeepseekV3MoE):
+    pass
 
 
 class Param2MoEMLP(Qwen2MoeMLP):
@@ -246,11 +211,13 @@ class Param2MoEPreTrainedModel(LlamaPreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Param2MoERouter, index=0),
+        "router_logits": OutputRecorder(Param2MoETopkRouter, index=0),
         "hidden_states": Param2MoEDecoderLayer,
         "attentions": Param2MoEAttention,
     }
@@ -259,13 +226,12 @@ class Param2MoEPreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
-        if isinstance(module, Param2MoEExperts):
+        if isinstance(module, Param2MoENaiveMoe):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, Param2MoERouter):
+        elif isinstance(module, Param2MoETopkRouter):
             init.normal_(module.weight, mean=0.0, std=std)
-            if module.expert_bias is not None:
-                init.zeros_(module.expert_bias)
+            init.zeros_(module.e_score_correction_bias)
 
 
 class Param2MoEModel(MixtralModel):
@@ -276,7 +242,7 @@ class Param2MoEForCausalLM(MixtralForCausalLM):
     def __init__(self, config):
         super().__init__(config)
         self.model = Param2MoEModel(config)
-        self.num_experts = config.num_experts
+        self.n_routed_experts = config.n_routed_experts
 
     def forward(
         self,
@@ -348,7 +314,7 @@ class Param2MoEForCausalLM(MixtralForCausalLM):
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
-                self.num_experts,
+                self.n_routed_experts,
                 self.num_experts_per_tok,
                 attention_mask,
             )

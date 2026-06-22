@@ -49,12 +49,12 @@ from .configuration_param2moe import Param2MoEConfig
 
 
 @use_experts_implementation
-class Param2MoEExperts(nn.Module):
+class Param2MoENaiveMoe(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
@@ -88,81 +88,75 @@ class Param2MoEExperts(nn.Module):
         return final_hidden_states
 
 
-class Param2MoERouter(nn.Module):
-    """
-    Sigmoid-based top-k router with per-expert learnable bias.
-
-    Unlike softmax routers, sigmoid gives independent per-expert probabilities.
-    The expert_bias shifts routing decisions only; output weights use unbiased
-    scores to preserve gradient flow through expert outputs.
-    """
-
-    def __init__(self, config: Param2MoEConfig):
+class Param2MoETopkRouter(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.weight = nn.Parameter(torch.zeros(config.num_experts, config.hidden_size))
-        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts))
+        self.config = config
+        self.n_routed_experts = config.n_routed_experts
 
-    def forward(self, hidden_states: torch.Tensor):
-        router_logits = F.linear(hidden_states.float(), self.weight.float())
-        scores = torch.sigmoid(router_logits)
-        _, topk_idx = torch.topk(scores + self.expert_bias.float(), k=self.top_k, dim=-1, sorted=False)
-        topk_weights = scores.gather(1, topk_idx)
-        if self.norm_topk_prob:
-            topk_weights = topk_weights / (topk_weights.sum(dim=-1, keepdim=True) + 1e-9)
-        topk_weights = (topk_weights * self.routed_scaling_factor).to(hidden_states.dtype)
-        return router_logits, topk_weights, topk_idx
+        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        return router_logits
 
 
 class Param2MoESparseMoeBlock(nn.Module):
-    def __init__(self, config: Param2MoEConfig):
+    """
+    A mixed expert module containing shared experts.
+    """
+
+    def __init__(self, config):
         super().__init__()
         self.config = config
-        self.experts = Param2MoEExperts(config)
-        self.gate = Param2MoERouter(config)
-        if config.n_shared_experts is not None:
-            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-            self.shared_experts = Param2MoEMLP(config=config, intermediate_size=intermediate_size)
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.topk_method = config.topk_method
-        self.num_group = config.n_group
-        self.top_k = config.num_experts_per_tok
-        self.topk_group = config.topk_group
+        self.experts = Param2MoENaiveMoe(config)
+        self.gate = Param2MoETopkRouter(config)
         self.shared_experts = Param2MoEMLP(
-            config,
-            intermediate_size=config.moe_intermediate_size * config.n_shared_experts,
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
+        self.n_routed_experts = config.n_routed_experts
+        self.n_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.top_k = config.num_experts_per_tok
 
     def route_tokens_to_experts(self, router_logits):
-        batch_size, seq_len, hidden_dim = router_logits.shape
-        router_logits = router_logits.view(-1, hidden_dim)
-        router_logits = router_logits.softmax(dim=-1, dtype=torch.float32)
-        if self.topk_method == "greedy":
-            topk_weight, topk_idx = torch.topk(router_logits, k=self.top_k, dim=-1, sorted=False)
-        elif self.topk_method == "group_limited_greedy":
-            group_scores = router_logits.view(batch_size * seq_len, self.num_group, -1).max(dim=-1).values
-            group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-            group_mask = torch.zeros_like(group_scores)
-            group_mask.scatter_(1, group_idx, 1)
-            score_mask = (
-                group_mask.unsqueeze(-1)
-                .expand(batch_size * seq_len, self.num_group, self.num_experts // self.num_group)
-                .reshape(batch_size * seq_len, -1)
-            )
-            tmp_scores = router_logits.masked_fill(~score_mask.bool(), 0.0)
-            topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
+        router_logits = router_logits.sigmoid()
+        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
+        group_scores = (
+            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .reshape(-1, self.n_routed_experts)
+        )
+        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        topk_weights = router_logits.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return topk_indices, topk_weights
 
-        topk_weight = topk_weight * self.routed_scaling_factor
-        return topk_idx, topk_weight
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = hidden_states
-        batch_size, seq_len, hidden_dim = hidden_states.shape
-        _, routing_weights, selected_experts = self.gate(hidden_states.view(-1, hidden_dim))
-        hidden_states = self.experts(hidden_states.view(-1, hidden_dim), selected_experts, routing_weights)
-        return hidden_states.view(batch_size, seq_len, hidden_dim) + self.shared_experts(residual)
+    def forward(self, hidden_states):
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        router_logits = self.gate(hidden_states)
+        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
 
 
 class Param2MoEMLP(nn.Module):
@@ -466,26 +460,27 @@ class Param2MoEPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Param2MoERouter, index=0),
+        "router_logits": OutputRecorder(Param2MoETopkRouter, index=0),
         "hidden_states": Param2MoEDecoderLayer,
         "attentions": Param2MoEAttention,
     }
+
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range
-        if isinstance(module, Param2MoEExperts):
+        if isinstance(module, Param2MoENaiveMoe):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, Param2MoERouter):
+        elif isinstance(module, Param2MoETopkRouter):
             init.normal_(module.weight, mean=0.0, std=std)
-            if module.expert_bias is not None:
-                init.zeros_(module.expert_bias)
+            init.zeros_(module.e_score_correction_bias)
 
 
 @auto_docstring
@@ -658,8 +653,9 @@ class Param2MoEForCausalLM(Param2MoEPreTrainedModel, GenerationMixin):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
+        self.n_routed_experts = config.n_routed_experts
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -736,7 +732,7 @@ class Param2MoEForCausalLM(Param2MoEPreTrainedModel, GenerationMixin):
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
-                self.num_experts,
+                self.n_routed_experts,
                 self.num_experts_per_tok,
                 attention_mask,
             )

@@ -86,6 +86,9 @@ class Param2MoEConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
     vocab_size: int = 128008
     hidden_size: int = 2048
@@ -106,7 +109,7 @@ class Param2MoEConfig(PreTrainedConfig):
     head_dim: int | None = 64
     first_k_dense_replace: int = 1
     n_group: int | None = 1
-    num_experts: int = 64
+    n_routed_experts: int = 64
     n_shared_experts: int = 2
     routed_scaling_factor: float = 2.5
     topk_group: int | None = 1
