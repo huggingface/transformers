@@ -237,6 +237,11 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention window size.
+        max_window_layers (`int`, *optional*, defaults to 28):
+            The number of layers using full attention.
+        layer_types (`list[str]`, *optional*):
+            List of attention layer types for each hidden layer. Defaults to `"full_attention"` for every layer
+            unless sliding window attention is enabled.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         num_code_groups (`int`, *optional*, defaults to 32):
@@ -292,6 +297,8 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         attention_bias: bool | None = False,
         use_sliding_window: bool | None = False,
         sliding_window: int | None = 4096,
+        max_window_layers: int | None = 28,
+        layer_types: list[str] | None = None,
         attention_dropout: float | None = 0.0,
         num_code_groups: int | None = 32,
         text_hidden_size: int | None = 2048,
@@ -332,10 +339,20 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window if use_sliding_window else None
+        self.max_window_layers = max_window_layers
 
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
 
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
@@ -434,7 +451,6 @@ class Qwen3TTSConfig(PreTrainedConfig):
 
 
 __all__ = [
-    "MimiConfig",
     "Qwen3TTSConfig",
     "Qwen3TTSTalkerConfig",
     "Qwen3TTSSpeakerEncoderConfig",
