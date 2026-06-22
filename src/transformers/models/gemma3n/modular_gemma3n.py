@@ -1720,6 +1720,16 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
         mean_resizing: bool = True,
     ):
         self.config.get_text_config().vocab_size_per_layer_input = self.vocab_size
+        for module in [self, getattr(self, "model", None), getattr(self, "language_model", None)]:
+            if module is not None:
+                if hasattr(module, "vocab_size"):
+                    module.vocab_size = self.vocab_size
+                if hasattr(module, "vocab_size_per_layer_input"):
+                    module.vocab_size_per_layer_input = self.vocab_size
+                sub_model = getattr(module, "language_model", None)
+                if sub_model is not None:
+                    if hasattr(sub_model, "vocab_size"):
+                        sub_model.vocab_size = self.vocab_size
         if self.config.get_text_config().hidden_size_per_layer_input:
             embed_tokens_per_layer = self.get_per_layer_input_embeddings()
             new_embeddings_per_layer = self._get_resized_embeddings(
