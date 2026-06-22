@@ -469,7 +469,12 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
     """
 )
 class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = {"normals_head", "normals_neck", "segmentation_head", "segmentation_neck"}
+    _keys_to_ignore_on_load_unexpected = {
+        "normals_neck",
+        "normals_decoder",
+        "segmentation_neck",
+        "segmentation_decoder",
+    }
 
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__(config)
@@ -524,7 +529,7 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
     """
 )
 class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = {"depth_head", "depth_neck", "segmentation_head", "segmentation_neck"}
+    _keys_to_ignore_on_load_unexpected = {"depth_neck", "depth_decoder", "segmentation_neck", "segmentation_decoder"}
 
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__(config)
@@ -575,7 +580,7 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
     """
 )
 class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = {"depth_head", "depth_neck", "normals_head", "normals_neck"}
+    _keys_to_ignore_on_load_unexpected = {"depth_neck", "depth_decoder", "normals_neck", "normals_decoder"}
 
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__(config)
