@@ -14,11 +14,11 @@
 
 import numpy as np
 
-from ... import is_torch_available
 from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
+from ...utils import logging
+from ...utils.import_utils import is_torch_available, requires
 
 
 if is_torch_available():
@@ -27,6 +27,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch",))
 class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Qwen3 ASR feature extractor.
@@ -69,7 +70,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         n_fft=400,
         padding_value=0.0,
         dither=0.0,
-        return_attention_mask=False,
+        return_attention_mask=True,
         n_window=50,
         min_length=8000,
         **kwargs,
@@ -130,7 +131,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
         truncation: bool = False,
         pad_to_multiple_of: int | None = None,
-        return_tensors: str | TensorType | None = None,
+        return_tensors: str | None = "pt",
         return_attention_mask: bool | None = None,
         padding: str | None = "max_length",
         max_length: int | None = None,
@@ -145,21 +146,9 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         Args:
             raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Mono-channel audio only.
-            truncation (`bool`, *optional*, defaults to `False`):
-                Truncate audio longer than ``max_length`` samples.
             pad_to_multiple_of (`int`, *optional*):
                 If set, pads the raw audio to a multiple of this value (in samples). Separate from
                 ``n_window``, which applies to the mel-frame axis.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                Return format: ``'pt'`` for PyTorch tensors, ``'np'`` for NumPy arrays.
-            return_attention_mask (`bool`, *optional*):
-                Whether to return the mel-frame attention mask (recommended for batched inference).
-            padding (`str` or [`~utils.PaddingStrategy`], *optional*, defaults to `"max_length"`):
-                Padding strategy: ``"longest"``, ``"max_length"`` or ``"do_not_pad"``.
-            max_length (`int`, *optional*):
-                Maximum audio length (in samples) when ``padding="max_length"``.
-            sampling_rate (`int`, *optional*):
-                Sampling rate of ``raw_speech``. Must match the feature extractor's sampling rate.
             n_window (`int`, *optional*):
                 Override the instance's ``n_window`` for this call. The mel axis is padded to a multiple
                 of ``2 * n_window``. Set to ``0`` to skip mel-axis padding entirely.
@@ -178,9 +167,6 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
                 f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
-
-        if not is_torch_available():
-            raise ValueError(f"{self.__class__.__name__} requires PyTorch to compute log-mel features.")
 
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
         if is_batched_numpy and len(raw_speech.shape) > 2:
@@ -202,7 +188,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
 
         # Zero-pad clips shorter than min_length before batching, matching the original Qwen3-ASR library:
         # https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/utils.py#L322
-        # NOTE: as original, do not adjust padding/attention masks (hurt performance on AMI)
+        # NOTE: as original, do not adjust padding/attention masks (hurts performance on AMI)
         if self.min_length > 0:
             raw_speech = [
                 np.pad(s, ((0, self.min_length - s.shape[0]), (0, 0))) if s.shape[0] < self.min_length else s
@@ -217,7 +203,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=True,
+            return_attention_mask=return_attention_mask,
         )
 
         input_features = padded_inputs["input_features"].transpose(2, 0, 1)
