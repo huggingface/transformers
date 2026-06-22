@@ -30,10 +30,11 @@ from ...utils import (
     is_timm_config_dict,
     is_timm_local_checkpoint,
     is_torchvision_available,
+    is_vision_available,
     logging,
     safe_load_json_file,
 )
-from ...utils.import_utils import requires
+from ...utils.import_utils import is_torchvision_greater_or_equal, requires
 from .auto_factory import _LazyAutoMapping
 from .auto_mappings import IMAGE_PROCESSOR_MAPPING_NAMES
 from .configuration_auto import (
@@ -46,14 +47,18 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-# These image processors use Lanczos interpolation, which is not supported by fast image processors.
-# To avoid important differences in outputs, we default to using the PIL backend for these processors.
-DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS = [
+# These image processors use Lanczos interpolation, which is not supported by torchvision < 0.27.
+# To avoid important differences in outputs, we default to using the PIL backend for these processors
+# when running on older torchvision versions. With torchvision >= 0.27, Lanczos is natively supported
+# and these processors can use the torchvision backend directly.
+_LANCZOS_IMAGE_PROCESSORS = [
     "ChameleonImageProcessor",
     "FlavaImageProcessor",
     "Idefics3ImageProcessor",
     "SmolVLMImageProcessor",
 ]
+
+DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS = [] if is_torchvision_greater_or_equal("0.27") else _LANCZOS_IMAGE_PROCESSORS
 
 
 if TYPE_CHECKING:
@@ -317,8 +322,8 @@ def _resolve_backend(backend: str | None, use_fast: bool | None, base_class_name
       explicit backend is given.
     - Explicit backend string: returned as-is.
     - None resolution: forces 'pil' for processors in DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS
-      (Lanczos interpolation, unsupported by torchvision); otherwise picks 'torchvision' when
-      available, falling back to 'pil'.
+      (Lanczos interpolation, unsupported by torchvision < 0.27); otherwise picks 'torchvision'
+      when available, falling back to 'pil'.
     """
     if use_fast is not None:
         logger.warning_once(
@@ -376,6 +381,30 @@ def _load_class_with_fallback(mapping, backend):
         return processor_class
 
     return None
+
+
+def _format_unavailable_image_processor_error(pretrained_model_name_or_path, mapping):
+    """Format the error when auto resolution found backend candidates but none could be imported."""
+    available_backends = {backend: class_name for backend, class_name in mapping.items() if class_name is not None}
+    missing_dependencies = []
+    if "torchvision" in available_backends and not is_torchvision_available():
+        missing_dependencies.append("torchvision")
+    if "pil" in available_backends and not is_vision_available():
+        missing_dependencies.append("Pillow")
+
+    processor_options = ", ".join(f"{backend}: {class_name}" for backend, class_name in available_backends.items())
+    error_message = (
+        f"Could not load any image processor class for {pretrained_model_name_or_path}. "
+        f"The model configuration resolves to the following image processor classes: {processor_options}. "
+        "None of these classes could be imported."
+    )
+    if missing_dependencies:
+        error_message += (
+            f" Missing optional dependencies: {', '.join(missing_dependencies)}. "
+            "Please install the missing dependencies or select a backend that is available in your environment."
+        )
+
+    return error_message
 
 
 def _find_mapping_for_image_processor(base_class_name: str) -> dict | None:
@@ -617,10 +646,16 @@ class AutoImageProcessor:
         # Handle remote code
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
-        explicit_local_code = has_local_code and not (
-            image_processor_class or _load_class_with_fallback(IMAGE_PROCESSOR_MAPPING[type(config)], backend)
-        ).__module__.startswith("transformers.")
+        explicit_local_code = False
         if has_remote_code:
+            if has_local_code:
+                local_image_processor_class = image_processor_class or _load_class_with_fallback(
+                    IMAGE_PROCESSOR_MAPPING[type(config)], backend
+                )
+                explicit_local_code = (
+                    local_image_processor_class is not None
+                    and not local_image_processor_class.__module__.startswith("transformers.")
+                )
             class_ref = _resolve_auto_map_class_ref(image_processor_auto_map, backend)
             upstream_repo = class_ref.split("--")[0] if "--" in class_ref else None
             trust_remote_code = resolve_trust_remote_code(
@@ -642,8 +677,13 @@ class AutoImageProcessor:
             if image_processor_class is not None:
                 return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-            available = [k for k, v in image_processor_mapping.items() if v is not None]
-            raise ValueError(f"Could not find image processor class. Available backends: {', '.join(available)}")
+            raise ValueError(
+                _format_unavailable_image_processor_error(pretrained_model_name_or_path, image_processor_mapping)
+            )
+        elif base_class_name is not None:
+            mapping = _find_mapping_for_image_processor(base_class_name)
+            if mapping is not None:
+                raise ValueError(_format_unavailable_image_processor_error(pretrained_model_name_or_path, mapping))
         raise ValueError(
             f"Unrecognized image processor in {pretrained_model_name_or_path}. Should have a "
             f"`image_processor_type` key in its {IMAGE_PROCESSOR_NAME} of {CONFIG_NAME}, or one of the following "
