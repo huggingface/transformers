@@ -167,7 +167,12 @@ class HfArgumentParser(ArgumentParser):
 
         origin_type = getattr(field.type, "__origin__", field.type)
         if origin_type is Union or (hasattr(types, "UnionType") and isinstance(origin_type, types.UnionType)):
-            if str not in field.type.__args__ and (
+            if all(t in (str, dict, type(None)) for t in field.type.__args__):
+                # For CLI parsing, accept string; JSON-based dict will still work
+                field.type = str
+                origin_type = str
+            
+            elif str not in field.type.__args__ and (
                 len(field.type.__args__) != 2 or type(None) not in field.type.__args__
             ):
                 raise ValueError(
@@ -175,7 +180,7 @@ class HfArgumentParser(ArgumentParser):
                     " the argument parser only supports one type per argument."
                     f" Problem encountered in field '{field.name}'."
                 )
-            if type(None) not in field.type.__args__:
+            elif type(None) not in field.type.__args__:
                 # filter `str` in Union
                 field.type = field.type.__args__[0] if field.type.__args__[1] is str else field.type.__args__[1]
                 origin_type = getattr(field.type, "__origin__", field.type)
