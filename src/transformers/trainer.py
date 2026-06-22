@@ -2594,21 +2594,38 @@ class Trainer:
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 
-        eval_dataloader = self.get_eval_dataloader(eval_dataset)
-        if self.is_fsdp_xla_v2_enabled:
-            eval_dataloader = tpu_spmd_dataloader(eval_dataloader)
+        eval_batch_size = self.args.per_device_eval_batch_size
 
-        start_time = time.time()
+        while True:
+            self.accelerator.free_memory()
+            eval_dataloader = self.get_eval_dataloader(eval_dataset)
+            if self.is_fsdp_xla_v2_enabled:
+                eval_dataloader = tpu_spmd_dataloader(eval_dataloader)
 
-        output = self.evaluation_loop(
-            eval_dataloader,
-            description="Evaluation",
-            # No point gathering the predictions if there are no metrics, otherwise we defer to
-            # self.args.prediction_loss_only
-            prediction_loss_only=True if self.compute_metrics is None else None,
-            ignore_keys=ignore_keys,
-            metric_key_prefix=metric_key_prefix,
-        )
+            start_time = time.time()
+
+            try:
+                output = self.evaluation_loop(
+                    eval_dataloader,
+                    description="Evaluation",
+                    # No point gathering the predictions if there are no metrics, otherwise we defer to
+                    # self.args.prediction_loss_only
+                    prediction_loss_only=True if self.compute_metrics is None else None,
+                    ignore_keys=ignore_keys,
+                    metric_key_prefix=metric_key_prefix,
+                )
+                break
+            except Exception as e:
+                if self.args.auto_find_batch_size and (
+                    isinstance(e, torch.cuda.OutOfMemoryError)
+                    or (isinstance(e, RuntimeError) and len(e.args) == 1 and "out of memory" in e.args[0])
+                ):
+                    eval_batch_size = eval_batch_size // 2
+                    if eval_batch_size == 0:
+                        raise RuntimeError("No executable eval batch size found, reached zero.")
+                    self.args.per_device_eval_batch_size = eval_batch_size
+                else:
+                    raise
 
         total_batch_size = self.args.eval_batch_size * self.args.world_size
         if f"{metric_key_prefix}_model_preparation_time" in output.metrics:
