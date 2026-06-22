@@ -112,7 +112,7 @@ class BlockManager:
     def get_free_blocks(
         self, n_blocks: int, last_block_id: int | None, shareable: bool, group_id: int
     ) -> list[int] | None:
-        """Returns a list of (n_blocks) free block and mark them as no longuer free in the internal data structures.
+        """Returns a list of (n_blocks) free block and mark them as no longer free in the internal data structures.
         If the (shareable) flag is set to True, a Block object is created to keep track of the block, with the
         (last_block_id) to indicate the last block id in the sequence, also named the parent block. If the manager
         cannot find enough free blocks, it returns None."""

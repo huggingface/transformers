@@ -8,6 +8,7 @@ data) and can compare throughput against a previously-saved run.
 import argparse
 import gc
 import json
+import os
 import time
 import types
 from collections.abc import Callable
@@ -24,17 +25,26 @@ from lighteval.tasks.requests import Doc
 from tabulate import tabulate
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatchingConfig, GenerationConfig
+from transformers.utils.logging import disable_progress_bar
 
 
 # Defaults
 RESULTS_DIR = Path(__file__).parent.parent / "benchmark_results/cb_overall/"
 
 
+# Auxiliary functions
 def _fmt(val: Any, spec: str = "", missing: str = "X") -> str:
     """Format `val` per `spec`, or return `missing` if val is None."""
     return format(val, spec) if val is not None else missing
 
 
+def _config_summary(cfg: Any) -> dict[str, Any]:
+    """Extract a JSON-friendly summary of a dataclass/config object."""
+    raw = cfg.to_dict() if hasattr(cfg, "to_dict") else cfg.__dict__
+    return {k: v for k, v in raw.items() if isinstance(v, (int, float, str, bool, type(None)))}
+
+
+# Data-related functions
 def _build_gsm8k_platinum_module() -> types.ModuleType:
     """Define the gsm8k_platinum custom task inline so lighteval's Registry can pick it up via `custom_tasks=`."""
 
@@ -49,7 +59,7 @@ def _build_gsm8k_platinum_module() -> types.ModuleType:
     metrics = list(Registry().load_all_task_configs()["gsm8k"].metrics)
 
     mod = types.ModuleType("_gsm8k_platinum_inline")
-    mod.TASKS_TABLE = [
+    mod.TASKS_TABLE = [  # type: ignore
         LightevalTaskConfig(
             name="gsm8k_platinum",
             prompt_function=gsm8k_platinum_prompt,
@@ -90,7 +100,7 @@ def _build_lighteval_inputs_scorer(
     def score(outputs) -> float:
         scores = []
         for doc, (_, out) in zip(docs, outputs.items()):
-            text = tokenizer.decode(out.generated_tokens, skip_special_tokens=True)
+            text = tokenizer.decode(out.generated_tokens, skip_special_tokens=True)  # type: ignore
             for s in stop_sequences:
                 text = text.split(s, 1)[0]
             value = metric.sample_level_fn.compute(doc, ModelResponse(text=[text]))
@@ -101,7 +111,6 @@ def _build_lighteval_inputs_scorer(
     return inputs, score
 
 
-# Data helpers
 def get_tokenized_gsm8k(
     tokenizer: AutoTokenizer, n_fewshot: int = 8
 ) -> tuple[list[list[int]], Callable[[Any], float]]:
@@ -152,19 +161,27 @@ class BenchmarkEntry:
     error: str | None = None
 
 
-def _config_summary(cfg: Any) -> dict[str, Any]:
-    """Extract a JSON-friendly summary of a dataclass/config object."""
-    raw = cfg.to_dict() if hasattr(cfg, "to_dict") else cfg.__dict__
-    return {k: v for k, v in raw.items() if isinstance(v, (int, float, str, bool, type(None)))}
-
-
 class BenchmarkResults:
     """Holds all CB benchmark runs and the shared model they execute against."""
 
-    def __init__(self, model_id: str, attn_impl: str, tp_size: int = 1):
+    def __init__(self, model_id: str, attn_impl: str, tp_size: int = 1, dp_size: int = 1):
         self.model_id = model_id
         self.attn_impl = attn_impl
         self.tp_size = tp_size
+        self.dp_size = dp_size
+        # For now, TP and DP are mutually exclusive
+        if self.tp_size > 1 and self.dp_size > 1:
+            raise ValueError("TP and DP cannot be used together")
+        # torchrun sets these per worker
+        self.global_rank = int(os.environ.get("RANK", 0))
+        self.local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        # Pin this worker to its own GPU and open a process group to gather results later
+        if self.dp_size > 1:
+            disable_progress_bar()
+            torch.cuda.set_device(self.local_rank)
+            if not torch.distributed.is_initialized():  # type: ignore
+                torch.distributed.init_process_group(backend="gloo")  # type: ignore
+        # Entries accumulator
         self.entries: list[BenchmarkEntry] = []
 
     def cleanup(self) -> None:
@@ -175,7 +192,12 @@ class BenchmarkResults:
     def _get_model(self) -> Any:
         self.cleanup()
         # tp_plan and device_map are mutually exclusive — TP uses its own placement.
-        placement = {"tp_plan": "auto"} if self.tp_size > 1 else {"device_map": 0}
+        if self.tp_size > 1:
+            placement = {"tp_plan": "auto"}
+        elif self.dp_size > 1:
+            placement = {"device_map": self.local_rank}
+        else:
+            placement = {"device_map": 0}
         model = AutoModelForCausalLM.from_pretrained(self.model_id, attn_implementation=self.attn_impl, **placement)
         return model.eval()
 
@@ -187,13 +209,11 @@ class BenchmarkResults:
         gen_config: GenerationConfig | None = None,
         label: str | None = None,
         score_fn: Callable[[Any], float] | None = None,
-    ) -> BenchmarkEntry:
+    ) -> None:
         """Run one CB benchmark and record time, tokens, and peak memory."""
 
         gen_config = GenerationConfig() if gen_config is None else gen_config
         gen_config.max_new_tokens = max_new_tokens
-
-        model = self._get_model()
 
         avg_input = sum(len(x) for x in data) / max(len(data), 1)
         entry = BenchmarkEntry(
@@ -204,9 +224,18 @@ class BenchmarkResults:
             cb_config=_config_summary(cb_config),
             gen_config=_config_summary(gen_config),
         )
+        # In DP, entries are sharded round-robin across ranks: entry i runs on rank i % dp_size.
+        if self.dp_size > 1 and len(self.entries) % self.dp_size != self.global_rank:
+            entry.error = f"Rank {self.global_rank} is not in charge of this entry"
+            self.entries.append(entry)
+            return None
 
-        print(f"\n[{entry.label}] samples={entry.num_samples} avg_in={avg_input:.1f} max_new={max_new_tokens}")
+        # Tag lines with the rank and disable the per-token bar so DP stdout stays readable.
+        tag = f"[rank {self.global_rank}]" if self.dp_size > 1 else ""
+        details = f"samples={entry.num_samples} avg_in={avg_input:.1f} max_new={max_new_tokens}"
+        print(f"\n{tag} [{entry.label}] Starting with {details}")
 
+        model = self._get_model()
         self.cleanup()
 
         try:
@@ -214,7 +243,7 @@ class BenchmarkResults:
                 inputs=data,
                 generation_config=gen_config,
                 continuous_batching_config=cb_config,
-                progress_bar=True,
+                progress_bar=self.dp_size == 1,
             )
             gen_start = min(out.created_time for out in outputs.values())
             gen_end = max(out.lifespan[1] for out in outputs.values())
@@ -223,22 +252,27 @@ class BenchmarkResults:
 
             entry.time_seconds = gen_time
             entry.num_tokens = num_tokens
-            entry.throughput_tok_per_sec = num_tokens / gen_time if gen_time > 0 else 0.0
+            tps = num_tokens / gen_time if gen_time > 0 else 0.0
+            entry.throughput_tok_per_sec = tps
             entry.peak_memory_gb = torch.cuda.max_memory_allocated() / (1024**3)
             if score_fn is not None:
                 entry.accuracy = score_fn(outputs)
-            print(
-                f"   {gen_time:.2f}s, {num_tokens} tokens, "
-                f"{entry.throughput_tok_per_sec:.2f} tok/s, peak {entry.peak_memory_gb:.2f} GB"
-                + (f", acc {entry.accuracy:.3f}" if entry.accuracy is not None else "")
-            )
+            details = f"time={gen_time:.2f}s tokens={num_tokens} tok/s={tps:.2f} GB={entry.peak_memory_gb:.2f}"
+            details += f", acc={entry.accuracy:.3f}" if entry.accuracy is not None else ""
+            print(f"\n{tag} [{entry.label}] Finished with {details}")
         except Exception as e:
             entry.error = str(e)
-            print(f"   ERROR: {e}")
+            print(f"{tag} [{entry.label}] ERROR: {e}")
 
         self.entries.append(entry)
+        model = None
         self.cleanup()
-        return entry
+
+    def gather_entries(self) -> None:
+        """In DP, merge each rank's owned entries onto all ranks (entry i is owned by rank i % dp_size)."""
+        gathered: list[Any] = [None] * self.dp_size
+        torch.distributed.all_gather_object(gathered, self.entries)  # type: ignore
+        self.entries = [gathered[i % self.dp_size][i] for i in range(len(self.entries))]
 
     # Persistence
     def save(self, name: str) -> Path:
@@ -250,7 +284,8 @@ class BenchmarkResults:
             "attn_impl": self.attn_impl,
             "entries": [asdict(e) for e in self.entries],
         }
-        filename.write_text(json.dumps(payload, indent=2))
+        with open(filename, "w") as f:
+            json.dump(payload, f, indent=2)
         print(f"\nResults saved to {filename}")
         return filename
 
@@ -317,6 +352,7 @@ if __name__ == "__main__":
     parser.add_argument("--model-id", type=str, default="meta-llama/Llama-3.1-8B-Instruct")
     parser.add_argument("--attn", type=str, default="kernels-community/flash-attn3")
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size (1 = no TP).")
+    parser.add_argument("--dp-size", type=int, default=1, help="Data parallel size (1 = no DP).")
     parser.add_argument(
         "--rollouts-lengths",
         "-rl",
@@ -324,14 +360,14 @@ if __name__ == "__main__":
         nargs="+",
         help="If this is specified, only the rollouts benchmarks run, with the given sizes (in tokens).",
     )
-    cli_args = parser.parse_args()
+    args = parser.parse_args()
 
-    results = BenchmarkResults(model_id=cli_args.model_id, attn_impl=cli_args.attn, tp_size=cli_args.tp_size)
-    tokenizer = AutoTokenizer.from_pretrained(cli_args.model_id, padding_side="left")
+    results = BenchmarkResults(model_id=args.model_id, attn_impl=args.attn, tp_size=args.tp_size, dp_size=args.dp_size)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_id, padding_side="left")
 
-    if cli_args.rollouts_lengths is not None:
+    if args.rollouts_lengths is not None:
         rollouts_only = True
-        rollout_sizes = cli_args.rollouts_lengths
+        rollout_sizes = args.rollouts_lengths
     else:
         rollouts_only = False
         rollout_sizes = [1024, 2048, 4096, 8192, 16384]
@@ -364,7 +400,7 @@ if __name__ == "__main__":
         results.add_benchmark(
             data=gsm8k_data,
             max_new_tokens=256,
-            cb_config=ContinuousBatchingConfig(use_default_compile_configs=True),
+            cb_config=ContinuousBatchingConfig(default_compile_level=1),
             gen_config=GenerationConfig(eos_token_id=-1),
             label="gsm8k_compile",
             score_fn=gsm8k_score_fn,
@@ -427,17 +463,22 @@ if __name__ == "__main__":
         results.add_benchmark(
             data=get_random_data(batch_size=32, num_tokens=256),
             max_new_tokens=length,
-            cb_config=ContinuousBatchingConfig(use_default_compile_configs=True),
+            cb_config=ContinuousBatchingConfig(default_compile_level=1),
             gen_config=GenerationConfig(eos_token_id=-1),
             label=f"rollouts_{length}",
         )
 
-    # Post processing and display. Only on rank 0 in TP runs to avoid duplicate output / file writes.
-    is_rank_zero = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
-    if is_rank_zero:
+    # In DP, gather every rank's entries
+    if args.dp_size > 1:
+        results.gather_entries()
+
+    # Post processing and display, only for rank 0
+    write_results = results.global_rank == 0 if (args.dp_size > 1 or args.tp_size > 1) else True
+
+    if write_results:
         results.print_summary()
-        if cli_args.compare_to:
-            baseline = BenchmarkResults.load_most_recent(cli_args.compare_to)
+        if args.compare_to:
+            baseline = BenchmarkResults.load_most_recent(args.compare_to)
             results.compare_to(baseline=baseline)
-        if cli_args.name:
-            results.save(cli_args.name)
+        if args.name:
+            results.save(args.name)
