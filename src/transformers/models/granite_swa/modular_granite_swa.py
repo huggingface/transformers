@@ -13,39 +13,94 @@
 # limitations under the License.
 """GraniteSWA: Granite with Sliding Window Attention and learnable attention sinks.
 
-The sink mechanism uses post-attention LSE scaling:
-    sink_scale = sigmoid(lse - sinks)
-    attn_output = attn_output * sink_scale
+GraniteSWA augments the Granite architecture with two changes:
+  * per-layer sliding-window attention (controlled by ``layer_types``), and
+  * a learnable per-head attention sink.
 
-This is different from GPT-OSS which concatenates sinks into the softmax denominator.
+The sink rescales the attention output by ``sigmoid(logsumexp(attn_logits) - sink)``. This is
+mathematically equivalent to adding a single extra (learnable) logit to the softmax denominator
+-- i.e. the ``s_aux`` auxiliary-logit mechanism used by GPT-OSS. The eager path computes the
+``sigmoid``-scaling explicitly, while the FlashAttention-3 and FlashAttention-4 backends apply
+the same sink through the shared attention dispatch by passing ``s_aux``.
 """
 
 from collections.abc import Callable
 
 import torch
-import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
+from torch.nn import functional as F
 from torch.nn import init
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import (
     GraniteDecoderLayer,
     GraniteForCausalLM,
     GraniteModel,
     GranitePreTrainedModel,
 )
-from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb
-from .configuration_granite_swa import GraniteSWAConfig
+from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, repeat_kv
 
 
 logger = logging.get_logger(__name__)
+
+
+@auto_docstring(checkpoint="ibm-research/granite-4.5-3b-pipecleaner-r260528a")
+@strict
+class GraniteSWAConfig(GraniteConfig):
+    r"""
+    sliding_window (`int`, *optional*, defaults to 128):
+        Size of the sliding attention window used by layers whose `layer_types` entry is
+        `"sliding_attention"`.
+    layer_types (`list[str]`, *optional*):
+        Per-layer attention type, each either `"full_attention"` or `"sliding_attention"`. When
+        `None`, every fourth layer (`i % 4 == 0`) uses full attention and the rest use sliding
+        window attention.
+
+    ```python
+    >>> from transformers import GraniteSWAModel, GraniteSWAConfig
+
+    >>> # Initializing a GraniteSWA configuration
+    >>> configuration = GraniteSWAConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = GraniteSWAModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "granite_swa"
+
+    vocab_size: int = 100352
+    hidden_size: int = 2560
+    intermediate_size: int = 8192
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 20
+    num_key_value_heads: int | None = 4
+    max_position_embeddings: int = 8192
+    rms_norm_eps: float = 1e-5
+    bos_token_id: int | None = 100257
+    eos_token_id: int | list[int] | None = 100257
+    tie_word_embeddings: bool = True
+    sliding_window: int | None = 128
+    layer_types: list[str] | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention" if i % 4 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
+            ]
+
+        super().__post_init__(**kwargs)
 
 
 def eager_attention_forward(
@@ -55,36 +110,31 @@ def eager_attention_forward(
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
     scaling: float,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     **kwargs,
-) -> tuple[torch.Tensor, None]:
-    """Eager attention that also computes LSE for sink scaling."""
-    key_states = key
-    value_states = value
-
-    num_key_value_groups = module.num_key_value_groups
-    if num_key_value_groups > 1:
-        key_states = key_states.repeat_interleave(num_key_value_groups, dim=1)
-        value_states = value_states.repeat_interleave(num_key_value_groups, dim=1)
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Eager attention with a learnable per-head sink applied as post-attention LSE scaling."""
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    # Compute LSE before softmax and store on the module for sink scaling
-    module._lse = torch.logsumexp(attn_weights, dim=-1)
+    # Sink scaling: sigmoid(logsumexp(logits) - sink), equivalent to an extra softmax-denominator logit.
+    lse = torch.logsumexp(attn_weights, dim=-1)  # (batch, num_heads, q_len)
+    sink_scale = torch.sigmoid((lse - module.sinks.view(1, -1, 1)).to(torch.float32))
 
     attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = F.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output * sink_scale.unsqueeze(-1).to(attn_output.dtype)
     attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, None
+    return attn_output, attn_weights
 
 
 class GraniteSWAAttention(LlamaAttention):
-    """Attention with per-layer sliding window and learnable attention sinks (LSE-based)."""
+    """Granite attention with per-layer sliding window and a learnable per-head attention sink."""
 
     def __init__(self, config: GraniteSWAConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
@@ -92,14 +142,14 @@ class GraniteSWAAttention(LlamaAttention):
         self.layer_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
-        # Learnable per-head attention sink parameter
+        # Learnable per-head attention sink (applied as an auxiliary softmax logit).
         self.sinks = nn.Parameter(torch.zeros(config.num_attention_heads))
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -116,7 +166,6 @@ class GraniteSWAAttention(LlamaAttention):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # Attention dispatch
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -127,31 +176,12 @@ class GraniteSWAAttention(LlamaAttention):
             key_states,
             value_states,
             attention_mask,
-            dropout=self.attention_dropout if self.training else 0.0,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
+            s_aux=self.sinks,  # diff with Granite: learnable attention sink (FA3/FA4 backends)
             **kwargs,
         )
-
-        # Get LSE for sink scaling
-        # For eager: stored on self._lse by eager_attention_forward
-        # For FA3: passed via s_aux (handled by kernel) — but we use LSE route instead
-        lse = getattr(self, "_lse", None)
-        if lse is None and hasattr(self, "_fa3_lse"):
-            lse = self._fa3_lse
-
-        # Apply sink scaling: sink_scale = sigmoid(lse - sinks)
-        if lse is not None:
-            sink_scale = torch.sigmoid((lse - self.sinks.view(1, -1, 1)).to(torch.float32)).to(attn_output.dtype)
-            # attn_output: (B, S, H*D) -> (B, S, H, D) for per-head scaling
-            B = input_shape[0]
-            S = input_shape[1] if len(input_shape) > 1 else attn_output.shape[0]
-            attn_output = attn_output.view(B, S, self.config.num_attention_heads, self.head_dim)
-            sink_scale = sink_scale.transpose(1, 2).unsqueeze(-1)  # (B, S, H, 1)
-            attn_output = attn_output * sink_scale
-            attn_output = attn_output.view(B, S, -1)
-            # Clean up
-            self._lse = None
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -166,14 +196,18 @@ class GraniteSWADecoderLayer(GraniteDecoderLayer):
 
 class GraniteSWAPreTrainedModel(GranitePreTrainedModel):
     _supports_sdpa = False
-    _compatible_flash_implementations = ["flash_attention_3"]
+    _supports_flex_attn = False
+    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     _can_record_outputs = {
         "hidden_states": GraniteSWADecoderLayer,
         "attentions": GraniteSWAAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        pass
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, GraniteSWAAttention):
+            init.zeros_(module.sinks)
 
 
 class GraniteSWAModel(GraniteModel):
@@ -205,14 +239,14 @@ class GraniteSWAModel(GraniteModel):
         inputs_embeds = inputs_embeds * self.embedding_multiplier
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        # Create per-layer-type causal masks
+        # Create the masks once per layer type (full vs sliding window) and reuse across layers.
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
