@@ -38,6 +38,7 @@ from transformers.testing_utils import (
     TestCasePlus,
     cleanup,
     require_kernels,
+    require_rocm,
     require_torch_accelerator,
     slow,
     torch_device,
@@ -690,3 +691,48 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
 
         result_mapping = kernel_config.kernel_mapping
         self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")
+
+
+@require_kernels
+@require_rocm
+@slow
+class TestRocmRotaryKernel(TestCasePlus):
+    """
+    Regression test for the ROCm `rotary_pos_emb` function kernel (`kernels-community/aiter-rope`).
+
+    The `aiter-rope` shim is a drop-in replacement for `apply_rotary_transformers` under the "rocm" entry of
+    `_KERNEL_MAPPING["rotary_pos_emb"]`. A stale shim (e.g. a signature mismatch like the dropped `position_ids`
+    argument fixed in https://github.com/huggingface/transformers/pull/46810) only blows up at runtime on a ROCm
+    GPU, where `use_kernels=True` dispatches `apply_rotary_pos_emb` to that kernel. Running a tiny dummy model
+    through a forward pass and comparing against the non-kernelized baseline catches such breakages.
+    """
+
+    model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_rotary_kernel_forward_matches_baseline(self):
+        inputs = self.tokenizer("Hello, how are you?", return_tensors="pt")
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
+
+        baseline = AutoModelForCausalLM.from_pretrained(self.model_id, use_kernels=False, device_map=torch_device)
+        baseline.eval()
+        with torch.no_grad():
+            baseline_out = baseline(**inputs).logits
+        del baseline
+        cleanup(torch_device, gc_collect=True)
+
+        kernelized = AutoModelForCausalLM.from_pretrained(self.model_id, use_kernels=True, device_map=torch_device)
+        kernelized.eval()
+        self.assertTrue(kernelized.use_kernels)
+        with torch.no_grad():
+            kernelized_out = kernelized(**inputs).logits
+
+        # If the `aiter-rope` shim signature is out of sync, the forward above raises; otherwise outputs must match.
+        torch.testing.assert_close(baseline_out, kernelized_out, atol=1e-3, rtol=1e-3)
+        del kernelized
