@@ -143,7 +143,7 @@ class Tipsv2DptReassembleStage(nn.Module):
             [
                 nn.Sequential(
                     nn.Linear(2 * config.backbone_config.hidden_size, config.backbone_config.hidden_size),
-                    ACT2FN[config.readout_act],
+                    ACT2FN[config.readout_activation],
                 )
                 for _ in config.neck_hidden_sizes
             ]

@@ -36,7 +36,7 @@ class Tipsv2DptConfig(PreTrainedConfig):
         The number of channels before fusion.
     reassemble_factors (`list[float]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
         The up/downsampling factors of the reassemble layers.
-    readout_act (`str`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+    readout_activation (`str`, *optional*, defaults to `"gelu_pytorch_tanh"`):
         Activation applied after the readout projection layer.
     num_depth_bins (`int`, *optional*, defaults to 256):
         The number of depth bins used by the depth-estimation head.
@@ -67,7 +67,7 @@ class Tipsv2DptConfig(PreTrainedConfig):
     neck_hidden_sizes: list[int] | tuple[int, ...] | None = None
     fusion_hidden_size: int = 256
     reassemble_factors: list[int | float] | tuple[int | float, ...] | None = None
-    readout_act: str = "gelu_pytorch_tanh"
+    readout_activation: str = "gelu_pytorch_tanh"
     num_depth_bins: int = 256
     min_depth: float = 0.001
     max_depth: float = 10.0
