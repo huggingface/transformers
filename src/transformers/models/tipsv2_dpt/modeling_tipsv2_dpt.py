@@ -409,6 +409,35 @@ class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Tipsv2DptOutput:
+        r"""
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoModel, AutoImageProcessor
+        >>> from transformers.image_utils import load_image
+
+        >>> model_id = "google/tipsv2-b14-dpt"
+        >>> model = AutoModel.from_pretrained(model_id, device_map="auto")
+        >>> image_processor = AutoImageProcessor.from_pretrained(model_id)
+
+        >>> image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/room.jpg")
+        >>> inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # outputs.predicted_depth: (batch_size, height, width) tensor with predicted depth in meters
+        >>> # outputs.normals: (batch_size, 3, height, width) tensor with normals in XYZ format (unnormalized)
+        >>> # outputs.segmentation_logits: (batch_size, config.num_labels, height, width) tensor with segmentation logits
+        >>> depth_results = image_processor.post_process_depth_estimation(outputs, target_sizes=[(image.height, image.width)])
+        >>> normal_results = image_processor.post_process_normal_estimation(outputs, target_sizes=[(image.height, image.width)])
+        >>> segmentation_results = image_processor.post_process_semantic_segmentation(outputs, target_sizes=[(image.height, image.width)])
+
+        >>> predicted_depth = depth_results[0]["predicted_depth"]  # (height, width) tensor with predicted depth in meters
+        >>> normals = normal_results[0]["normals"]  # (3, height, width) tensor with normals in XYZ format (L2-normalized)
+        >>> segmentation = segmentation_results[0]  # (height, width) tensor with class ids
+        ```"""
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         feature_maps = outputs.feature_maps
 
@@ -474,6 +503,27 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
         labels: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DepthEstimatorOutput:
+        r"""
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoModelForDepthEstimation, AutoImageProcessor
+        >>> from transformers.image_utils import load_image
+
+        >>> model_id = "google/tipsv2-b14-dpt"
+        >>> model = AutoModelForDepthEstimation.from_pretrained(model_id, device_map="auto")
+        >>> image_processor = AutoImageProcessor.from_pretrained(model_id)
+
+        >>> image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/room.jpg")
+        >>> inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> results = image_processor.post_process_depth_estimation(outputs, target_sizes=[(image.height, image.width)])
+        >>> predicted_depth = results[0]["predicted_depth"]  # (height, width) tensor with predicted depth in meters
+        ```"""
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         feature_maps = outputs.feature_maps
 
@@ -526,6 +576,27 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
         labels: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Tipsv2DptNormalEstimatorOutput:
+        r"""
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import Tipsv2DptForNormalEstimation, AutoImageProcessor
+        >>> from transformers.image_utils import load_image
+
+        >>> model_id = "google/tipsv2-b14-dpt"
+        >>> model = Tipsv2DptForNormalEstimation.from_pretrained(model_id, device_map="auto")
+        >>> image_processor = AutoImageProcessor.from_pretrained(model_id)
+
+        >>> image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/room.jpg")
+        >>> inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> results = image_processor.post_process_normal_estimation(outputs, target_sizes=[(image.height, image.width)])
+        >>> normals = results[0]["normals"]  # (3, height, width) tensor with normals in XYZ format (L2-normalized)
+        ```"""
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         feature_maps = outputs.feature_maps
 
@@ -581,6 +652,27 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoModelForSemanticSegmentation, AutoImageProcessor
+        >>> from transformers.image_utils import load_image
+
+        >>> model_id = "google/tipsv2-b14-dpt"
+        >>> model = AutoModelForSemanticSegmentation.from_pretrained(model_id, device_map="auto")
+        >>> image_processor = AutoImageProcessor.from_pretrained(model_id)
+
+        >>> image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/room.jpg")
+        >>> inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> results = image_processor.post_process_semantic_segmentation(outputs, target_sizes=[(image.height, image.width)])
+        >>> segmentation_map = results[0]  # (height, width) tensor with class ids
+        ```
         """
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         feature_maps = outputs.feature_maps

@@ -377,6 +377,42 @@ class Tipsv2VisionEncoder(Dinov2WithRegistersEncoder):
 class Tipsv2VisionModel(Dinov2WithRegistersModel):
     _keys_to_ignore_on_load_unexpected = {"text_encoder"}
 
+    def forward(
+        self,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
+            pre-training.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoConfig, Tipsv2VisionModel, AutoImageProcessor
+        >>> from transformers.image_utils import load_image
+
+        >>> model_id = "google/tipsv2-b14"
+        >>> config = AutoConfig.from_pretrained(model_id)
+        >>> model = Tipsv2VisionModel.from_pretrained(model_id, config=config.vision_config, device_map="auto")
+        >>> image_processor = AutoImageProcessor.from_pretrained(model_id)
+
+        >>> image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+        >>> inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # Tipsv2 repurposes the register token from DINOv2-with-registers as a secondary class token
+        >>> sequence = outputs.last_hidden_state  # (batch_size, 1 + num_register_tokens + num_patches, hidden_size)
+        >>> cls_token_1 = sequence[:, 0]  # supervised by web alt-text captions
+        >>> cls_token_2 = sequence[:, 1 : 1 + model.config.num_register_tokens]  # supervised by synthetic captions
+        ```"""
+        return super().forward(pixel_values, bool_masked_pos=bool_masked_pos, **kwargs)
+
 
 class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
     _keys_to_ignore_on_load_unexpected = {"text_encoder"}
@@ -607,6 +643,26 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel, EmbeddingAccessMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoConfig, Tipsv2TextModel, AutoProcessor
+
+        >>> model_id = "google/tipsv2-b14"
+        >>> config = AutoConfig.from_pretrained(model_id)
+        >>> model = Tipsv2TextModel.from_pretrained(model_id, config=config.text_config, device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+
+        >>> candidate_labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
+        >>> inputs = processor(text=candidate_labels, return_tensors="pt").to(model.device)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> text_embeds = outputs.pooler_output  # (batch_size, hidden_size)
+        ```"""
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -735,6 +791,32 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
             pre-training.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss when both image and text inputs are provided.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoModel, AutoProcessor
+        >>> from transformers.image_utils import load_image
+
+        >>> model_id = "google/tipsv2-b14"
+        >>> model = AutoModel.from_pretrained(model_id, device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+
+        >>> image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+        >>> candidate_labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
+
+        >>> inputs = processor(text=candidate_labels, images=image, return_tensors="pt").to(model.device)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> probs = outputs.logits_per_image.softmax(dim=1)
+        >>> most_likely_idx = probs.argmax(dim=1).item()
+        >>> most_likely_label = candidate_labels[most_likely_idx]
+        >>> print(f"Most likely label: '{most_likely_label}' with probability: {probs[0][most_likely_idx].item():.3f}")
+        Most likely label: 'a photo of a cat' with probability: 0.975
+        ```
         """
         if pixel_values is None and input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify pixel_values, input_ids, or inputs_embeds")
