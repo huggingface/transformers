@@ -416,6 +416,9 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
+    "salesforce/blip2-opt-*",
+    "salesforce/blip2-flan-t5-*",
+    "salesforce/instructblip-flan-t5-*",
 ]
 
 
