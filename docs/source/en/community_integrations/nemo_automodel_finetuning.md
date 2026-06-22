@@ -21,6 +21,9 @@ rendered properly in your Markdown viewer.
 Define your training run in a YAML config file (see full [config file](https://github.com/NVIDIA-NeMo/Automodel/blob/0d05e245e0bbc9128b869b21a3908512affc6cae/examples/llm_finetune/nemotron/nemotron_nano_v3_hellaswag_peft.yaml)).
 
 ```yaml
+# Recipe class the `automodel` CLI instantiates from this config
+recipe: TrainFinetuneRecipeForNextTokenPrediction
+
 # Instantiate a Nemotron V3 Nano model
 model:
   _target_: nemo_automodel.NeMoAutoModelForCausalLM.from_pretrained
@@ -51,10 +54,10 @@ distributed:
 # ... other parameters
 ```
 
-Launch training with `torchrun` using the command below.
+Launch training with the `automodel` CLI using the command below.
 
 ```bash
-torchrun -–nproc-per-node=4 examples/llm_finetune/finetune.py -c /path/to/yaml
+automodel /path/to/yaml --nproc-per-node 4
 ```
 
 ## Transformers integration

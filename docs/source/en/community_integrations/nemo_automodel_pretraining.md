@@ -26,31 +26,29 @@ import torch
 import torch.distributed as dist
 
 from nemo_automodel import NeMoAutoModelForCausalLM
-from nemo_automodel.recipes._dist_setup import setup_distributed
+from nemo_automodel.components.distributed.config import DistributedSetup
+from nemo_automodel.components.distributed.mesh import ParallelismSizes
 
 dist.init_process_group(backend="nccl")
 torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", 0)))
 torch.manual_seed(1111)
 
-dist_setup = setup_distributed(
-    {
-        "strategy": "fsdp2",
-        "dp_size": None,  # will be inferred from world_size and other parallelism sizes
-        "dp_replicate_size": None,
-        "tp_size": 1,
-        "pp_size": 1,
-        "cp_size": 1,
-        "ep_size": 8,
-    },
+# Build the resolved distributed topology (device mesh + MoE mesh + strategy/MoE configs).
+# dp_size is inferred from world_size and the other parallelism sizes.
+distributed_setup = DistributedSetup.build(
+    strategy="fsdp2",
+    parallelism_sizes=ParallelismSizes(
+        tp_size=1,
+        pp_size=1,
+        cp_size=1,
+        ep_size=8,
+    ),
     world_size=dist.get_world_size(),
 )
-kwargs = {
-    "device_mesh": dist_setup.device_mesh,
-    "moe_mesh": dist_setup.moe_mesh,
-    "distributed_config": dist_setup.strategy_config,
-    "moe_config": dist_setup.moe_config,
-}
-model = NeMoAutoModelForCausalLM.from_pretrained("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16", **kwargs)
+model = NeMoAutoModelForCausalLM.from_pretrained(
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
+    distributed_setup=distributed_setup,
+)
 print(model)
 dist.destroy_process_group()
 ```
