@@ -666,6 +666,8 @@
         title: GraniteMoeHybrid
       - local: model_doc/granitemoeshared
         title: GraniteMoeShared
+      - local: model_doc/granitemoe_swa
+        title: GraniteMoeSWA
       - local: model_doc/granite_swa
         title: GraniteSWA
       - local: model_doc/helium
