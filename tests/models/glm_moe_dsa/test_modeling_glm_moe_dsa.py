@@ -38,6 +38,7 @@ from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
 )
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -72,7 +73,7 @@ class GlmMoeDsaModelTester(CausalLMModelTester):
 
 
 @require_torch
-class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
+class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase, TensorParallelTesterMixin):
     model_tester_class = GlmMoeDsaModelTester
     test_all_params_have_gradient = False
     model_split_percents = [0.5, 0.7, 0.8]

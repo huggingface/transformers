@@ -603,7 +603,6 @@ class FP8Experts(nn.Module):
         self.config = config
         self.has_bias = has_bias
         self.has_gate = has_gate
-        self.scale_fmt = scale_fmt
         self.block_size = block_size
         self.hidden_dim = config.hidden_size
         self.activation_scheme = activation_scheme

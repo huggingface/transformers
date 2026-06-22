@@ -26,6 +26,7 @@ from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
 )
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -135,7 +136,7 @@ class DeepseekV32ModelTester(CausalLMModelTester):
 
 
 @require_torch
-class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
+class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase, TensorParallelTesterMixin):
     pipeline_model_mapping = (
         {
             "feature-extraction": DeepseekV32Model,

@@ -28,6 +28,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -58,7 +59,7 @@ class Glm4MoeLiteModelTester(CausalLMModelTester):
 
 
 @require_torch
-class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
+class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase, TensorParallelTesterMixin):
     model_tester_class = Glm4MoeLiteModelTester
     test_all_params_have_gradient = False
     model_split_percents = [0.5, 0.7, 0.8]

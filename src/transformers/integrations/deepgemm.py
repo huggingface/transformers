@@ -186,20 +186,20 @@ def _is_sm100(device: torch.device) -> bool:
     return torch.cuda.get_device_capability(device)[0] >= 10
 
 
-def _assert_sm100_scales_are_ue8m0(experts: torch.nn.Module, device: torch.device) -> None:
+def _assert_sm100_scales_are_ue8m0(scale: torch.Tensor) -> None:
     """On B200 (SM100) DeepGEMM only supports UE8M0 (power-of-two) scales; the float32 scales
-    that work on H100 (SM90) have no SM100 path. ``scale_fmt="ue8m0"`` scales are powers of two,
-    so ``_coerce_sf_for_kernel``'s round to UE8M0 is a no-op (even when they're stored in a
-    float32 container, e.g. dsv4-flash-base); ``scale_fmt="float"`` scales are not, so fail loud
-    rather than silently rounding them and corrupting the output.
+    that work on H100 (SM90) have no SM100 path. UE8M0 scales load as ``float8_e8m0fnu`` (the
+    loader normalizes even float32-container checkpoints like dsv4-flash-base), so a plain
+    ``float32`` scale here means a genuine non-UE8M0 checkpoint — fail loud rather than let
+    ``_coerce_sf_for_kernel`` silently round it and corrupt the output.
     """
-    if not _is_sm100(device):
+    if not _is_sm100(scale.device):
         return  # SM90 consumes float32 SFs directly (no UE8M0 round).
-    if getattr(experts, "scale_fmt", "float") == "ue8m0":
-        return
+    if scale.dtype != torch.float32:
+        return  # already UE8M0 (`float8_e8m0fnu`) — kernel-ready as-is.
     raise ValueError(
         "DeepGEMM's Blackwell (SM100) experts kernel requires power-of-two (UE8M0) scale "
-        "factors, but this checkpoint ships plain float32 block scales "
+        "factors, but this checkpoint's expert scales are plain float32 "
         "(quantization_config.scale_fmt='float'). Rounding them to UE8M0 would scale the "
         "dequantized expert weights incorrectly and silently corrupt the output. Use a "
         "checkpoint quantized with scale_fmt='ue8m0', or an experts implementation that "
@@ -577,9 +577,8 @@ def deepgemm_fp8_fp4_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    device = hidden_states.device
-    _assert_single_device(device, context="experts")
-    _assert_sm100_scales_are_ue8m0(self, device)
+    _assert_single_device(hidden_states.device, context="experts")
+    _assert_sm100_scales_are_ue8m0(self.down_proj_scale_inv)
 
     if self.activation_scheme == "static":
         raise NotImplementedError("DeepGEMM experts dispatch does not support static activation quantization.")
@@ -591,6 +590,7 @@ def deepgemm_fp8_fp4_experts_forward(
         deepgemm.grouped_fp8_fp4_matmul_nn if self.is_transposed else deepgemm.grouped_fp8_fp4_matmul_nt
     )
 
+    device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
@@ -738,7 +738,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
       `transform_weights_for_mega_moe((gate_up, gate_up_sf), (down, down_sf))`.
       - `config.swiglu_limit` (optional): SwiGLU clamp; absent → unclamped.
     """
-    _assert_sm100_scales_are_ue8m0(self, hidden_states.device)
+    _assert_sm100_scales_are_ue8m0(self.down_proj_scale_inv)
 
     if self.gate_up_proj.dtype != torch.int8:
         raise RuntimeError(
