@@ -38,14 +38,9 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
-    mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
-        Number of hidden layers in the Multi-Token Prediction (MTP) module. When set to 0, MTP is disabled.
-    mtp_loss_weight (`float`, *optional*, defaults to 0.0):
-        Weight for the MTP auxiliary loss. The total loss is computed as `main_loss + mtp_loss_weight * mtp_loss`.
-    output_mtp_loss (`bool`, *optional*, defaults to `False`):
-        Whether to return the MTP auxiliary loss in the model output. When `True`, the `mtp_loss` field in the
-        output will contain the MTP loss value, and it will be added to the main loss (weighted by
-        `mtp_loss_weight`) when `labels` are provided.
+    num_mtp_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled. Matches the field name
+        used by the generic MTP infrastructure in #46229.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -108,9 +103,7 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
-    mtp_num_hidden_layers: int = 0
-    mtp_loss_weight: float = 0.0
-    output_mtp_loss: bool = False
+    num_mtp_layers: int = 0
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
@@ -155,14 +148,8 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
 @strict
 class Qwen3_5Config(PreTrainedConfig):
     r"""
-    mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
-        Number of hidden layers in the Multi-Token Prediction (MTP) module. When set to 0, MTP is disabled.
-    mtp_loss_weight (`float`, *optional*, defaults to 0.0):
-        Weight for the MTP auxiliary loss. The total loss is computed as `main_loss + mtp_loss_weight * mtp_loss`.
-    output_mtp_loss (`bool`, *optional*, defaults to `False`):
-        Whether to return the MTP auxiliary loss in the model output. When `True`, the `mtp_loss` field in the
-        output will contain the MTP loss value, and it will be added to the main loss (weighted by
-        `mtp_loss_weight`) when `labels` are provided.
+    num_mtp_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
 
     Example:
 
@@ -191,9 +178,7 @@ class Qwen3_5Config(PreTrainedConfig):
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
     tie_word_embeddings: bool = False
-    mtp_num_hidden_layers: int = 0
-    mtp_loss_weight: float = 0.0
-    output_mtp_loss: bool = False
+    num_mtp_layers: int = 0
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
