@@ -1284,8 +1284,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.ln_1\.", ".layer_norm1."),
             WeightRenaming(r"\.ln_2\.", ".layer_norm2."),
             WeightRenaming(r"\.attn\.", ".self_attn."),
-            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."), # if config.use_swiglu_ffn=False
-            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."), # if config.use_swiglu_ffn=False
+            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),  # if config.use_swiglu_ffn=False
+            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),  # if config.use_swiglu_ffn=False
             # WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."), # if config.use_swiglu_ffn=True
             # WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."), # if config.use_swiglu_ffn=True
             WeightConverter(
