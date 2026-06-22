@@ -35,9 +35,8 @@ You can find the model card and checkpoint [here](https://huggingface.co/google/
 
 Despite it being a text diffusion model and having a custom generation loop, most of the interface is shared with other models that can generate text with [`DiffusionGemmaGenerationMixin.generate`]. If you're using another `transformers` model in your app, you should be able to directly replace it with this model.
 
-### Common caveats
-
-- DiffusionGemma doesn't accept `use_cache`. It always uses a KV cache;
+Common caveats
+- DiffusionGemma doesn't accept `use_cache`; it always uses a KV cache.
 - Support for common flags like `top_k` won't be available at release day, but will be added over time if they are compatible with text diffusion.
 
 ### Basic example
