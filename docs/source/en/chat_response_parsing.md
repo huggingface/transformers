@@ -88,6 +88,9 @@ The parser will emit **events** as text from the generation process is fed in. T
 the region is complete, it will be emitted in a separate event with the fully parsed content. At the end of generation,
 the `finalize()` method flushes any remaining text and emits any final events, as well as the complete message dict.
 
+Note that although `parse_response` can accept batches, streamed parsing is always single-sequence: each `ResponseParser` tracks the state of one generation.
+If you want to stream multiple generations at once, create one [`~utils.chat_parsing.ResponseParser`] per sequence.
+
 ## Streaming events
 
 Each streamed parsing event is a dict with a `type` key. There are three kinds:
@@ -298,18 +301,17 @@ The `json` parser parses the captured text as JSON. It's the workhorse for tool-
 anything else with nested structure. It accepts a handful of optional `content_args` to handle the
 various ways models mangle JSON in the wild:
 
-- `unquoted_keys` (bool, default `false`): rewrite bare-identifier keys (e.g. `{name: "foo"}`) into
-  quoted form (`{"name": "foo"}`) before parsing. Useful for models that emit Javascript-style
+- `unquoted_keys` (bool, default `false`): Enable when key names are raw rather than quoted
+  (e.g. `{name: "foo"}`). Useful for models that emit Javascript-style
   object literals rather than strict JSON.
 - `string_delims` (list of `[open, close]` pairs, optional): for models that wrap string
-  values in custom delimiters instead of `"..."`. Each pair gives an opening and closing marker;
-  matching regions are extracted and spliced back in as standard JSON strings before parsing.
+  values in custom delimiters instead of `"..."`. Each pair gives an opening and closing marker.
 - `allow_non_json` (bool, default `false`): if parsing fails, return the stripped raw text instead
   of raising. Useful as a fallback for fields where the model *usually* emits JSON but occasionally
   drops to plain text.
 
-The model authors responsible for the existence of `unquoted_keys` and `string_delims` know who
-they are and should feel an appropriate amount of shame.
+`unquoted_keys` and `string_delims` both exist to handle models that emit non-standard,
+almost-but-not-quite-JSON output, so you should only need them for a handful of models.
 
 ```python
 field = {"args": {"open": "<args>", "close": "</args>", "content": "json", "content_args": {"unquoted_keys": True}}}
@@ -417,7 +419,7 @@ A whole-string placeholder like `"{content}"` returns the looked-up value with i
 parsed JSON dict slots in directly as the value of `function`. A placeholder must be the entire string: mixing
 text and placeholders (`"abc {name} def"`) is not permitted. They're not f-strings!
 
-You can abuse `transform` quite a lot, which becomes necessary when the model output has a wildly different format
+`transform` is quite versatile, which becomes necessary when the model output has a wildly different format
 to our standard API. GPT-OSS is a good example - it embeds the function name in the channel header rather than in
 the JSON body, so we have to capture it with a named group in `open_pattern` and merge it with `content` inside the
 transform. All named groups in `open_pattern` and `close_pattern` become available as variables alongside `content`:
@@ -481,7 +483,7 @@ The `transform_each` flag is only needed when `content` is already a list; for t
 match contributes one element (and `repeats: True` accumulates them), then the transform will apply to each element
 by default.
 
-## Very advanced: Regex portability
+## Framework developers: Regex portability
 
 `open_pattern`, `close_pattern`, and `start_anchor_pattern` are regex strings. For most users, and even for most
 model authors, this shouldn't be a problem, but if you are a developer writing an implementation of response parsing
