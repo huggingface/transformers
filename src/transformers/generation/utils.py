@@ -3452,7 +3452,7 @@ class GenerationMixin(ContinuousMixin):
                 beam_idx = self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len])
                 if hasattr(self, "_reorder_cache"):
                     model_kwargs[cache_key] = self._reorder_cache(model_kwargs[cache_key], beam_idx)
-                else:
+                elif hasattr(model_kwargs[cache_key], "reorder_cache"):
                     model_kwargs[cache_key].reorder_cache(beam_idx)
 
             cur_len = cur_len + 1
