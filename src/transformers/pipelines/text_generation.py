@@ -402,6 +402,19 @@ class TextGenerationPipeline(Pipeline):
 
         output = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
 
+        # Clear past_key_values immediately after generation to free GPU memory.
+        # past_key_values are not needed by the pipeline and can be very large,
+        # especially during batch inference where they accumulate and cause OOM errors.
+        if isinstance(output, ModelOutput):
+            if hasattr(output, "past_key_values") and output.past_key_values is not None:
+                del output["past_key_values"]
+            # Clear any extra tensors that are not needed
+            for extra_key in ["cache_position", "encoder_outputs"]:
+                if hasattr(output, extra_key):
+                    del output[extra_key]
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         if isinstance(output, ModelOutput):
             generated_sequence = output.sequences
             other_outputs = {k: v for k, v in output.items() if k not in {"sequences", "past_key_values"}}

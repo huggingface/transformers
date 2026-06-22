@@ -123,6 +123,17 @@ class PipelineIterator(IterableDataset):
             return self.loader_batch_item()
 
         # We're out of items within a batch
+        # Clean up previous batch data to free memory, especially past_key_values
+        # which can be very large and cause OOM when accumulated across batches.
+        if self._loader_batch_data is not None:
+            if isinstance(self._loader_batch_data, dict) or hasattr(self._loader_batch_data, "items"):
+                for k in list(getattr(self._loader_batch_data, "keys", lambda: [])()
+                              if hasattr(self._loader_batch_data, "keys")
+                              else self._loader_batch_data.keys()):
+                    if k == "past_key_values":
+                        del self._loader_batch_data[k]
+            self._loader_batch_data = None
+
         item = next(self.iterator)
         processed = self.infer(item, **self.params)
         # We now have a batch of "inferred things".
