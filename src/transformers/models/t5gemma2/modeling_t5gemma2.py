@@ -422,9 +422,16 @@ class T5Gemma2MergedAttention(nn.Module):
         key_states = torch.cat([key_states, cross_key_states], dim=2)
         value_states = torch.cat([value_states, cross_value_states], dim=2)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
+        # Merged attention concatenates self-attention and cross-attention keys/values,
+        # producing a combined key tensor and a merged 4D mask. Flash Attention 2 expects
+        # either a causal flag or a 2D padding mask and cannot express this merged pattern,
+        # so we fall back to eager attention for the decoder regardless of _attn_implementation.
+        # Strip a potential "paged|" prefix (continuous batching) before checking.
+        _attn_impl = self.config._attn_implementation
+        _base_impl = _attn_impl.split("|")[-1] if "|" in _attn_impl else _attn_impl
+        if "flash_attention" in _base_impl:
+            _attn_impl = "eager"
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(_attn_impl, eager_attention_forward)
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -660,9 +667,10 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
     ]
     _skip_keys_device_placement = ["past_key_values"]
 
-    # Mask creation is incompatible
-    # FA due to non-default creation / SWA
-    _supports_flash_attn = False
+    # Flash Attention 2 is supported for the encoder (full + sliding-window layers).
+    # The decoder's merged attention (self + cross keys concatenated) falls back to
+    # eager automatically; FA2 mask handling (None / 2D) is adapted in the decoder forward.
+    _supports_flash_attn = True
     _supports_sdpa = True
     # Flex due to custom masks not compatible to be merged after creation
     _supports_flex_attn = False
@@ -1017,12 +1025,27 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
+        # FA2's mask interface returns None (no-padding) or a 2D tensor, both of which
+        # cannot be torch.cat'd when building the merged self+cross mask. The merged
+        # attention falls back to eager anyway, so force eager-format (4D float) masks
+        # for the decoder. "sdpa" returns 4D bool; eager needs 4D float 0/-inf additive bias.
+        # Also handle paged variants like "paged|flash_attention_2" via substring check.
+        _mask_config = self.config
+        _base_impl = (
+            self.config._attn_implementation.split("|")[-1]
+            if "|" in self.config._attn_implementation
+            else self.config._attn_implementation
+        )
+        if "flash_attention" in _base_impl:
+            _mask_config = copy.copy(self.config)
+            _mask_config._attn_implementation = "eager"
+
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             # this masking function does nothing to masking but forces `allow_is_causal_skip` to be False
             # as we always need a mask during decoding for merged attention.
             dummy_and_mask_function = lambda *args: torch.tensor(True, dtype=torch.bool)  # noqa
             mask_kwargs = {
-                "config": self.config,
+                "config": _mask_config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
@@ -1037,7 +1060,7 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
             cross_attn_mask_mapping = {
                 "full_attention": create_bidirectional_mask(
-                    config=self.config,
+                    config=_mask_config,
                     inputs_embeds=inputs_embeds,
                     attention_mask=encoder_attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
