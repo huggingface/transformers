@@ -306,10 +306,7 @@ class Sapiens2ModelTester:
         expected_h = patch_height * (2 ** len(config.head_config.upsample_out_channels))
 
         labels = floats_tensor([self.batch_size, config.num_labels, expected_h, expected_h])
-
-        label_weights = torch.ones(
-            self.batch_size, config.num_labels, 1, 1, device=pixel_values.device, dtype=pixel_values.dtype
-        )
+        label_weights = floats_tensor([self.batch_size, config.num_labels, expected_h, expected_h])
 
         return config, pixel_values, labels, label_weights
 
