@@ -832,11 +832,11 @@ class Trainer:
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             if self.accelerator.state.fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
-                raise ValueError(
-                    "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
-                    "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
-                    "when using FSDP."
+                logger.warning(
+                    "FSDP activation_checkpointing is enabled. Disabling redundant gradient_checkpointing "
+                    "to avoid conflicts."
                 )
+                self.args.gradient_checkpointing = False
 
         if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None) is None:
             propagate_args_to_deepspeed(self.accelerator, self.args)
