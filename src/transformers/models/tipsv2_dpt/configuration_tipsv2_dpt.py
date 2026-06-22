@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring
+@auto_docstring(checkpoint="google/tipsv2-b14-dpt")
 @strict
 class Tipsv2DptConfig(PreTrainedConfig):
     r"""

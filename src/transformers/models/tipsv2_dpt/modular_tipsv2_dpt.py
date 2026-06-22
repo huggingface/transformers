@@ -189,7 +189,7 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
         return semantic_segmentation
 
 
-@auto_docstring
+@auto_docstring(checkpoint="google/tipsv2-b14-dpt")
 @strict
 class Tipsv2DptConfig(PreTrainedConfig):
     r"""
