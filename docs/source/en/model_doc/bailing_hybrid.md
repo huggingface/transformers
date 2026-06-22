@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The BailingHybrid model (Ring-2.5-1T / Ling-2.5-1T) was proposed by [InclusionAI](https://huggingface.co/inclusionAI). It is a trillion-parameter model based on a hybrid linear attention architecture, combining Multi-head Latent Attention (MLA), Lightning Linear Attention, and Mixture of Experts (MoE).
+The BailingHybrid model (Ling/Ring 2.6 series, e.g. Ling-2.6-flash) was proposed by [InclusionAI](https://huggingface.co/inclusionAI). It is based on a hybrid linear attention architecture, combining Multi-head Latent Attention (MLA), Lightning Linear Attention, and Mixture of Experts (MoE).
 
 Key architectural features:
 - **Hybrid Attention**: Uses a 1:7 ratio of MLA to Lightning Linear Attention layers, achieving near-linear computational complexity
@@ -34,11 +34,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
 model = AutoModelForCausalLM.from_pretrained(
-    "inclusionAI/Ring-2.5-1T",
+    "inclusionAI/Ling-2.6-flash-base",
     device_map="auto",
     dtype=torch.bfloat16,
 )
-tokenizer = AutoTokenizer.from_pretrained("inclusionAI/Ring-2.5-1T")
+tokenizer = AutoTokenizer.from_pretrained("inclusionAI/Ling-2.6-flash-base")
 
 inputs = tokenizer("Hello, how are you?", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=50)

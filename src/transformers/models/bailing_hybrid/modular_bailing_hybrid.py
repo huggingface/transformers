@@ -640,8 +640,8 @@ class BailingHybridForCausalLM(MixtralForCausalLM):
         ```python
         >>> from transformers import AutoTokenizer, BailingHybridForCausalLM
 
-        >>> model = BailingHybridForCausalLM.from_pretrained("inclusionAI/Ring-2.5-1T")
-        >>> tokenizer = AutoTokenizer.from_pretrained("inclusionAI/Ring-2.5-1T")
+        >>> model = BailingHybridForCausalLM.from_pretrained("inclusionAI/Ling-2.6-flash-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("inclusionAI/Ling-2.6-flash-base")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
