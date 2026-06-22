@@ -3454,6 +3454,10 @@ class GenerationMixin(ContinuousMixin):
                     model_kwargs[cache_key] = self._reorder_cache(model_kwargs[cache_key], beam_idx)
                 elif hasattr(model_kwargs[cache_key], "reorder_cache"):
                     model_kwargs[cache_key].reorder_cache(beam_idx)
+                else:
+                    raise ValueError(
+                        f"{self.__class__.__name__} cannot use beam search with a cache currently, as the cache cannot be reordered"
+                    )
 
             cur_len = cur_len + 1
             is_early_stop_heuristic_unsatisfied = self._check_early_stop_heuristic(

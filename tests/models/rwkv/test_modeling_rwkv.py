@@ -16,6 +16,8 @@
 import unittest
 from unittest.util import safe_repr
 
+from parameterized import parameterized
+
 from transformers import AutoTokenizer, RwkvConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -366,6 +368,15 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip("This model doesn't support padding")
     def test_left_padding_compatibility(self):
+        pass
+
+    @unittest.skip("This model doesn't support beam search with cache, as the cache cannot be reordered")
+    def test_beam_search_generate(self):
+        pass
+
+    @unittest.skip("This model doesn't support beam search with cache, as the cache cannot be reordered")
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    def test_generate_from_inputs_embeds(self, _, num_beams):
         pass
 
 
