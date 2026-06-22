@@ -485,8 +485,10 @@ class VideoPrismAttention(VivitAttention):
 
 class VideoPrismLayerNorm(nn.LayerNorm):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # a custom layernorm formula with gamma -> gamma + 1 is used in this model
-        return F.layer_norm(hidden_states, self.normalized_shape, self.weight + 1, self.bias, self.eps)
+        # a custom layernorm formula with gamma -> gamma + 1 is used in this model. ``+ 1.0`` (not
+        # ``+ 1``) keeps the constant as a float scalar — Python-int addition routes through a
+        # ``prim.device`` graph node that ``run_decompositions`` rejects during ONNX export.
+        return F.layer_norm(hidden_states, self.normalized_shape, self.weight + 1.0, self.bias, self.eps)
 
 
 class VideoPrismLayer(VivitLayer):
