@@ -1707,11 +1707,13 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
 
-        # update last_hidden_state that'll be used in the depth decoder
-        model_kwargs["last_hidden_state"] = outputs.get("last_hidden_state")[:, -1:]
-
+        # update last_hidden_state that'll be used in the depth decoder. ``.clone()`` breaks the
+        # view into the main decoder's cudagraph output buffer — otherwise the depth decoder reads
+        # the slice *after* the next main-decoder step has already overwritten it.
+        last_hidden_state = outputs.get("last_hidden_state")[:, -1:].clone()
+        model_kwargs["last_hidden_state"] = last_hidden_state
         # dirty, but we need to make a last depth_decoder.generate
-        self.last_hidden_state = outputs.get("last_hidden_state")[:, -1:]
+        self.last_hidden_state = last_hidden_state
         return model_kwargs
 
     def get_input_embeddings(self):
