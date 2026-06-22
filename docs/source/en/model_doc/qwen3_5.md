@@ -146,7 +146,7 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
 
 [[autodoc]] Qwen3_5VLCausalLMOutputWithPast
 
-## Qwen3_5MTP
+## Qwen3_5MtpLayerStack
 
-[[autodoc]] Qwen3_5MTP
+[[autodoc]] Qwen3_5MtpLayerStack
 
