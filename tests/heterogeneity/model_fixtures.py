@@ -1,3 +1,18 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Model-specific fixtures for heterogeneity tests.
 
 Contains architecture-dependent test metadata:
@@ -6,7 +21,7 @@ Contains architecture-dependent test metadata:
 - References to production heterogeneous modeling spec factories
 
 When adding a new architecture, update the production spec in
-transformers.heterogeneity.supported_models and add only the test-only
+transformers.integrations.heterogeneity.supported_models and add only the test-only
 reference layer mapping here.
 """
 
@@ -15,8 +30,8 @@ from dataclasses import dataclass
 
 import torch
 
-from transformers.heterogeneity import HeterogeneousModelingSpec
-from transformers.heterogeneity.supported_models import MODEL_TO_SPEC_FACTORY
+from transformers.integrations.heterogeneity import HeterogeneousModelingSpec
+from transformers.integrations.heterogeneity.supported_models import MODEL_TO_SPEC_FACTORY
 from transformers.models.gpt_oss.modeling_gpt_oss import (
     GptOssDecoderLayer,
     GptOssPreTrainedModel,

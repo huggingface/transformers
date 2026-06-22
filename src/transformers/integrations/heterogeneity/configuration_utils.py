@@ -1,3 +1,18 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import copy
@@ -20,6 +35,107 @@ class HeterogeneitySpec:
     per_layer_overrides: dict[int, dict[str, Any]]
     per_layer_attributes: set[str]
     fallback_values: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class _HeterogeneousAttributeAccessResult:
+    has_value: bool
+    value: Any = None
+
+
+class HeterogeneousConfigMixin:
+    """Mixin for heterogeneous per-layer config behavior."""
+
+    @staticmethod
+    def _pop_heterogeneous_config_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+        heterogeneous_kwargs = {}
+        if "per_layer_config" in kwargs:
+            heterogeneous_kwargs["per_layer_config"] = kwargs.pop("per_layer_config")
+        return heterogeneous_kwargs
+
+    @classmethod
+    def _update_config_dict_with_heterogeneous_kwargs(
+        cls, config_dict: dict[str, Any], kwargs: dict[str, Any]
+    ) -> None:
+        config_dict.update(cls._pop_heterogeneous_config_kwargs(kwargs))
+
+    def _apply_heterogeneous_config_kwargs(self, kwargs: dict[str, Any]) -> None:
+        per_layer_config = kwargs.get("per_layer_config")
+        if per_layer_config is not None:
+            self.per_layer_config = per_layer_config
+
+    def _handle_heterogeneous_attribute_access(self, key: str) -> _HeterogeneousAttributeAccessResult:
+        # In heterogeneous configs, per-layer attributes are ambiguous on the global config.
+        # Callers must read them from a concrete layer unless they explicitly opt into the global value.
+        try:
+            heterogeneity_spec = object.__getattribute__(self, "_heterogeneity_spec")
+        except AttributeError:
+            return _HeterogeneousAttributeAccessResult(has_value=False)
+
+        try:
+            allow_global_per_layer_attribute_access = object.__getattribute__(
+                self, "allow_global_per_layer_attribute_access"
+            )
+        except AttributeError:
+            allow_global_per_layer_attribute_access = False
+
+        if key == "allow_global_per_layer_attribute_access":
+            return _HeterogeneousAttributeAccessResult(has_value=True, value=allow_global_per_layer_attribute_access)
+
+        validate_global_per_layer_attribute_access(key, heterogeneity_spec, allow_global_per_layer_attribute_access)
+
+        return _HeterogeneousAttributeAccessResult(has_value=False)
+
+    def _iter_config_keys_with_heterogeneous_adjustment(self, keys: Iterable[str]) -> Iterable[str]:
+        # Per-layer attributes intentionally raise on direct access and should not be exposed by iteration,
+        # unless `allow_global_per_layer_attribute_access` is True.
+        if self.is_heterogeneous and not self.allow_global_per_layer_attribute_access:
+            for key in keys:
+                if key not in self.per_layer_attributes:
+                    yield key
+        else:
+            yield from keys
+
+    def _update_heterogeneous_to_dict_output(self, d: dict[str, Any]) -> None:
+        if not self.is_heterogeneous:
+            return
+
+        per_layer_overrides = self._heterogeneity_spec.per_layer_overrides
+        if per_layer_overrides:
+            # Zero-pad so keys sort numerically in JSON (0,1,...,10 not 0,1,10,2,...)
+            max_digits = len(str(max(per_layer_overrides.keys())))
+            d["per_layer_config"] = {
+                str(layer_idx).zfill(max_digits): copy.deepcopy(layer_overrides)
+                for layer_idx, layer_overrides in per_layer_overrides.items()
+            }
+        else:
+            d["per_layer_config"] = {}
+
+        d.pop("_heterogeneity_spec", None)
+
+    @property
+    def is_heterogeneous(self) -> bool:
+        return hasattr(self, "_heterogeneity_spec")
+
+    @property
+    def per_layer_config(self) -> Sequence[PreTrainedConfig] | None:
+        if not self.is_heterogeneous:
+            return None
+        return get_per_layer_config(self)
+
+    @per_layer_config.setter
+    def per_layer_config(self, per_layer_config: dict[int | str, dict[str, Any]] | None) -> None:
+        if per_layer_config is None:
+            delattr(self, "_heterogeneity_spec")
+            return
+
+        apply_heterogeneous_config(self, per_layer_config)
+
+    @property
+    def per_layer_attributes(self) -> set[str] | None:
+        if not self.is_heterogeneous:
+            return None
+        return self._heterogeneity_spec.per_layer_attributes
 
 
 def apply_heterogeneous_config(
@@ -55,21 +171,6 @@ def apply_heterogeneous_config(
     config._heterogeneity_spec = _modify_config_and_create_heterogeneity_spec(
         config, normalized_per_layer_overrides, explicit=explicit
     )
-
-
-def heterogeneous_to_dict_helper(config: PreTrainedConfig, d: dict[str, Any]) -> None:
-    per_layer_overrides = config._heterogeneity_spec.per_layer_overrides
-    if per_layer_overrides:
-        # Zero-pad so keys sort numerically in JSON (0,1,...,10 not 0,1,10,2,...)
-        max_digits = len(str(max(per_layer_overrides.keys())))
-        d["per_layer_config"] = {
-            str(layer_idx).zfill(max_digits): copy.deepcopy(layer_overrides)
-            for layer_idx, layer_overrides in per_layer_overrides.items()
-        }
-    else:
-        d["per_layer_config"] = {}
-
-    d.pop("_heterogeneity_spec", None)
 
 
 def validate_global_per_layer_attribute_access(

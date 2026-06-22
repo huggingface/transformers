@@ -65,6 +65,16 @@ _import_structure = {
         "load_dequant_gguf_tensor",
         "load_gguf",
     ],
+    "heterogeneity": [
+        "HeterogeneousConfigMixin",
+        "HeterogeneousModelingSpec",
+        "ReturnEntry",
+        "SkipDescriptor",
+        "apply_heterogeneous_modeling",
+        "clean_up_post_heterogeneous_modeling",
+        "get_heterogeneous_modeling_spec",
+        "get_skip_replacement",
+    ],
     "higgs": [
         "HiggsLinear",
         "dequantize_higgs",
@@ -229,6 +239,16 @@ if TYPE_CHECKING:
         _gguf_parse_value,
         load_dequant_gguf_tensor,
         load_gguf,
+    )
+    from .heterogeneity import (
+        HeterogeneousConfigMixin,
+        HeterogeneousModelingSpec,
+        ReturnEntry,
+        SkipDescriptor,
+        apply_heterogeneous_modeling,
+        clean_up_post_heterogeneous_modeling,
+        get_heterogeneous_modeling_spec,
+        get_skip_replacement,
     )
     from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear

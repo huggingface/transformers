@@ -1,3 +1,18 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import contextlib
 import tempfile
 import unittest
@@ -7,7 +22,7 @@ from unittest.mock import patch
 from parameterized import parameterized
 
 from transformers import LlamaConfig
-from transformers.heterogeneity import apply_heterogeneous_config
+from transformers.integrations.heterogeneity.configuration_utils import apply_heterogeneous_config
 from transformers.utils import logging as transformers_logging
 
 
@@ -130,7 +145,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
             per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}},
             allow_global_per_layer_attribute_access=True,
         )
-        logger = transformers_logging.get_logger("transformers.heterogeneity.configuration_utils")
+        logger = transformers_logging.get_logger("transformers.integrations.heterogeneity.configuration_utils")
         logger.warning_once.cache_clear()
 
         with self.assertLogs(logger=logger, level="WARNING") as logs:
@@ -143,7 +158,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
 
     def test_non_per_layer_attributes_do_not_warn(self):
         config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
-        logger = transformers_logging.get_logger("transformers.heterogeneity.configuration_utils")
+        logger = transformers_logging.get_logger("transformers.integrations.heterogeneity.configuration_utils")
         logger.warning_once.cache_clear()
 
         with self.assertNoLogs(logger=logger, level="WARNING"):
@@ -263,7 +278,10 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.per_layer_config[2].custom_attr, 30)
         self.assertEqual(config.per_layer_config[3].custom_attr, 40)
 
-    @patch("transformers.configuration_utils.apply_heterogeneous_config", apply_heterogeneous_config_explicit)
+    @patch(
+        "transformers.integrations.heterogeneity.configuration_utils.apply_heterogeneous_config",
+        apply_heterogeneous_config_explicit,
+    )
     def test_explicit_fills_missing_layers_and_attributes(self):
         """explicit=True creates per-layer overrides for missing layers and fills missing attrs from global."""
         config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 1}})
@@ -278,7 +296,10 @@ class TestHeterogeneousConfig(unittest.TestCase):
             },
         )
 
-    @patch("transformers.configuration_utils.apply_heterogeneous_config", apply_heterogeneous_config_explicit)
+    @patch(
+        "transformers.integrations.heterogeneity.configuration_utils.apply_heterogeneous_config",
+        apply_heterogeneous_config_explicit,
+    )
     def test_explicit_does_not_promote_uniform_values(self):
         """explicit=True keeps uniform values per-layer instead of promoting to global."""
         per_layer = {i: {"num_key_value_heads": 2} for i in range(4)}

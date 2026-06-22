@@ -30,12 +30,7 @@ from typing_extensions import dataclass_transform
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
-from .heterogeneity import (
-    apply_heterogeneous_config,
-    get_per_layer_config,
-    heterogeneous_to_dict_helper,
-    validate_global_per_layer_attribute_access,
-)
+from .integrations.heterogeneity import HeterogeneousConfigMixin
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
@@ -126,7 +121,7 @@ def wrap_init_to_accept_kwargs(cls: dataclass):
 @dataclass_transform(kw_only_default=True)
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
+class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, HeterogeneousConfigMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
@@ -305,12 +300,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
         self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
 
+        # HeterogeneousConfigMixin: Heterogeneity kwargs have dedicated handling,
+        # so exclude them from regular additional attributes.
+        heterogeneous_kwargs = self._pop_heterogeneous_config_kwargs(kwargs)
+
         # Additional attributes without default values
         for key, value in kwargs.items():
-            # Needs to be handled after all other attributes are set
-            if key == "per_layer_config":
-                continue
-
             # Check this to avoid deserializing problematic fields from hub configs - they should use the public field
             if key not in ("_attn_implementation_internal", "_experts_implementation_internal"):
                 try:
@@ -319,9 +314,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
 
-        per_layer_config = kwargs.pop("per_layer_config", None)
-        if per_layer_config is not None:
-            self.per_layer_config = per_layer_config
+        # HeterogeneousConfigMixin: apply heterogeneity after all of the config attributes are initialized.
+        self._apply_heterogeneous_config_kwargs(heterogeneous_kwargs)
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
@@ -448,24 +442,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
 
-        # In heterogeneous configs, per-layer attributes are ambiguous on the global config.
-        # Callers must read them from a concrete layer unless they explicitly opt into the global value.
-        try:
-            heterogeneity_spec = super().__getattribute__("_heterogeneity_spec")
-        except AttributeError:
-            pass
-        else:
-            try:
-                allow_global_per_layer_attribute_access = super().__getattribute__(
-                    "allow_global_per_layer_attribute_access"
-                )
-            except AttributeError:
-                allow_global_per_layer_attribute_access = False
-            if key == "allow_global_per_layer_attribute_access":
-                return allow_global_per_layer_attribute_access
-            validate_global_per_layer_attribute_access(
-                key, heterogeneity_spec, allow_global_per_layer_attribute_access
-            )
+        # HeterogeneousConfigMixin: per-layer attributes are ambiguous on the global config,
+        # so delegate access handling to the mixin before falling back to regular attribute lookup.
+        handle_heterogeneous_attribute_access = super().__getattribute__("_handle_heterogeneous_attribute_access")
+        heterogeneous_attribute_access_result = handle_heterogeneous_attribute_access(key)
+        if heterogeneous_attribute_access_result.has_value:
+            return heterogeneous_attribute_access_result.value
 
         return super().__getattribute__(key)
 
@@ -875,8 +857,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 elif value != "auto":
                     config_dict[key] = value
 
-        if "per_layer_config" in kwargs:
-            config_dict["per_layer_config"] = kwargs.pop("per_layer_config")
+        # HeterogeneousConfigMixin: move heterogeneity-specific kwargs into the constructor config dict.
+        cls._update_config_dict_with_heterogeneous_kwargs(config_dict, kwargs)
 
         config = cls(**config_dict)
 
@@ -981,13 +963,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def __iter__(self):
-        for key in self.__dict__:
-            if self.is_heterogeneous:
-                # Per-layer attributes intentionally raise on direct access and should not be exposed by iteration,
-                # unless `allow_global_per_layer_attribute_access` is True
-                if not self.allow_global_per_layer_attribute_access and key in self.per_layer_attributes:
-                    continue
-            yield key
+        # HeterogeneousConfigMixin: some keys of `self.__dict__` require hiding when using a heterogeneous config.
+        yield from self._iter_config_keys_with_heterogeneous_adjustment(self.__dict__)
 
     def to_diff_dict(self) -> dict[str, Any]:
         """
@@ -1046,8 +1023,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             )
         self.dict_dtype_to_str(serializable_config_dict)
 
-        if self.is_heterogeneous:
-            heterogeneous_to_dict_helper(self, serializable_config_dict)
+        # HeterogeneousConfigMixin: update the serialized output.
+        self._update_heterogeneous_to_dict_output(serializable_config_dict)
 
         return serializable_config_dict
 
@@ -1096,8 +1073,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             )
         self.dict_dtype_to_str(output)
 
-        if self.is_heterogeneous:
-            heterogeneous_to_dict_helper(self, output)
+        # HeterogeneousConfigMixin: update the serialized output.
+        self._update_heterogeneous_to_dict_output(output)
 
         return output
 
@@ -1341,30 +1318,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     setattr(config_to_return, new_key, value)
 
         return config_to_return
-
-    @property
-    def is_heterogeneous(self) -> bool:
-        return hasattr(self, "_heterogeneity_spec")
-
-    @property
-    def per_layer_config(self) -> Sequence["PreTrainedConfig"] | None:
-        if not self.is_heterogeneous:
-            return None
-        return get_per_layer_config(self)
-
-    @per_layer_config.setter
-    def per_layer_config(self, per_layer_config: dict[int | str, dict[str, Any]] | None) -> None:
-        if per_layer_config is None:
-            delattr(self, "_heterogeneity_spec")
-            return
-
-        apply_heterogeneous_config(self, per_layer_config)
-
-    @property
-    def per_layer_attributes(self) -> set[str] | None:
-        if not self.is_heterogeneous:
-            return None
-        return self._heterogeneity_spec.per_layer_attributes
 
 
 def get_configuration_file(configuration_files: list[str]) -> str:

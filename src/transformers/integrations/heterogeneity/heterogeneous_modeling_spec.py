@@ -1,3 +1,18 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -36,7 +51,7 @@ def get_heterogeneous_modeling_spec(model: PreTrainedModel) -> HeterogeneousMode
         ) from None
 
     model_package_name = model_module_name.removeprefix(_MODEL_MODULE_PREFIX).split(".", 1)[0]
-    from transformers.heterogeneity.supported_models import MODEL_TO_SPEC_FACTORY
+    from transformers.integrations.heterogeneity.supported_models import MODEL_TO_SPEC_FACTORY
 
     spec_factory = MODEL_TO_SPEC_FACTORY.get(model_package_name)
 
@@ -44,7 +59,7 @@ def get_heterogeneous_modeling_spec(model: PreTrainedModel) -> HeterogeneousMode
         raise ValueError(
             f"No heterogeneous modeling spec is defined for `{model_package_name}`. Built-in heterogeneous modeling "
             "support is only available for models listed in "
-            "`transformers.heterogeneity.supported_models.MODEL_TO_SPEC_FACTORY`. Alternatively, set `_heterogeneous_modeling_spec` on the model class."
+            "`transformers.integrations.heterogeneity.supported_models.MODEL_TO_SPEC_FACTORY`. Alternatively, set `_heterogeneous_modeling_spec` on the model class."
         )
 
     return spec_factory()

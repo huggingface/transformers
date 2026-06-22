@@ -1,3 +1,18 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import contextvars
@@ -9,7 +24,10 @@ from functools import wraps
 from types import MethodType
 from typing import TYPE_CHECKING, Any
 
-from transformers.heterogeneity.heterogeneous_modeling_spec import SkipDescriptor, get_heterogeneous_modeling_spec
+from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import (
+    SkipDescriptor,
+    get_heterogeneous_modeling_spec,
+)
 
 
 if TYPE_CHECKING:
@@ -41,7 +59,7 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
 
     The model must resolve to a ``HeterogeneousModelingSpec`` either by setting
     ``_heterogeneous_modeling_spec`` on the model class, or by having a built-in
-    spec factory in ``transformers.heterogeneity.supported_models``.
+    spec factory in ``transformers.integrations.heterogeneity.supported_models``.
     The spec defines the decoder layer class to patch, an optional layer-index argument name,
     and optional skip descriptors.
 
