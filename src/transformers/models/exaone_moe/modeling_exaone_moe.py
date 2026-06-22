@@ -23,8 +23,8 @@ from collections.abc import Callable
 from typing import Optional
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
