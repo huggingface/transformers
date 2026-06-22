@@ -868,7 +868,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.self_attn\.norm_q\.", target_patterns=".self_attn.q_norm."),
             WeightRenaming(source_patterns=r"\.self_attn\.norm_k\.", target_patterns=".self_attn.k_norm."),
         ],
-        "bailing_hybrid": [
+        "bailing2_5_moe": [
             # Embedding rename.
             WeightRenaming(r"word_embeddings", "embed_tokens"),
             # NOTE: full-attention (MLA) layer indices (where (i + 1) % layer_group_size == 0)
@@ -1542,7 +1542,7 @@ def extract_weight_conversions_for_model(
     if conversions is None and model_type:
         conversions = get_checkpoint_conversion_mapping(model_type)
 
-    if model_type == "bailing_hybrid" and conversions is not None:
+    if model_type == "bailing2_5_moe" and conversions is not None:
         # Inject `attention -> self_attn` renames for full-attention layer indices,
         # derived from the model config rather than hardcoded.
         num_hidden_layers = getattr(model.config, "num_hidden_layers", 0)

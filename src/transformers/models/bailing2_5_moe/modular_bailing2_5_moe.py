@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BailingHybrid model."""
+"""PyTorch BailingMoeV2_5 model."""
 
 import math
 
@@ -47,7 +47,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralForCausalLM
-from .configuration_bailing_hybrid import BailingHybridConfig
+from .configuration_bailing2_5_moe import BailingMoeV2_5Config
 
 
 if is_flash_linear_attention_available():
@@ -61,16 +61,16 @@ is_fast_path_available = all((chunk_simple_gla, fused_recurrent_simple_gla))
 logger = logging.get_logger(__name__)
 
 
-class BailingHybridRMSNorm(DeepseekV3RMSNorm):
+class BailingMoeV2_5RMSNorm(DeepseekV3RMSNorm):
     pass
 
 
-class BailingHybridRotaryEmbedding(LlamaRotaryEmbedding):
+class BailingMoeV2_5RotaryEmbedding(LlamaRotaryEmbedding):
     """RoPE for MLA layers — uses full qk_rope_head_dim, interleaved application."""
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: BailingHybridConfig | None = None,
+        config: BailingMoeV2_5Config | None = None,
         device: torch.device | None = None,
         seq_len: int | None = None,
     ) -> tuple[torch.Tensor, float]:
@@ -85,12 +85,12 @@ class BailingHybridRotaryEmbedding(LlamaRotaryEmbedding):
         return inv_freq, attention_factor
 
 
-class BailingHybridLinearRotaryEmbedding(LlamaRotaryEmbedding):
+class BailingMoeV2_5LinearRotaryEmbedding(LlamaRotaryEmbedding):
     """RoPE for linear attention layers — uses partial rotary factor on linear attention head dim."""
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: BailingHybridConfig | None = None,
+        config: BailingMoeV2_5Config | None = None,
         device: torch.device | None = None,
         seq_len: int | None = None,
     ) -> tuple[torch.Tensor, float]:
@@ -106,27 +106,27 @@ class BailingHybridLinearRotaryEmbedding(LlamaRotaryEmbedding):
         return inv_freq, attention_factor
 
 
-class BailingHybridMLP(DeepseekV3MLP):
+class BailingMoeV2_5MLP(DeepseekV3MLP):
     pass
 
 
-class BailingHybridTopkRouter(DeepseekV3TopkRouter):
+class BailingMoeV2_5TopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config):
         super().__init__(config)
         self.n_routed_experts = config.num_experts
 
 
-class BailingHybridExperts(DeepseekV3NaiveMoe):
+class BailingMoeV2_5Experts(DeepseekV3NaiveMoe):
     pass
 
 
-class BailingHybridMoE(DeepseekV3MoE):
+class BailingMoeV2_5MoE(DeepseekV3MoE):
     def __init__(self, config):
         nn.Module.__init__(self)
         self.config = config
-        self.experts = BailingHybridExperts(config)
-        self.gate = BailingHybridTopkRouter(config)
-        self.shared_experts = BailingHybridMLP(
+        self.experts = BailingMoeV2_5Experts(config)
+        self.gate = BailingMoeV2_5TopkRouter(config)
+        self.shared_experts = BailingMoeV2_5MLP(
             config=config, intermediate_size=config.moe_shared_expert_intermediate_size * config.num_shared_experts
         )
         self.n_routed_experts = config.num_experts
@@ -137,7 +137,7 @@ class BailingHybridMoE(DeepseekV3MoE):
         self.top_k = config.num_experts_per_tok
 
 
-class BailingHybridGroupRMSNorm(nn.Module):
+class BailingMoeV2_5GroupRMSNorm(nn.Module):
     """Group-wise RMS normalization for linear attention output."""
 
     def __init__(self, hidden_size, group_norm_size, eps=1e-6):
@@ -307,10 +307,10 @@ def _apply_rotary_pos_emb_linear(q, k, cos, sin, unsqueeze_dim=2):
     return q_embed, k_embed
 
 
-class BailingHybridLightningAttention(nn.Module):
+class BailingMoeV2_5LightningAttention(nn.Module):
     """Lightning Linear Attention using SimpleGLA (Simple Gated Linear Attention) from the fla library."""
 
-    def __init__(self, config: BailingHybridConfig, layer_idx: int):
+    def __init__(self, config: BailingMoeV2_5Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -322,11 +322,11 @@ class BailingHybridLightningAttention(nn.Module):
         self.g_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
 
-        self.g_norm = BailingHybridGroupRMSNorm(config.hidden_size, config.group_norm_size, eps=config.rms_norm_eps)
+        self.g_norm = BailingMoeV2_5GroupRMSNorm(config.hidden_size, config.group_norm_size, eps=config.rms_norm_eps)
 
         if config.use_qk_norm:
-            self.query_layernorm = BailingHybridRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.key_layernorm = BailingHybridRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.query_layernorm = BailingMoeV2_5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.key_layernorm = BailingMoeV2_5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
         # Build ALiBi-style slopes for decay, scaled by layer position
         slopes = _build_slope_tensor(self.num_heads)
@@ -338,7 +338,7 @@ class BailingHybridLightningAttention(nn.Module):
 
         if not is_fast_path_available:
             logger.warning_once(
-                "The fast path for BailingHybridLightningAttention is not available because flash-linear-attention "
+                "The fast path for BailingMoeV2_5LightningAttention is not available because flash-linear-attention "
                 "is not installed. Falling back to pure PyTorch implementation. "
                 "To install, see https://github.com/fla-org/flash-linear-attention#installation"
             )
@@ -426,32 +426,32 @@ class BailingHybridLightningAttention(nn.Module):
         return attn_output
 
 
-class BailingHybridAttention(DeepseekV3Attention):
+class BailingMoeV2_5Attention(DeepseekV3Attention):
     """MLA (Multi-Latent Attention) inherited from DeepSeek V3."""
 
     pass
 
 
-class BailingHybridDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: BailingHybridConfig, layer_idx: int):
+class BailingMoeV2_5DecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: BailingMoeV2_5Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
         # Token mixer: MLA or Lightning Linear Attention
         self.layer_type = config.layer_types[layer_idx]
         if self.layer_type == "full_attention":
-            self.self_attn = BailingHybridAttention(config=config, layer_idx=layer_idx)
+            self.self_attn = BailingMoeV2_5Attention(config=config, layer_idx=layer_idx)
         else:
-            self.linear_attn = BailingHybridLightningAttention(config=config, layer_idx=layer_idx)
+            self.linear_attn = BailingMoeV2_5LightningAttention(config=config, layer_idx=layer_idx)
 
         # MLP: MoE or Dense
         if layer_idx >= config.first_k_dense_replace:
-            self.mlp = BailingHybridMoE(config)
+            self.mlp = BailingMoeV2_5MoE(config)
         else:
-            self.mlp = BailingHybridMLP(config)
+            self.mlp = BailingMoeV2_5MLP(config)
 
-        self.input_layernorm = BailingHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = BailingHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = BailingMoeV2_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = BailingMoeV2_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -492,47 +492,47 @@ class BailingHybridDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class BailingHybridPreTrainedModel(PreTrainedModel):
-    config: BailingHybridConfig
+class BailingMoeV2_5PreTrainedModel(PreTrainedModel):
+    config: BailingMoeV2_5Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["BailingHybridDecoderLayer"]
+    _no_split_modules = ["BailingMoeV2_5DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(BailingHybridTopkRouter, index=0),
-        "hidden_states": BailingHybridDecoderLayer,
-        "attentions": BailingHybridAttention,
+        "router_logits": OutputRecorder(BailingMoeV2_5TopkRouter, index=0),
+        "hidden_states": BailingMoeV2_5DecoderLayer,
+        "attentions": BailingMoeV2_5Attention,
     }
     _is_stateful = True
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, BailingHybridTopkRouter):
+        if isinstance(module, BailingMoeV2_5TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, BailingHybridExperts):
+        elif isinstance(module, BailingMoeV2_5Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, BailingHybridLightningAttention):
+        elif isinstance(module, BailingMoeV2_5LightningAttention):
             # Reinitialize the slope buffer from config
             slopes = _build_slope_tensor(module.num_heads)
             layer_scale = 1 - (module.layer_idx - 1) / (self.config.num_hidden_layers - 1) + 1e-5
             init.copy_(module.slope, (-slopes * layer_scale).to(module.slope.dtype))
 
 
-class BailingHybridModel(BailingHybridPreTrainedModel):
-    def __init__(self, config: BailingHybridConfig):
+class BailingMoeV2_5Model(BailingMoeV2_5PreTrainedModel):
+    def __init__(self, config: BailingMoeV2_5Config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.layers = nn.ModuleList(
-            [BailingHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [BailingMoeV2_5DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = BailingHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = BailingHybridRotaryEmbedding(config=config)
-        self.rotary_emb_linear = BailingHybridLinearRotaryEmbedding(config=config)
+        self.norm = BailingMoeV2_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = BailingMoeV2_5RotaryEmbedding(config=config)
+        self.rotary_emb_linear = BailingMoeV2_5LinearRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -611,7 +611,7 @@ class BailingHybridModel(BailingHybridPreTrainedModel):
         return linear_attn_mask
 
 
-class BailingHybridForCausalLM(MixtralForCausalLM):
+class BailingMoeV2_5ForCausalLM(MixtralForCausalLM):
     def __init__(self, config):
         super().__init__(config)
         self.num_experts = config.num_experts
@@ -638,9 +638,9 @@ class BailingHybridForCausalLM(MixtralForCausalLM):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, BailingHybridForCausalLM
+        >>> from transformers import AutoTokenizer, BailingMoeV2_5ForCausalLM
 
-        >>> model = BailingHybridForCausalLM.from_pretrained("inclusionAI/Ling-2.6-flash-base")
+        >>> model = BailingMoeV2_5ForCausalLM.from_pretrained("inclusionAI/Ling-2.6-flash-base")
         >>> tokenizer = AutoTokenizer.from_pretrained("inclusionAI/Ling-2.6-flash-base")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
@@ -665,18 +665,18 @@ class BailingHybridForCausalLM(MixtralForCausalLM):
         )
 
 
-class BailingHybridForSequenceClassification(GenericForSequenceClassification, BailingHybridPreTrainedModel):
+class BailingMoeV2_5ForSequenceClassification(GenericForSequenceClassification, BailingMoeV2_5PreTrainedModel):
     pass
 
 
-class BailingHybridForTokenClassification(GenericForTokenClassification, BailingHybridPreTrainedModel):
+class BailingMoeV2_5ForTokenClassification(GenericForTokenClassification, BailingMoeV2_5PreTrainedModel):
     pass
 
 
 __all__ = [
-    "BailingHybridPreTrainedModel",
-    "BailingHybridModel",
-    "BailingHybridForCausalLM",
-    "BailingHybridForSequenceClassification",
-    "BailingHybridForTokenClassification",
+    "BailingMoeV2_5PreTrainedModel",
+    "BailingMoeV2_5Model",
+    "BailingMoeV2_5ForCausalLM",
+    "BailingMoeV2_5ForSequenceClassification",
+    "BailingMoeV2_5ForTokenClassification",
 ]

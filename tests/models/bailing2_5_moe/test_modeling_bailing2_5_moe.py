@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch BailingHybrid model."""
+"""Testing suite for the PyTorch BailingMoeV2_5 model."""
 
 import unittest
 
 from parameterized import parameterized
 
-from transformers import BailingHybridConfig, is_torch_available
+from transformers import BailingMoeV2_5Config, is_torch_available
 from transformers.testing_utils import (
     require_torch,
     torch_device,
@@ -33,16 +33,16 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BailingHybridForCausalLM,
-        BailingHybridForSequenceClassification,
-        BailingHybridForTokenClassification,
-        BailingHybridModel,
+        BailingMoeV2_5ForCausalLM,
+        BailingMoeV2_5ForSequenceClassification,
+        BailingMoeV2_5ForTokenClassification,
+        BailingMoeV2_5Model,
     )
 
 
-class BailingHybridModelTester:
+class BailingMoeV2_5ModelTester:
     if is_torch_available():
-        causal_lm_class = BailingHybridForCausalLM
+        causal_lm_class = BailingMoeV2_5ForCausalLM
 
     def __init__(
         self,
@@ -156,7 +156,7 @@ class BailingHybridModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return BailingHybridConfig(
+        return BailingMoeV2_5Config(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             intermediate_size=self.intermediate_size,
@@ -193,7 +193,7 @@ class BailingHybridModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = BailingHybridModel(config=config)
+        model = BailingMoeV2_5Model(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -216,25 +216,25 @@ class BailingHybridModelTester:
 
 
 @require_torch
-class BailingHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BailingMoeV2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            BailingHybridModel,
-            BailingHybridForCausalLM,
-            BailingHybridForSequenceClassification,
-            BailingHybridForTokenClassification,
+            BailingMoeV2_5Model,
+            BailingMoeV2_5ForCausalLM,
+            BailingMoeV2_5ForSequenceClassification,
+            BailingMoeV2_5ForTokenClassification,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (BailingHybridForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (BailingMoeV2_5ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": BailingHybridModel,
-            "text-classification": BailingHybridForSequenceClassification,
-            "token-classification": BailingHybridForTokenClassification,
-            "text-generation": BailingHybridForCausalLM,
-            "zero-shot": BailingHybridForSequenceClassification,
+            "feature-extraction": BailingMoeV2_5Model,
+            "text-classification": BailingMoeV2_5ForSequenceClassification,
+            "token-classification": BailingMoeV2_5ForTokenClassification,
+            "text-generation": BailingMoeV2_5ForCausalLM,
+            "zero-shot": BailingMoeV2_5ForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -242,11 +242,11 @@ class BailingHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
     model_split_percents = [0.5, 0.7, 0.8]
 
-    _torch_compile_train_cls = BailingHybridForCausalLM if is_torch_available() else None
+    _torch_compile_train_cls = BailingMoeV2_5ForCausalLM if is_torch_available() else None
 
     def setUp(self):
-        self.model_tester = BailingHybridModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BailingHybridConfig, hidden_size=32)
+        self.model_tester = BailingMoeV2_5ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=BailingMoeV2_5Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -256,7 +256,7 @@ class BailingHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_attention_outputs(self):
-        """Needs override as BailingHybrid alternates between MLA and linear attention layers."""
+        """Needs override as BailingMoeV2_5 alternates between MLA and linear attention layers."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
         config._attn_implementation = "eager"
@@ -298,23 +298,23 @@ class BailingHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
 
     @parameterized.expand([("random",), ("same",)])
-    @unittest.skip("BailingHybrid is not compatible with assisted decoding due to hybrid cache")
+    @unittest.skip("BailingMoeV2_5 is not compatible with assisted decoding due to hybrid cache")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("BailingHybrid is not compatible with assisted decoding due to hybrid cache")
+    @unittest.skip("BailingMoeV2_5 is not compatible with assisted decoding due to hybrid cache")
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("BailingHybrid is not compatible with assisted decoding due to hybrid cache")
+    @unittest.skip("BailingMoeV2_5 is not compatible with assisted decoding due to hybrid cache")
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip("BailingHybrid uses MLA so it is not compatible with the standard cache format")
+    @unittest.skip("BailingMoeV2_5 uses MLA so it is not compatible with the standard cache format")
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip("BailingHybrid uses MLA so it is not compatible with the standard cache format")
+    @unittest.skip("BailingMoeV2_5 uses MLA so it is not compatible with the standard cache format")
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
@@ -322,35 +322,35 @@ class BailingHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip("BailingHybrid uses MLA so beam search is not compatible with the standard cache format")
+    @unittest.skip("BailingMoeV2_5 uses MLA so beam search is not compatible with the standard cache format")
     def test_beam_sample_generate(self):
         pass
 
-    @unittest.skip("BailingHybrid uses MLA so beam search is not compatible with the standard cache format")
+    @unittest.skip("BailingMoeV2_5 uses MLA so beam search is not compatible with the standard cache format")
     def test_beam_search_generate(self):
         pass
 
-    @unittest.skip("BailingHybrid uses MLA so beam search is not compatible with the standard cache format")
+    @unittest.skip("BailingMoeV2_5 uses MLA so beam search is not compatible with the standard cache format")
     def test_beam_sample_generate_dict_output(self):
         pass
 
-    @unittest.skip("BailingHybrid uses MLA so beam search is not compatible with the standard cache format")
+    @unittest.skip("BailingMoeV2_5 uses MLA so beam search is not compatible with the standard cache format")
     def test_beam_search_generate_dict_output(self):
         pass
 
-    @unittest.skip("BailingHybrid uses MLA so it is not compatible with continue from past_key_values")
+    @unittest.skip("BailingMoeV2_5 uses MLA so it is not compatible with continue from past_key_values")
     def test_generate_continue_from_past_key_values(self):
         pass
 
-    @unittest.skip("BailingHybrid's linear attention has no conv1d, so conv_states are None")
+    @unittest.skip("BailingMoeV2_5's linear attention has no conv1d, so conv_states are None")
     def test_past_key_values_format(self):
         pass
 
-    @unittest.skip("BailingHybrid uses MLA so inputs_embeds generation is not compatible with cache format")
+    @unittest.skip("BailingMoeV2_5 uses MLA so inputs_embeds generation is not compatible with cache format")
     def test_generate_from_inputs_embeds_0_greedy(self):
         pass
 
-    @unittest.skip("BailingHybrid uses MLA so inputs_embeds generation is not compatible with cache format")
+    @unittest.skip("BailingMoeV2_5 uses MLA so inputs_embeds generation is not compatible with cache format")
     def test_generate_from_inputs_embeds_1_beam(self):
         pass
 
@@ -358,13 +358,13 @@ class BailingHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    def test_bailing_hybrid_sequence_classification_model(self):
+    def test_bailing2_5_moe_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_labels)
-        model = BailingHybridForSequenceClassification(config)
+        model = BailingMoeV2_5ForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)

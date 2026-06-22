@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from .auto import *
     from .autoformer import *
     from .aya_vision import *
-    from .bailing_hybrid import *
+    from .bailing2_5_moe import *
     from .bamba import *
     from .bark import *
     from .bart import *

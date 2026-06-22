@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_bailing_hybrid import *
-    from .modeling_bailing_hybrid import *
+    from .configuration_bailing2_5_moe import *
+    from .modeling_bailing2_5_moe import *
 else:
     import sys
 

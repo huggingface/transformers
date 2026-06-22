@@ -15,11 +15,11 @@ rendered properly in your Markdown viewer.
 -->
 *This model was contributed to Hugging Face Transformers on 2026-06-17.*
 
-# BailingHybrid
+# BailingMoeV2_5
 
 ## Overview
 
-The BailingHybrid model (Ling/Ring 2.6 series, e.g. Ling-2.6-flash) was proposed by [InclusionAI](https://huggingface.co/inclusionAI). It is based on a hybrid linear attention architecture, combining Multi-head Latent Attention (MLA), Lightning Linear Attention, and Mixture of Experts (MoE).
+The BailingMoeV2_5 model (Ling/Ring 2.6 series, e.g. Ling-2.6-flash) was proposed by [InclusionAI](https://huggingface.co/inclusionAI). It is based on a hybrid linear attention architecture, combining Multi-head Latent Attention (MLA), Lightning Linear Attention, and Mixture of Experts (MoE).
 
 Key architectural features:
 - **Hybrid Attention**: Uses a 1:7 ratio of MLA to Lightning Linear Attention layers, achieving near-linear computational complexity
@@ -47,26 +47,26 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 For optimal performance with the linear attention layers, install the [flash-linear-attention](https://github.com/fla-org/flash-linear-attention) library. Without it, the model falls back to a pure PyTorch implementation.
 
-## BailingHybridConfig
+## BailingMoeV2_5Config
 
-[[autodoc]] BailingHybridConfig
+[[autodoc]] BailingMoeV2_5Config
 
-## BailingHybridModel
+## BailingMoeV2_5Model
 
-[[autodoc]] BailingHybridModel
+[[autodoc]] BailingMoeV2_5Model
     - forward
 
-## BailingHybridForCausalLM
+## BailingMoeV2_5ForCausalLM
 
-[[autodoc]] BailingHybridForCausalLM
+[[autodoc]] BailingMoeV2_5ForCausalLM
     - forward
 
-## BailingHybridForSequenceClassification
+## BailingMoeV2_5ForSequenceClassification
 
-[[autodoc]] BailingHybridForSequenceClassification
+[[autodoc]] BailingMoeV2_5ForSequenceClassification
     - forward
 
-## BailingHybridForTokenClassification
+## BailingMoeV2_5ForTokenClassification
 
-[[autodoc]] BailingHybridForTokenClassification
+[[autodoc]] BailingMoeV2_5ForTokenClassification
     - forward

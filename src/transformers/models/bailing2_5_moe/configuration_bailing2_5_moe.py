@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""BailingHybrid model configuration"""
+"""BailingMoeV2_5 model configuration"""
 
 from huggingface_hub.dataclasses import strict
 
@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="inclusionAI/Ling-2.6-flash-base")
 @strict
-class BailingHybridConfig(PreTrainedConfig):
+class BailingMoeV2_5Config(PreTrainedConfig):
     r"""
     layer_group_size (`int`, *optional*, defaults to 8):
         Controls the hybrid layer pattern. Every `layer_group_size`-th layer uses full MLA attention,
@@ -53,16 +53,16 @@ class BailingHybridConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BailingHybridModel, BailingHybridConfig
+    >>> from transformers import BailingMoeV2_5Model, BailingMoeV2_5Config
 
-    >>> # Initializing a BailingHybrid style configuration
-    >>> configuration = BailingHybridConfig()
+    >>> # Initializing a BailingMoeV2_5 style configuration
+    >>> configuration = BailingMoeV2_5Config()
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "bailing_hybrid"
+    model_type = "bailing2_5_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
@@ -159,4 +159,4 @@ class BailingHybridConfig(PreTrainedConfig):
         return kwargs
 
 
-__all__ = ["BailingHybridConfig"]
+__all__ = ["BailingMoeV2_5Config"]
