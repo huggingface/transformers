@@ -294,6 +294,9 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
             # Full attention on every layer keeps the KV cache complete: the sliding window is realized as a
             # mask over generated tokens, while the image/prompt prefill is always retained.
             self.layer_types = ["full_attention"] * self.num_hidden_layers
+        if self.mlp_layer_types is None:
+            # TODO: double check
+            self.mlp_layer_types = ["dense"] * self.num_hidden_layers
         super().__post_init__(**kwargs)
 
 
