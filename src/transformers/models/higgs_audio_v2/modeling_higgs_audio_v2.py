@@ -532,7 +532,6 @@ class HiggsAudioV2Model(HiggsAudioV2PreTrainedModel):
                 repeats = (num_ones + source.numel() - 1) // source.numel()
                 source = source.repeat(repeats)[:num_ones]
                 inputs_embeds = inputs_embeds.masked_scatter(mask, source)
-
         elif audio_input_ids is not None:
             inputs_embeds = audio_embeds
 
