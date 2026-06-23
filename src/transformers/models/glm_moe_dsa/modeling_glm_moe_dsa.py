@@ -236,7 +236,7 @@ class GlmMoeDsaIndexer(nn.Module):
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
         # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention
-        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
