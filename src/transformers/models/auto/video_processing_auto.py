@@ -64,6 +64,7 @@ else:
             ("qwen3_5_moe", "Qwen3VLVideoProcessor"),
             ("qwen3_omni_moe", "Qwen2VLVideoProcessor"),
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
+            ("videoprism", "LlavaOnevisionVideoProcessor"),
         ]
     )
     VIDEO_PROCESSOR_MAPPING_NAMES.update(MISSING_VIDEO_PROCESSOR_MAPPING_NAMES)
