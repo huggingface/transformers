@@ -20,10 +20,15 @@ import numpy as np
 import torch
 from torch import nn
 
+from huggingface_hub.dataclasses import strict
+
 from ...cache_utils import DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import auto_docstring, logging
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..mimi.modeling_mimi import (
     MimiEncoderOutput,
     MimiEuclideanCodebook,
@@ -35,6 +40,7 @@ from ..mimi.modeling_mimi import (
 )
 from ..qwen2_5_omni.modeling_qwen2_5_omni import SnakeBeta
 from ..qwen3.modeling_qwen3 import Qwen3RotaryEmbedding
+from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeCode2WavConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeCausalConvNet,
     Qwen3OmniMoeCausalTransConvNet,
