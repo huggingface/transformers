@@ -617,6 +617,8 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
 
 
 class UnlimitedOcrModel(DeepseekOcr2Model):
+    _keys_to_ignore_on_load_unexpected = {"lm_head"}
+
     def __init__(self, config: UnlimitedOcrConfig):
         super().__init__(config)
         self.multi_modal_projector = nn.Linear(

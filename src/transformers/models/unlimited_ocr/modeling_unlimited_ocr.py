@@ -1636,6 +1636,7 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
 )
 class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
     base_model_prefix = "model"
+    _keys_to_ignore_on_load_unexpected = {"lm_head"}
 
     def __init__(self, config: UnlimitedOcrConfig):
         super().__init__(config)
