@@ -209,22 +209,49 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
         observed_main_input_name = list(model_signature.parameters.keys())[1]
         self.assertEqual(TimesFmModelForPrediction.main_input_name, observed_main_input_name)
 
+    def test_past_values_to_tensor_left_pads_and_stacks(self):
+        past_values = [
+            torch.tensor([1.0, 2.0, 3.0]),
+            torch.tensor([4.0]),
+            torch.tensor([5.0, 6.0]),
+        ]
+        expected = torch.tensor(
+            [
+                [1.0, 2.0, 3.0],
+                [0.0, 0.0, 4.0],
+                [0.0, 5.0, 6.0],
+            ]
+        )
+
+        out = TimesFmModelForPrediction._past_values_to_tensor(past_values)
+
+        self.assertEqual(out.shape, (3, 3))
+        self.assertEqual(out.dtype, past_values[0].dtype)
+        self.assertTrue(torch.equal(out, expected))
+
 
 @require_torch
 @slow
 class TimesFmModelIntegrationTests(unittest.TestCase):
     def test_inference(self):
         model = TimesFmModelForPrediction.from_pretrained("google/timesfm-2.0-500m-pytorch").to(torch_device)
-        forecast_input = [
-            np.sin(np.linspace(0, 20, 100)),
-            np.sin(np.linspace(0, 20, 200)),
-            np.sin(np.linspace(0, 20, 400)),
+        sequences = [
+            torch.sin(torch.linspace(0, 20, 100, dtype=torch.float32, device=torch_device)),
+            torch.sin(torch.linspace(0, 20, 200, dtype=torch.float32, device=torch_device)),
+            torch.sin(torch.linspace(0, 20, 400, dtype=torch.float32, device=torch_device)),
         ]
-        forecast_input_tensor = [torch.tensor(ts, dtype=torch.float32, device=torch_device) for ts in forecast_input]
-        frequency_input = [0, 1, 2]
+        past_values = TimesFmModelForPrediction._past_values_to_tensor(sequences)
+        past_observed_mask = torch.zeros_like(past_values, dtype=torch.long)
+        for i, ts in enumerate(sequences):
+            past_observed_mask[i, past_values.shape[1] - ts.shape[0] :] = 1
+        frequency_input = torch.tensor([0, 1, 2], dtype=torch.long, device=torch_device)
 
         with torch.no_grad():
-            output = model(past_values=forecast_input_tensor, freq=frequency_input)
+            output = model(
+                past_values=past_values,
+                past_observed_mask=past_observed_mask,
+                freq=frequency_input,
+            )
 
         mean_predictions = output.mean_predictions
         self.assertEqual(mean_predictions.shape, torch.Size([3, model.config.horizon_length]))
