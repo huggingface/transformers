@@ -110,6 +110,7 @@ if TYPE_CHECKING:
     from .dia import *
     from .dialogpt import *
     from .diffllama import *
+    from .diffusion_gemma import *
     from .dinat import *
     from .dinov2 import *
     from .dinov2_with_registers import *
