@@ -697,7 +697,9 @@ class DiffusionGemmaGenerationMixin:
             streamer.put(input_ids.cpu())
 
         # 0.f performance tuning
-        is_compiling = past_key_values is not None and past_key_values.is_compileable and not generation_config.disable_compile
+        is_compiling = (
+            past_key_values is not None and past_key_values.is_compileable and not generation_config.disable_compile
+        )
         if is_compiling:
             encoder_forward_after_prefill, decoder_forward, sampler, diffusion_stopping_criteria = (
                 self._compile_functions(sampler, diffusion_stopping_criteria)
