@@ -22,11 +22,11 @@ from ...utils import auto_docstring
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
+    Glm4MoeExperts,
     Glm4MoeForCausalLM,
     Glm4MoeMLP,
     Glm4MoeModel,
     Glm4MoeMoE,
-    Glm4MoeNaiveMoe,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
     Glm4MoeRotaryEmbedding,
@@ -150,7 +150,7 @@ class Glm4MoeLiteRMSNorm(Glm4MoeRMSNorm):
     pass
 
 
-class Glm4MoeLiteNaiveMoe(Glm4MoeNaiveMoe):
+class Glm4MoeLiteExperts(Glm4MoeExperts):
     pass
 
 

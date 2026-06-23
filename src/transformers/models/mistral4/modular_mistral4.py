@@ -25,11 +25,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
 from ...utils.generic import is_flash_attention_requested
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3DecoderLayer,
+    DeepseekV3Experts,
     DeepseekV3MoE,
-    DeepseekV3NaiveMoe,
     apply_rotary_pos_emb_interleave,
 )
 from ..llama.modeling_llama import (
@@ -60,32 +61,25 @@ class Mistral4MLP(Qwen2MoeMLP):
     pass
 
 
-class Mistral4TopkRouter(nn.Module):
+class Mistral4TopkRouter(DeepseekV2TopkRouter):
     def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.n_routed_experts
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
+        super().__init__(config)
+        del self.topk_method
         self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-
-        self.weight = nn.Parameter(torch.empty((self.num_experts, config.hidden_size)))
 
     def forward(self, hidden_states):
-        # Mistral4 routes on softmax scores (no sigmoid / score-correction bias); top-k
-        # selection lives here so the `ep_router` hook can remap the returned indices.
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
         router_logits = F.linear(hidden_states, self.weight)
         scores = router_logits.softmax(-1)
-        group_scores = scores.view(-1, self.n_group, self.num_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
+        group_scores = (
+            scores.view(-1, self.num_group, self.num_experts // self.num_group).topk(2, dim=-1)[0].sum(dim=-1)
+        )
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
         group_mask.scatter_(1, group_idx, 1)
         score_mask = (
             group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.num_experts // self.n_group)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
             .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores.masked_fill(~score_mask.bool(), 0.0)
@@ -98,7 +92,7 @@ class Mistral4TopkRouter(nn.Module):
         return router_logits, topk_weights, topk_indices
 
 
-class Mistral4NaiveMoe(DeepseekV3NaiveMoe):
+class Mistral4Experts(DeepseekV3Experts):
     pass
 
 
@@ -263,7 +257,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Mistral4TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Mistral4NaiveMoe):
+        elif isinstance(module, Mistral4Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 

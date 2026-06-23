@@ -1204,12 +1204,9 @@ class DeepseekOcr2TextTopkRouter(nn.Module):
         self.topk_method = config.topk_method
         self.num_group = config.n_group
         self.topk_group = config.topk_group
-        # Named `weight` (not wrapped in `nn.Linear`) so the parameter key stays `mlp.gate.weight`.
         self.weight = nn.Parameter(torch.empty((self.num_experts, config.hidden_size)))
 
     def forward(self, hidden_states):
-        # Top-k selection lives in the router (not the MoE block) so the `ep_router`
-        # tensor-parallel hook can remap global → local expert ids on the returned indices.
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.softmax(dim=-1, dtype=torch.float32)
@@ -1237,9 +1234,8 @@ class DeepseekOcr2TextMoe(nn.Module):
         self.config = config
         self.experts = DeepseekOcr2TextExperts(config)
         self.gate = DeepseekOcr2TextTopkRouter(config)
-        if config.n_shared_experts is not None:
-            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-            self.shared_experts = DeepseekOcr2TextMLP(config=config, intermediate_size=intermediate_size)
+        intermediate_size = config.moe_intermediate_size * config.n_shared_experts
+        self.shared_experts = DeepseekOcr2TextMLP(config=config, intermediate_size=intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states

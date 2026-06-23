@@ -231,7 +231,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         expert_bias = self.expert_bias if self.use_expert_bias else None
-        router_logits, routing_weights, selected_experts = self.gate(hidden_states_reshaped, expert_bias)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped, expert_bias)
         final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 

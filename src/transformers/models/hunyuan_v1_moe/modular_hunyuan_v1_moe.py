@@ -145,7 +145,7 @@ class HunYuanMoEV1Moe(nn.Module):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_mlp = self.shared_mlp(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
-        router_logits, routing_weights, selected_experts = self.gate(hidden_states)
+        _, routing_weights, selected_experts = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights).reshape(
             batch_size, sequence_length, hidden_dim
         )

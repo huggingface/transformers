@@ -152,28 +152,27 @@ class Mistral4TopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.top_k = config.num_experts_per_tok
         self.num_experts = config.n_routed_experts
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
+        self.top_k = config.num_experts_per_tok
         self.routed_scaling_factor = config.routed_scaling_factor
-
+        self.num_group = config.n_group
+        self.topk_group = config.topk_group
         self.weight = nn.Parameter(torch.empty((self.num_experts, config.hidden_size)))
+        self.norm_topk_prob = config.norm_topk_prob
 
     def forward(self, hidden_states):
-        # Mistral4 routes on softmax scores (no sigmoid / score-correction bias); top-k
-        # selection lives here so the `ep_router` hook can remap the returned indices.
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
         router_logits = F.linear(hidden_states, self.weight)
         scores = router_logits.softmax(-1)
-        group_scores = scores.view(-1, self.n_group, self.num_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
+        group_scores = (
+            scores.view(-1, self.num_group, self.num_experts // self.num_group).topk(2, dim=-1)[0].sum(dim=-1)
+        )
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
         group_mask.scatter_(1, group_idx, 1)
         score_mask = (
             group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.num_experts // self.n_group)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
             .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores.masked_fill(~score_mask.bool(), 0.0)
@@ -187,7 +186,7 @@ class Mistral4TopkRouter(nn.Module):
 
 
 @use_experts_implementation
-class Mistral4NaiveMoe(nn.Module):
+class Mistral4Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
@@ -231,14 +230,13 @@ class Mistral4MoE(nn.Module):
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: Mistral4Config):
         super().__init__()
         self.config = config
-        self.experts = Mistral4NaiveMoe(config)
+        self.experts = Mistral4Experts(config)
         self.gate = Mistral4TopkRouter(config)
-        self.shared_experts = Mistral4MLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-        )
+        intermediate_size = config.moe_intermediate_size * config.n_shared_experts
+        self.shared_experts = Mistral4MLP(config=config, intermediate_size=intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
@@ -554,7 +552,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Mistral4TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Mistral4NaiveMoe):
+        elif isinstance(module, Mistral4Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 

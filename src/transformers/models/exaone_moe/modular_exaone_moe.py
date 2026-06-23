@@ -24,8 +24,8 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3Experts,
     DeepseekV3MoE,
-    DeepseekV3NaiveMoe,
     DeepseekV3TopkRouter,
 )
 from ..exaone4.configuration_exaone4 import Exaone4Config
@@ -145,7 +145,7 @@ class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
     pass
 
 
-class ExaoneMoeExperts(DeepseekV3NaiveMoe):
+class ExaoneMoeExperts(DeepseekV3Experts):
     pass
 
 

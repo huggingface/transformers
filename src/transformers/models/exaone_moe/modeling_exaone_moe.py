@@ -228,32 +228,31 @@ class ExaoneMoeTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.top_k = config.num_experts_per_tok
         self.num_experts = config.n_routed_experts
+        self.top_k = config.num_experts_per_tok
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.n_group = config.n_group
+        self.num_group = config.n_group
         self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-
         self.weight = nn.Parameter(torch.empty((self.num_experts, config.hidden_size)))
+        self.norm_topk_prob = config.norm_topk_prob
         self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
-        # Top-k selection lives in the router (not the MoE block) so the `ep_router`
-        # tensor-parallel hook can remap global → local expert ids on the returned indices.
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
         group_scores = (
-            scores_for_choice.view(-1, self.n_group, self.num_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
+            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
         )
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
         group_mask.scatter_(1, group_idx, 1)
         score_mask = (
             group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.num_experts // self.n_group)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
             .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
@@ -316,6 +315,7 @@ class ExaoneMoeSparseMoEBlock(nn.Module):
         self.config = config
         self.experts = ExaoneMoeExperts(config)
         self.gate = ExaoneMoeTopkRouter(config)
+        intermediate_size = config.moe_intermediate_size * config.n_shared_experts
         self.shared_experts = ExaoneMoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
         )

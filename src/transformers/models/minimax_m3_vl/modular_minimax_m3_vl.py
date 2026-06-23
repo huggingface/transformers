@@ -93,12 +93,6 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
 
     model_type = "minimax_m3_vl_text"
     base_config_key = "text_config"
-    base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
-        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
-    }
 
     hidden_size: int = 6144
     intermediate_size: int = 3072

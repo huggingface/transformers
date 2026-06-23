@@ -66,7 +66,7 @@ class LongcatFlashMLP(DeepseekV3MLP):
 class LongcatFlashTopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config):
         super().__init__(config)
-        del self.n_group
+        del self.num_group
         del self.topk_group
         del self.weight
         del self.norm_topk_prob

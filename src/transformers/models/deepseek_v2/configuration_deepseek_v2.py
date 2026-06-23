@@ -100,6 +100,10 @@ class DeepseekV2Config(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+        "num_experts": "n_routed_experts",
+    }
     first_k_dense_replace: int = 0
     kv_lora_rank: int = 512
     q_lora_rank: int | None = 1536
