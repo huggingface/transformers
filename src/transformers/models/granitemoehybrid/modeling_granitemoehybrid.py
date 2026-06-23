@@ -272,8 +272,6 @@ class GraniteMoeHybridMambaLayer(nn.Module):
     - We ported most of the refactors in https://github.com/huggingface/transformers/pull/35154, which is (as of Dec 18, 2024) unmerged
     """
 
-    layer_type = "linear_attention"
-
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__()
         self.num_heads = config.mamba_n_heads
@@ -365,6 +363,8 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             )
         else:
             logger.warning_once("The fast path for GraniteMoeHybrid will be used when running the model on a GPU")
+
+        self.layer_type = "linear_attention"
 
     def cuda_kernels_forward(
         self,
@@ -991,7 +991,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
-        self.layer_type = config.layers_block_type[layer_idx]
+        self.block_type = config.layers_block_type[layer_idx]
 
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0

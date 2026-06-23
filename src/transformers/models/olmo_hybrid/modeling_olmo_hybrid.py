@@ -641,8 +641,6 @@ class OlmoHybridGatedDeltaNet(nn.Module):
     - Supports allow_neg_eigval: scales beta by 2.0 to allow range [0, 2]
     """
 
-    layer_type = "linear_attention"
-
     def __init__(self, config: OlmoHybridConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -722,6 +720,8 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 "Falling back to torch implementation. To install, follow: "
                 "https://github.com/fla-org/flash-linear-attention#installation"
             )
+
+        self.layer_type = "linear_attention"
 
     def forward(
         self,
@@ -842,7 +842,6 @@ class OlmoHybridAttentionDecoderLayer(GradientCheckpointingLayer):
         self.mlp = OlmoHybridMLP(config)
         self.post_attention_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layer_type = "full_attention"
 
     def forward(
         self,
@@ -882,7 +881,6 @@ class OlmoHybridLinearAttentionDecoderLayer(GradientCheckpointingLayer):
         self.mlp = OlmoHybridMLP(config)
         self.input_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layer_type = "linear_attention"
         self.linear_attn = OlmoHybridGatedDeltaNet(config, layer_idx=layer_idx)
 
     def forward(

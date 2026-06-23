@@ -187,8 +187,6 @@ class ZambaMambaMixer(nn.Module):
     `self.out_proj`. The pre-activations, coming from different mamba heads, are then concatenated and fed into `self.out_proj`.
     """
 
-    layer_type = "linear_attention"
-
     def __init__(self, config: ZambaConfig, layer_idx):
         super().__init__()
         self.config = config
@@ -267,6 +265,8 @@ class ZambaMambaMixer(nn.Module):
                 " is None. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d. If you want to use the naive implementation, set `use_mamba_kernels=False` in the model config"
             )
+
+        self.layer_type = "linear_attention"
 
     def cuda_kernels_forward(
         self, hidden_states: torch.Tensor, cache_params: Cache | None = None, attention_mask=None

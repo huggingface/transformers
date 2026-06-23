@@ -119,8 +119,6 @@ class NemotronHMamba2Mixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    layer_type = "linear_attention"
-
     def __init__(self, config: NemotronHConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config
@@ -223,6 +221,8 @@ class NemotronHMamba2Mixer(nn.Module):
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
+
+        self.layer_type = "linear_attention"
 
     def cuda_kernels_forward(
         self,

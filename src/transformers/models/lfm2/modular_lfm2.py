@@ -133,8 +133,6 @@ class Lfm2Attention(LlamaAttention):
 
 
 class Lfm2ShortConv(nn.Module):
-    layer_type = "conv"
-
     def __init__(
         self,
         config: Lfm2Config,
@@ -156,6 +154,8 @@ class Lfm2ShortConv(nn.Module):
         )
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
+
+        self.layer_type = "conv"
 
     def cuda_kernels_forward(
         self,
