@@ -30,7 +30,13 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
+from ...masking_utils import (
+    blockwise_overlay,
+    create_causal_mask,
+    create_masks_for_generate,
+    create_sliding_window_causal_mask,
+    sliding_window_overlay,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
@@ -1188,6 +1194,46 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         return self.get_image_features(pixel_values_videos, video_position_ids, **kwargs)
 
 
+def create_masks_for_vision_model(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    past_key_values: Cache | None,
+    position_ids: torch.Tensor | None,
+    block_sequence_ids: torch.Tensor,
+) -> dict:
+    """Create full_attention and sliding_attention masks with correct composition.
+
+    For global (full attention) layers:  OR(causal, blockwise)
+    For local (sliding window) layers:  AND(sliding_window, OR(causal, blockwise))
+    """
+    mask_kwargs = {
+        "config": config,
+        "inputs_embeds": inputs_embeds,
+        "attention_mask": attention_mask,
+        "past_key_values": past_key_values,
+        "position_ids": position_ids,
+    }
+
+    # Full attention: OR(causal, blockwise) — use block_sequence_ids directly
+    full_mask = create_causal_mask(**mask_kwargs, block_sequence_ids=block_sequence_ids)
+
+    # Sliding attention: AND(sliding_window, OR(causal, blockwise))
+    # Pass blockwise as or_mask_function (applied as step 2 in create_causal_mask)
+    # Pass sliding_window as and_mask_function (applied as step 3, after OR)
+    # Do NOT pass block_sequence_ids (to avoid the incorrect step 4 final OR)
+    sliding_mask = create_causal_mask(
+        **mask_kwargs,
+        or_mask_function=blockwise_overlay(block_sequence_ids),
+        and_mask_function=sliding_window_overlay(config.sliding_window),
+    )
+
+    return {
+        "full_attention": full_mask,
+        "sliding_attention": sliding_mask,
+    }
+
+
 @auto_docstring(
     custom_intro="""
     The base Gemma 4 model comprising a vision backbone, an audio backbone, a language model, and a language modeling
@@ -1356,14 +1402,15 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             "position_ids": position_ids,
         }
 
-        # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-        # Smaller Gemma models use a conventional casual attention mask
-        if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-            if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+        text_config = config.get_text_config()
+        use_bidir = getattr(text_config, "use_bidirectional_attention", None) == "vision"
 
-            mask_kwargs["block_sequence_ids"] = block_sequence_ids
+        if use_bidir and mm_token_type_ids is not None:
+            block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+            return create_masks_for_vision_model(
+                block_sequence_ids=block_sequence_ids,
+                **mask_kwargs,
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 
