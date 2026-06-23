@@ -181,7 +181,7 @@ def resize_and_normalize_image(
 def build_resized_image(
     backend: "TorchvisionBackend",
     image_chw: torch.Tensor,
-    base_image_input_size: list[int],
+    base_image_input_size: int,
     resample: PILImageResampling,
     do_rescale: bool,
     rescale_factor: float,
@@ -193,7 +193,7 @@ def build_resized_image(
     chw_resized = resize_and_normalize_image(
         backend,
         image_chw,
-        base_image_input_size,
+        [base_image_input_size, base_image_input_size],
         resample,
         do_rescale=do_rescale,
         rescale_factor=rescale_factor,
@@ -202,8 +202,7 @@ def build_resized_image(
         image_std=image_std,
     )
     resized = chw_resized.permute(1, 2, 0).unsqueeze(0)
-    crop_patch_w = base_image_input_size[1] // image_patch_size
-    crop_patch_h = base_image_input_size[0] // image_patch_size
+    crop_patch_h = crop_patch_w = base_image_input_size // image_patch_size
     resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
     return resized, resize_idx
 
@@ -251,7 +250,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_chw: torch.Tensor,
         max_crops: int,
         overlap_margins: list[int],
-        base_image_input_size: list[int],
+        base_image_input_size: int,
         resample: PILImageResampling,
         do_rescale: bool,
         rescale_factor: float,
@@ -261,9 +260,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_patch_size: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Tile `image_chw` into overlapping square crops and return per-patch global indices with overlap patches collapsed to a single owner."""
-        if base_image_input_size[0] != base_image_input_size[1]:
-            raise ValueError(f"Expected square base_image_input_size, got {base_image_input_size}")
-        crop_size = base_image_input_size[0]
+        crop_size = base_image_input_size
         left_margin, right_margin = overlap_margins
         crop_patches = crop_size // image_patch_size
         window_patches = crop_patches - (left_margin + right_margin)
@@ -310,7 +307,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_chw: torch.Tensor,
         max_crops: int,
         overlap_margins: list[int],
-        base_image_input_size: list[int],
+        base_image_input_size: int,
         resample: PILImageResampling,
         do_rescale: bool,
         rescale_factor: float,
@@ -321,14 +318,10 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_pooling_w: int,
         image_pooling_h: int,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        if isinstance(base_image_input_size, int):
-            base_image_input_size = (base_image_input_size, base_image_input_size)
-
         base_image_input_d = image_patch_size
         pooling_w = image_pooling_w
         pooling_h = image_pooling_h
-        crop_patch_w = base_image_input_size[1] // base_image_input_d
-        crop_patch_h = base_image_input_size[0] // base_image_input_d
+        crop_patch_h = crop_patch_w = base_image_input_size // base_image_input_d
 
         crop_arr, patch_idx_arr = self._build_overlapping_crops(
             image_chw,
@@ -406,7 +399,9 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        base_image_input_size = [size.height, size.width]
+        if size.height != size.width:
+            raise ValueError(f"Molmo2 only supports a square `size`, got height={size.height}, width={size.width}.")
+        base_image_input_size = size.height
         image_pooling_h, image_pooling_w = pooling_size
 
         all_grids: list[torch.Tensor] = []
@@ -556,7 +551,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     def _build_frame_patches(
         self,
         frame_chw: torch.Tensor,
-        base_image_input_size: list[int],
+        base_image_input_size: int,
         resample: PILImageResampling,
         do_rescale: bool,
         rescale_factor: float,
@@ -599,7 +594,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        base_image_input_size = [size.height, size.width]
+        if size.height != size.width:
+            raise ValueError(f"Molmo2 only supports a square `size`, got height={size.height}, width={size.width}.")
+        base_image_input_size = size.height
         image_pooling_h, image_pooling_w = pooling_size
 
         all_crops: list[torch.Tensor] = []
