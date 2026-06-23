@@ -238,6 +238,22 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         # A single-item batch returns a one-element list, not a bare dict.
         self.assertEqual(tokenizer.parse_response([out_a]), [single_a])
 
+    def test_explicit_template_schema_detection(self):
+        """An explicit new-style template passed as `schema=` is routed to the response-template
+        parser, not the legacy `response_schema` parser. New-style is identified by a top-level
+        `version` key (the canonical marker) or a `fields` key for templates that omit it."""
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model_out = (
+            "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
+            '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", '
+            '"parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        )
+        expected = parse_response(model_out, cohere_template)
+        # Detected via the canonical `version` marker...
+        self.assertEqual(tokenizer.parse_response(model_out, schema={"version": 1, **cohere_template}), expected)
+        # ...and via `fields` when the template omits `version`.
+        self.assertEqual(tokenizer.parse_response(model_out, schema=cohere_template), expected)
+
     def test_cohere(self):
         model_out = (
             "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
@@ -587,6 +603,17 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             parse_response("[hi]", bad_template)
         self.assertIn("unknown content parser", str(cm.exception).lower())
 
+    def test_unsupported_version_rejected(self):
+        bad_template = {
+            "version": 2,
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|assistant|>",
+            "fields": {"content": {"content": "text"}},
+        }
+        with self.assertRaises(ValueError) as cm:
+            parse_response("hello", bad_template)
+        self.assertIn("version", str(cm.exception).lower())
+
     def test_two_implicit_fields_rejected(self):
         bad_template = {
             "defaults": {"role": "assistant"},
@@ -709,15 +736,18 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 parse_response("<x>hi</x>", spec)
 
-    def test_literal_list_eos_must_stand_alone(self):
-        """The magic `"eos"` literal maps to end-of-stream and is only valid on its own."""
+    def test_field_without_close_runs_to_end_of_stream(self):
+        """A field with no `close`/`close_pattern` stays open until end-of-stream, capturing
+        everything after its open."""
         spec = {
             "defaults": {"role": "assistant"},
             "start_anchor": "<|assistant|>",
-            "fields": {"content": {"close": ["eos", "<turn|>"], "content": "text"}},
+            "fields": {"content": {"open": "<resp>", "content": "text"}},
         }
-        with self.assertRaises(ValueError):
-            parse_response("hi", spec)
+        self.assertEqual(
+            parse_response("<resp>hello world", spec),
+            {"role": "assistant", "content": "hello world"},
+        )
 
 
 # Fixtures shared by the streaming tests: one representative input per template,

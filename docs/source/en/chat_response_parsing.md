@@ -242,12 +242,15 @@ Each field supports several keys. We can divide these into two types. First, the
 |-----------------|--------------------|-----------------------------------------------------------------------------------------------|
 | `open`          | str or list[str]   | Literal string that opens this region. A list of strings means "match any of these".          |
 | `open_pattern`  | str (regex)        | Regex alternative to `open`. Named groups become capture variables available to `transform`.  |
-| `close`         | str or list[str]   | Literal string (or list of strings) that closes this region. `"eos"` means end-of-stream.     |
+| `close`         | str or list[str]   | Literal string (or list of strings) that closes this region. Omit to run to end-of-stream.    |
 | `close_pattern` | str (regex)        | Regex alternative to `close`. Named groups become capture variables available to `transform`. |
 | `repeats`       | bool               | If true, the field is a list and each match appends. Default `false`.                         |
 | `optional`      | bool               | If false and the region never matches, we raise an error. Default `true`.                     |
 
 A field should have **either** `open` or `open_pattern`, but not both, and the same is true for `close` and `close_pattern`.
+
+A field may omit `close`/`close_pattern` entirely, in which case the region stays open until the end of the
+generated text. This is useful for a final field that runs to the end of the message.
 
 A field with **neither** `open` nor `open_pattern` is the **implicit** field: it's active whenever no explicit
 region is open, so it captures leftover text. At most one field can be implicit. This is most often used when `content`

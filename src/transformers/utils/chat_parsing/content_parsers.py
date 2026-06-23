@@ -28,15 +28,15 @@ def _text(text: str, args: dict) -> str:
 
 
 def _int(text: str, args: dict) -> int:
-    return int(text.strip())
+    return int(_text(text, args))
 
 
 def _float(text: str, args: dict) -> float:
-    return float(text.strip())
+    return float(_text(text, args))
 
 
 def _bool(text: str, args: dict) -> bool:
-    return text.strip().lower() in ("true", "1")
+    return _text(text, args).lower() in ("true", "1")
 
 
 # Sentinel characters for lax-JSON string pre-extraction — ASCII control chars
@@ -53,7 +53,7 @@ def _json(text: str, args: dict) -> Any:
         custom markers are pre-extracted, then restored as standard JSON strings.
       - `allow_non_json` (bool): return stripped text if parsing fails.
     """
-    string_delims = args.get("string_delims") or []
+    string_delims = args.get("string_delims", [])
     unquoted_keys = args.get("unquoted_keys", False)
 
     if string_delims and (_LAX_OPEN in text or _LAX_CLOSE in text):
@@ -126,17 +126,14 @@ def _kv_lines(text: str, args: dict) -> dict:
     line_sep = args.get("line_sep", "\n")
     kv_sep = args.get("kv_sep", ":")
     value_parser = args.get("value_parser")
-    strip = args.get("strip", True)
 
     out: dict[str, Any] = {}
     for line in text.split(line_sep):
-        if strip:
-            line = line.strip()
+        line = _text(line, args)
         if not line or kv_sep not in line:
             continue
         k, v = line.split(kv_sep, 1)
-        if strip:
-            k, v = k.strip(), v.strip()
+        k, v = _text(k, args), _text(v, args)
         out[k] = _sub_parse(v, value_parser)
     return out
 

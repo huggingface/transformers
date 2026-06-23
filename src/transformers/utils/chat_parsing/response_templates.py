@@ -52,7 +52,7 @@ class ResponseTemplate:
     implicit: str | None = None
     start_anchor_literals: list[str] | None = None
 
-    def truncate_past_last_anchor(self, text: str, *, log_if_missing: bool = True) -> str:
+    def truncate_past_last_anchor(self, text: str) -> str:
         """When parsing responses, we can't just parse the tokens generated
         by the model. This is because chat templates often include early parts of the message such as <start_of_turn>
         or <think> tokens in the prefill. Therefore, we take the whole chat as input, but truncate to the start
@@ -61,12 +61,11 @@ class ResponseTemplate:
         for m in self.start_anchor_re.finditer(text):
             last_end = m.end()
         if last_end is None:
-            if log_if_missing:
-                kind = "start_anchor" if self.start_anchor_literals is not None else "start_anchor_pattern"
-                logger.warning_once(
-                    f"response_template defines {kind} but the anchor was not found "
-                    "in the prefix; the parser will process the entire prefix instead."
-                )
+            kind = "start_anchor" if self.start_anchor_literals is not None else "start_anchor_pattern"
+            logger.info(
+                f"response_template defines {kind} but the anchor was not found "
+                "in the prefix; the parser will process the entire prefix instead."
+            )
             return text
         return text[last_end:]
 
@@ -99,11 +98,6 @@ def _compile_anchor(scope: str, field: dict, literal_key: str, pattern_key: str)
             raise ValueError(f"{scope}: '{literal_key}' must be a string or list of strings, got {type(raw).__name__}")
         if any(s == "" for s in literals):
             raise ValueError(f"{scope}: '{literal_key}' literals cannot be empty strings")
-        # `"eos"` is a magic literal mapping to end-of-stream; only meaningful on its own.
-        if "eos" in literals:
-            if len(literals) > 1:
-                raise ValueError(f"{scope}: the 'eos' literal cannot be combined with other literals")
-            return re.compile(r"\Z"), literals, False
         # Sort longest-first so alternation prefers the longer alternative when both could match.
         ordered = sorted(literals, key=len, reverse=True)
         can_extend = any(a != b and a.startswith(b) for a in literals for b in literals)

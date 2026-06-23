@@ -3340,10 +3340,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def parse_response(
         self,
-        response: str | list[int] | np.ndarray | torch.Tensor,
+        response: str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor,
         schema: list | dict | None = None,
         *,
-        prefix: str | list[int] | np.ndarray | torch.Tensor | None = None,
+        prefix: str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor | None = None,
     ):
         """
         Converts an output string created by generating text from a model into a parsed message dictionary.
@@ -3387,8 +3387,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     "for parsing chat responses!"
                 )
         else:
-            # Explicit schema argument: detect new-style by the presence of a top-level `fields` key.
-            use_new_template = isinstance(schema, dict) and "fields" in schema
+            # Explicit schema argument: new-style response templates are identified by a top-level
+            # `version` key (the canonical marker), falling back to `fields` for templates that omit
+            # it. Legacy `response_schema` dicts have neither.
+            use_new_template = isinstance(schema, dict) and ("version" in schema or "fields" in schema)
 
         if prefix is not None and not use_new_template:
             raise ValueError(

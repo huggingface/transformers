@@ -2216,10 +2216,10 @@ class ProcessorMixin(PushToHubMixin):
 
     def parse_response(
         self,
-        response: "str | list[int] | np.ndarray | torch.Tensor",
+        response: "str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor",
         schema: list | dict | None = None,
         *,
-        prefix: "str | list[int] | np.ndarray | torch.Tensor | None" = None,
+        prefix: "str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor | None" = None,
     ):
         """
         Converts an output string created by generating text from a model into a parsed message dictionary.
