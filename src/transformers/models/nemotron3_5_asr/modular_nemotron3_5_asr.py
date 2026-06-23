@@ -361,19 +361,11 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
 
 
 class Nemotron3_5AsrPreTrainedModel(NemotronAsrStreamingPreTrainedModel):
-    # The encoder is reused as-is via `AutoModel` (a `NemotronAsrStreamingEncoder` submodule that initializes
-    # itself and records its own hidden states/attentions), so this wrapper records no encoder outputs and only
-    # needs the generic `_init_weights`. Overriding both (rather than inheriting from the base, whose bodies
-    # reference the encoder block/attention classes by symbol) also stops the modular converter from copying the
-    # entire encoder stack into this file as dead code.
-    _no_split_modules = ["NemotronAsrStreamingEncoderBlock"]
+    _no_split_modules = None
     _can_record_outputs = {}
 
     @torch.no_grad()
     def _init_weights(self, module):
-        # Call the framework base directly (not `super()`, which the modular converter would inline, pulling the
-        # encoder-specific init branches and their classes back into this file): the reused encoder submodule
-        # initializes its own attention/positional weights, so only generic init is needed here.
         PreTrainedModel._init_weights(self, module)
 
 

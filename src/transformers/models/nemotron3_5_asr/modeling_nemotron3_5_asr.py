@@ -70,12 +70,7 @@ class Nemotron3_5AsrPreTrainedModel(PreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
-    # The encoder is reused as-is via `AutoModel` (a `NemotronAsrStreamingEncoder` submodule that initializes
-    # itself and records its own hidden states/attentions), so this wrapper records no encoder outputs and only
-    # needs the generic `_init_weights`. Overriding both (rather than inheriting from the base, whose bodies
-    # reference the encoder block/attention classes by symbol) also stops the modular converter from copying the
-    # entire encoder stack into this file as dead code.
-    _no_split_modules = ["NemotronAsrStreamingEncoderBlock"]
+    _no_split_modules = None
     _supports_flat_attention_mask = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -89,9 +84,6 @@ class Nemotron3_5AsrPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        # Call the framework base directly (not `super()`, which the modular converter would inline, pulling the
-        # encoder-specific init branches and their classes back into this file): the reused encoder submodule
-        # initializes its own attention/positional weights, so only generic init is needed here.
         super()._init_weights(module)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
