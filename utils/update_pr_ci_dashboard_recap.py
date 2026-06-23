@@ -29,7 +29,7 @@ GRAFANA_QUERY_URL = "https://transformers-ci.lor-e.huggingface.cool/api/datasour
 DASHBOARD_URL = (
     "https://transformers-ci.lor-e.huggingface.cool/d/pytest-observability-by-pr/pytest-observability-branch"
 )
-BADGE_URL = "https://transformers-ci.lor-e.huggingface.cool/exporter/badge/pr"
+BADGE_URL = "https://transformers-ci.lor-e.huggingface.cool/badge/pr"
 BADGE_START = "<!-- ci-dashboard-badge:start -->"
 BADGE_END = "<!-- ci-dashboard-badge:end -->"
 RECAP_START = "<!-- ci-dashboard-recap:start -->"
