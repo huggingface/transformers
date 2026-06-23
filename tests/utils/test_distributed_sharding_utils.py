@@ -16,8 +16,11 @@ import unittest
 import torch
 
 from transformers.distributed.sharding_utils import DtensorShardOperation
+
+
 if torch.distributed.is_available():
     from torch.distributed.tensor.placement_types import Replicate, Shard, _StridedShard
+
 
 class FakeMesh:
     """Fake multi-dimensional device mesh for testing DtensorShardOperation."""
