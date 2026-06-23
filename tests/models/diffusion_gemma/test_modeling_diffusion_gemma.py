@@ -92,7 +92,7 @@ class DiffusionGemmaVisionText2TextModelTester:
         image_token_id=4,
         boi_token_id=5,
         eoi_token_id=6,
-        seq_length=25,
+        seq_length=25,  # See: `test_generate_beyond_sliding_window` before changing this value!
         self_conditioning_size=16,
         canvas_length=16,
         is_training=False,
@@ -672,12 +672,23 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
     def test_generate_beyond_sliding_window(self, name, cache_implementation):
         """Tests that generate can run beyond the sliding window length"""
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        config.text_config.sliding_window = 16
+        # Canvas length has to be much smaller than sliding window to correctly check the mask
+        # and input-length has to be smaller than sliding length! We will check three cases:
+        # 1) input/mask is smaller than window
+        # 2) input length approaching full cache length
+        # 3) input length goes beyond window length
+        # Input length is 25 in model tester, so we will set sliding window to 48 tokens
+        # After generating `max_new_tokens=32`, the final length will go beyond sliding window
+        config.text_config.sliding_window = 48
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
         model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
 
         generation_outputs = model.generate(
-            **model_inputs, max_new_tokens=32, max_denoising_steps=2, cache_implementation=cache_implementation
+            **model_inputs,
+            max_new_tokens=32,
+            max_denoising_steps=2,
+            disable_compile=True,
+            cache_implementation=cache_implementation,
         )
         self.assertTrue(generation_outputs.sequences.shape[1] > config.text_config.sliding_window)
 
