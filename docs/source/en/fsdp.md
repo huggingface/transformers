@@ -50,7 +50,7 @@ rendered properly in your Markdown viewer.
 
 ## Sharding strategies
 
-FSDP2 controls sharding with [fsdp_config](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.fsdp_config). Set `fsdp=True` to enable FSDP, and set `reshard_after_forward` in the FSDP config to choose the memory and throughput tradeoff.
+FSDP2 controls sharding with [`~TrainingArguments.fsdp_config`]. Set `fsdp=True` to enable FSDP, and set `reshard_after_forward` in the FSDP config to choose the memory and throughput tradeoff.
 
 | `reshard_after_forward` | behavior |
 |---|---|
@@ -61,13 +61,9 @@ FSDP2 controls sharding with [fsdp_config](https://huggingface.co/docs/transform
 
 ## Configure FSDP
 
-These fields control how FSDP2 wraps, shards, and loads the model.
-
-- `reshard_after_forward` determines whether to reshard parameters after the forward pass. The default `true` saves more memory. Set it to `false` to keep parameters gathered between the forward and backward passes and reduce communication at the cost of higher peak memory.
+These fields control how FSDP2 wraps, shards, and loads the model. `reshard_after_forward` and `auto_wrap_policy` are covered in [Sharding strategies](#sharding-strategies).
 
 - `cpu_offload` offloads parameters and gradients to CPU when they aren't in use to save GPU memory.
-
-- `auto_wrap_policy` determines how modules are wrapped into FSDP units. Defaults to `"TRANSFORMER_BASED_WRAP"`, which wraps transformer layers. Use `"SIZE_BASED_WRAP"` for modules above a parameter-count threshold, or `"NO_WRAP"` to disable auto wrapping.
 
 - `transformer_layer_cls_to_wrap` defines the transformer layer to wrap into an FSDP unit when `auto_wrap_policy` is `"TRANSFORMER_BASED_WRAP"`. Each unit manages its own gather and scatter ops. Only the current unit's parameters are gathered during the forward pass. The previous units' parameters are released to save memory.
 
@@ -75,20 +71,20 @@ These fields control how FSDP2 wraps, shards, and loads the model.
 
 - `min_num_params` sets the minimum number of parameters per module for size-based wrapping. It is only used when `auto_wrap_policy` is `"SIZE_BASED_WRAP"`.
 
-- `state_dict_type` controls the checkpoint format. Defaults to `"FULL_STATE_DICT"` for a single Transformers-compatible checkpoint. Use `"SHARDED_STATE_DICT"` for one checkpoint file per rank.
+- `state_dict_type` controls the checkpoint format. Defaults to `"FULL_STATE_DICT"` for a single Transformers-compatible checkpoint. Use `"SHARDED_STATE_DICT"` for one checkpoint file per rank, which is faster for large models. Sharded checkpoints only load back into FSDP, so save a `"FULL_STATE_DICT"` for the final checkpoint you want to share or load outside FSDP.
 
 - `cpu_ram_efficient_loading` loads the checkpoint from disk on rank 0 only. Other GPUs initialize an empty model and receive the weights by broadcast, avoiding multiple processes loading a large model into CPU RAM.
 
 - `activation_checkpointing` recomputes activations during the backward pass instead of storing them. Use this instead of [gradient checkpointing](./grad_checkpointing) in [`TrainingArguments`]. Setting both raises an error.
 
-Configure FSDP training with either an [Accelerate config file](./accelerate#accelerate-config-file) or an FSDP config file passed to [fsdp_config](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.fsdp_config).
+Configure FSDP training with either an [Accelerate config file](./accelerate#accelerate-config-file) or an FSDP config file passed to `fsdp_config`.
 
 <hfoptions id="launch">
 <hfoption id="Accelerate config file">
 
 Run the [accelerate config](https://huggingface.co/docs/accelerate/en/package_reference/cli#accelerate-config) command and answer questions about your hardware and training setup. This creates a `default_config.yaml` file in your cache.
 
-Run [accelerate launch](https://huggingface.co/docs/accelerate/en/package_reference/cli#accelerate-launch) with a [`Trainer`]-based script. The [`fsdp_config`] is unnecessary because the Accelerate config file covers the same settings.
+Run [accelerate launch](https://huggingface.co/docs/accelerate/en/package_reference/cli#accelerate-launch) with a [`Trainer`]-based script. The `fsdp_config` is unnecessary because the Accelerate config file covers the same settings.
 
 ```cli
 accelerate launch train.py
@@ -110,7 +106,7 @@ accelerate launch train.py
 }
 ```
 
-Set `fsdp=True` and pass the FSDP config file to [`fsdp_config`].
+Set `fsdp=True` and pass the FSDP config file to `fsdp_config`.
 
 ```py
 from transformers import TrainingArguments
@@ -129,4 +125,5 @@ TrainingArguments(
 
 - See [DDP](./ddp) for data-parallel training when your model fits on one GPU.
 - See [DeepSpeed](./deepspeed) for ZeRO optimization and NVMe offloading.
+- For FSDP on TPUs with PyTorch/XLA, set `xla`, `xla_fsdp_settings`, and `xla_fsdp_grad_ckpt` in [`~TrainingArguments.fsdp_config`].
 - Read the [FSDP chapter](https://nanotron-ultrascale-playbook.static.hf.space/index.html#zero-3:_adding_parameter_partitioning_(fsdp)) from The Ultra-Scale Playbook for more information about how FSDP works.

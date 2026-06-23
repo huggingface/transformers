@@ -23,26 +23,26 @@ You can control which accelerators (CUDA, XPU, MPS, HPU, etc.) PyTorch sees and 
 Use the hardware-specific environment variable to select accelerators and set their order. Set it on the command line per run, or add it to `~/.bashrc` or another startup config file.
 
 > [!WARNING]
-> Avoid exporting environment variables because if you forget a previously exported value, you may silently train on the wrong accelerators. Set the environment variable on the same command line as the training run.
+> Avoid exporting environment variables because if you forget how an environment variable was set up, you may silently train on the wrong accelerators. Set the environment variable on the same command line as the training run.
 
 For example, to select accelerators 0 and 2 out of four:
 
 <hfoptions id="accelerator-type">
 <hfoption id="CUDA">
 
-```bash
+```cli
 CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
 ```
 
 PyTorch sees only GPUs 0 and 2, which are mapped to `cuda:0` and `cuda:1`. To reverse the order (use GPU 2 as `cuda:0` and GPU 0 as `cuda:1`):
 
-```bash
+```cli
 CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
 ```
 
 To run without any GPUs:
 
-```bash
+```cli
 CUDA_VISIBLE_DEVICES= python trainer-program.py ...
 ```
 
@@ -50,32 +50,32 @@ Control the order of CUDA devices with `CUDA_DEVICE_ORDER`.
 
 - Order by PCIe bus ID (matches `nvidia-smi`):
 
-    ```bash
+    ```cli
     export CUDA_DEVICE_ORDER=PCI_BUS_ID
     ```
 
 - Order by compute capability (fastest first):
 
-    ```bash
+    ```cli
     export CUDA_DEVICE_ORDER=FASTEST_FIRST
     ```
 
 </hfoption>
 <hfoption id="Intel XPU">
 
-```bash
+```cli
 ZE_AFFINITY_MASK=0,2 torchrun trainer-program.py ...
 ```
 
 PyTorch sees only XPUs 0 and 2, which are mapped to `xpu:0` and `xpu:1`. To reverse the order (use XPU 2 as `xpu:0` and XPU 0 as `xpu:1`):
 
-```bash
+```cli
 ZE_AFFINITY_MASK=2,0 torchrun trainer-program.py ...
 ```
 
 Control the order of Intel XPUs with:
 
-```bash
+```cli
 export ZE_ENABLE_PCI_ID_DEVICE_ORDER=1
 ```
 

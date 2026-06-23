@@ -49,6 +49,20 @@ Run [accelerate launch](https://huggingface.co/docs/accelerate/en/package_refere
 accelerate launch train.py
 ```
 
+The [accelerator_config](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.accelerator_config) accepts settings that don't have dedicated top-level arguments. For example, set `non_blocking=True` together with [`~TrainingArguments.dataloader_pin_memory`] to overlap data transfer with compute for higher GPU throughput.
+
+```py
+from transformers import TrainingArguments
+
+TrainingArguments(
+    ...,
+    dataloader_pin_memory=True,
+    accelerator_config={
+        "non_blocking": True,
+    },
+)
+```
+
 ## TrainingArguments
 
 Pass a backend-specific config to [`TrainingArguments`]. The [`~Trainer.create_accelerator_and_postprocess`] method reads the settings and configures training.
@@ -56,7 +70,7 @@ Pass a backend-specific config to [`TrainingArguments`]. The [`~Trainer.create_a
 <hfoptions id="backend">
 <hfoption id="FSDP">
 
-Pass a JSON config file or dict to [`fsdp_config`]. See [FSDP](./fsdp) for a full guide and config reference.
+Pass a JSON config file or dict to [`~TrainingArguments.fsdp_config`]. See [FSDP](./fsdp) for a full guide and config reference.
 
 ```py
 from transformers import TrainingArguments
@@ -71,7 +85,7 @@ TrainingArguments(
 </hfoption>
 <hfoption id="DeepSpeed">
 
-Pass a JSON config file or dict to [`deepspeed`]. See [DeepSpeed](./deepspeed) for a full guide and config reference.
+Pass a JSON config file or dict to [`~TrainingArguments.deepspeed`]. See [DeepSpeed](./deepspeed) for a full guide and config reference.
 
 ```py
 from transformers import TrainingArguments
@@ -101,22 +115,6 @@ TrainingArguments(
 
 </hfoption>
 </hfoptions>
-
-## Accelerate training settings
-
-The [accelerator_config](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.accelerator_config) accepts settings that don't have dedicated top-level arguments. For example, set `non_blocking=True` together with [`~TrainingArguments.dataloader_pin_memory`] to overlap data transfer with compute for higher GPU throughput.
-
-```py
-from transformers import TrainingArguments
-
-TrainingArguments(
-    ...,
-    dataloader_pin_memory=True,
-    accelerator_config={
-        "non_blocking": True,
-    },
-)
-```
 
 ## Next steps
 
