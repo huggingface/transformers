@@ -117,7 +117,6 @@ from .utils import (
     is_librosa_available,
     is_liger_kernel_available,
     is_lomo_available,
-    is_mamba_2_ssm_available,
     is_mistral_common_available,
     is_multipart_available,
     is_natten_available,
@@ -761,19 +760,6 @@ def require_causal_conv1d(test_case):
     return unittest.skipUnless(
         is_causal_conv1d_available(),
         "test requires `causal-conv1d`",
-    )(test_case)
-
-
-def require_mamba_2_ssm(test_case):
-    """
-    Decorator marking a test that requires the Mamba2 fast-path kernels (mamba-ssm).
-
-    These tests are skipped when mamba-ssm isn't installed.
-    """
-
-    return unittest.skipUnless(
-        is_mamba_2_ssm_available(),
-        "test requires `mamba-ssm`",
     )(test_case)
 
 
