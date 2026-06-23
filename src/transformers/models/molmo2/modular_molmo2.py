@@ -982,9 +982,6 @@ class Molmo2VisionModel(PreTrainedModel):
         self.config = config
         self.image_default_input_size = config.image_default_input_size
 
-        # positional embeddings
-        self.scale = config.hidden_size**-0.5
-        self.num_prefix_tokens: int = 0  # no class embeddings
         self.positional_embedding = nn.Parameter(
             torch.zeros(config.image_num_pos, config.hidden_size),
         )
