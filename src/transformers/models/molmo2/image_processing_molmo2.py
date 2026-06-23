@@ -206,15 +206,17 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         window_size = window_patches * image_patch_size
         margin_size = (left_margin + right_margin) * image_patch_size
 
-        _, original_h, original_w = image_chw.shape
-        tiling_h, tiling_w = select_tiling(original_h - margin_size, original_w - margin_size, window_size, max_crops)
-        src_h = tiling_h * window_size + margin_size
-        src_w = tiling_w * window_size + margin_size
+        _, original_height, original_width = image_chw.shape
+        tiling_h, tiling_w = select_tiling(
+            original_height - margin_size, original_width - margin_size, window_size, max_crops
+        )
+        src_height = tiling_h * window_size + margin_size
+        src_width = tiling_w * window_size + margin_size
 
         src = resize_and_normalize_image(
             self,
             image_chw,
-            [src_h, src_w],
+            [src_height, src_width],
             resample,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
@@ -237,7 +239,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
             patch_idx[:, :-1, :, -right_margin:] = -1
 
         patch_idx = patch_idx.permute(0, 2, 1, 3).reshape(-1)
-        patch_idx = patch_idx[patch_idx >= 0].reshape(src_h // image_patch_size, src_w // image_patch_size)
+        patch_idx = patch_idx[patch_idx >= 0].reshape(src_height // image_patch_size, src_width // image_patch_size)
 
         return crops, patch_idx
 
