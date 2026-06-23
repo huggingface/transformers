@@ -1426,19 +1426,19 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "UnlimitedOcrTextModel": [
-            # WeightConverter(
-            #     source_patterns=[
-            #         "mlp.experts.*.gate_proj.weight",
-            #         "mlp.experts.*.up_proj.weight",
-            #     ],
-            #     target_patterns="mlp.experts.gate_up_proj",
-            #     operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-            # ),
-            # WeightConverter(
-            #     source_patterns="mlp.experts.*.down_proj.weight",
-            #     target_patterns="mlp.experts.down_proj",
-            #     operations=[MergeModulelist(dim=0)],
-            # ),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
         ],
     }
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
