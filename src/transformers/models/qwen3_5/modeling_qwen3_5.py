@@ -1716,6 +1716,9 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
             )
+            mtp_weight = float(getattr(self.config, "mtp_loss_weight", 0.0))
+            if mtp_weight > 0.0 and loss is not None:
+                loss = loss + mtp_weight * mtp_loss
 
         return Qwen3_5CausalLMOutputWithPast(
             loss=loss,
@@ -1875,6 +1878,9 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
             )
+            mtp_weight = float(getattr(self.config, "mtp_loss_weight", 0.0))
+            if mtp_weight > 0.0 and loss is not None:
+                loss = loss + mtp_weight * mtp_loss
 
         return CausalLMOutputWithPast(
             loss=loss,

@@ -85,6 +85,9 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     num_mtp_layers (`int`, *optional*, defaults to 0):
         Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled. Matches the field name
         used by the generic MTP infrastructure in #46229.
+    mtp_loss_weight (`float`, *optional*, defaults to 0.0):
+        Weight of the MTP auxiliary loss added on top of the main LM loss when `labels` are provided.
+        Set to 0.0 to compute and return `mtp_loss` separately without folding it into the main loss.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -122,6 +125,7 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     num_hidden_layers: int = 32
     num_key_value_heads: int = 4
     num_mtp_layers: int = 0
+    mtp_loss_weight: float = 0.0
 
     decoder_sparse_step = AttributeError()
     norm_topk_prob = AttributeError()
@@ -157,6 +161,9 @@ class Qwen3_5Config(Qwen3VLConfig):
     r"""
     num_mtp_layers (`int`, *optional*, defaults to 0):
         Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
+    mtp_loss_weight (`float`, *optional*, defaults to 0.0):
+        Weight of the MTP auxiliary loss added on top of the main LM loss when `labels` are provided.
+        Set to 0.0 to compute and return `mtp_loss` separately without folding it into the main loss.
 
     Example:
 
@@ -178,6 +185,7 @@ class Qwen3_5Config(Qwen3VLConfig):
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
     num_mtp_layers: int = 0
+    mtp_loss_weight: float = 0.0
 
 
 class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
@@ -776,6 +784,9 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
             )
+            mtp_weight = float(getattr(self.config, "mtp_loss_weight", 0.0))
+            if mtp_weight > 0.0 and loss is not None:
+                loss = loss + mtp_weight * mtp_loss
 
         return Qwen3_5CausalLMOutputWithPast(
             loss=loss,
@@ -857,6 +868,9 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
             )
+            mtp_weight = float(getattr(self.config, "mtp_loss_weight", 0.0))
+            if mtp_weight > 0.0 and loss is not None:
+                loss = loss + mtp_weight * mtp_loss
 
         return CausalLMOutputWithPast(
             loss=loss,
