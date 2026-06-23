@@ -971,12 +971,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> torch.nn.Module:
-        return self.language_model.wte
-
-    def set_input_embeddings(self, value: torch.nn.Module) -> None:
-        self.language_model.wte = value
-
     def merge_visual_inputs(
         self,
         pixel_values: torch.Tensor | None = None,
@@ -1063,7 +1057,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
             raise ValueError("You cannot specify both images and inputs_embeds at the same time.")
 
         if inputs_embeds is None:
-            inputs_embeds = self.language_model.wte(input_ids)
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
         image_features: torch.FloatTensor | None = None
         if images is not None:
