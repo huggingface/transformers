@@ -87,11 +87,21 @@ class MtpLayerStack(PreTrainedModel):
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
         super().__init__(main_model.config.get_text_config())
         self.num_mtp_layers = num_mtp_layers
-        # Infer the type of the layers based on the main model
-        layer_cls = type(main_model.base_model.layers[0])
+        # For text-only models the decoder stack lives directly on base_model;
+        # for VL models it is nested one level deeper under language_model.
+        text_decoder = main_model.base_model
+        if not hasattr(text_decoder, "layers"):
+            text_decoder = getattr(text_decoder, "language_model", None) or getattr(
+                text_decoder, "text_model", None
+            )
+            if text_decoder is None or not hasattr(text_decoder, "layers"):
+                raise AttributeError(
+                    f"Cannot locate decoder layers under {type(main_model.base_model).__name__}"
+                )
+        layer_cls = type(text_decoder.layers[0])
         norm_cls = next(
             type(module)
-            for name, module in main_model.base_model.layers[0].named_modules()  # type: ignore
+            for name, module in text_decoder.layers[0].named_modules()  # type: ignore
             if "norm" in name
         )
         # Instantiate new mtp layers
@@ -105,7 +115,7 @@ class MtpLayerStack(PreTrainedModel):
         self.embed_tokens = main_model.get_input_embeddings()
         self.shared_head = main_model.lm_head
         # Use the same rotary class (it only has non-persistent buffers)
-        self.rotary_emb = main_model.base_model.rotary_emb
+        self.rotary_emb = text_decoder.rotary_emb
         self.post_init()
 
     def forward(
