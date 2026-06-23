@@ -64,27 +64,27 @@ class Wav2Vec2BertModelTester:
         batch_size=13,
         seq_length=200,  # speech is longer
         is_training=False,
-        hidden_size=16,
-        feature_projection_input_dim=16,
+        hidden_size=32,
+        feature_projection_input_dim=160,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        hidden_dropout_prob=0.1,
-        intermediate_size=20,
+        num_hidden_layers=17,
+        num_attention_heads=4,
+        hidden_dropout_prob=0.0,
+        intermediate_size=64,
         layer_norm_eps=1e-5,
         hidden_act="gelu",
         initializer_range=0.02,
-        mask_time_prob=0.5,
+        mask_time_prob=0.0,
         mask_time_length=2,
-        vocab_size=32,
+        vocab_size=16,
         do_stable_layer_norm=False,
         num_adapter_layers=2,
         adapter_stride=2,
-        tdnn_dim=(32, 32),
-        tdnn_kernel=(5, 3),
+        tdnn_dim=(4, 4),
+        tdnn_kernel=(3, 3),
         tdnn_dilation=(1, 2),
-        xvector_output_dim=32,
+        xvector_output_dim=2,
         position_embeddings_type="relative",
         scope=None,
     ):
@@ -160,6 +160,7 @@ class Wav2Vec2BertModelTester:
             tdnn_dilation=self.tdnn_dilation,
             xvector_output_dim=self.xvector_output_dim,
             position_embeddings_type=position_embeddings_type,
+            output_hidden_size=self.hidden_size,
         )
 
     def create_and_check_model(self, config, input_features, attention_mask):
@@ -408,6 +409,8 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
+
+    model_split_percents = [0.5, 0.8]
 
     pipeline_model_mapping = (
         {
