@@ -782,7 +782,13 @@ class Qwen3_5CausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
     mtp_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when MTP is enabled and `labels` are provided):
         Multi-Token Prediction auxiliary loss. Weighting is left to the trainer.
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
+
+    mtp_loss: torch.FloatTensor | None = None
+    rope_deltas: torch.LongTensor | None = None
 
 
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
