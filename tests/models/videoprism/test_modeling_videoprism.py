@@ -717,14 +717,10 @@ class VideoPrismForVideoClassificationModelTester(VideoPrismVisionModelTester):
         model.eval()
         with torch.no_grad():
             result = model(pixel_values, labels=labels)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.tubelet_size[1], self.tubelet_size[2])
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.loss.shape, torch.Size([]))
         self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.num_labels))
-        self.parent.assertEqual(
-            result.hidden_states.shape, (self.batch_size, num_patches * self.num_frames, self.hidden_size)
-        )
+        self.parent.assertIsNone(result.hidden_states)
+        self.parent.assertIsNone(result.attentions)
 
 
 @require_vision
@@ -759,18 +755,18 @@ class VideoPrismForVideoClassificationTest(VideoPrismModelTest, unittest.TestCas
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    @unittest.skip(reason="VideoPrismForVideoClassification does not expose top-level attentions")
+    @unittest.skip(reason="VideoPrismVisionModel does not record intermediate attentions")
     def test_attention_outputs(self):
         pass
 
     @unittest.skip(
-        reason="VideoPrismForVideoClassification returns a single hidden_states tensor, not layer-wise hidden states"
+        reason="VideoPrismVisionModel does not record intermediate hidden states"
     )
     def test_hidden_states_output(self):
         pass
 
     @unittest.skip(
-        reason="VideoPrismForVideoClassification does not expose common hidden_states/attentions fields for retain-grad checks"
+        reason="VideoPrismVisionModel does not record intermediate hidden states or attentions"
     )
     def test_retain_grad_hidden_states_attentions(self):
         pass
