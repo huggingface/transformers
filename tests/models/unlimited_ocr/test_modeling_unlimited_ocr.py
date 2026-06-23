@@ -155,7 +155,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
 
 @require_torch
 class UnlimitedOcrIntegrationTest(unittest.TestCase):
-    model_id = "baidu/Unlimited-OCR"
+    model_id = "guarin/Unlimited-OCR"
 
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(self.model_id)
