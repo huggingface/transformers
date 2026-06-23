@@ -1380,15 +1380,17 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(r"decode_head\.conv_matting\.", r"decode_head.predictor."),
         ],
-        "UnlimitedOcrModel": [
-            WeightRenaming(r"model\.sam_model", "vision_tower.sam_encoder"),
-            WeightRenaming(r"model\.vision_model", "vision_tower.vision_encoder"),
-            WeightRenaming(r"model\.view_seperator", "view_separator"),
-            WeightRenaming(r"model\.image_newline", "image_newline"),
-            WeightRenaming(r"model\.projector\.layers\.(weight|bias)", r"multi_modal_projector.\1"),
-            WeightRenaming(r"model\.embed_tokens\.", r"language_model.embed_tokens."),
-            WeightRenaming(r"model\.layers\.", r"language_model.layers."),
-            WeightRenaming(r"model\.norm\.", r"language_model.norm."),
+        # TODO: unlimited-ocr instead of unlimited_ocr because hub config has model_type="unlimited-ocr"
+        "unlimited-ocr": [
+            WeightRenaming(r"(^|model\.)sam_model", r"\1vision_tower.sam_encoder"),
+            WeightRenaming(r"(^|model\.)vision_model", r"\1vision_tower.vision_encoder"),
+            WeightRenaming(r"(^|model\.)view_seperator", r"\1view_separator"),
+            WeightRenaming(r"(^|model\.)image_newline", r"\1image_newline"),
+            WeightRenaming(r"(^|model\.)projector\.layers\.weight", r"\1multi_modal_projector.weight"),
+            WeightRenaming(r"(^|model\.)projector\.layers\.bias", r"\1multi_modal_projector.bias"),
+            WeightRenaming(r"(^|model\.)embed_tokens\.", r"\1language_model.embed_tokens."),
+            WeightRenaming(r"(^|model\.)layers\.", r"\1language_model.layers."),
+            WeightRenaming(r"(^|model\.)norm\.", r"\1language_model.norm."),
         ],
         "UnlimitedOcrSamVisionEncoder": [
             WeightRenaming(r"blocks\.(\d+)\.norm1\.", r"layers.\1.layer_norm1."),
