@@ -2690,9 +2690,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # Both are already present -> it means the config is wrong and do not reflect the actual
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
+                    source_param = self.get_parameter(source_param_name)
+                    target_param = self.get_parameter(target_param_name)
+
+                    # Skip check if both are disk offloaded. Tied tensors always
+                    # share the same offload device as per `infer_auto_device_map`
+                    if source_param.device.type == "meta" and target_param.device.type == "meta":
+                        continue
+
                     # If both are present, check if the weights are exactly similar, and only tie in this case
                     # This check is important, as torch `.bin` checkpoints always contain both keys, referencing the same storage
-                    if not torch.equal(self.get_parameter(source_param_name), self.get_parameter(target_param_name)):
+                    if not torch.equal(source_param, target_param):
                         logger.warning(
                             f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
                             f"{target_param_name}, but both are present in the checkpoints with different values, so we will NOT "
@@ -4318,8 +4326,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
-            if len(devices := list(device_map.values())) == 1 and devices[0] == "disk":
-                raise ValueError("Trying to load everything on `disk` which means the model doesn't fit in memory.")
 
         # Finalize model weight initialization
         load_config = LoadStateDictConfig(
@@ -4357,8 +4363,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 **kwargs,
             )
 
-        # If the device_map has more than 1 device: dispatch model with hooks on all devices
-        if device_map is not None and len(set(device_map.values())) > 1:
+        # If the device_map has more than 1 device or disk offloading: dispatch model with hooks
+        if device_map is not None and (len(set(device_map.values())) > 1 or "disk" in set(device_map.values())):
             accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, disk_offload_index, offload_buffers)
 
         if hf_quantizer is not None:
