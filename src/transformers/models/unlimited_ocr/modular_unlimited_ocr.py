@@ -11,15 +11,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...cache_utils import Cache
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...modeling_outputs import BaseModelOutput
+from ...processing_utils import Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..clip.configuration_clip import CLIPVisionConfig
 from ..deepseek_ocr2.configuration_deepseek_ocr2 import (
     DeepseekOcr2Config,
     DeepseekOcr2TextConfig,
     DeepseekOcr2VisionConfig,
 )
+from ..deepseek_ocr2.image_processing_deepseek_ocr2 import DeepseekOcr2ImageProcessor, get_optimal_tiled_canvas
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
     DeepseekOcr2CausalLMOutputWithPast,
     DeepseekOcr2ForConditionalGeneration,
@@ -53,27 +64,187 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
     DeepseekOcr2VisionRMSNorm,
     DeepseekOcr2VisionRotaryEmbedding,
 )
+from ..deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor, DeepseekOcr2ProcessorKwargs
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
 
 
+class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
+    tile_size = 640
+    max_patches = 32
+    model_input_names = ["pixel_values", "num_local_patches", "image_spatial_crop"]
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        size,
+        crop_to_patches: bool,
+        min_patches: int,
+        max_patches: int,
+        tile_size: int,
+        resample,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean,
+        image_std,
+        disable_grouping: bool | None,
+        return_tensors,
+        **kwargs,
+    ) -> BatchFeature:
+        batch_feature = super()._preprocess(
+            images,
+            size=size,
+            crop_to_patches=crop_to_patches,
+            min_patches=min_patches,
+            max_patches=max_patches,
+            tile_size=tile_size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            disable_grouping=disable_grouping,
+            return_tensors=return_tensors,
+            **kwargs,
+        )
+
+        image_spatial_crop = []
+        for image in images:
+            height, width = image.shape[-2:]
+            if crop_to_patches and max(height, width) > tile_size:
+                num_columns, num_rows = get_optimal_tiled_canvas(
+                    (height, width), (tile_size, tile_size), min_patches, max_patches
+                )
+            else:
+                num_columns, num_rows = 1, 1
+            image_spatial_crop.append([num_columns, num_rows])
+        batch_feature["image_spatial_crop"] = torch.tensor(image_spatial_crop, dtype=torch.long)
+        return batch_feature
+
+
+class UnlimitedOcrProcessorKwargs(DeepseekOcr2ProcessorKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+    }
+
+
+class UnlimitedOcrProcessor(DeepseekOcr2Processor):
+    def _expand_image_tokens(
+        self,
+        text: list[TextInput],
+        image_spatial_crop: torch.Tensor,
+        num_local_patches: list[int] | torch.Tensor,
+    ) -> list[str]:
+        size = self.image_processor.size["height"]
+        tile_size = self.image_processor.tile_size
+
+        num_queries_global = math.ceil(size / self.patch_size / self.downsample_ratio)
+        num_queries_local = math.ceil(tile_size / self.patch_size / self.downsample_ratio)
+
+        crop_index = 0
+        for i in range(len(text)):
+            while self.image_token in text[i]:
+                num_columns = int(image_spatial_crop[crop_index][0])
+                num_rows = int(image_spatial_crop[crop_index][1])
+                num_tokens = num_queries_global * (num_queries_global + 1) + 1
+                if int(num_local_patches[crop_index]) > 0:
+                    num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
+                text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_tokens, 1)
+                crop_index += 1
+            text[i] = text[i].replace("<|placeholder|>", self.image_token)
+        return text
+
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        **kwargs: Unpack[UnlimitedOcrProcessorKwargs],
+    ) -> BatchFeature:
+        if images is None:
+            raise ValueError("`images` are expected as arguments to a `UnlimitedOcrProcessor` instance.")
+        if text is None:
+            raise ValueError("`text` is required for `UnlimitedOcrProcessor`. Example: `'<image>\\nFree OCR.'`")
+
+        output_kwargs = self._merge_kwargs(
+            UnlimitedOcrProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        if isinstance(text, str):
+            text = [text]
+        elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
+
+        text = text.copy()  # below lines change text in-place
+
+        image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+        text = self._expand_image_tokens(text, image_inputs["image_spatial_crop"], image_inputs["num_local_patches"])
+
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        return BatchFeature(
+            data={**text_inputs, **image_inputs},
+            tensor_type=return_tensors,
+        )
+
+
+@auto_docstring(checkpoint="baidu/Unlimited-OCR")
+@strict
 class UnlimitedOcrSamVisionConfig(GotOcr2VisionConfig):
-    pass
+    model_type = "unlimited_ocr_sam_vision_model"
+    base_config_key = "sam_config"
 
 
+@auto_docstring(checkpoint="baidu/Unlimited-OCR")
+@strict
 class UnlimitedOcrVisionEncoderConfig(CLIPVisionConfig):
-    pass
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import UnlimitedOcrConfig
+
+    >>> config = UnlimitedOcrConfig()
+    >>> encoder_config = config.vision_config.encoder_config
+    ```"""
+
+    model_type = "unlimited_ocr_vision_encoder"
+    base_config_key = "encoder_config"
 
 
+@auto_docstring(checkpoint="baidu/Unlimited-OCR")
+@strict
 class UnlimitedOcrVisionConfig(DeepseekOcr2VisionConfig):
-    pass
+    model_type = "unlimited_ocr_vision"
+    base_config_key = "vision_config"
+    sub_configs = {
+        "sam_config": UnlimitedOcrSamVisionConfig,
+        "encoder_config": UnlimitedOcrVisionEncoderConfig,
+    }
 
 
+@auto_docstring(checkpoint="baidu/Unlimited-OCR")
+@strict
 class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
-    pass
+    model_type = "unlimited_ocr_text"
+    base_config_key = "text_config"
 
 
+@auto_docstring(checkpoint="baidu/Unlimited-OCR")
+@strict
 class UnlimitedOcrConfig(DeepseekOcr2Config):
-    pass
+    model_type = "unlimited_ocr"
+    sub_configs = {
+        "vision_config": UnlimitedOcrVisionConfig,
+        "text_config": UnlimitedOcrTextConfig,
+    }
 
 
 class UnlimitedOcrModelOutputWithPooling(DeepseekOcr2ModelOutputWithPooling):
@@ -153,7 +324,27 @@ class UnlimitedOcrVisionEncoder(DeepseekOcr2VisionEncoder):
 
 
 class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
-    pass
+    def __init__(self, config: UnlimitedOcrVisionConfig):
+        super().__init__(config)
+        del self.query_768_resolution
+        del self.query_1024_resolution
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        sam_encoder_outputs = self.sam_encoder(pixel_values, **kwargs)
+        vision_encoder_outputs = self.vision_encoder(pixel_values, **kwargs)
+
+        sam_hidden_state = sam_encoder_outputs.last_hidden_state
+        vision_encoder_hidden_state = vision_encoder_outputs.last_hidden_state
+        hidden_state = torch.cat([vision_encoder_hidden_state[:, 1:], sam_hidden_state], dim=1)
+
+        # TODO: How to pass hidden_states and attentions?
+        return BaseModelOutput(
+            last_hidden_state=hidden_state,
+            # hidden_states=encoder_outputs.hidden_states,
+            # attentions=encoder_outputs.attentions,
+        )
 
 
 class UnlimitedOcrTextRotaryEmbedding(DeepseekOcr2TextRotaryEmbedding):
@@ -195,17 +386,243 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
 class UnlimitedOcrModel(DeepseekOcr2Model):
     def __init__(self, config: UnlimitedOcrConfig):
         super().__init__(config)
-        n_embed = 1280
         self.multi_modal_projector = nn.Linear(
-            config.vision_config.sam_config.hidden_size + config.vision_config.encoder_config.hidden_size, n_embed
+            config.vision_config.sam_config.hidden_size + config.vision_config.encoder_config.hidden_size,
+            config.text_config.hidden_size,
         )
-        embed_std = 1 / torch.sqrt(torch.tensor(n_embed, dtype=torch.float32))
-        self.image_newline = nn.Parameter(torch.randn(n_embed) * embed_std)
-        self.view_seperator = nn.Parameter(torch.randn(n_embed) * embed_std)
+        embed_std = 1 / torch.sqrt(torch.tensor(config.text_config.hidden_size, dtype=torch.float32))
+        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size) * embed_std)
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_values_local: torch.FloatTensor | None = None,
+        num_local_patches: list[int] | torch.Tensor | None = None,
+        image_spatial_crop: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> "UnlimitedOcrModelOutputWithPooling":
+        r"""
+        pixel_values_local (`torch.FloatTensor` of shape `(total_patches, 3, height, width)`, *optional*):
+            All local patches flattened across the batch, or `None` if no local views.
+        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
+            Number of local patches per image, e.g. `[6, 0, 4]`.
+        image_spatial_crop (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+            The local crop grid `(num_columns, num_rows)` per image.
+        """
+        # `torch.split` requires `list[int]`, not a Tensor, for per-image variable-length splitting.
+        if isinstance(num_local_patches, torch.Tensor):
+            num_local_patches = num_local_patches.tolist()
+
+        batch_size = pixel_values.shape[0]
+
+        global_vision_outputs = self.vision_tower(pixel_values, **kwargs)
+        global_features = self.multi_modal_projector(global_vision_outputs.last_hidden_state)
+
+        local_outputs = {}
+        if pixel_values_local is not None:
+            local_vision_outputs = self.vision_tower(pixel_values_local, **kwargs)
+            all_local_features = self.multi_modal_projector(local_vision_outputs.last_hidden_state)
+            per_image_local = torch.split(all_local_features, num_local_patches, dim=0)
+            local_outputs = {
+                "local_last_hidden_state": local_vision_outputs.last_hidden_state,
+                "local_hidden_states": local_vision_outputs.hidden_states,
+                "local_attentions": local_vision_outputs.attentions,
+            }
+        else:
+            per_image_local = [None] * batch_size
+
+        hidden_size = global_features.shape[-1]
+        newline = self.image_newline[None, None, :]
+        view_separator = self.view_separator[None, :]
+
+        all_features = []
+        for idx in range(batch_size):
+            num_queries_global = int(global_features.shape[1] ** 0.5)
+            global_grid = global_features[idx].reshape(num_queries_global, num_queries_global, hidden_size)
+            global_grid = torch.cat([global_grid, newline.expand(num_queries_global, 1, hidden_size)], dim=1)
+            global_flat = global_grid.reshape(-1, hidden_size)
+
+            local_features = per_image_local[idx]
+            if local_features is not None and local_features.shape[0] > 0:
+                num_columns, num_rows = int(image_spatial_crop[idx][0]), int(image_spatial_crop[idx][1])
+                num_queries_local = int(local_features.shape[1] ** 0.5)
+                local_grid = local_features.reshape(
+                    num_rows, num_columns, num_queries_local, num_queries_local, hidden_size
+                )
+                local_grid = local_grid.permute(0, 2, 1, 3, 4).reshape(
+                    num_rows * num_queries_local, num_columns * num_queries_local, hidden_size
+                )
+                local_grid = torch.cat(
+                    [local_grid, newline.expand(num_rows * num_queries_local, 1, hidden_size)], dim=1
+                )
+                local_flat = local_grid.reshape(-1, hidden_size)
+                # NOTE: local-then-global ordering matches the reference `forward` (the feature order the weights
+                # were trained on), NOT the token order built by the reference `infer`. Verify against a reference
+                # generation on a cropped image before trusting crop mode.
+                all_features.append(torch.cat([local_flat, global_flat, view_separator], dim=0))
+            else:
+                all_features.append(torch.cat([global_flat, view_separator], dim=0))
+
+        image_features = torch.cat(all_features, dim=0)
+        return UnlimitedOcrModelOutputWithPooling(
+            last_hidden_state=global_vision_outputs.last_hidden_state,
+            pooler_output=image_features,
+            hidden_states=global_vision_outputs.hidden_states,
+            attentions=global_vision_outputs.attentions,
+            **local_outputs,
+        )
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_local: torch.FloatTensor | None = None,
+        num_local_patches: list[int] | torch.Tensor | None = None,
+        image_spatial_crop: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | UnlimitedOcrModelOutputWithPast:
+        r"""
+        pixel_values_local (`torch.FloatTensor`, *optional*):
+            Local patch pixel values of shape `(total_patches, 3, H, W)`.
+        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
+            Number of local patches per image in the batch.
+        image_spatial_crop (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+            The local crop grid `(num_columns, num_rows)` per image.
+        """
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        image_features = None
+        if pixel_values is not None:
+            image_features = self.get_image_features(
+                pixel_values, pixel_values_local, num_local_patches, image_spatial_crop, return_dict=True
+            ).pooler_output
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        outputs = self.language_model(
+            input_ids=None,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        return UnlimitedOcrModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features,
+        )
 
 
 class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
-    pass
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_local: torch.FloatTensor | None = None,
+        num_local_patches: list[int] | torch.Tensor | None = None,
+        image_spatial_crop: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | UnlimitedOcrCausalLMOutputWithPast:
+        r"""
+        pixel_values_local (`torch.FloatTensor`, *optional*):
+            Local patch pixel values of shape `(total_patches, 3, H, W)`.
+        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
+            Number of local patches per image in the batch.
+        image_spatial_crop (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+            The local crop grid `(num_columns, num_rows)` per image.
+        """
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            pixel_values_local=pixel_values_local,
+            num_local_patches=num_local_patches,
+            image_spatial_crop=image_spatial_crop,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        hidden_states = hidden_states[:, slice_indices, :]
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                **kwargs,
+            )
+
+        return UnlimitedOcrCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        pixel_values_local=None,
+        num_local_patches=None,
+        image_spatial_crop=None,
+        attention_mask=None,
+        logits_to_keep=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_values_local=pixel_values_local,
+            num_local_patches=num_local_patches,
+            attention_mask=attention_mask,
+            logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            model_inputs["image_spatial_crop"] = image_spatial_crop
+
+        return model_inputs
 
 
 __all__ = [
@@ -215,8 +632,10 @@ __all__ = [
     "UnlimitedOcrVisionEncoderConfig",
     "UnlimitedOcrSamVisionConfig",
     "UnlimitedOcrForConditionalGeneration",
+    "UnlimitedOcrImageProcessor",
     "UnlimitedOcrModel",
     "UnlimitedOcrPreTrainedModel",
+    "UnlimitedOcrProcessor",
     "UnlimitedOcrTextModel",
     "UnlimitedOcrTextPreTrainedModel",
     "UnlimitedOcrVisionModel",

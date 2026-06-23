@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -25,25 +24,25 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
+@auto_docstring(checkpoint="baidu/Unlimited-OCR")
 @strict
 class UnlimitedOcrSamVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
-        The number of output channels in the SAM neck.
+        Dimensionality of the output channels in the Patch Encoder.
+    use_abs_pos (`bool`, *optional*, defaults to `True`):
+        Whether to use absolute position embedding.
+    use_rel_pos (`bool`, *optional*, defaults to `True`):
+        Whether to use relative position embedding.
     window_size (`int`, *optional*, defaults to 14):
-        Window size for windowed attention layers.
+        Window size for relative position.
     global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
-        Indices of encoder layers that use global (non-windowed) attention.
-    mlp_dim (`int`, *optional*):
-        Dimensionality of the MLP layer in each vision encoder block. Defaults to `hidden_size * mlp_ratio`.
-    downsample_channels (`list[int]`, *optional*):
-        The channel dimensions for the multi-scale downsampling neck layers. Defaults to `[512, 896]`.
+        The indexes of the global attention layers.
+    mlp_dim (`int`, *optional*, defaults to 3072):
+        The dimensionality of the MLP layer in the Transformer encoder.
     """
 
     base_config_key = "sam_config"
-    model_type = "unlimited_ocr_sam_vision_model"
-
     hidden_size: int = 768
     output_channels: int = 256
     num_hidden_layers: int = 12
@@ -56,24 +55,15 @@ class UnlimitedOcrSamVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     initializer_range: float = 1e-10
     qkv_bias: bool = True
-    mlp_ratio: float = 4.0
     use_abs_pos: bool = True
     use_rel_pos: bool = True
     window_size: int = 14
     global_attn_indexes: list[int] | tuple[int, ...] = (2, 5, 8, 11)
-    mlp_dim: int | None = None
-
-    downsample_channels: list[int] | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.downsample_channels is None:
-            self.downsample_channels = [512, 896]
-        self.mlp_dim = int(self.hidden_size * self.mlp_ratio) if self.mlp_dim is None else self.mlp_dim
-        self.scale = self.hidden_size // 2
-        super().__post_init__(**kwargs)
+    mlp_dim: int = 3072
+    model_type = "unlimited_ocr_sam_vision_model"
 
 
-@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
+@auto_docstring(checkpoint="baidu/Unlimited-OCR")
 @strict
 class UnlimitedOcrVisionEncoderConfig(PreTrainedConfig):
     r"""
@@ -86,66 +76,33 @@ class UnlimitedOcrVisionEncoderConfig(PreTrainedConfig):
     >>> encoder_config = config.vision_config.encoder_config
     ```"""
 
-    model_type = "unlimited_ocr_encoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
-
-    # Default tensor parallel plan for base model `UnlimitedOcrVisionEncoder`
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    vocab_size: int = 151936
-    hidden_size: int = 4096
-    intermediate_size: int = 22016
-    num_hidden_layers: int = 32
-    num_attention_heads: int = 32
-    num_key_value_heads: int | None = 32
-    hidden_act: str = "silu"
-    max_position_embeddings: int = 32768
-    initializer_range: float = 0.02
-    rms_norm_eps: float = 1e-6
-    use_cache: bool = True
-    tie_word_embeddings: bool = False
-    rope_parameters: RopeParameters | dict | None = None
-    use_sliding_window: bool = False
-    sliding_window: int | None = 4096
-    max_window_layers: int = 28
-    layer_types: list[str] | None = None
-    attention_dropout: float | int = 0.0
-    pad_token_id: int | None = None
-    bos_token_id: int | None = None
-    eos_token_id: int | list[int] | None = None
-
+    model_type = "unlimited_ocr_vision_encoder"
     base_config_key = "encoder_config"
 
-    def __post_init__(self, **kwargs):
-        self.sliding_window = self.sliding_window if self.use_sliding_window else None
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
+    hidden_size: int = 768
+    intermediate_size: int = 3072
+    projection_dim: int = 512
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] | None = 224
+    patch_size: int | list[int] | tuple[int, int] | None = 32
+    hidden_act: str = "quick_gelu"
+    layer_norm_eps: float = 1e-5
+    attention_dropout: int | float | None = 0.0
+    initializer_range: float = 0.02
+    initializer_factor: float = 1.0
 
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if self.sliding_window is not None and i >= self.max_window_layers
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-
-        super().__post_init__(**kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
 
 
-@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
+@auto_docstring(checkpoint="baidu/Unlimited-OCR")
 @strict
 class UnlimitedOcrVisionConfig(PreTrainedConfig):
     r"""
@@ -179,7 +136,7 @@ class UnlimitedOcrVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
+@auto_docstring(checkpoint="baidu/Unlimited-OCR")
 @strict
 class UnlimitedOcrTextConfig(PreTrainedConfig):
     r"""
@@ -245,7 +202,6 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
     topk_method: str | None = "greedy"
     num_experts_per_tok: int | None = None
     moe_intermediate_size: int = 1407
-
     base_config_key = "text_config"
     mlp_layer_types: list[str] | None = None
 
@@ -264,7 +220,7 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
+@auto_docstring(checkpoint="baidu/Unlimited-OCR")
 @strict
 class UnlimitedOcrConfig(PreTrainedConfig):
     r"""

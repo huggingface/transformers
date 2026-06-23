@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import collections
 import math
 from collections.abc import Callable
@@ -973,35 +972,23 @@ class UnlimitedOcrVisionModel(UnlimitedOcrPreTrainedModel):
         super().__init__(config)
         self.sam_encoder = UnlimitedOcrSamVisionEncoder(config.sam_config)
         self.vision_encoder = UnlimitedOcrVisionEncoder(config.encoder_config)
-
-        # Resolution-specific learnable queries
-        self.query_768_resolution = nn.Embedding(144, config.encoder_config.hidden_size)  # 12x12 for 768px
-        self.query_1024_resolution = nn.Embedding(256, config.encoder_config.hidden_size)  # 16x16 for 1024px
         self.post_init()
 
     @can_return_tuple
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         sam_encoder_outputs = self.sam_encoder(pixel_values, **kwargs)
-        hidden_states = sam_encoder_outputs.last_hidden_state.flatten(2).transpose(1, 2)
-        bsz, num_patches, _ = hidden_states.shape
+        vision_encoder_outputs = self.vision_encoder(pixel_values, **kwargs)
 
-        queries = self.query_768_resolution.weight if num_patches <= 144 else self.query_1024_resolution.weight
-        queries = queries.unsqueeze(0).expand(bsz, -1, -1)
-        combined = torch.cat([hidden_states, queries], dim=1)
+        sam_hidden_state = sam_encoder_outputs.last_hidden_state
+        vision_encoder_hidden_state = vision_encoder_outputs.last_hidden_state
+        hidden_state = torch.cat([vision_encoder_hidden_state[:, 1:], sam_hidden_state], dim=1)
 
-        encoder_outputs = self.vision_encoder(
-            inputs_embeds=combined,
-            num_patches=num_patches,
-            **kwargs,
-        )
-
-        query_features = encoder_outputs.last_hidden_state[:, num_patches:, :]
-
+        # TODO: How to pass hidden_states and attentions?
         return BaseModelOutput(
-            last_hidden_state=query_features,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            last_hidden_state=hidden_state,
+            # hidden_states=encoder_outputs.hidden_states,
+            # attentions=encoder_outputs.attentions,
         )
 
 
@@ -1423,7 +1410,8 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
 
         self.vision_tower = UnlimitedOcrVisionModel(config.vision_config)
         self.multi_modal_projector = nn.Linear(
-            config.vision_config.encoder_config.hidden_size, config.text_config.hidden_size
+            config.vision_config.sam_config.hidden_size + config.vision_config.encoder_config.hidden_size,
+            config.text_config.hidden_size,
         )
 
         self.vocab_size = config.text_config.vocab_size
@@ -1432,6 +1420,8 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
 
         # Learnable separator between local and global views (initialized in `_init_weights`).
         self.view_separator = nn.Parameter(torch.empty(config.text_config.hidden_size))
+        embed_std = 1 / torch.sqrt(torch.tensor(config.text_config.hidden_size, dtype=torch.float32))
+        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size) * embed_std)
         self.post_init()
 
     @can_return_tuple
@@ -1441,15 +1431,18 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
         pixel_values: torch.FloatTensor,
         pixel_values_local: torch.FloatTensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
+        image_spatial_crop: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> "UnlimitedOcrModelOutputWithPooling":
         r"""
         pixel_values_local (`torch.FloatTensor` of shape `(total_patches, 3, height, width)`, *optional*):
             All local patches flattened across the batch, or `None` if no local views.
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image, e.g. `[6, 0, 4]`.
+        image_spatial_crop (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+            The local crop grid `(num_columns, num_rows)` per image.
         """
-        # torch.split requires list[int], not Tensor, for per-image variable-length splitting
+        # `torch.split` requires `list[int]`, not a Tensor, for per-image variable-length splitting.
         if isinstance(num_local_patches, torch.Tensor):
             num_local_patches = num_local_patches.tolist()
 
@@ -1471,16 +1464,37 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
         else:
             per_image_local = [None] * batch_size
 
-        all_features = []
-        view_sep = self.view_separator.to(global_features.device).unsqueeze(0)
-        for idx in range(batch_size):
-            global_flat = global_features[idx].reshape(-1, global_features.shape[-1])
+        hidden_size = global_features.shape[-1]
+        newline = self.image_newline[None, None, :]
+        view_separator = self.view_separator[None, :]
 
-            if per_image_local[idx] is not None:
-                local_flat = per_image_local[idx].reshape(-1, per_image_local[idx].shape[-1])
-                all_features.append(torch.cat([local_flat, global_flat, view_sep], dim=0))
+        all_features = []
+        for idx in range(batch_size):
+            num_queries_global = int(global_features.shape[1] ** 0.5)
+            global_grid = global_features[idx].reshape(num_queries_global, num_queries_global, hidden_size)
+            global_grid = torch.cat([global_grid, newline.expand(num_queries_global, 1, hidden_size)], dim=1)
+            global_flat = global_grid.reshape(-1, hidden_size)
+
+            local_features = per_image_local[idx]
+            if local_features is not None and local_features.shape[0] > 0:
+                num_columns, num_rows = int(image_spatial_crop[idx][0]), int(image_spatial_crop[idx][1])
+                num_queries_local = int(local_features.shape[1] ** 0.5)
+                local_grid = local_features.reshape(
+                    num_rows, num_columns, num_queries_local, num_queries_local, hidden_size
+                )
+                local_grid = local_grid.permute(0, 2, 1, 3, 4).reshape(
+                    num_rows * num_queries_local, num_columns * num_queries_local, hidden_size
+                )
+                local_grid = torch.cat(
+                    [local_grid, newline.expand(num_rows * num_queries_local, 1, hidden_size)], dim=1
+                )
+                local_flat = local_grid.reshape(-1, hidden_size)
+                # NOTE: local-then-global ordering matches the reference `forward` (the feature order the weights
+                # were trained on), NOT the token order built by the reference `infer`. Verify against a reference
+                # generation on a cropped image before trusting crop mode.
+                all_features.append(torch.cat([local_flat, global_flat, view_separator], dim=0))
             else:
-                all_features.append(torch.cat([global_flat, view_sep], dim=0))
+                all_features.append(torch.cat([global_flat, view_separator], dim=0))
 
         image_features = torch.cat(all_features, dim=0)
         return UnlimitedOcrModelOutputWithPooling(
@@ -1522,6 +1536,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         pixel_values_local: torch.FloatTensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
+        image_spatial_crop: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -1534,6 +1549,8 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
             Local patch pixel values of shape `(total_patches, 3, H, W)`.
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image in the batch.
+        image_spatial_crop (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+            The local crop grid `(num_columns, num_rows)` per image.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1541,7 +1558,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
         image_features = None
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values, pixel_values_local, num_local_patches, return_dict=True
+                pixel_values, pixel_values_local, num_local_patches, image_spatial_crop, return_dict=True
             ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
@@ -1615,6 +1632,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Generati
         pixel_values: torch.FloatTensor | None = None,
         pixel_values_local: torch.FloatTensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
+        image_spatial_crop: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -1629,12 +1647,15 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Generati
             Local patch pixel values of shape `(total_patches, 3, H, W)`.
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image in the batch.
+        image_spatial_crop (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+            The local crop grid `(num_columns, num_rows)` per image.
         """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             pixel_values_local=pixel_values_local,
             num_local_patches=num_local_patches,
+            image_spatial_crop=image_spatial_crop,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1674,6 +1695,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Generati
         pixel_values=None,
         pixel_values_local=None,
         num_local_patches=None,
+        image_spatial_crop=None,
         attention_mask=None,
         logits_to_keep=None,
         is_first_iteration=False,
@@ -1683,6 +1705,9 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Generati
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_values_local=pixel_values_local,
+            num_local_patches=num_local_patches,
             attention_mask=attention_mask,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
@@ -1690,9 +1715,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Generati
         )
 
         if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_local"] = pixel_values_local
-            model_inputs["num_local_patches"] = num_local_patches
+            model_inputs["image_spatial_crop"] = image_spatial_crop
 
         return model_inputs
 
