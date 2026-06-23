@@ -1439,7 +1439,7 @@ def _build_checkpoint_conversion_mapping():
             #     target_patterns="mlp.experts.down_proj",
             #     operations=[MergeModulelist(dim=0)],
             # ),
-        ]
+        ],
     }
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()

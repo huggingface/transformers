@@ -295,8 +295,9 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
             # mask over generated tokens, while the image/prompt prefill is always retained.
             self.layer_types = ["full_attention"] * self.num_hidden_layers
         if self.mlp_layer_types is None:
-            # TODO: double check
-            self.mlp_layer_types = ["dense"] * self.num_hidden_layers
+            self.mlp_layer_types = [
+                "sparse" if layer_idx >= 1 else "dense" for layer_idx in range(self.num_hidden_layers)
+            ]
         super().__post_init__(**kwargs)
 
 
