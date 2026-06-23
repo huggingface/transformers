@@ -1960,6 +1960,63 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
+    @overload
+    def apply_chat_template(
+        self,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        chat_template: str | None = None,
+        tools: list[dict] | None = None,
+        documents: list[dict[str, str]] | None = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool | str = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenize: Literal[False] = False,
+        return_tensors: str | TensorType | None = None,
+        return_dict: bool = False,
+        load_audio_from_video: bool = False,
+        processor_kwargs: dict | None = None,
+        **kwargs,
+    ) -> str:
+        ...
+
+    @overload
+    def apply_chat_template(
+        self,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        chat_template: str | None = None,
+        tools: list[dict] | None = None,
+        documents: list[dict[str, str]] | None = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool | str = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenize: Literal[True],
+        return_tensors: str | TensorType | None = None,
+        return_dict: Literal[False] = False,
+        load_audio_from_video: bool = False,
+        processor_kwargs: dict | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        ...
+
+    @overload
+    def apply_chat_template(
+        self,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        chat_template: str | None = None,
+        tools: list[dict] | None = None,
+        documents: list[dict[str, str]] | None = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool | str = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenize: Literal[True],
+        return_tensors: str | TensorType | None = None,
+        return_dict: Literal[True],
+        load_audio_from_video: bool = False,
+        processor_kwargs: dict | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        ...
+
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
@@ -1975,7 +2032,7 @@ class ProcessorMixin(PushToHubMixin):
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
         **kwargs,
-    ) -> str:
+    ) -> str | torch.Tensor | BatchFeature:
         """
         Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
         conversations to turn them into a single tokenizable string.
