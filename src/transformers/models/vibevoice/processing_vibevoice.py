@@ -66,9 +66,6 @@ class VibeVoiceProcessor(ProcessorMixin):
             The token used to indicate to continue generating audio.
     """
 
-    feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
-    tokenizer_class = "Qwen2TokenizerFast"
-
     def __init__(
         self,
         feature_extractor,

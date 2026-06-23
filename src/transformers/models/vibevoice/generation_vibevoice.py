@@ -80,10 +80,21 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         - `num_diffusion_steps`: Number of diffusion steps to use during generation of each audio chunk.
         """
 
+        # Pop VibeVoice-specific kwargs BEFORE calling super() to prevent the base class from
+        # treating them as conflicting generation-related arguments and emitting a deprecation warning.
+        noise_scheduler = kwargs.pop("noise_scheduler", None)
+        monitor_progress = kwargs.pop("monitor_progress", None)
+        num_diffusion_steps = kwargs.pop("num_diffusion_steps", None)
+        max_new_tokens = kwargs.pop("max_new_tokens", None)
+
         generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
 
-        # Extract VibeVoice noise scheduler
-        noise_scheduler = model_kwargs.pop("noise_scheduler", kwargs.pop("noise_scheduler", None))
+        if max_new_tokens is not None:
+            generation_config.max_new_tokens = max_new_tokens
+
+        # Fall back to value already set on generation_config (e.g. model.generation_config.noise_scheduler = ...)
+        if noise_scheduler is None:
+            noise_scheduler = getattr(generation_config, "noise_scheduler", None)
         if noise_scheduler is None:
             raise ValueError(
                 "VibeVoice generation requires a `noise_scheduler` to be provided, e.g., "
@@ -99,10 +110,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 "generation. It must implement `set_timesteps` and `step` methods, and have a `timesteps` attribute."
             )
         generation_config.noise_scheduler = noise_scheduler
-        if "monitor_progress" in model_kwargs:
-            generation_config.monitor_progress = model_kwargs.pop("monitor_progress")
-        if "num_diffusion_steps" in model_kwargs:
-            generation_config.num_diffusion_steps = model_kwargs.pop("num_diffusion_steps")
+        if monitor_progress is not None:
+            generation_config.monitor_progress = monitor_progress
+        if num_diffusion_steps is not None:
+            generation_config.num_diffusion_steps = num_diffusion_steps
         return generation_config, model_kwargs
 
     def _sample(

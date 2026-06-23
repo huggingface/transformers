@@ -13,13 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-06-18.*
+*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-06-23.*
 
 
 # VibeVoice
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
@@ -68,12 +69,12 @@ pip install soundfile   # for saving audio
 ### Loading the model
 
 ```python
-from transformers import AutoProcessor, VibeVoiceForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 model_id = "bezzam/VibeVoice-1.5B-hf"
 # model_id = "bezzam/VibeVoice-7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceForConditionalGeneration.from_pretrained(model_id)
+model = AutoModelForTextToWaveform.from_pretrained(model_id)
 ```
 
 ### Text-to-speech (TTS)
@@ -81,7 +82,7 @@ model = VibeVoiceForConditionalGeneration.from_pretrained(model_id)
 ```python
 import os
 import diffusers
-from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
+from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
 
 model_id = "bezzam/VibeVoice-1.5B-hf"
 # model_id = "bezzam/VibeVoice-7B-hf"
@@ -90,8 +91,7 @@ set_seed(42)  # for deterministic results
 
 # Load model
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceForConditionalGeneration.from_pretrained(model_id, device_map="auto")
-sampling_rate = processor.feature_extractor.sampling_rate
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 # Prepare input
 chat_template = [{"role": "0", "content": [{"type": "text", "text": text}]}]
@@ -106,7 +106,8 @@ noise_scheduler = diffusers.DPMSolverMultistepScheduler(
     beta_schedule="squaredcos_cap_v2",
     prediction_type="v_prediction",
 )
-audio = model.generate(**inputs, noise_scheduler=noise_scheduler)
+model.generation_config.noise_scheduler = noise_scheduler
+audio = model.generate(**inputs)
 
 # Save to file
 fn = f"{os.path.basename(model_id)}_tts.wav"
@@ -123,7 +124,7 @@ A url (`url`), local path (`path`), or loaded audio array (`audio`) can be provi
 ```python
 import os
 import diffusers
-from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
+from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
 
 model_id = "bezzam/VibeVoice-1.5B-hf"
 # model_id = "bezzam/VibeVoice-7B-hf"
@@ -132,7 +133,7 @@ set_seed(42)  # for deterministic results
 
 # Load model
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 sampling_rate = processor.feature_extractor.sampling_rate
 
 # Prepare input
@@ -152,7 +153,6 @@ inputs = processor.apply_chat_template(
     chat_template,
     tokenize=True,
     return_dict=True,
-    sampling_rate=sampling_rate,
 ).to(model.device, model.dtype)
 
 # Generate!
@@ -160,7 +160,8 @@ noise_scheduler = diffusers.DPMSolverMultistepScheduler(
     beta_schedule="squaredcos_cap_v2",
     prediction_type="v_prediction",
 )
-audio = model.generate(**inputs, noise_scheduler=noise_scheduler)
+model.generation_config.noise_scheduler = noise_scheduler
+audio = model.generate(**inputs)
 
 # Save to file
 fn = f"{os.path.basename(model_id)}_tts_clone.wav"
@@ -181,7 +182,7 @@ import time
 import diffusers
 import torch
 from tqdm import tqdm
-from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
+from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
 
 model_id = "bezzam/VibeVoice-1.5B-hf"
 # model_id = "bezzam/VibeVoice-7B-hf"
@@ -238,11 +239,10 @@ chat_template = [
 
 # Load model
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceForConditionalGeneration.from_pretrained(model_id, device_map="auto")
-sampling_rate = processor.feature_extractor.sampling_rate
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 # prepare inputs
-inputs = processor.apply_chat_template(chat_template, tokenize=True, return_dict=True, sampling_rate=sampling_rate).to(
+inputs = processor.apply_chat_template(chat_template, tokenize=True, return_dict=True).to(
     model.device, model.dtype
 )
 
@@ -251,6 +251,9 @@ noise_scheduler = diffusers.DPMSolverMultistepScheduler(
     beta_schedule="squaredcos_cap_v2",
     prediction_type="v_prediction",
 )
+model.generation_config.noise_scheduler = noise_scheduler
+if max_new_tokens is not None:
+    model.generation_config.max_new_tokens = max_new_tokens
 start_time = time.time()
 completed_samples = set()
 with tqdm(desc="Generating") as pbar:
@@ -271,9 +274,7 @@ with tqdm(desc="Generating") as pbar:
 
     audio = model.generate(
         **inputs,
-        max_new_tokens=max_new_tokens,
         monitor_progress=monitor_progress,
-        noise_scheduler=noise_scheduler,
     )
 generation_time = time.time() - start_time
 print(f"Generation time: {generation_time:.2f} seconds")
@@ -294,7 +295,7 @@ import time
 import diffusers
 import torch
 from tqdm import tqdm
-from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
+from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
 
 model_id = "bezzam/VibeVoice-1.5B-hf"
 # model_id = "bezzam/VibeVoice-7B-hf"
@@ -397,15 +398,13 @@ chat_template = [
 
 # Load model
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceForConditionalGeneration.from_pretrained(model_id, device_map="auto")
-sampling_rate = processor.feature_extractor.sampling_rate
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 # prepare inputs
 inputs = processor.apply_chat_template(
     chat_template,
     return_dict=True,
     tokenize=True,
-    sampling_rate=sampling_rate,
 ).to(model.device, model.dtype)
 
 # Generate audio with a callback to track progress
@@ -413,6 +412,9 @@ noise_scheduler = diffusers.DPMSolverMultistepScheduler(
     beta_schedule="squaredcos_cap_v2",
     prediction_type="v_prediction",
 )
+model.generation_config.noise_scheduler = noise_scheduler
+if max_new_tokens is not None:
+    model.generation_config.max_new_tokens = max_new_tokens
 start_time = time.time()
 completed_samples = set()
 with tqdm(desc="Generating") as pbar:
@@ -433,9 +435,7 @@ with tqdm(desc="Generating") as pbar:
 
     audio = model.generate(
         **inputs,
-        max_new_tokens=max_new_tokens,
         monitor_progress=monitor_progress,
-        noise_scheduler=noise_scheduler,
     )
 generation_time = time.time() - start_time
 print(f"Generation time: {generation_time:.2f} seconds")
@@ -497,7 +497,7 @@ VibeVoice can be trained with the loss outputted by the model.
 
 ```python
 import diffusers
-from transformers import AutoProcessor, VibeVoiceForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 
 model_id = "bezzam/VibeVoice-1.5B-hf"
@@ -505,7 +505,7 @@ model_id = "bezzam/VibeVoice-1.5B-hf"
 
 # Load model and processor
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 model.train()
 
 # Prepare batch of 2
@@ -549,7 +549,6 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     output_labels=True,
-    sampling_rate=processor.feature_extractor.sampling_rate,
 ).to(model.device, model.dtype)
 
 # Forward pass
@@ -572,32 +571,32 @@ print(f"Total loss: {total_loss.item():.4f}")
 total_loss.backward()
 ```
 
-### Torch compile (2x speed-up on A100)
+### Torch compile (~2x speed-up)
 
-The model can be compiled for faster inference/training.
+The model can be compiled with `torch.compile` for faster inference. A few warmup runs are needed before the compiled model reaches full speed.
+
+On an A100 with batch size 4, we observed a 1.9x speed-up between compiled vs. non-compiled inference, see [this script](https://gist.github.com/ebezzam/c45b9fdee65f3029e17d566e30c59399).
 
 ```python
 import time
+
 import diffusers
 import torch
-from transformers import AutoProcessor, VibeVoiceForConditionalGeneration
-
+from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 model_id = "bezzam/VibeVoice-1.5B-hf"
 # model_id = "bezzam/VibeVoice-7B-hf"
 num_warmup = 5
-num_runs = 10
 
 torch.set_float32_matmul_precision("high")
 
 # Load processor + model
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceForConditionalGeneration.from_pretrained(
-    model_id,
-    torch_dtype=torch.bfloat16,
+model = AutoModelForTextToWaveform.from_pretrained(
+    model_id, dtype=torch.bfloat16,
 ).to("cuda")
 
-# Prepare static inputs
+# Prepare inputs
 chat_template = [
     [
         {
@@ -606,7 +605,7 @@ chat_template = [
                 {"type": "text", "text": "VibeVoice is a novel framework for generating expressive audio."},
                 {
                     "type": "audio",
-                    "path": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
+                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
                 },
             ],
         }
@@ -616,7 +615,6 @@ inputs = processor.apply_chat_template(
     chat_template,
     tokenize=True,
     return_dict=True,
-    sampling_rate=processor.feature_extractor.sampling_rate,
 ).to("cuda", torch.bfloat16)
 
 noise_scheduler = diffusers.DPMSolverMultistepScheduler(
@@ -624,49 +622,19 @@ noise_scheduler = diffusers.DPMSolverMultistepScheduler(
     prediction_type="v_prediction",
 )
 
-# Benchmark without compile
-print("Warming up without compile...")
-with torch.no_grad():
-    for _ in range(num_warmup):
-        _ = model(**inputs, noise_scheduler=noise_scheduler)
-torch.cuda.synchronize()
-
-print("\n=== Benchmarking without torch.compile ===")
-torch.cuda.synchronize()
-start = time.time()
-with torch.no_grad():
-    for _ in range(num_runs):
-        _ = model(**inputs, noise_scheduler=noise_scheduler)
-torch.cuda.synchronize()
-
-no_compile_time = (time.time() - start) / num_runs
-print(f"Average inference time without compile: {no_compile_time:.4f}s")
-
 # Compile the model
-print("\nApplying torch.compile...")
 model = torch.compile(model)
 
-print("Warming up compiled model...")
+# Warmup (required for torch.compile to reach full speed)
+print("Warming up...")
+warmup_start = time.time()
 with torch.no_grad():
     for _ in range(num_warmup):
         _ = model(**inputs, noise_scheduler=noise_scheduler)
 torch.cuda.synchronize()
-
-print("\n=== Benchmarking with torch.compile ===")
-torch.cuda.synchronize()
-start = time.time()
-with torch.no_grad():
-    for _ in range(num_runs):
-        _ = model(**inputs, noise_scheduler=noise_scheduler)
-torch.cuda.synchronize()
-
-compile_time = (time.time() - start) / num_runs
-print(f"Average inference time with compile: {compile_time:.4f}s")
-
-speedup = no_compile_time / compile_time
-print(f"\n✓ Speedup: {speedup:.2f}x faster")
+print(f"Warmup complete in {time.time() - warmup_start:.2f}s.")
+# Warmup complete in 16.41s.
 ```
-
 
 ## VibeVoiceConfig
 
@@ -686,8 +654,3 @@ print(f"\n✓ Speedup: {speedup:.2f}x faster")
 ## VibeVoiceModel
 
 [[autodoc]] VibeVoiceModel
-
-## VibeVoiceSemanticTokenizerModel
-
-[[autodoc]] VibeVoiceSemanticTokenizerModel
-

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
 
+import copy
 from typing import Any, TypedDict, overload
 
 from ..audio_utils import AudioInput
@@ -171,12 +172,17 @@ class TextToAudioPipeline(Pipeline):
 
         preprocessor = self.processor if self.processor is not None else self.tokenizer
         if isinstance(text, Chat):
+            # Processor kwargs are passed separately from Jinja2 template kwargs.
+            processor_kwargs = kwargs.pop("processor_kwargs", None) or {}
+            chat_template_kwargs = {
+                "tokenize": True,
+                "return_dict": True,
+                "processor_kwargs": processor_kwargs,
+                **kwargs,
+            }
             output = preprocessor.apply_chat_template(
                 text.messages,
-                tokenize=True,
-                return_dict=True,
-                sampling_rate=self.sampling_rate,
-                **kwargs,
+                **chat_template_kwargs,
             )
         else:
             # Add speaker ID if needed and user didn't insert at start of text
@@ -202,14 +208,28 @@ class TextToAudioPipeline(Pipeline):
             generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
 
             # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" not in generate_kwargs:
-                generate_kwargs["generation_config"] = self.generation_config
-
-            # generate_kwargs get priority over forward_params
-            forward_params.update(generate_kwargs)
+            if "generation_config" in generate_kwargs:
+                generation_config = generate_kwargs.pop("generation_config")
+            else:
+                generation_config = copy.deepcopy(self.generation_config)
 
             # ensure dict output to facilitate postprocessing
-            forward_params.update({"return_dict_in_generate": True})
+            generation_config.return_dict_in_generate = True
+
+            # priotiize max_new_tokens to avoid max_length warning
+            if generation_config.max_new_tokens is not None:
+                generation_config.max_length = None
+
+            # Merge generate_kwargs into generation_config where possible to avoid the
+            # deprecation warning about passing generation_config alongside generation params
+            model_specific_kwargs = {}
+            for k, v in generate_kwargs.items():
+                if hasattr(generation_config, k):
+                    setattr(generation_config, k, v)
+                else:
+                    model_specific_kwargs[k] = v
+            forward_params["generation_config"] = generation_config
+            forward_params.update(model_specific_kwargs)
 
             if self.model.config.model_type in ["csm"]:
                 # NOTE (ebezzam): CSM does not have the audio tokenizer in the processor therefore `output_audio=True`
@@ -280,6 +300,7 @@ class TextToAudioPipeline(Pipeline):
         preprocess_params=None,
         forward_params=None,
         generate_kwargs=None,
+        processor_kwargs=None,
     ):
         if getattr(self, "assistant_model", None) is not None:
             generate_kwargs["assistant_model"] = self.assistant_model
@@ -294,6 +315,8 @@ class TextToAudioPipeline(Pipeline):
 
         if preprocess_params is None:
             preprocess_params = {}
+        if processor_kwargs is not None:
+            preprocess_params["processor_kwargs"] = processor_kwargs
         postprocess_params = {}
 
         return preprocess_params, params, postprocess_params

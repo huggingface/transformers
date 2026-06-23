@@ -375,13 +375,10 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
     logger.info("Full model checkpoint loaded successfully")
 
     # Set default generation config
-    vibevoice_model.generation_config._from_model_config = False
     if "7B" in checkpoint:
         vibevoice_model.generation_config.max_new_tokens = 20250
-        vibevoice_model.generation_config.max_length = 20250
     else:
         vibevoice_model.generation_config.max_new_tokens = 40500
-        vibevoice_model.generation_config.max_length = 40500
     vibevoice_model.generation_config.do_sample = False
     vibevoice_model.generation_config.guidance_scale = 1.3
     vibevoice_model.generation_config.noise_scheduler_class = "DPMSolverMultistepScheduler"
