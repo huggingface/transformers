@@ -42,6 +42,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "NemotronAsrStreamingEncoderConfig": ["num_mel_bins"],  # Used via the `subsampling_out_hidden_size` property
     "Gemma4UnifiedAudioConfig": ["audio_embed_dim"],  # Used as meta data for other attributes/properties
     "Gemma4UnifiedVisionConfig": [
         "patch_size",
