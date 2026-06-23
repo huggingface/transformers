@@ -301,36 +301,44 @@ class TestAddNewModelLike(unittest.TestCase):
 
             -->
 
-
             # MyTest
 
-            ## Overview
+            [MyTest](<PAPER_URL>) <INTRO_SENTENCES>
 
-            The MyTest model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-            <INSERT SHORT SUMMARY HERE>
+            You can find all the [MyTest] checkpoints under the [<ORG>](<HUB_CHECKPOINT_URL>) collection.
 
-            The abstract from the paper is the following:
+            ## Quickstart
 
-            <INSERT PAPER ABSTRACT HERE>
+            <hfoptions id="usage">
+            <hfoption id="Pipeline">
 
-            Tips:
+            ```py
+            from transformers import pipeline
 
-            <INSERT TIPS ABOUT MODEL HERE>
+            pipe = pipeline(task="<TASK>", model="<CHECKPOINT_ID>", device=0)
+            pipe("<MINIMAL_INPUT>")
+            ```
 
-            This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-            The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+            </hfoption>
+            <hfoption id="AutoModel">
 
-            ## Usage examples
+            ```py
+            from transformers import AutoTokenizer, <AUTOMODEL_CLASS>
 
-            <INSERT SOME NICE EXAMPLES HERE>
+            tokenizer = AutoTokenizer.from_pretrained("<CHECKPOINT_ID>")
+            model = <AUTOMODEL_CLASS>.from_pretrained("<CHECKPOINT_ID>", device_map="auto")
+
+            inputs = tokenizer("<MINIMAL_INPUT>", return_tensors="pt").to(model.device)
+            outputs = model(**inputs)
+            print(<OUTPUT_EXPRESSION>)
+            ```
+
+            </hfoption>
+            </hfoptions>
 
             ## MyTestConfig
 
             [[autodoc]] MyTestConfig
-
-            ## MyTestForCausalLM
-
-            [[autodoc]] MyTestForCausalLM
 
             ## MyTestModel
 
@@ -342,17 +350,25 @@ class TestAddNewModelLike(unittest.TestCase):
             [[autodoc]] MyTestPreTrainedModel
                 - forward
 
+            ## MyTestForCausalLM
+
+            [[autodoc]] MyTestForCausalLM
+                - forward
+
             ## MyTestForSequenceClassification
 
             [[autodoc]] MyTestForSequenceClassification
+                - forward
 
             ## MyTestForQuestionAnswering
 
             [[autodoc]] MyTestForQuestionAnswering
+                - forward
 
             ## MyTestForTokenClassification
 
             [[autodoc]] MyTestForTokenClassification
+                - forward
             """
         )
         self.assertFileIsEqual(EXPECTED_DOC, os.path.join(self.DOC_PATH, "model_doc", "my_test.md"))
@@ -721,28 +737,40 @@ class TestAddNewModelLike(unittest.TestCase):
 
             -->
 
-
             # MyTest2
 
-            ## Overview
+            [MyTest2](<PAPER_URL>) <INTRO_SENTENCES>
 
-            The MyTest2 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-            <INSERT SHORT SUMMARY HERE>
+            You can find all the [MyTest2] checkpoints under the [<ORG>](<HUB_CHECKPOINT_URL>) collection.
 
-            The abstract from the paper is the following:
+            ## Quickstart
 
-            <INSERT PAPER ABSTRACT HERE>
+            <hfoptions id="usage">
+            <hfoption id="Pipeline">
 
-            Tips:
+            ```py
+            from transformers import pipeline
 
-            <INSERT TIPS ABOUT MODEL HERE>
+            pipe = pipeline(task="<TASK>", model="<CHECKPOINT_ID>", device=0)
+            pipe("<MINIMAL_INPUT>")
+            ```
 
-            This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-            The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+            </hfoption>
+            <hfoption id="AutoModel">
 
-            ## Usage examples
+            ```py
+            from transformers import AutoTokenizer, <AUTOMODEL_CLASS>
 
-            <INSERT SOME NICE EXAMPLES HERE>
+            tokenizer = AutoTokenizer.from_pretrained("<CHECKPOINT_ID>")
+            model = <AUTOMODEL_CLASS>.from_pretrained("<CHECKPOINT_ID>", device_map="auto")
+
+            inputs = tokenizer("<MINIMAL_INPUT>", return_tensors="pt").to(model.device)
+            outputs = model(**inputs)
+            print(<OUTPUT_EXPRESSION>)
+            ```
+
+            </hfoption>
+            </hfoptions>
 
             ## MyTest2VisionConfig
 
@@ -756,40 +784,6 @@ class TestAddNewModelLike(unittest.TestCase):
 
             [[autodoc]] MyTest2Config
 
-            ## MyTest2AudioPreTrainedModel
-
-            [[autodoc]] MyTest2AudioPreTrainedModel
-                - forward
-
-            ## MyTest2AudioModel
-
-            [[autodoc]] MyTest2AudioModel
-                - forward
-
-            ## MyTest2VisionPreTrainedModel
-
-            [[autodoc]] MyTest2VisionPreTrainedModel
-                - forward
-
-            ## MyTest2VisionModel
-
-            [[autodoc]] MyTest2VisionModel
-                - forward
-
-            ## MyTest2PreTrainedModel
-
-            [[autodoc]] MyTest2PreTrainedModel
-                - forward
-
-            ## MyTest2Model
-
-            [[autodoc]] MyTest2Model
-                - forward
-
-            ## MyTest2ForCausalLM
-
-            [[autodoc]] MyTest2ForCausalLM
-
             ## MyTest2ImageProcessor
 
             [[autodoc]] MyTest2ImageProcessor
@@ -801,6 +795,41 @@ class TestAddNewModelLike(unittest.TestCase):
             ## MyTest2Processor
 
             [[autodoc]] MyTest2Processor
+
+            ## MyTest2AudioModel
+
+            [[autodoc]] MyTest2AudioModel
+                - forward
+
+            ## MyTest2VisionModel
+
+            [[autodoc]] MyTest2VisionModel
+                - forward
+
+            ## MyTest2Model
+
+            [[autodoc]] MyTest2Model
+                - forward
+
+            ## MyTest2AudioPreTrainedModel
+
+            [[autodoc]] MyTest2AudioPreTrainedModel
+                - forward
+
+            ## MyTest2VisionPreTrainedModel
+
+            [[autodoc]] MyTest2VisionPreTrainedModel
+                - forward
+
+            ## MyTest2PreTrainedModel
+
+            [[autodoc]] MyTest2PreTrainedModel
+                - forward
+
+            ## MyTest2ForCausalLM
+
+            [[autodoc]] MyTest2ForCausalLM
+                - forward
             """
         )
         self.assertFileIsEqual(EXPECTED_DOC, os.path.join(self.DOC_PATH, "model_doc", "my_test2.md"))
