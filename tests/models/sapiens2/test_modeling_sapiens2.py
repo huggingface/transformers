@@ -199,22 +199,15 @@ class Sapiens2ModelTester:
             (self.batch_size, config.num_labels, expected_h, expected_h),
         )
 
-        with torch.no_grad():
-            result_with_loss = model(
-                pixel_values,
-                labels=labels,
-            )
-
+        # Test standard loss backward pass
+        result_with_loss = model(pixel_values, labels=labels)
         self.parent.assertIsNotNone(result_with_loss.loss)
+        result_with_loss.loss.backward()
 
-        with torch.no_grad():
-            result_with_weights = model(
-                pixel_values,
-                labels=labels,
-                label_weights=label_weights,
-            )
-
+        # Test weighted loss backward pass
+        result_with_weights = model(pixel_values, labels=labels, label_weights=label_weights)
         self.parent.assertIsNotNone(result_with_weights.loss)
+        result_with_weights.loss.backward()
 
     def create_and_check_for_normal_estimation(self, config, pixel_values, labels):
         model = Sapiens2ForNormalEstimation(config)

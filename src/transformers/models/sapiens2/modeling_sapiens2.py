@@ -1137,8 +1137,6 @@ def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
     """,
 )
 class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
-    _loss_function = staticmethod(torch.nn.functional.mse_loss)
-
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
