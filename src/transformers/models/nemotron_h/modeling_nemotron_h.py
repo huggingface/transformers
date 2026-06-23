@@ -691,7 +691,6 @@ class NemotronHMoE(nn.Module):
         # Replace with NemotronH-specific experts (non-gated MLP architecture)
         self.experts = NemotronHExperts(config)
         self.gate = NemotronHTopkRouter(config)
-        intermediate_size = config.moe_intermediate_size * config.n_shared_experts
 
         # Override shared_experts to use NemotronHMLP with correct intermediate size
         self.shared_experts = NemotronHMLP(config=config, intermediate_size=config.moe_shared_expert_intermediate_size)

@@ -473,8 +473,9 @@ class Glm4MoeLiteMoE(nn.Module):
         self.config = config
         self.experts = Glm4MoeLiteExperts(config)
         self.gate = Glm4MoeLiteTopkRouter(config)
-        intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-        self.shared_experts = Glm4MoeLiteMLP(config=config, intermediate_size=intermediate_size)
+        self.shared_experts = Glm4MoeLiteMLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states

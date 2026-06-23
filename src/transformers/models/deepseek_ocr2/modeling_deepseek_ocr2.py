@@ -1234,8 +1234,9 @@ class DeepseekOcr2TextMoe(nn.Module):
         self.config = config
         self.experts = DeepseekOcr2TextExperts(config)
         self.gate = DeepseekOcr2TextTopkRouter(config)
-        intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-        self.shared_experts = DeepseekOcr2TextMLP(config=config, intermediate_size=intermediate_size)
+        self.shared_experts = DeepseekOcr2TextMLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states

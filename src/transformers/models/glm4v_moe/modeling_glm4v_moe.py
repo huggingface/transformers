@@ -300,7 +300,6 @@ class Glm4vMoeTextMoE(nn.Module):
         self.config = config
         self.experts = Glm4vMoeTextExperts(config)
         self.gate = Glm4vMoeTextTopkRouter(config)
-        intermediate_size = config.moe_intermediate_size * config.n_shared_experts
         self.shared_experts = Glm4vMoeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )

@@ -582,8 +582,9 @@ class DeepseekV32MoE(nn.Module):
         self.config = config
         self.experts = DeepseekV32Experts(config)
         self.gate = DeepseekV32TopkRouter(config)
-        intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-        self.shared_experts = DeepseekV32MLP(config=config, intermediate_size=intermediate_size)
+        self.shared_experts = DeepseekV32MLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states

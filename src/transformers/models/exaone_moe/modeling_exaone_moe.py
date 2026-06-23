@@ -315,7 +315,6 @@ class ExaoneMoeSparseMoEBlock(nn.Module):
         self.config = config
         self.experts = ExaoneMoeExperts(config)
         self.gate = ExaoneMoeTopkRouter(config)
-        intermediate_size = config.moe_intermediate_size * config.n_shared_experts
         self.shared_experts = ExaoneMoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
         )
