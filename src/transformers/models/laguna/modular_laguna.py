@@ -96,6 +96,12 @@ class LagunaConfig(Qwen2MoeConfig):
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
 
     vocab_size: int = 100352
     intermediate_size: int = 8192

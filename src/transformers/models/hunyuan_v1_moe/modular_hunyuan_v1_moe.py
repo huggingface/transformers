@@ -111,16 +111,19 @@ class HunYuanMoEV1Gate(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
-        self.wg = nn.Linear(config.hidden_size, num_experts, bias=False, dtype=torch.float32)
+        self.num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
+        self.top_k = config.moe_topk if isinstance(config.moe_topk, int) else config.moe_topk[layer_idx]
+        self.wg = nn.Linear(config.hidden_size, self.num_experts, bias=False, dtype=torch.float32)
 
     def forward(self, hidden_states):
-        bsz, seq_len, hidden_size = hidden_states.shape
-        hidden_states = hidden_states.reshape(-1, hidden_size)
+        hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
         if self.wg.weight.dtype == torch.float32:
             hidden_states = hidden_states.float()
-        logits = self.wg(hidden_states)
-        return logits
+        router_logits = self.wg(hidden_states)
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        return router_logits, routing_weights.to(router_logits.dtype), selected_experts
 
 
 class HunYuanMoEV1Experts(MixtralExperts):
@@ -138,18 +141,11 @@ class HunYuanMoEV1Moe(nn.Module):
         self.experts = HunYuanMoEV1Experts(config)
         self.shared_mlp = HunYuanMoEV1MLP(config)
 
-    def route_tokens_to_experts(self, hidden_states):
-        routing_weights = F.softmax(hidden_states, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        return selected_experts, routing_weights.to(hidden_states.dtype)
-
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_mlp = self.shared_mlp(hidden_states)
-        router_logits = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
-        selected_experts, routing_weights = self.route_tokens_to_experts(router_logits)
+        router_logits, routing_weights, selected_experts = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights).reshape(
             batch_size, sequence_length, hidden_dim
         )

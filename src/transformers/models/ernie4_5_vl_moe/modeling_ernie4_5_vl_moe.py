@@ -347,6 +347,7 @@ class Ernie4_5_VLMoeMoeTopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.zeros(config.moe_num_experts, config.hidden_size, dtype=torch.float32))
         self.moe_statics = Ernie4_5_VLMoeMoeStatics(config)
         self.top_k = config.moe_k
+        self.num_experts = config.moe_num_experts
         self.norm_min = config.moe_norm_min
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -365,7 +366,7 @@ class Ernie4_5_VLMoeMoeTopKRouter(nn.Module):
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
         routing_weights = routing_weights.to(hidden_states.dtype)
-        return router_logits, selected_experts, routing_weights
+        return router_logits, routing_weights, selected_experts
 
 
 @use_experts_implementation
@@ -423,7 +424,7 @@ class Ernie4_5_VLMoeSparseMoeBlock(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.view(-1, self.hidden_dim)
 
-        router_logits, top_k_index, top_k_weights = self.gate(hidden_states)
+        router_logits, top_k_weights, top_k_index = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
 
         # moe results are changed to a flattened shape to ease the modality isolated assigning of results

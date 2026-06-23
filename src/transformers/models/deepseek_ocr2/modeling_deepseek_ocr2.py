@@ -1198,7 +1198,6 @@ class DeepseekOcr2TextTopkRouter(nn.Module):
     def __init__(self, config: DeepseekOcr2TextConfig):
         super().__init__()
         self.config = config
-        self.n_routed_experts = config.n_routed_experts
         self.num_experts = config.n_routed_experts
         self.top_k = config.num_experts_per_tok
         self.routed_scaling_factor = config.routed_scaling_factor
@@ -1206,7 +1205,7 @@ class DeepseekOcr2TextTopkRouter(nn.Module):
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         # Named `weight` (not wrapped in `nn.Linear`) so the parameter key stays `mlp.gate.weight`.
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
+        self.weight = nn.Parameter(torch.empty((self.num_experts, config.hidden_size)))
 
     def forward(self, hidden_states):
         # Top-k selection lives in the router (not the MoE block) so the `ep_router`
@@ -1217,14 +1216,14 @@ class DeepseekOcr2TextTopkRouter(nn.Module):
         if self.topk_method == "greedy":
             topk_weights, topk_indices = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = scores.view(-1, self.num_group, self.n_routed_experts // self.num_group).max(dim=-1).values
+            group_scores = scores.view(-1, self.num_group, self.num_experts // self.num_group).max(dim=-1).values
             group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
             group_mask = torch.zeros_like(group_scores)
             group_mask.scatter_(1, group_idx, 1)
             score_mask = (
                 group_mask.unsqueeze(-1)
-                .expand(-1, self.num_group, self.n_routed_experts // self.num_group)
-                .reshape(-1, self.n_routed_experts)
+                .expand(-1, self.num_group, self.num_experts // self.num_group)
+                .reshape(-1, self.num_experts)
             )
             scores = scores.masked_fill(~score_mask.bool(), 0.0)
             topk_weights, topk_indices = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)

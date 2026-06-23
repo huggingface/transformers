@@ -397,7 +397,7 @@ class Ernie4_5_VLMoeSparseMoeBlock(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.view(-1, self.hidden_dim)
 
-        router_logits, top_k_index, top_k_weights = self.gate(hidden_states)
+        router_logits, top_k_weights, top_k_index = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
 
         # moe results are changed to a flattened shape to ease the modality isolated assigning of results

@@ -19,7 +19,6 @@ from transformers import BitsAndBytesConfig, Cache, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -51,7 +50,7 @@ class DeepseekV2ModelTester(CausalLMModelTester):
 
 
 @require_torch
-class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase, TensorParallelTesterMixin):
+class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_tester_class = DeepseekV2ModelTester
     model_split_percents = [0.5, 0.7, 0.8]

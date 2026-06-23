@@ -111,6 +111,7 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.zeros(config.moe_num_experts, config.hidden_size, dtype=torch.float32))
         self.moe_statics = Ernie4_5_MoeStatics(config)
         self.top_k = config.moe_k
+        self.num_experts = config.moe_num_experts
         self.norm_min = config.moe_norm_min
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -129,7 +130,7 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
         routing_weights = routing_weights.to(hidden_states.dtype)
-        return router_logits, selected_experts, routing_weights
+        return router_logits, routing_weights, selected_experts
 
 
 class Ernie4_5_MoeSparseMoeBlock(nn.Module):
@@ -152,7 +153,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        _, top_k_index, top_k_weights = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
 
         if self.shared_experts is not None:
