@@ -66,7 +66,8 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> None:
     """Extract a Canary `.nemo` (tar) archive into `extract_dir`."""
     print(f"Extracting NeMo archive: {nemo_file_path}")
     with tarfile.open(nemo_file_path, "r", encoding="utf-8") as tar:
-        tar.extractall(extract_dir)
+        # filter="data" sanitizes members (PEP 706) so a malicious archive cannot write outside extract_dir
+        tar.extractall(extract_dir, filter="data")
 
 
 def convert_decoder_config(nemo_config) -> CanaryConfig:

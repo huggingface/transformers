@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-09-17 and contributed to Hugging Face Transformers on 2026-06-21.*
+*This model was published in HF papers on 2025-09-17 and contributed to Hugging Face Transformers on 2026-06-23.*
 
 <div class="flex flex-wrap space-x-1">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
