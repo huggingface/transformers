@@ -59,11 +59,7 @@ def fold_mtp_loss(
     unchanged so callers that prefer to weight it externally can read
     `mtp_loss` from the output.
     """
-    if (
-        mtp_module is None
-        or labels is None
-        or input_ids is None
-    ):
+    if mtp_module is None or labels is None or input_ids is None:
         return main_loss, None
 
     mtp_loss = mtp_module.compute_mtp_loss(
@@ -145,13 +141,9 @@ class MtpLayerStack(PreTrainedModel):
         # for VL models it is nested one level deeper under language_model.
         text_decoder = main_model.base_model
         if not hasattr(text_decoder, "layers"):
-            text_decoder = getattr(text_decoder, "language_model", None) or getattr(
-                text_decoder, "text_model", None
-            )
+            text_decoder = getattr(text_decoder, "language_model", None) or getattr(text_decoder, "text_model", None)
             if text_decoder is None or not hasattr(text_decoder, "layers"):
-                raise AttributeError(
-                    f"Cannot locate decoder layers under {type(main_model.base_model).__name__}"
-                )
+                raise AttributeError(f"Cannot locate decoder layers under {type(main_model.base_model).__name__}")
         layer_cls = type(text_decoder.layers[0])
         norm_cls = next(
             type(module)
