@@ -110,6 +110,7 @@ if TYPE_CHECKING:
     from .dia import *
     from .dialogpt import *
     from .diffllama import *
+    from .diffusion_gemma import *
     from .dinat import *
     from .dinov2 import *
     from .dinov2_with_registers import *
@@ -264,6 +265,7 @@ if TYPE_CHECKING:
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
+    from .minicpm3 import *
     from .minicpmv4_6 import *
     from .minimax import *
     from .minimax_m2 import *
