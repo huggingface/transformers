@@ -155,7 +155,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
 
 @require_torch
 class UnlimitedOcrIntegrationTest(unittest.TestCase):
-    model_id = "deepseek-community/DeepSeek-OCR-2"
+    model_id = "baidu/Unlimited-OCR"
 
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(self.model_id)
@@ -164,7 +164,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    def test_small_model_integration_test_free_ocr(self):
+    def test_small_model_integration_test_document_parsing(self):
         model = UnlimitedOcrForConditionalGeneration.from_pretrained(
             self.model_id, torch_dtype=torch.bfloat16, device_map=torch_device
         )
@@ -173,21 +173,20 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
             )
         )
-        inputs = self.processor(images=image, text="<image>\nFree OCR.", return_tensors="pt").to(
+        inputs = self.processor(images=image, text="<image>\ndocument parsing.", return_tensors="pt").to(
             model.device, dtype=torch.bfloat16
         )
         generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", None): "R&D QUALITY IMPROVEMENT SUGGESTION/SOLUTION FORM\n\nName/",
-                ("xpu", 5): "R&D QUALITY IMPROVEMENT SUGGESTION/SOLUTION FORM\n\nName/",
+                ("cuda", None): "image [383, 87, 497, 171]\ntitle [333",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
 
     @slow
-    def test_small_model_integration_test_grounding_markdown(self):
+    def test_small_model_integration_test_document_parsing_grounding(self):
         model = UnlimitedOcrForConditionalGeneration.from_pretrained(
             self.model_id, torch_dtype=torch.bfloat16, device_map=torch_device
         )
@@ -198,15 +197,14 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         )
         inputs = self.processor(
             images=image,
-            text="<image>\n<|grounding|>Convert the document to markdown.",
+            text="<image>\ndocument parsing.",
             return_tensors="pt",
         ).to(model.device, dtype=torch.bfloat16)
         generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False)
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", None): "<|ref|>title<|/ref|><|det|>[[330, 198, 559, 230]]<|/det|>\n# R",
-                ("xpu", 5): "<|ref|>title<|/ref|><|det|>[[330, 198, 558, 230]]<|/det|>\n# R",
+                ("cuda", None): "<|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>title [333",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
@@ -228,7 +226,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         )
         inputs = self.processor(
             images=[image1, image2],
-            text=["<image>\nFree OCR.", "<image>\nFree OCR."],
+            text=["<image>\ndocument parsing.", "<image>\ndocument parsing."],
             return_tensors="pt",
             padding=True,
         ).to(model.device, dtype=torch.bfloat16)
@@ -239,12 +237,8 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): [
-                    "R&D QUALITY IMPROVEMENT SUGGESTION/SOLUTION FORM\n\nName/",
-                    "# Reducing the number of images\n\nIt is also believed that the performance of a website is a critical",
-                ],
-                ("xpu", 5): [
-                    "R&D QUALITY IMPROVEMENT SUGGESTION/SOLUTION FORM\n\nName/",
-                    "# Reducing the number of images\n\nIt is also believed that the performance of a website is a critical",
+                    "image [383, 87, 497, 171]\ntitle [333",
+                    "header [53, 23, 365, 41]Advanced Template and Styl",
                 ],
             }
         ).get_expectation()  # fmt: skip
