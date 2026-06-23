@@ -512,7 +512,6 @@ class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGeneratio
 
 
 __all__ = [
-    "Nemotron3_5AsrConfig",
     "Nemotron3_5AsrProcessor",
     "Nemotron3_5AsrRNNTOutput",
     "Nemotron3_5AsrForRNNT",
