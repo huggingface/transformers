@@ -503,6 +503,17 @@ class TensorParallelTesterMixin(ABC):
         if not self._has_ep_plan():
             self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
 
+    def _assert_ep_capable_moe_has_plan(self):
+        """An EP-capable MoE (`@use_experts_implementation`) must ship an expert-parallel plan,
+        otherwise the EP path silently skips below for lack of a `base_model_ep_plan`."""
+        if not self._get_tp_model_class()._can_set_experts_implementation():
+            return
+        self.assertTrue(
+            self._has_ep_plan(),
+            "Model supports a switchable experts implementation (@use_experts_implementation) but defines no "
+            "base_model_ep_plan; add an expert-parallel plan to its config so the EP path is covered.",
+        )
+
     @is_tensor_parallel_test
     def test_tp_forward(self):
         self._skip_if_not_supported()
@@ -577,6 +588,7 @@ class TensorParallelTesterMixin(ABC):
 
     @is_tensor_parallel_test
     def test_ep_forward(self):
+        self._assert_ep_capable_moe_has_plan()
         self._skip_if_ep_not_supported()
 
         config = self.model_tester.get_config()
@@ -593,6 +605,7 @@ class TensorParallelTesterMixin(ABC):
 
     @is_tensor_parallel_test
     def test_ep_backward(self):
+        self._assert_ep_capable_moe_has_plan()
         self._skip_if_ep_not_supported()
 
         config = self.model_tester.get_config()
