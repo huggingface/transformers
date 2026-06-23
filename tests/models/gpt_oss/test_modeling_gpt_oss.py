@@ -210,18 +210,6 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
         # Generate key to look up expected outputs
         key = generate_config_key(quantized, model_size, kernels, attn_impl, mode)
 
-        if os.environ.get("WRITE_FIXTURES") == "1":
-            expected_results = {}
-            if os.path.exists(RESULTS_PATH):
-                with open(RESULTS_PATH, "r") as f:
-                    expected_results = json.load(f)
-            expected_results[key] = output_texts
-            with open(RESULTS_PATH, "w") as f:
-                json.dump(expected_results, f, indent=2, ensure_ascii=False)
-                f.write("\n")
-            print(f"WRITE_FIXTURES: wrote {len(output_texts)} entries for key={key}")
-            return
-
         # Load expected outputs from restructured JSON
         if os.path.exists(RESULTS_PATH):
             with open(RESULTS_PATH, "r") as f:
