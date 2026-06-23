@@ -630,8 +630,6 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         full_mask = mask_dict["full_attention"]
         sliding_mask = mask_dict["sliding_attention"]
 
-        min_val = torch.finfo(full_mask.dtype).min
-
         # In full_attention, bidirectional image block (tokens 5-11) is fully visible
         # (Both look-back and look-ahead are 0.0)
         self.assertEqual(full_mask[0, 0, 5, 11].item(), 0.0)
