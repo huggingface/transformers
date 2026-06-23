@@ -1400,9 +1400,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
         # easily available. Seed with the class-level FSDP plan before the instance attribute shadows it.
-        cls_fsdp_plan = getattr(self, "_fsdp_plan", None) or {}
-        self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
-        self._fsdp_plan = dict(cls_fsdp_plan)
+        self._tp_plan, self._ep_plan, self._pp_plan, self._fsdp_plan = {}, {}, {}, {}
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
