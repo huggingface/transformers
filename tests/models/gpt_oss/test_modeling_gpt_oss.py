@@ -109,9 +109,7 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         # `_compatible_flash_implementations` routes to `aiter-flash-attn` on ROCm (no ROCm build of vllm-flash-attn3).
         expected_kernel = (
-            "kernels-community/aiter-flash-attn"
-            if is_rocm_platform()
-            else "kernels-community/vllm-flash-attn3"
+            "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/vllm-flash-attn3"
         )
         # `kernels>=0.15` requires an explicit version/revision pin on `get_kernel(...)`.
         flash = get_kernel(expected_kernel, version=1)
@@ -368,11 +366,7 @@ if __name__ == "__main__":
     # Shared parameterization
     # ------------------------
     # FA3-style attention kernel — uses the AITER backend on ROCm (no vllm-flash-attn3 build there).
-    _FA3_KERNEL = (
-        "kernels-community/aiter-flash-attn"
-        if is_rocm_platform()
-        else "kernels-community/vllm-flash-attn3"
-    )
+    _FA3_KERNEL = "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/vllm-flash-attn3"
     PARAMETERS = [
         (False, "20b", False, "eager", "eval"),
         (False, "20b", False, "eager", "train"),
