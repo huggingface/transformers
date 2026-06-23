@@ -1007,9 +1007,9 @@ def spawn_materialize(
 ) -> Future | Callable:
     """Materialize (and optionally shard) a tensor, asynchronously if a thread pool is provided.
 
-    When ``sharding_op`` is given the tensor is sharded according to the DTensor
-    placement strategy; otherwise it is simply copied to *device*/*dtype*.
-    Without a thread pool a deferred callable is returned instead of a Future.
+    When ``sharding_op`` is given the tensor is sharded (DTensor placement or legacy TP plan);
+    otherwise it is simply copied to *device*/*dtype*. Without a thread pool a deferred
+    callable is returned instead of a Future.
     """
 
     def _job():
@@ -1023,22 +1023,6 @@ def spawn_materialize(
         # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
         # memory during Conversion
         return _job
-
-
-def spawn_tp_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
-) -> Future | Callable:
-    """Materialize and shard a tensor (according to the legacy TP-plan) from file asynchronously if `thread_pool` is
-    provided, or return a Callable that will load the tensor synchronously when called."""
-
-    return spawn_materialize(
-        thread_pool,
-        tensor,
-        device,
-        dtype,
-        sharding_op=sharding_method,
-        tensor_idx=tensor_idx,
-    )
 
 
 def dot_natural_key(s: str):
@@ -1474,13 +1458,13 @@ def convert_and_load_state_dict_in_model(
                         and any(isinstance(op, MergeModulelist) for op in mapping.operations)
                         else None
                     )
-                    future_or_tensor = spawn_tp_materialize(
+                    future_or_tensor = spawn_materialize(
                         thread_pool,
                         tensor,
-                        mapping.distributed_operation,
-                        shard_index,
                         device_map[""],
                         _dtype,
+                        sharding_op=mapping.distributed_operation,
+                        tensor_idx=shard_index,
                     )
 
             if future_or_tensor is None:
