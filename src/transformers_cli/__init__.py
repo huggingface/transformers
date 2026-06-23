@@ -11,31 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import sys
+"""Public exports for the lightweight `transformers` CLI entrypoint."""
 
-import pytest
-from typer.testing import CliRunner
-
-from transformers_cli.run import app
+from .run import app, main
 
 
-@pytest.fixture
-def cli():
-    def _cli_invoke(*args):
-        runner = CliRunner()
-
-        old_out_close = sys.stdout.close
-        old_err_close = sys.stderr.close
-
-        def _noop(*a, **k):
-            return None
-
-        sys.stdout.close = _noop
-        sys.stderr.close = _noop
-        try:
-            return runner.invoke(app, list(args), catch_exceptions=False)
-        finally:
-            sys.stdout.close = old_out_close
-            sys.stderr.close = old_err_close
-
-    return _cli_invoke
+__all__ = ["app", "main"]
