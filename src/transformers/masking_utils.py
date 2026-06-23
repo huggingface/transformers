@@ -709,6 +709,16 @@ def flex_attention_mask(
         device (`torch.device` or `str`, optional):
             An optional device to create the mask on.
     """
+    # Ensure offsets are plain Python ints. Callers may pass scalar Tensors
+    # (e.g. from cache_position[0] or StaticLayerCache.get_seq_length()), which
+    # propagate into the mask_mod closure and add an extra batch dimension to
+    # every per-index result, producing a 5D BlockMask that create_block_mask
+    # cannot unpack (raises "too many values to unpack (expected 4)"). See #46682.
+    if isinstance(q_offset, torch.Tensor):
+        q_offset = q_offset.item()
+    if isinstance(kv_offset, torch.Tensor):
+        kv_offset = kv_offset.item()
+
     # Potentially add the padding 2D mask
     if attention_mask is not None:
         # Older torch (2.5.x) cannot handle sequences not in multiples of 128 (default block size)
