@@ -387,6 +387,10 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_generate_continue_from_past_key_values(self):
         super().test_generate_continue_from_past_key_values()
 
+    @unittest.skip(reason="Decoder can't keep attention grads")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
 
 @require_torch
 @slow

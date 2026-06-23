@@ -77,8 +77,9 @@ class CanaryDecoderLayer(WhisperDecoderLayer):
 
 class CanarySinusoidalPositionalEmbedding(nn.Module):
     """
-    Fixed sinusoidal positional embedding replicating NeMo's `FixedPositionalEncoding`: the standard sinusoidal table
-    from [Attention Is All You Need](https://huggingface.co/papers/1706.03762) scaled by `1 / sqrt(embedding_dim)`.
+    Fixed sinusoidal positional embedding from NeMo's `FixedPositionalEncoding`: the standard interleaved sin/cos table
+    of [Attention Is All You Need](https://huggingface.co/papers/1706.03762) scaled by `1 / sqrt(embedding_dim)`. No
+    other sinusoidal positional embedding in the library applies this scaling, so none can be reused here.
     """
 
     positional_embeddings: torch.Tensor
