@@ -374,6 +374,8 @@ is_fast_path_available = all(kernel_modules)
 
 
 class Lfm2MoeShortConv(nn.Module):
+    layer_type = "conv"
+
     def __init__(
         self,
         config: Lfm2MoeConfig,
@@ -500,7 +502,6 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
             self.self_attn = Lfm2MoeAttention(config, layer_idx)
         else:
             self.conv = Lfm2MoeShortConv(config, layer_idx)
-            self.conv.layer_type = "conv"
         self.feed_forward = (
             Lfm2MoeMLP(config, intermediate_size=config.intermediate_size)
             if layer_idx < config.num_dense_layers

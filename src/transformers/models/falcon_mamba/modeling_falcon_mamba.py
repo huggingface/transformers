@@ -84,6 +84,8 @@ class FalconMambaMixer(nn.Module):
     and is why FalconMamba is called **selective** state spaces)
     """
 
+    layer_type = "linear_attention"
+
     def __init__(self, config: FalconMambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__()
         self.config = config
@@ -476,7 +478,6 @@ class FalconMambaBlock(GradientCheckpointingLayer):
         self.residual_in_fp32 = config.residual_in_fp32
         self.norm = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.mixer = FalconMambaMixer(config, layer_idx=layer_idx, initialize_mixer_weights=False)
-        self.mixer.layer_type = "linear_attention"
 
     def forward(
         self,
