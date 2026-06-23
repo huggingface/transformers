@@ -316,8 +316,6 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
 class GptOssPreTrainedModel(LlamaPreTrainedModel):
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
     _supports_sdpa = False
-    # `kernels-community/vllm-flash-attn3` and `flash_attention_4` have no ROCm builds;
-    # on ROCm route FA3-style attention to `kernels-community/aiter-flash-attn` instead.
     _compatible_flash_implementations = (
         ["kernels-community/aiter-flash-attn"]
         if is_rocm_platform()

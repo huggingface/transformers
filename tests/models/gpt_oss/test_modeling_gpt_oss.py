@@ -30,7 +30,6 @@ from transformers import (
     AutoTokenizer,
     is_torch_available,
 )
-from transformers.utils import is_rocm_platform
 from transformers.testing_utils import (
     cleanup,
     require_deterministic_for_xpu,
@@ -41,6 +40,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_rocm_platform
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
