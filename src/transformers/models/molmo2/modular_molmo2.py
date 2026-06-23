@@ -90,18 +90,18 @@ def select_tiling(height: int, width: int, patch_size: int, max_num_crops: int) 
                 tilings.append((tile_height, tile_width))
     tilings.sort(key=lambda x: (x[0] * x[1], x[0]))
 
-    candidate_resolutions = np.array(tilings, dtype=np.int32) * patch_size
-    original_size = np.stack([height, width], dtype=np.float32)
+    candidate_resolutions = torch.tensor(tilings, dtype=torch.int32) * patch_size
+    original_size = torch.stack([height, width], dtype=torch.float32)
 
-    with np.errstate(divide="ignore"):
-        required_scales = candidate_resolutions.astype(np.float32) / original_size
-    required_scale = np.min(required_scales, axis=-1, keepdims=True)
+    with torch.errstate(divide="ignore"):
+        required_scales = candidate_resolutions.astype(torch.float32) / original_size
+    required_scale = torch.min(required_scales, axis=-1, keepdims=True)
 
-    if np.all(required_scale < 1):
-        return tilings[np.argmax(required_scale)]
+    if torch.all(required_scale < 1):
+        return tilings[torch.argmax(required_scale)]
 
-    required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
-    return tilings[np.argmin(required_scale)]
+    required_scale = torch.where(required_scale < 1.0, 10e9, required_scale)
+    return tilings[torch.argmin(required_scale)]
 
 
 def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
