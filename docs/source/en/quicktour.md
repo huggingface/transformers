@@ -71,8 +71,6 @@ Then install an up-to-date version of Transformers and some additional libraries
 
 [Hugging Face Skills](https://github.com/huggingface/skills) teach your coding agent how to work with Transformers. Instead of writing a training script yourself, ask your agent to fine-tune a vision model and let the skill guide it.
 
-Hugging Face skills live in [huggingface/skills](https://github.com/huggingface/skills) and work across all major coding agents.
-
 <hfoptions id="install">
 <hfoption id="Claude Code">
 
