@@ -23,8 +23,9 @@ from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutput
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_int
 from ..clip.configuration_clip import CLIPVisionConfig
+from ..clip.modeling_clip import CLIPVisionEmbeddings, CLIPVisionModel
 from ..deepseek_ocr2.configuration_deepseek_ocr2 import (
     DeepseekOcr2Config,
     DeepseekOcr2TextConfig,
@@ -57,7 +58,6 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
     DeepseekOcr2TextRMSNorm,
     DeepseekOcr2TextRotaryEmbedding,
     DeepseekOcr2VisionAttention,
-    DeepseekOcr2VisionEncoder,
     DeepseekOcr2VisionEncoderLayer,
     DeepseekOcr2VisionMLP,
     DeepseekOcr2VisionModel,
@@ -319,8 +319,78 @@ class UnlimitedOcrVisionEncoderLayer(DeepseekOcr2VisionEncoderLayer):
     pass
 
 
-class UnlimitedOcrVisionEncoder(DeepseekOcr2VisionEncoder):
-    pass
+class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        num_patches = embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
+
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        target_dtype = patch_pos_embed.dtype
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed.to(torch.float32),
+            size=(new_height, new_width),
+            mode="bicubic",
+            antialias=True,
+            align_corners=False,
+        ).to(target_dtype)
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, patch_embeds: torch.Tensor) -> torch.Tensor:
+        r"""
+        patch_embeds (`torch.Tensor` of shape `(batch_size, hidden_size, grid_height, grid_width)`):
+            The SAM feature map, injected directly as the CLIP patch embeddings. The CLIP patch convolution
+            (`self.patch_embedding`) is intentionally bypassed.
+        """
+        batch_size, _, grid_height, grid_width = patch_embeds.shape
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        embeddings = embeddings + self.interpolate_pos_encoding(
+            embeddings, grid_height * self.patch_size, grid_width * self.patch_size
+        )
+        return embeddings
+
+
+class UnlimitedOcrVisionEncoder(CLIPVisionModel):
+    main_input_name = "patch_embeds"
+
+    def __init__(self, config: "UnlimitedOcrVisionEncoderConfig"):
+        super().__init__(config)
+        del self.post_layernorm
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(self, patch_embeds: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        r"""
+        patch_embeds (`torch.Tensor` of shape `(batch_size, hidden_size, grid_height, grid_width)`):
+            The SAM feature map used in place of the CLIP patch embeddings.
+        """
+        hidden_states = self.embeddings(patch_embeds)
+        hidden_states = self.pre_layrnorm(hidden_states)
+        encoder_outputs: BaseModelOutput = self.encoder(inputs_embeds=hidden_states, **kwargs)
+        return BaseModelOutput(
+            last_hidden_state=encoder_outputs.last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
@@ -333,17 +403,18 @@ class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         sam_encoder_outputs = self.sam_encoder(pixel_values, **kwargs)
-        vision_encoder_outputs = self.vision_encoder(pixel_values, **kwargs)
+        sam_feature_map = sam_encoder_outputs.last_hidden_state
 
-        sam_hidden_state = sam_encoder_outputs.last_hidden_state
+        vision_encoder_outputs = self.vision_encoder(sam_feature_map, **kwargs)
         vision_encoder_hidden_state = vision_encoder_outputs.last_hidden_state
-        hidden_state = torch.cat([vision_encoder_hidden_state[:, 1:], sam_hidden_state], dim=1)
 
-        # TODO: How to pass hidden_states and attentions?
+        sam_hidden_state = sam_feature_map.flatten(2).transpose(1, 2)
+        hidden_state = torch.cat([vision_encoder_hidden_state[:, 1:], sam_hidden_state], dim=-1)
+
         return BaseModelOutput(
             last_hidden_state=hidden_state,
-            # hidden_states=encoder_outputs.hidden_states,
-            # attentions=encoder_outputs.attentions,
+            hidden_states=vision_encoder_outputs.hidden_states,
+            attentions=vision_encoder_outputs.attentions,
         )
 
 
@@ -409,7 +480,6 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
         image_spatial_crop (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
             The local crop grid `(num_columns, num_rows)` per image.
         """
-        # `torch.split` requires `list[int]`, not a Tensor, for per-image variable-length splitting.
         if isinstance(num_local_patches, torch.Tensor):
             num_local_patches = num_local_patches.tolist()
 
@@ -457,8 +527,8 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
                 )
                 local_flat = local_grid.reshape(-1, hidden_size)
                 # NOTE: local-then-global ordering matches the reference `forward` (the feature order the weights
-                # were trained on), NOT the token order built by the reference `infer`. Verify against a reference
-                # generation on a cropped image before trusting crop mode.
+                # were trained on), NOT the token order built by the reference `infer`.
+                # TODO: verify correctness
                 all_features.append(torch.cat([local_flat, global_flat, view_separator], dim=0))
             else:
                 all_features.append(torch.cat([global_flat, view_separator], dim=0))
