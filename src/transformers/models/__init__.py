@@ -104,13 +104,13 @@ if TYPE_CHECKING:
     from .deimv2 import *
     from .deit import *
     from .deprecated import *
-    from .diffusion_gemma import *
     from .depth_anything import *
     from .depth_pro import *
     from .detr import *
     from .dia import *
     from .dialogpt import *
     from .diffllama import *
+    from .diffusion_gemma import *
     from .dinat import *
     from .dinov2 import *
     from .dinov2_with_registers import *
