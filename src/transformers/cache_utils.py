@@ -44,6 +44,7 @@ class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
     is_compileable = False
+    supports_early_init = True
     # Subclasses can set ``layer_type`` to auto-register themselves in
     # ``LAYER_TYPE_CACHE_MAPPING`` at import time (used by ``DynamicCache`` to dispatch
     # per-layer cache classes from ``config.layer_types``).
@@ -386,12 +387,8 @@ class StaticLayer(CacheLayerMixin):
         devices, dtypes etc later on for each `update` (which could break the static dynamo addresses as well).
 
         If this is unwanted, one can call `early_initialization(...)` on the Cache directly, which will call this
-        function ahead-of-time (this is required for `torch.export` for example). Note that for `compile`, as we
-        internally don't compile the prefill, this is guaranteed to have been called already when compiling.
-        If compiling the prefill as well, e.g. calling `model.compile(...)` before `generate` with a static cache,
-        it is still supported in general, but without guarantees depending on the compilation options (e.g. cuda graphs,
-        i.e. `mode="reduce-overhead"` is known to fail). But it will in general work correctly, and prefill should
-        not be compiled anyway for performances!
+        function ahead-of-time (this is required for `torch.export` for example). It is also required whenever the
+        prefill itself ends up in a compiled region (with chunked prefill for instance).
         """
         self.dtype, self.device = key_states.dtype, key_states.device
         self.max_batch_size, self.num_heads = key_states.shape[:2]
@@ -857,6 +854,8 @@ class LinearAttentionCacheLayerMixin(ABC):
 
     # All shapes are static by essence in a LinearAttention layer, so it is compileable
     is_compileable = True
+    # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
+    supports_early_init = False
 
     def __init__(self):
         self.conv_states: torch.Tensor | None = None
@@ -1007,6 +1006,14 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         if len(args) == 0 and len(kwargs) == 1:
             LinearAttentionLayer.lazy_initialization(self, **kwargs)
 
+    def offload(self):
+        DynamicLayer.offload(self)
+        LinearAttentionLayer.offload(self)
+
+    def prefetch(self):
+        DynamicLayer.prefetch(self)
+        LinearAttentionLayer.prefetch(self)
+
     def reset(self) -> None:
         LinearAttentionLayer.reset(self)
         DynamicLayer.reset(self)
@@ -1089,19 +1096,22 @@ class Cache:
 
     def prefetch(self, layer_idx: int, only_non_sliding: bool = True):
         """
-        Prefetch a given layer on its device. If `only_non_sliding` is True, it will try to prefetch only the layers
-        which are non-sliding. If the `layer_idx` is outside the range, this will circle back to the first layers.
-        Note that we use a non-default stream for this, to avoid blocking.
+        Prefetch the next offloaded layer on its device, starting at `layer_idx` and circling back to the beginning
+        if needed. Linear-attention layers are never offloaded and are skipped, as are sliding layers when
+        `only_non_sliding`. Note that we use a non-default stream for this, to avoid blocking.
         """
-        if only_non_sliding:
-            # Try to find next non-sliding, starting at `layer_idx`
-            try:
-                layer_idx = layer_idx + self.is_sliding[layer_idx:].index(False)
-            # In this case, we need to circle back to the beginning
-            except ValueError:
-                layer_idx = self.is_sliding.index(False)
-        else:
-            layer_idx = layer_idx if layer_idx < len(self.layers) else 0
+        # Whether each layer is offloaded, hence worth prefetching: linear-attention layers never go through the
+        # offloading `update` path, and sliding layers are skipped when `only_non_sliding` (kept resident).
+        is_offloaded = [
+            not is_linear and not (only_non_sliding and is_sliding)
+            for is_linear, is_sliding in zip(self.is_linear, self.is_sliding)
+        ]
+        try:
+            # Try to find the next offloaded layer, starting at `layer_idx`
+            layer_idx = layer_idx + is_offloaded[layer_idx:].index(True)
+        # In this case, we need to circle back to the beginning
+        except ValueError:
+            layer_idx = is_offloaded.index(True)
 
         # Prefetch
         with self.prefetch_stream if _is_torch_greater_or_equal_than_2_7 else torch.cuda.stream(self.prefetch_stream):
@@ -1239,6 +1249,8 @@ class Cache:
             )
 
         for layer, layer_num_heads, layer_head_dim in zip(self.layers, num_heads, head_dim):
+            if not layer.supports_early_init or layer.is_initialized:
+                continue
             # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
             # this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
             # creates an empty tensor with correct shape, dtype and device), which is very efficient and practical
@@ -1370,8 +1382,9 @@ class Cache:
     @property
     def max_cache_len(self) -> int:
         """Return the maximum cache length of the cache"""
-        values = [layer.max_cache_len for layer in self.layers]
-        return max(values)
+        # Linear attention layers have no `max_cache_len`; skip them so a hybrid cache reports its attention layers'.
+        values = [layer.max_cache_len for layer in self.layers if hasattr(layer, "max_cache_len")]
+        return max(values) if values else 0
 
     @property
     def is_compileable(self) -> bool:
@@ -1384,12 +1397,23 @@ class Cache:
     @property
     def is_initialized(self) -> bool:
         """Return whether the cache data is initialized"""
-        return len(self.layers) > 0 and all(layer.is_initialized for layer in self.layers)
+        layers = [layer for layer in self.layers if layer.supports_early_init]
+        return len(layers) > 0 and all(layer.is_initialized for layer in layers)
 
     @property
     def is_sliding(self) -> list[bool]:
         """Return whether the layers of the cache are sliding window"""
         return [getattr(layer, "is_sliding", False) for layer in self.layers]
+
+    @property
+    def is_linear(self) -> list[bool]:
+        """Return whether the layers of the cache are linear attention (Mamba/SSM) layers. Note that layers containing
+        both linear and full attention states will return False by this function"""
+        return [
+            isinstance(layer, LinearAttentionCacheLayerMixin)
+            and not isinstance(layer, LinearAttentionAndFullAttentionLayer)
+            for layer in self.layers
+        ]
 
     def __len__(self):
         """
