@@ -1096,20 +1096,7 @@ class Molmo2VisionBackbone(PreTrainedModel):
 
 
 class Molmo2RotaryEmbedding(LlamaRotaryEmbedding):
-    def __init__(self, config: Molmo2TextConfig, rope_type: str | None = None):
-        nn.Module.__init__(self)
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-        self.config = config
-        self.rope_type = rope_type or config.rope_parameters["rope_type"]
-        rope_init_fn = (
-            self.compute_default_rope_parameters
-            if self.rope_type == "default"
-            else ROPE_INIT_FUNCTIONS[self.rope_type]
-        )
-        inv_freq, self.attention_scaling = rope_init_fn(config)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+    pass
 
 
 class Molmo2RMSNorm(LlamaRMSNorm):
@@ -1384,9 +1371,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.rotary_embs = nn.ModuleDict({"default": Molmo2RotaryEmbedding(config, rope_type="default")})
-        if config.rope_scaling_layers:
-            self.rotary_embs["scaling"] = Molmo2RotaryEmbedding(config)
+        self.rotary_emb = Molmo2RotaryEmbedding(config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -1442,17 +1427,16 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        position_embeddings = {key: self.rotary_embs[key](hidden_states, position_ids) for key in self.rotary_embs}
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for layer_idx, decoder_block in enumerate(self.blocks[: self.config.num_hidden_layers]):
-            rope_key = "scaling" if layer_idx in self.config.rope_scaling_layers else "default"
             hidden_states = decoder_block(
                 hidden_states,
                 attention_mask=causal_mask_mapping,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=position_embeddings[rope_key],
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

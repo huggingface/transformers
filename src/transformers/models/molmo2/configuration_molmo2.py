@@ -17,7 +17,6 @@ Molmo2 configuration
 """
 
 from dataclasses import field
-from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
@@ -137,12 +136,10 @@ class Molmo2TextConfig(PreTrainedConfig):
         The dropout ratio for the embedding layer.
     residual_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio applied after residual connections.
-    rope_theta (`float`, *optional*, defaults to 1000000.0):
-        The base period of the RoPE embeddings.
-    rope_scaling (`dict[str, Any]`, *optional*):
-        Dictionary containing the scaling configuration for the RoPE embeddings.
-    rope_scaling_layers (`list[int]`, *optional*):
-        Layer indices where extended RoPE scaling is applied. When unset, all layers use the default RoPE.
+    layer_types (`list[str]`, *optional*):
+        List of layer types to use for the model.
+    rope_parameters (`RopeParameters`, *optional*):
+        RoPE parameters for the model.
     norm_after (`bool`, *optional*, defaults to `False`):
         Whether to apply layer normalization after the attention/FFN blocks instead of before.
     attn_implementation (`str`, *optional*):
@@ -180,10 +177,7 @@ class Molmo2TextConfig(PreTrainedConfig):
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
     max_position_embeddings: int = 4096
-    rope_theta: float = 1000000.0
-    rope_scaling: dict[str, Any] | None = None
     rope_parameters: RopeParameters | dict | None = None
-    rope_scaling_layers: list[int] | None = None
     layer_norm_eps: float = 1e-6
     norm_after: bool = False
     initializer_range: float = 0.02
@@ -196,14 +190,7 @@ class Molmo2TextConfig(PreTrainedConfig):
             kwargs["attn_implementation"] = self.attn_implementation
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-        if self.rope_scaling_layers is None:
-            self.rope_scaling_layers = []
         super().__post_init__(**kwargs)
-
-    def convert_rope_params_to_dict(self, **kwargs):
-        if self.rope_scaling is not None:
-            kwargs["rope_scaling"] = self.rope_scaling
-        return super().convert_rope_params_to_dict(**kwargs)
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
