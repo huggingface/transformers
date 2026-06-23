@@ -111,9 +111,7 @@ class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
         group_scores = (
-            scores_for_choice.view(-1, self.n_group, self.num_experts // self.n_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
+            scores_for_choice.view(-1, self.n_group, self.num_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
         )
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
