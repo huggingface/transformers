@@ -333,7 +333,7 @@ The fast path relies on the `flash_attn_with_kvcache` kernel, which is available
 
 | Device | `attn_implementation` |
 |---|---|
-| CUDA | `flash_attention_3` |
+| CUDA | `flash_attention_2` or `flash_attention_3` |
 | XPU | [flash_attention_2](https://huggingface.co/kernels-community/flash-attn2) |
 
 For any other combination, or when the kernel can't be imported, the manager falls back to the varlen path. It logs a warning only when you set `max_blocks_per_request` explicitly.
