@@ -52,13 +52,117 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeCode2WavTransformerLayer,
     Qwen3OmniMoeConvNeXtBlock,
 )
-from .configuration_qwen3_tts_tokenizer_multi_codebook import (
-    Qwen3TTSTokenizerMultiCodebookCode2WavConfig,
-    Qwen3TTSTokenizerMultiCodebookConfig,
-)
 
 
 logger = logging.get_logger(__name__)
+
+
+@strict
+class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
+    r"""
+    Configuration class for the Qwen3-TTS V2 tokenizer decoder (Code2Wav). Only the fields specific to the
+    multi-codebook tokenizer are documented below; the remaining transformer and vocoder defaults are shared with
+    [`Qwen3OmniMoeCode2WavConfig`].
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 512):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 1024):
+            MLP intermediate dimension.
+        head_dim (`int`, *optional*, defaults to 64):
+            Attention head dimension.
+        codebook_dim (`int`, *optional*, defaults to 512):
+            Dimension of quantizer codebook vectors.
+        num_semantic_quantizers (`int`, *optional*, defaults to 1):
+            Number of semantic quantizer layers.
+        semantic_codebook_size (`int`, *optional*, defaults to 4096):
+            Size of the semantic codebook.
+        latent_dim (`int`, *optional*, defaults to 1024):
+            Latent dimension used between pre-conv and transformer.
+        vector_quantization_hidden_dimension (`int`, *optional*, defaults to 512):
+            Hidden dimension for the vector quantization projection.
+        use_causal_conv (`bool`, *optional*, defaults to `True`):
+            Whether to use causal convolutions in the decoder.
+        trim_right_ratio (`float`, *optional*, defaults to 1.0):
+            Ratio for trimming the right side of transposed convolution output.
+    """
+
+    model_type = "qwen3_tts_tokenizer_multi_codebook_code2wav"
+
+    hidden_size: int = 512
+    intermediate_size: int = 1024
+    head_dim: int = 64
+    codebook_dim: int = 512
+    num_semantic_quantizers: int = 1
+    semantic_codebook_size: int = 4096
+    latent_dim: int = 1024
+    vector_quantization_hidden_dimension: int = 512
+    use_causal_conv: bool = True
+    trim_right_ratio: float = 1.0
+
+
+@strict
+class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
+    r"""
+    Configuration class for the Qwen3-TTS V2 tokenizer (encoder + decoder).
+
+    Args:
+        encoder_config (`dict`, *optional*):
+            Configuration for the Mimi-based encoder sub-model.
+        decoder_config (`dict`, *optional*):
+            Configuration for the Code2Wav decoder sub-model.
+        encoder_valid_num_quantizers (`int`, *optional*, defaults to 16):
+            Number of quantizer layers the encoder actually uses.
+        input_sample_rate (`int`, *optional*, defaults to 24000):
+            Sample rate of the input audio.
+        output_sample_rate (`int`, *optional*, defaults to 24000):
+            Sample rate of the decoded output audio.
+        decode_upsample_rate (`int`, *optional*, defaults to 1920):
+            Upsampling rate applied during decoding.
+        encode_downsample_rate (`int`, *optional*, defaults to 1920):
+            Downsampling rate applied during encoding.
+    """
+
+    model_type = "qwen3_tts_tokenizer_multi_codebook"
+    sub_configs = {
+        "encoder_config": AutoConfig,
+        "decoder_config": Qwen3TTSTokenizerMultiCodebookCode2WavConfig,
+    }
+
+    def __init__(
+        self,
+        encoder_config: dict | None = None,
+        decoder_config: dict | None = None,
+        encoder_valid_num_quantizers: int | None = 16,
+        input_sample_rate: int | None = 24000,
+        output_sample_rate: int | None = 24000,
+        decode_upsample_rate: int | None = 1920,
+        encode_downsample_rate: int | None = 1920,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        if encoder_config is None:
+            encoder_config = {}
+            logger.info("encoder_config is None. Initializing V2 encoder with default values.")
+        if decoder_config is None:
+            decoder_config = {}
+            logger.info("decoder_config is None. Initializing V2 decoder with default values.")
+
+        self.encoder_config = (
+            CONFIG_MAPPING["mimi"](**encoder_config) if isinstance(encoder_config, dict) else encoder_config
+        )
+        self.decoder_config = (
+            Qwen3TTSTokenizerMultiCodebookCode2WavConfig(**decoder_config)
+            if isinstance(decoder_config, dict)
+            else decoder_config
+        )
+
+        self.encoder_valid_num_quantizers = encoder_valid_num_quantizers
+        self.input_sample_rate = input_sample_rate
+        self.output_sample_rate = output_sample_rate
+        self.decode_upsample_rate = decode_upsample_rate
+        self.encode_downsample_rate = encode_downsample_rate
 
 
 #  Component Aliases
