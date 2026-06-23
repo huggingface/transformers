@@ -138,15 +138,3 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
 [[autodoc]] Qwen3_5ForTokenClassification
     - forward
 
-## Qwen3_5CausalLMOutputWithPast
-
-[[autodoc]] Qwen3_5CausalLMOutputWithPast
-
-## Qwen3_5VLCausalLMOutputWithPast
-
-[[autodoc]] Qwen3_5VLCausalLMOutputWithPast
-
-## Qwen3_5MtpLayerStack
-
-[[autodoc]] Qwen3_5MtpLayerStack
-
