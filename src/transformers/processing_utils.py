@@ -1960,7 +1960,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
-    @overload
+    @typing.overload
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
@@ -1979,7 +1979,7 @@ class ProcessorMixin(PushToHubMixin):
     ) -> str:
         ...
 
-    @overload
+    @typing.overload
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
@@ -1995,10 +1995,10 @@ class ProcessorMixin(PushToHubMixin):
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
         **kwargs,
-    ) -> torch.Tensor:
+    ) -> list[int] | list[list[int]] | np.ndarray | "torch.Tensor":
         ...
 
-    @overload
+    @typing.overload
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
