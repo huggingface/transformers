@@ -39,6 +39,47 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+def fold_mtp_loss(
+    mtp_module: nn.Module | None,
+    *,
+    main_loss: torch.Tensor | None,
+    labels: torch.Tensor | None,
+    input_ids: torch.Tensor | None,
+    main_hidden_states: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    position_ids: torch.Tensor | None,
+    mtp_loss_weight: float = 0.0,
+) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+    """Compute MTP auxiliary loss and optionally fold it into the main LM loss.
+
+    Returns `(loss, mtp_loss)`. `mtp_loss` is `None` when MTP is disabled or
+    `labels`/`input_ids` are not provided. When `mtp_loss_weight > 0` and a
+    `main_loss` is available, the returned `loss` is
+    `main_loss + mtp_loss_weight * mtp_loss`; otherwise `loss` is returned
+    unchanged so callers that prefer to weight it externally can read
+    `mtp_loss` from the output.
+    """
+    if (
+        mtp_module is None
+        or labels is None
+        or input_ids is None
+    ):
+        return main_loss, None
+
+    mtp_loss = mtp_module.compute_mtp_loss(
+        input_ids=input_ids,
+        main_hidden_states=main_hidden_states,
+        labels=labels,
+        attention_mask=attention_mask,
+        position_ids=position_ids,
+    )
+
+    loss = main_loss
+    if mtp_loss_weight > 0.0 and loss is not None:
+        loss = loss + mtp_loss_weight * mtp_loss
+    return loss, mtp_loss
+
+
 class MtpLayer(nn.Module):
     def __init__(
         self, config: PreTrainedConfig, decoder_layer_cls: type[nn.Module], norm_cls: type[nn.Module], layer_idx: int

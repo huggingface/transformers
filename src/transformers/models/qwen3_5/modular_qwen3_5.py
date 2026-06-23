@@ -23,7 +23,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...generation.mtp import MtpLayerStack
+from ...generation.mtp import MtpLayerStack, fold_mtp_loss
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
@@ -757,22 +757,16 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        if (
-            labels is not None
-            and input_ids is not None
-            and getattr(self.config, "num_mtp_layers", 0) > 0
-            and hasattr(self, "mtp")
-        ):
-            mtp_loss = self.mtp.compute_mtp_loss(
-                input_ids=input_ids,
-                main_hidden_states=hidden_states,
-                labels=labels,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-            )
-            mtp_weight = float(getattr(self.config, "mtp_loss_weight", 0.0))
-            if mtp_weight > 0.0 and loss is not None:
-                loss = loss + mtp_weight * mtp_loss
+        loss, mtp_loss = fold_mtp_loss(
+            getattr(self, "mtp", None),
+            main_loss=loss,
+            labels=labels,
+            input_ids=input_ids,
+            main_hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            mtp_loss_weight=float(getattr(self.config, "mtp_loss_weight", 0.0)),
+        )
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -906,22 +900,16 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
-        if (
-            labels is not None
-            and input_ids is not None
-            and getattr(self.config, "num_mtp_layers", 0) > 0
-            and hasattr(self, "mtp")
-        ):
-            mtp_loss = self.mtp.compute_mtp_loss(
-                input_ids=input_ids,
-                main_hidden_states=hidden_states,
-                labels=labels,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-            )
-            mtp_weight = float(getattr(self.config, "mtp_loss_weight", 0.0))
-            if mtp_weight > 0.0 and loss is not None:
-                loss = loss + mtp_weight * mtp_loss
+        loss, mtp_loss = fold_mtp_loss(
+            getattr(self, "mtp", None),
+            main_loss=loss,
+            labels=labels,
+            input_ids=input_ids,
+            main_hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            mtp_loss_weight=float(getattr(self.config, "mtp_loss_weight", 0.0)),
+        )
 
         return Qwen3_5CausalLMOutputWithPast(
             loss=loss,
