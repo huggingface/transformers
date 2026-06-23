@@ -219,6 +219,31 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
         inputs_dict["image_token_pooling"] = full_pooling[: batch_size * num_image_tokens]
         return config, inputs_dict
 
+    def test_expand_inputs_for_generation_expands_visual_token_pooling(self):
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=2)
+        model = Molmo2ForConditionalGeneration(config).to(torch_device)
+
+        expand_size = 3
+        input_ids = inputs_dict["input_ids"]
+        image_token_pooling = inputs_dict["image_token_pooling"]
+        expanded_input_ids, expanded_kwargs = model._expand_inputs_for_generation(
+            expand_size=expand_size,
+            input_ids=input_ids,
+            image_token_pooling=image_token_pooling,
+        )
+
+        image_token_counts = (input_ids == config.image_token_id).sum(dim=-1).tolist()
+        expected_pooling = []
+        offset = 0
+        for count in image_token_counts:
+            image_token_pooling_slice = image_token_pooling[offset : offset + count]
+            offset += count
+            expected_pooling.extend(image_token_pooling_slice for _ in range(expand_size))
+        expected_pooling = torch.cat(expected_pooling, dim=0)
+
+        self.assertEqual(expanded_input_ids.shape[0], input_ids.shape[0] * expand_size)
+        self.assertTrue(torch.equal(expanded_kwargs["image_token_pooling"], expected_pooling))
+
     # overwrite inputs_embeds tests because we need to delete "pixel_values" for VLMs
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

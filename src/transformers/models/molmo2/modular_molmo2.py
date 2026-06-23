@@ -1633,22 +1633,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
         image_features: torch.FloatTensor | None = None
         if images is not None:
             image_features = self.vision_backbone(images, token_pooling)
-            image_token_counts = (input_ids == self.config.image_token_id).sum(dim=-1)
-            total_image_tokens = image_token_counts.sum()
-            if total_image_tokens != image_features.shape[0] and total_image_tokens % image_features.shape[0] == 0:
-                num_beams = total_image_tokens // image_features.shape[0]
-                original_image_token_counts = image_token_counts[::num_beams]
-                if original_image_token_counts.sum() == image_features.shape[0]:
-                    image_features = torch.cat(
-                        [
-                            image_features_slice
-                            for image_features_slice in image_features.split(
-                                [int(count) for count in original_image_token_counts.tolist()]
-                            )
-                            for _ in range(num_beams)
-                        ],
-                        dim=0,
-                    )
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(
                 special_image_mask,
@@ -1801,14 +1785,45 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             "video_grids",
         )
         visual = {k: model_kwargs.pop(k) for k in visual_keys if k in model_kwargs}
+        original_input_ids = input_ids
         input_ids, model_kwargs = super()._expand_inputs_for_generation(
             expand_size=expand_size,
             is_encoder_decoder=is_encoder_decoder,
             input_ids=input_ids,
             **model_kwargs,
         )
+        if expand_size != 1 and original_input_ids is not None:
+            image_token_counts = (original_input_ids == self.config.image_token_id).sum(dim=-1)
+            if "image_token_pooling" in visual:
+                visual["image_token_pooling"] = self._repeat_visual_token_pooling_for_generation(
+                    visual["image_token_pooling"], image_token_counts, expand_size
+                )
+            if "video_token_pooling" in visual:
+                visual["video_token_pooling"] = self._repeat_visual_token_pooling_for_generation(
+                    visual["video_token_pooling"], image_token_counts, expand_size
+                )
         model_kwargs.update(visual)
         return input_ids, model_kwargs
+
+    @staticmethod
+    def _repeat_visual_token_pooling_for_generation(
+        token_pooling: torch.Tensor | None, token_counts: torch.Tensor, expand_size: int
+    ) -> torch.Tensor | None:
+        if token_pooling is None:
+            return None
+
+        counts = [int(count) for count in token_counts.tolist()]
+        if token_pooling.shape[0] != sum(counts):
+            return token_pooling
+
+        repeated_pooling = []
+        offset = 0
+        for count in counts:
+            token_pooling_slice = token_pooling[offset : offset + count]
+            offset += count
+            repeated_pooling.extend(token_pooling_slice for _ in range(expand_size))
+
+        return torch.cat(repeated_pooling, dim=0) if repeated_pooling else token_pooling
 
     def prepare_inputs_for_generation(
         self,
