@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """This file contains the parsers used by chat response parsing. Each parser takes a chunk of captured text
-and parses it into a single key in the output message dictionary. Functions are generally boilerplate and as
-a result this is mostly agent-written."""
+and parses it into a single key in the output message dictionary. Functions are generally boilerplate."""
 
 from __future__ import annotations
 
