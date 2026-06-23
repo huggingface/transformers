@@ -149,8 +149,10 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
     # SAM uses rel-pos bias, incompatible with flash attention.
     _supports_flash_attn = False
     _supports_sdpa = True
-
-    _can_compile_fullgraph = True
+    # The text model keeps the image/prompt prefill fully visible by tracking its length on the cache and
+    # building the attention mask from it. This stateful, data-dependent masking cannot be traced into a single
+    # graph, so full-graph compilation is unsupported.
+    _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
 
@@ -167,6 +169,15 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, UnlimitedOcrModel):
             embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
             init.normal_(module.view_separator, mean=0.0, std=embed_std)
+        if isinstance(module, UnlimitedOcrModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
+        elif isinstance(module, UnlimitedOcrVisionEmbeddings):
+            factor = module.config.initializer_factor
+            init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
 
 
 class UnlimitedOcrSamVisionAttention(nn.Module):
@@ -907,90 +918,10 @@ class UnlimitedOcrVisionEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class UnlimitedOcrVisionEmbeddings(nn.Module):
-    def __init__(self, config: UnlimitedOcrVisionConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
-
-        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
-
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            bias=False,
-        )
-
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
-
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing.
-
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
-        """
-        num_patches = embeddings.shape[1] - 1
-        position_embedding = self.position_embedding.weight.unsqueeze(0)
-        num_positions = position_embedding.shape[1] - 1
-
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embedding(self.position_ids)
-
-        class_pos_embed = position_embedding[:, :1]
-        patch_pos_embed = position_embedding[:, 1:]
-
-        dim = embeddings.shape[-1]
-
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
-
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-
-        target_dtype = patch_pos_embed.dtype
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.to(torch.float32),
-            size=(new_height, new_width),
-            mode="bicubic",
-            antialias=True,
-            align_corners=False,
-        ).to(target_dtype)
-
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-
-        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
-
-    def forward(self, patch_embeds: torch.Tensor) -> torch.Tensor:
-        r"""
-        patch_embeds (`torch.Tensor` of shape `(batch_size, hidden_size, grid_height, grid_width)`):
-            The SAM feature map, injected directly as the CLIP patch embeddings. The CLIP patch convolution
-            (`self.patch_embedding`) is intentionally bypassed.
-        """
-        batch_size, _, grid_height, grid_width = patch_embeds.shape
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
-        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.interpolate_pos_encoding(
-            embeddings, grid_height * self.patch_size, grid_width * self.patch_size
-        )
-        return embeddings
-
-
 class UnlimitedOcrAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: UnlimitedOcrVisionConfig | UnlimitedOcrTextConfig):
+    def __init__(self, config: UnlimitedOcrVisionEncoderConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -1004,6 +935,9 @@ class UnlimitedOcrAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        # The shared `eager_attention_forward` calls `repeat_kv(..., num_key_value_groups)`; CLIP attention is
+        # plain multi-head attention, so the group count is 1 and `repeat_kv` becomes a no-op.
+        self.num_key_value_groups = 1
 
     def forward(
         self,
@@ -1093,6 +1027,86 @@ class UnlimitedOcrEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class UnlimitedOcrVisionEmbeddings(nn.Module):
+    def __init__(self, config: UnlimitedOcrVisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+
+        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            bias=False,
+        )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches + 1
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+        num_patches = embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
+
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        target_dtype = patch_pos_embed.dtype
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed.to(torch.float32),
+            size=(new_height, new_width),
+            mode="bicubic",
+            antialias=True,
+            align_corners=False,
+        ).to(target_dtype)
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, patch_embeds: torch.Tensor) -> torch.Tensor:
+        r"""
+        patch_embeds (`torch.Tensor` of shape `(batch_size, hidden_size, grid_height, grid_width)`):
+            The SAM feature map, injected directly as the CLIP patch embeddings. The CLIP patch convolution
+            (`self.patch_embedding`) is intentionally bypassed.
+        """
+        batch_size, _, grid_height, grid_width = patch_embeds.shape
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        embeddings = embeddings + self.interpolate_pos_encoding(
+            embeddings, grid_height * self.patch_size, grid_width * self.patch_size
+        )
+        return embeddings
+
+
 class UnlimitedOcrEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -1137,6 +1151,10 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
     main_input_name = "patch_embeds"
     input_modalities = ("image",)
     _input_embed_layer = "patch_embedding"
+    _can_record_outputs = {
+        "hidden_states": UnlimitedOcrEncoderLayer,
+        "attentions": UnlimitedOcrAttention,
+    }
 
     def __init__(self, config: UnlimitedOcrVisionEncoderConfig):
         super().__init__(config)
@@ -1148,6 +1166,7 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @capture_outputs
     @auto_docstring
     def forward(self, patch_embeds: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         r"""
@@ -1157,11 +1176,7 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
         hidden_states = self.embeddings(patch_embeds)
         hidden_states = self.pre_layrnorm(hidden_states)
         encoder_outputs: BaseModelOutput = self.encoder(inputs_embeds=hidden_states, **kwargs)
-        return BaseModelOutput(
-            last_hidden_state=encoder_outputs.last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return BaseModelOutput(last_hidden_state=encoder_outputs.last_hidden_state)
 
 
 class UnlimitedOcrVisionModel(UnlimitedOcrPreTrainedModel):
@@ -1641,9 +1656,10 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
         self.vocab_size = config.text_config.vocab_size
 
         self.language_model = UnlimitedOcrTextModel(config.text_config)
-        self.view_separator = nn.Parameter(torch.randn(config.text_config.hidden_size) * embed_std)
-        embed_std = 1 / torch.sqrt(torch.tensor(config.text_config.hidden_size, dtype=torch.float32))
-        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size) * embed_std)
+
+        # Learnable separator between local and global views (initialized in `_init_weights`).
+        self.view_separator = nn.Parameter(torch.empty(config.text_config.hidden_size))
+        self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size))
         self.post_init()
 
     @can_return_tuple
@@ -1926,16 +1942,18 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Generati
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_values_local=pixel_values_local,
-            num_local_patches=num_local_patches,
             attention_mask=attention_mask,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
+        # Image inputs are only needed during prefill (or when the cache is disabled); once the image tokens
+        # have been embedded they must be dropped so later decode steps don't reprocess the pixel values.
         if is_first_iteration or not kwargs.get("use_cache", True):
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["pixel_values_local"] = pixel_values_local
+            model_inputs["num_local_patches"] = num_local_patches
             model_inputs["image_spatial_crop"] = image_spatial_crop
 
         return model_inputs

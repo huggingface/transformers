@@ -51,8 +51,7 @@ class UnlimitedOcrVisionText2TextModelTester(VLMModelTester):
     vision_config_class = UnlimitedOcrVisionConfig
 
     def __init__(self, parent, **kwargs):
-        # VisionModel always selects query_768_resolution (144 tokens) for small images + 1 separator
-        kwargs.setdefault("num_image_tokens", 145)
+        kwargs.setdefault("num_image_tokens", 7)
         kwargs.setdefault("image_token_id", 1)
         kwargs.setdefault("image_size", 16)
         kwargs.setdefault("hidden_size", 128)
@@ -83,6 +82,7 @@ class UnlimitedOcrVisionText2TextModelTester(VLMModelTester):
             "patch_size": 2,
             "hidden_act": "gelu",
             "mlp_ratio": 4.0,
+            "mlp_dim": 128,
             "window_size": 4,
             "global_attn_indexes": [1],
             "downsample_channels": [32, 64],
@@ -144,8 +144,12 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
 
     def _image_features_prepare_config_and_inputs(self):
         config, inputs_dict = super()._image_features_prepare_config_and_inputs()
-        # test_get_image_features_output expects vision_config.hidden_size, but ours is in encoder_config.
-        config.vision_config.hidden_size = config.vision_config.encoder_config.hidden_size
+        # `get_image_features` returns the concatenation of the SAM feature map and the CLIP encoder output as
+        # `last_hidden_state`, so its hidden size is the sum of the two. `vision_config` has no `hidden_size` of
+        # its own, so set it here for `test_get_image_features_output`.
+        config.vision_config.hidden_size = (
+            config.vision_config.sam_config.downsample_channels[-1] + config.vision_config.encoder_config.hidden_size
+        )
         return config, inputs_dict
 
 

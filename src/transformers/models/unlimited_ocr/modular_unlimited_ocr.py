@@ -17,6 +17,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -33,7 +34,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.configuration_clip import CLIPVisionConfig
-from ..clip.modeling_clip import CLIPVisionEmbeddings, CLIPVisionModel
+from ..clip.modeling_clip import CLIPAttention, CLIPEncoderLayer, CLIPVisionEmbeddings, CLIPVisionModel
 from ..deepseek_ocr2.configuration_deepseek_ocr2 import (
     DeepseekOcr2Config,
     DeepseekOcr2TextConfig,
@@ -294,7 +295,23 @@ class UnlimitedOcrCausalLMOutputWithPast(DeepseekOcr2CausalLMOutputWithPast):
 
 
 class UnlimitedOcrPreTrainedModel(DeepseekOcr2PreTrainedModel):
-    pass
+    # The text model keeps the image/prompt prefill fully visible by tracking its length on the cache and
+    # building the attention mask from it. This stateful, data-dependent masking cannot be traced into a single
+    # graph, so full-graph compilation is unsupported.
+    _can_compile_fullgraph = False
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, UnlimitedOcrModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
+        elif isinstance(module, UnlimitedOcrVisionEmbeddings):
+            factor = module.config.initializer_factor
+            init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
 
 
 class UnlimitedOcrSamVisionAttention(DeepseekOcr2SamVisionAttention):
@@ -353,6 +370,18 @@ class UnlimitedOcrVisionEncoderLayer(DeepseekOcr2VisionEncoderLayer):
     pass
 
 
+class UnlimitedOcrAttention(CLIPAttention):
+    def __init__(self, config: UnlimitedOcrVisionEncoderConfig):
+        super().__init__(config)
+        # The shared `eager_attention_forward` calls `repeat_kv(..., num_key_value_groups)`; CLIP attention is
+        # plain multi-head attention, so the group count is 1 and `repeat_kv` becomes a no-op.
+        self.num_key_value_groups = 1
+
+
+class UnlimitedOcrEncoderLayer(CLIPEncoderLayer):
+    pass
+
+
 class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         num_patches = embeddings.shape[1] - 1
@@ -405,12 +434,17 @@ class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
 
 class UnlimitedOcrVisionEncoder(CLIPVisionModel):
     main_input_name = "patch_embeds"
+    _can_record_outputs = {
+        "hidden_states": UnlimitedOcrEncoderLayer,
+        "attentions": UnlimitedOcrAttention,
+    }
 
     def __init__(self, config: UnlimitedOcrVisionEncoderConfig):
         super().__init__(config)
         del self.post_layernorm
 
     @can_return_tuple
+    @capture_outputs
     @auto_docstring
     def forward(self, patch_embeds: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         r"""
@@ -420,11 +454,7 @@ class UnlimitedOcrVisionEncoder(CLIPVisionModel):
         hidden_states = self.embeddings(patch_embeds)
         hidden_states = self.pre_layrnorm(hidden_states)
         encoder_outputs: BaseModelOutput = self.encoder(inputs_embeds=hidden_states, **kwargs)
-        return BaseModelOutput(
-            last_hidden_state=encoder_outputs.last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return BaseModelOutput(last_hidden_state=encoder_outputs.last_hidden_state)
 
 
 class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
@@ -572,9 +602,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             config.vision_config.sam_config.downsample_channels[-1] + config.vision_config.encoder_config.hidden_size,
             config.text_config.hidden_size,
         )
-        embed_std = 1 / torch.sqrt(torch.tensor(config.text_config.hidden_size, dtype=torch.float32))
-        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size) * embed_std)
-        self.view_separator = nn.Parameter(torch.randn(config.text_config.hidden_size) * embed_std)
+        self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size))
 
     def get_image_features(
         self,
@@ -792,16 +820,18 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_values_local=pixel_values_local,
-            num_local_patches=num_local_patches,
             attention_mask=attention_mask,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
+        # Image inputs are only needed during prefill (or when the cache is disabled); once the image tokens
+        # have been embedded they must be dropped so later decode steps don't reprocess the pixel values.
         if is_first_iteration or not kwargs.get("use_cache", True):
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["pixel_values_local"] = pixel_values_local
+            model_inputs["num_local_patches"] = num_local_patches
             model_inputs["image_spatial_crop"] = image_spatial_crop
 
         return model_inputs
