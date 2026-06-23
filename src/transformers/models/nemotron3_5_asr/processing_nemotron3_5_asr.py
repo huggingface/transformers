@@ -276,7 +276,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
 
             - **prompt_ids** -- A `(batch_size,)` `torch.LongTensor` of language-prompt indices. Pass it
               to the model/`generate`; the model turns it into the broadcast one-hot used by
-              `prompt_kernel`.
+              `prompt_projector`.
         """
         if not is_streaming and not is_first_audio_chunk:
             raise ValueError("In non-streaming mode (`is_streaming=False`), `is_first_audio_chunk` must be `True`.")

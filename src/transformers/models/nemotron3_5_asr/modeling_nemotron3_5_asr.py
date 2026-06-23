@@ -112,6 +112,22 @@ class Nemotron3_5AsrPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
+class Nemotron3_5AsrPromptProjector(nn.Module):
+    def __init__(self, config: Nemotron3_5AsrConfig):
+        super().__init__()
+        self.linear_1 = nn.Linear(
+            config.encoder_config.hidden_size + config.num_prompts, config.prompt_intermediate_size
+        )
+        self.act = nn.ReLU()
+        self.linear_2 = nn.Linear(config.prompt_intermediate_size, config.encoder_config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
 class Nemotron3_5AsrRNNTDecoder(nn.Module):
     """LSTM-based prediction network For RNN-T"""
 
@@ -197,11 +213,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
         self.joint = Nemotron3_5AsrRNNTJointNetwork(config)
         self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
         # Language-ID prompt fusion: [encoder_output ; one_hot(language)] -> MLP -> encoder hidden size.
-        self.prompt_kernel = nn.Sequential(
-            nn.Linear(config.encoder_config.hidden_size + config.num_prompts, config.prompt_intermediate_size),
-            nn.ReLU(),
-            nn.Linear(config.prompt_intermediate_size, config.encoder_config.hidden_size),
-        )
+        self.prompt_projector = Nemotron3_5AsrPromptProjector(config)
 
         self.post_init()
 
@@ -234,7 +246,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
         prompt_ids = prompt_ids.to(hidden_states.device)
         one_hot = nn.functional.one_hot(prompt_ids, num_classes=self.config.num_prompts).to(hidden_states.dtype)
         one_hot = one_hot[:, None, :].expand(-1, hidden_states.shape[1], -1)
-        fused = self.prompt_kernel(torch.cat([hidden_states, one_hot], dim=-1))
+        fused = self.prompt_projector(torch.cat([hidden_states, one_hot], dim=-1))
 
         encoder_outputs.pooler_output = self.encoder_projector(fused)
         return encoder_outputs
@@ -268,7 +280,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
             Defaults to `config.encoder_config.default_num_lookahead_tokens`.
         prompt_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Language-prompt indices for language-ID conditioning. Produced by the processor from
-            `language`. Turned into the broadcast one-hot consumed by `prompt_kernel`.
+            `language`. Turned into the broadcast one-hot consumed by `prompt_projector`.
 
         Example:
 

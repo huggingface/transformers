@@ -17,14 +17,14 @@
 
 Adapted from `convert_nemotron_asr_to_hf.py`. `Nemotron3_5Asr` is the multilingual extension of
 `NemotronAsr`: the encoder / decoder / joint module layout (and therefore the weight key mappings) is
-identical, plus a single new top-level module — `prompt_kernel`, the language-ID prompt-fusion MLP —
-whose NeMo keys (`prompt_kernel.0/.2.*`) match the HF names verbatim and so pass through unchanged.
+identical, plus a single new top-level module — `prompt_projector`, the language-ID prompt-fusion MLP.
+Its NeMo keys (`prompt_kernel.0/.2.*`) are remapped to the HF names (`prompt_projector.linear_1/2.*`).
 
 The multilingual differences handled here are:
   * the target classes are `Nemotron3_5Asr*`,
   * `num_prompts` and the `prompt_dictionary` (locale -> prompt index) are read from NeMo's
     `model_defaults` and written into the config and processor,
-  * `prompt_intermediate_size` is derived from the `prompt_kernel` shapes.
+  * `prompt_intermediate_size` is derived from the `prompt_projector` shapes.
 """
 
 import argparse
@@ -50,8 +50,11 @@ from transformers.utils.hub import cached_file
 
 
 # Encoder / decoder / joint submodule layout matches NemotronAsr (and Parakeet), so these mappings are
-# reused verbatim. The new `prompt_kernel.*` keys are not matched by any pattern and pass through as-is.
+# reused verbatim. The new `prompt_kernel.*` keys (NeMo's `nn.Sequential`) are remapped to the HF
+# `prompt_projector.linear_{1,2}.*` names of `Nemotron3_5AsrPromptProjector`.
 NEMO_TO_HF_WEIGHT_MAPPING = {
+    r"prompt_kernel\.0\.": r"prompt_projector.linear_1.",
+    r"prompt_kernel\.2\.": r"prompt_projector.linear_2.",
     # NeMo's `pre_encode.conv` is a flat Sequential (conv, relu, dwconv, pwconv, relu, dwconv, pwconv, relu).
     # HF splits it into a stem (`conv_in`) plus depthwise-separable `layers`.
     r"encoder\.pre_encode\.conv\.0\.": r"encoder.subsampling.conv_in.",
@@ -426,7 +429,7 @@ def load_and_convert_rnnt_state_dict(model_files):
         if key.startswith("ctc_decoder.") or "ctc_loss" in key:
             print(f"Skipping auxiliary CTC weight: {key}")
             continue
-        # `prompt_kernel.*` (the language-ID fusion MLP) has identical names in NeMo and HF.
+        # `prompt_kernel.*` (the language-ID fusion MLP) is remapped to `prompt_projector.linear_{1,2}.*`.
         converted_key = convert_key(key, all_mappings)
         converted_state_dict[converted_key] = value
 
@@ -437,13 +440,13 @@ def write_rnnt_model(nemo_config, encoder_config, model_files, output_dir, push_
     """Write the RNN-T model using the encoder config, RNN-T config, and converted state dict."""
     converted_state_dict = load_and_convert_rnnt_state_dict(model_files)
 
-    # The prompt-fusion MLP hidden size is the output dim of its first linear (`prompt_kernel.0`).
-    if "prompt_kernel.0.weight" not in converted_state_dict:
+    # The prompt-fusion MLP hidden size is the output dim of its first linear (`prompt_projector.linear_1`).
+    if "prompt_projector.linear_1.weight" not in converted_state_dict:
         raise ValueError(
-            "Checkpoint has no `prompt_kernel.0.weight`; this does not look like a prompt-conditioned "
+            "Checkpoint has no `prompt_projector.linear_1.weight`; this does not look like a prompt-conditioned "
             "Nemotron 3.5 ASR checkpoint. Use `convert_nemotron_asr_to_hf.py` for the English model."
         )
-    prompt_intermediate_size = converted_state_dict["prompt_kernel.0.weight"].shape[0]
+    prompt_intermediate_size = converted_state_dict["prompt_projector.linear_1.weight"].shape[0]
 
     model_config = convert_rnnt_config(nemo_config, encoder_config, prompt_intermediate_size)
     print(f"Converted RNN-T config: {model_config}")

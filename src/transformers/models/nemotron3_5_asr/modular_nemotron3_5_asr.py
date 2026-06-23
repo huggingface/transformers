@@ -12,15 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Nemotron3_5Asr model.
-
-Nemotron3_5Asr is the multilingual extension of [`NemotronAsrStreaming`]. It reuses the entire cache-aware
-streaming FastConformer encoder, RNN-T decoder, joint network, feature extraction, and streaming
-generation machinery unchanged, and adds **language-ID prompt conditioning**: the target language is
-turned into a one-hot vector, broadcast across the encoder time axis, concatenated with the encoder
-output, and fused back to the encoder hidden size by a small MLP (`prompt_kernel`) before the joint
-network. See `nvidia/nemotron-3.5-asr-streaming-0.6b`.
-"""
 
 from dataclasses import dataclass
 
@@ -282,7 +273,7 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
 
             - **prompt_ids** -- A `(batch_size,)` `torch.LongTensor` of language-prompt indices. Pass it
               to the model/`generate`; the model turns it into the broadcast one-hot used by
-              `prompt_kernel`.
+              `prompt_projector`.
         """
         if not is_streaming and not is_first_audio_chunk:
             raise ValueError("In non-streaming mode (`is_streaming=False`), `is_first_audio_chunk` must be `True`.")
@@ -365,6 +356,22 @@ class Nemotron3_5AsrPreTrainedModel(NemotronAsrStreamingPreTrainedModel):
         PreTrainedModel._init_weights(self, module)
 
 
+class Nemotron3_5AsrPromptProjector(nn.Module):
+    def __init__(self, config: Nemotron3_5AsrConfig):
+        super().__init__()
+        self.linear_1 = nn.Linear(
+            config.encoder_config.hidden_size + config.num_prompts, config.prompt_intermediate_size
+        )
+        self.act = nn.ReLU()
+        self.linear_2 = nn.Linear(config.prompt_intermediate_size, config.encoder_config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
 @auto_docstring(
     custom_intro="""
     Nemotron3_5Asr Encoder with an RNN-T (Recurrent Neural Network Transducer) head and language-ID
@@ -375,11 +382,7 @@ class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGeneratio
     def __init__(self, config: Nemotron3_5AsrConfig):
         super().__init__(config)
         # Language-ID prompt fusion: [encoder_output ; one_hot(language)] -> MLP -> encoder hidden size.
-        self.prompt_kernel = nn.Sequential(
-            nn.Linear(config.encoder_config.hidden_size + config.num_prompts, config.prompt_intermediate_size),
-            nn.ReLU(),
-            nn.Linear(config.prompt_intermediate_size, config.encoder_config.hidden_size),
-        )
+        self.prompt_projector = Nemotron3_5AsrPromptProjector(config)
         self.post_init()
 
     @can_return_tuple
@@ -411,7 +414,7 @@ class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGeneratio
         prompt_ids = prompt_ids.to(hidden_states.device)
         one_hot = nn.functional.one_hot(prompt_ids, num_classes=self.config.num_prompts).to(hidden_states.dtype)
         one_hot = one_hot[:, None, :].expand(-1, hidden_states.shape[1], -1)
-        fused = self.prompt_kernel(torch.cat([hidden_states, one_hot], dim=-1))
+        fused = self.prompt_projector(torch.cat([hidden_states, one_hot], dim=-1))
 
         encoder_outputs.pooler_output = self.encoder_projector(fused)
         return encoder_outputs
@@ -445,7 +448,7 @@ class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGeneratio
             Defaults to `config.encoder_config.default_num_lookahead_tokens`.
         prompt_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Language-prompt indices for language-ID conditioning. Produced by the processor from
-            `language`. Turned into the broadcast one-hot consumed by `prompt_kernel`.
+            `language`. Turned into the broadcast one-hot consumed by `prompt_projector`.
 
         Example:
 
