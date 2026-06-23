@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import copy
 import os
 import re
 from typing import TYPE_CHECKING
@@ -47,7 +48,19 @@ class MtpLayer(nn.Module):
         self.enorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
         self.eh_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
-        self.mtp_block = decoder_layer_cls(config, layer_idx)
+        # Decoder layers driven by a per-layer `layer_types` list (e.g. Qwen3.5
+        # hybrid attention) need an entry at `layer_idx`. The mtp block always
+        # runs full attention, so extend a shallow copy of the config to keep
+        # the original model config untouched.
+        block_config = config
+        layer_types = getattr(config, "layer_types", None)
+        if layer_types is not None and layer_idx >= len(layer_types):
+            block_config = copy.copy(config)
+            new_layer_types = list(layer_types)
+            while len(new_layer_types) <= layer_idx:
+                new_layer_types.append("full_attention")
+            block_config.layer_types = new_layer_types
+        self.mtp_block = decoder_layer_cls(block_config, layer_idx)
         self.post_norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
