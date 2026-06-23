@@ -725,9 +725,7 @@ class Gemma3Model(PaliGemmaModel):
             }
 
             if token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(
-                    token_type_ids, device=inputs_embeds.device
-                )
+                block_sequence_ids = get_block_sequence_ids_for_mask(token_type_ids, device=inputs_embeds.device)
                 causal_mask_mapping = create_masks_for_vision_model(
                     block_sequence_ids=block_sequence_ids,
                     **mask_kwargs,
@@ -930,9 +928,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         }
 
         if token_type_ids is not None:
-            block_sequence_ids = get_block_sequence_ids_for_mask(
-                token_type_ids, device=inputs_embeds.device
-            )
+            block_sequence_ids = get_block_sequence_ids_for_mask(token_type_ids, device=inputs_embeds.device)
             return create_masks_for_vision_model(
                 block_sequence_ids=block_sequence_ids,
                 **mask_kwargs,

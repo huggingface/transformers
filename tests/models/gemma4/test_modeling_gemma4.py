@@ -606,7 +606,7 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
         config = self.model_tester.get_config()
         config.text_config._attn_implementation = "eager"
-        
+
         # Override sliding window to a known small value to test truncation
         sliding_window = 4
         config.text_config.sliding_window = sliding_window
