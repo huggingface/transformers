@@ -79,12 +79,12 @@ class Molmo2AdapterConfig(PreTrainedConfig):
         Indices of ViT layers to extract features from.
     pooling_attention_mask (`bool`, *optional*, defaults to `False`):
         Whether to use attention mask during pooling.
+    float32_attention (`bool`, *optional*, defaults to `True`):
+        Whether to compute adapter attention scores in float32 for compatibility with the original checkpoint.
     text_hidden_size (`int`, *optional*, defaults to 3584):
         Hidden size of the text model (used for projection).
     image_feature_dropout (`float`, *optional*, defaults to 0.0):
         Dropout rate for image features.
-    float32_attention (`bool`, *optional*, defaults to `True`):
-        Whether to compute adapter attention scores in float32 for compatibility with the original checkpoint.
     attn_implementation (`str`, *optional*):
         Attention implementation serialized by the original checkpoint config.
     """
@@ -118,6 +118,8 @@ class Molmo2AdapterConfig(PreTrainedConfig):
 @strict
 class Molmo2TextConfig(PreTrainedConfig):
     r"""
+    layer_types (`list[str]`, *optional*):
+        List of layer types to use for the model.
     additional_vocab_size (`int`, *optional*, defaults to 128):
         Number of additional vocabulary tokens beyond the base vocabulary.
     qkv_bias (`bool`, *optional*, defaults to `True`):
@@ -131,8 +133,6 @@ class Molmo2TextConfig(PreTrainedConfig):
         The dropout ratio for the embedding layer.
     residual_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio applied after residual connections.
-    layer_types (`list[str]`, *optional*):
-        List of layer types to use for the model.
     rope_parameters (`RopeParameters`, *optional*):
         RoPE parameters for the model.
     norm_after (`bool`, *optional*, defaults to `False`):

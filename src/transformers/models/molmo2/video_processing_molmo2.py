@@ -168,8 +168,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         if fps is not None and num_frames is not None:
             raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
 
-        if max_fps is None:
-            max_fps = self.max_fps
+        max_fps = max_fps if max_fps is not None else self.max_fps
 
         if metadata.fps is None:
             metadata.fps = fps if fps is not None else max_fps
