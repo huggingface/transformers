@@ -207,6 +207,8 @@ class JambaMambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
+    layer_type = "linear_attention"
+
     def __init__(self, config: JambaConfig, layer_idx):
         super().__init__()
         self.config = config

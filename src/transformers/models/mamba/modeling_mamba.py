@@ -63,6 +63,8 @@ class MambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
+    layer_type = "linear_attention"
+
     def __init__(self, config: MambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__()
         self.config = config

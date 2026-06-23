@@ -272,6 +272,8 @@ class GraniteMoeHybridMambaLayer(nn.Module):
     - We ported most of the refactors in https://github.com/huggingface/transformers/pull/35154, which is (as of Dec 18, 2024) unmerged
     """
 
+    layer_type = "linear_attention"
+
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__()
         self.num_heads = config.mamba_n_heads

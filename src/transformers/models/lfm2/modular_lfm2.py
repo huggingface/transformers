@@ -133,6 +133,8 @@ class Lfm2Attention(LlamaAttention):
 
 
 class Lfm2ShortConv(nn.Module):
+    layer_type = "conv"
+
     def __init__(
         self,
         config: Lfm2Config,

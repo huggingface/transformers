@@ -368,6 +368,8 @@ class FalconH1Mixer(nn.Module):
     - The use of gated RMS normalization layer is optional
     """
 
+    layer_type = "linear_attention"
+
     def __init__(self, config: FalconH1Config, layer_idx: int):
         super().__init__()
         self.num_heads = config.mamba_n_heads

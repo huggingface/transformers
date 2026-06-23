@@ -500,6 +500,7 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
             self.self_attn = Lfm2MoeAttention(config, layer_idx)
         else:
             self.conv = Lfm2MoeShortConv(config, layer_idx)
+            self.conv.layer_type = "conv"
         self.feed_forward = (
             Lfm2MoeMLP(config, intermediate_size=config.intermediate_size)
             if layer_idx < config.num_dense_layers
