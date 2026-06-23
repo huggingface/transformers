@@ -230,7 +230,6 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
             "t_max": 0.8,
             "stability_threshold": 1,
             "confidence_threshold": 0.005,
-            "return_dict_in_generate": True,
         }
 
     # Overriding GenerationMixin-related functions that are not relevant to DiffusionGemma.
