@@ -19,6 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...masking_utils import (
@@ -207,8 +208,32 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
 @strict
 class UnlimitedOcrSamVisionConfig(GotOcr2VisionConfig):
+    r"""
+    output_channels (`int`, *optional*, defaults to 256):
+        Dimensionality of the output channels in the Patch Encoder.
+    use_abs_pos (`bool`, *optional*, defaults to `True`):
+        Whether to use absolute position embedding.
+    use_rel_pos (`bool`, *optional*, defaults to `True`):
+        Whether to use relative position embedding.
+    window_size (`int`, *optional*, defaults to 14):
+        Window size for relative position.
+    global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        The indexes of the global attention layers.
+    mlp_dim (`int`, *optional*, defaults to 3072):
+        The dimensionality of the MLP layer in the Transformer encoder.
+    downsample_channels (`list[int]`, *optional*, defaults to `(512, 896)`):
+        The channel dimensions for the multi-scale downsampling neck layers.
+    """
+
     model_type = "unlimited_ocr_sam_vision_model"
     base_config_key = "sam_config"
+
+    downsample_channels: list[int] | tuple[int, ...] | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.downsample_channels is None:
+            self.downsample_channels = [512, 896]
+        return PretrainedConfig.__post_init__(self, **kwargs)
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")

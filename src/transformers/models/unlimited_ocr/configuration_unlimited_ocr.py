@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, PretrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -40,6 +40,8 @@ class UnlimitedOcrSamVisionConfig(PreTrainedConfig):
         The indexes of the global attention layers.
     mlp_dim (`int`, *optional*, defaults to 3072):
         The dimensionality of the MLP layer in the Transformer encoder.
+    downsample_channels (`list[int]`, *optional*, defaults to `(512, 896)`):
+        The channel dimensions for the multi-scale downsampling neck layers.
     """
 
     base_config_key = "sam_config"
@@ -60,7 +62,15 @@ class UnlimitedOcrSamVisionConfig(PreTrainedConfig):
     window_size: int = 14
     global_attn_indexes: list[int] | tuple[int, ...] = (2, 5, 8, 11)
     mlp_dim: int = 3072
+
     model_type = "unlimited_ocr_sam_vision_model"
+
+    downsample_channels: list[int] | tuple[int, ...] | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.downsample_channels is None:
+            self.downsample_channels = [512, 896]
+        return PretrainedConfig.__post_init__(self, **kwargs)
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
