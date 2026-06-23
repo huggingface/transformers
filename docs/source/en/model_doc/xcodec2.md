@@ -55,7 +55,7 @@ audio = dataset[0]["audio"]["array"]
 inputs = feature_extractor(audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(
     model.device, model.dtype
 )
-print("Input waveform shape:", inputs["audio"].shape)
+print("Input waveform shape:", inputs["input_values"].shape)
 # Input waveform shape: torch.Size([1, 1, 93760])
 
 # encoder and decoder
@@ -91,17 +91,17 @@ audios = [dataset[i]["audio"]["array"] for i in range(batch_size)]
 inputs = feature_extractor(audio=audios, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(
     model.device, model.dtype
 )
-print("Input waveform shape:", inputs["audio"].shape)
-# Input waveform shape: torch.Size([2, 1, 94080])
+print("Input waveform shape:", inputs["input_values"].shape)
+# Input waveform shape: torch.Size([2, 1, 93760])
 
 # encoder and decoder
 encoder_output = model.encode(**inputs)
 audio_codes = encoder_output.audio_codes
 print("Audio codes shape:", audio_codes.shape)
-# Audio codes shape: torch.Size([2, 1, 294])
+# Audio codes shape: torch.Size([2, 1, 293])
 audio_values = model.decode(audio_codes).audio_values
 print("Audio values shape:", audio_values.shape)
-# Audio values shape: torch.Size([2, 1, 94080])
+# Audio values shape: torch.Size([2, 1, 93760])
 
 # Equivalently, you can do encoding and decoding in one step
 model_output = model(**inputs)
@@ -113,7 +113,7 @@ audio_values = model_output.audio_values
 
 You can speed up inference with [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html). The first few calls will be slower due to compilation overhead, but subsequent calls will be faster.
 
-On an A100, we observed a speed-up of ~1.3 for a batch size of 4 ([script](https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-benchmark_torch_compile-py)).
+On an A100, we observed a speed-up of ~1.35 for a batch size of 4 ([script](https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-benchmark_torch_compile-py)).
 
 ```python
 import torch
