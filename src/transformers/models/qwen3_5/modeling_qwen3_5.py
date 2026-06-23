@@ -756,6 +756,11 @@ class Qwen3_5RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
+@dataclass
+class Qwen3_5CausalLMOutputWithPast(CausalLMOutputWithPast):
+    """Causal LM output for Qwen3.5. Inherits ``mtp_loss`` from the base class."""
+
+
 class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen3_5TextConfig, layer_idx: int):
         super().__init__()
@@ -1645,7 +1650,7 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> Qwen3_5CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1694,7 +1699,7 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
             and getattr(self.config, "num_mtp_layers", 0) > 0
             and hasattr(self, "mtp")
         ):
-            mtp_loss = self._compute_mtp_loss(
+            mtp_loss = self.mtp.compute_mtp_loss(
                 input_ids=input_ids,
                 main_hidden_states=hidden_states,
                 labels=labels,
@@ -1702,33 +1707,13 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
                 position_ids=position_ids,
             )
 
-        return CausalLMOutputWithPast(
+        return Qwen3_5CausalLMOutputWithPast(
             loss=loss,
             mtp_loss=mtp_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-        )
-
-    def _compute_mtp_loss(
-        self,
-        input_ids: torch.LongTensor,
-        main_hidden_states: torch.Tensor,
-        labels: torch.LongTensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-    ) -> torch.Tensor:
-        pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else 0
-        return self.mtp.compute_mtp_loss(
-            input_ids=input_ids,
-            main_hidden_states=main_hidden_states,
-            labels=labels,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            loss_function=self.loss_function,
-            vocab_size=self.config.vocab_size,
-            pad_token_id=pad_token_id,
         )
 
 
@@ -1873,7 +1858,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
             and getattr(self.config, "num_mtp_layers", 0) > 0
             and hasattr(self, "mtp")
         ):
-            mtp_loss = self._compute_mtp_loss(
+            mtp_loss = self.mtp.compute_mtp_loss(
                 input_ids=input_ids,
                 main_hidden_states=hidden_states,
                 labels=labels,
@@ -2113,26 +2098,6 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
 
         return input_ids, model_kwargs
 
-    def _compute_mtp_loss(
-        self,
-        input_ids: torch.LongTensor,
-        main_hidden_states: torch.Tensor,
-        labels: torch.LongTensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-    ) -> torch.Tensor:
-        pad_token_id = self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else 0
-        return self.mtp.compute_mtp_loss(
-            input_ids=input_ids,
-            main_hidden_states=main_hidden_states,
-            labels=labels,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            loss_function=self.loss_function,
-            vocab_size=self.config.text_config.vocab_size,
-            pad_token_id=pad_token_id,
-        )
-
 
 class Qwen3_5TextForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
     config: Qwen3_5TextConfig
@@ -2179,4 +2144,5 @@ __all__ = [
     "Qwen3_5ForTokenClassification",
     "Qwen3_5ForConditionalGeneration",
     "Qwen3_5PreTrainedModel",
+    "Qwen3_5CausalLMOutputWithPast",
 ]

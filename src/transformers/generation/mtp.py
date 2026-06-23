@@ -192,9 +192,6 @@ class MtpLayerStack(PreTrainedModel):
         labels: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-        loss_function=None,
-        vocab_size: int | None = None,
-        pad_token_id: int = 0,
     ) -> torch.Tensor:
         """Compute the MTP auxiliary loss over the full sequence for training.
 
@@ -211,16 +208,12 @@ class MtpLayerStack(PreTrainedModel):
             position_ids: Optional position ids. For mrope models these should be
                 the 3D ``(3, batch, seq_len)`` tensor; the text dimension is used
                 for the MTP layers.
-            loss_function: Callable with ``(logits, labels, vocab_size)`` signature,
-                e.g. ``ForCausalLMLoss``.
-            vocab_size: Passed to ``loss_function``.
-            pad_token_id: Used to pad shifted input ids at the right edge.
 
         Returns:
             Scalar loss tensor (mean across MTP layers).
         """
-        if loss_function is None or vocab_size is None:
-            raise ValueError("loss_function and vocab_size are required for compute_mtp_loss")
+        vocab_size = self.shared_head.out_features
+        pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else 0
 
         # Prepare position embeddings for the full sequence
         inputs_embeds_full = self.embed_tokens(input_ids)
@@ -285,10 +278,10 @@ class MtpLayerStack(PreTrainedModel):
             shifted_labels = torch.roll(labels, -shift, dims=1).clone()
             shifted_labels[:, -shift:] = -100
 
-            layer_loss = loss_function(
-                logits=mtp_logits,
-                labels=shifted_labels,
-                vocab_size=vocab_size,
+            layer_loss = nn.functional.cross_entropy(
+                mtp_logits.view(-1, vocab_size),
+                shifted_labels.view(-1),
+                ignore_index=-100,
             )
             total_loss = total_loss + layer_loss
 
