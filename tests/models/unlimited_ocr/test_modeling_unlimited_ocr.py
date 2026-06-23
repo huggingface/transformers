@@ -34,7 +34,7 @@ if is_torch_available():
         UnlimitedOcrForConditionalGeneration,
         UnlimitedOcrModel,
     )
-    from transformers.models.deepseek_ocr2.configuration_deepseek_ocr2 import (
+    from transformers.models.unlimited_ocr.configuration_unlimited_ocr import (
         UnlimitedOcrTextConfig,
         UnlimitedOcrVisionConfig,
     )

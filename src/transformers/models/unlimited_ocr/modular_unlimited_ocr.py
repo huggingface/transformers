@@ -17,13 +17,21 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...modeling_outputs import BaseModelOutput
+from ...masking_utils import (
+    and_masks,
+    causal_mask_function,
+    create_causal_mask,
+    create_sliding_window_causal_mask,
+)
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_int
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..clip.configuration_clip import CLIPVisionConfig
 from ..clip.modeling_clip import CLIPVisionEmbeddings, CLIPVisionModel
 from ..deepseek_ocr2.configuration_deepseek_ocr2 import (
@@ -233,8 +241,34 @@ class UnlimitedOcrVisionConfig(DeepseekOcr2VisionConfig):
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
 @strict
 class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
+    r"""
+    n_group (`int`, *optional*):
+        Number of groups for grouped top-k expert routing.
+    topk_method (`str`, *optional*, defaults to `"greedy"`):
+        Method for selecting top-k experts in MoE layers.
+    mlp_layer_types (`list[str]`, *optional*):
+        MLP type (`"dense"` or `"sparse"`) for each decoder layer, e.g. `["dense", "sparse", "sparse", ...]`.
+    layer_types (`list[str]`, *optional*):
+        Attention type for each decoder layer. Defaults to `"full_attention"` on every layer so the KV cache
+        retains all tokens; the sliding window (`sliding_window`) is applied as a mask over generated tokens
+        only, not by truncating the cache.
+    sliding_window (`int`, *optional*, defaults to 128):
+        If set, each token additionally attends only to the last `sliding_window` tokens. The image and prompt
+        tokens processed during prefill stay fully visible (they are never evicted); the window only applies
+        across generated tokens. Set to `None` for full causal attention.
+    """
+
     model_type = "unlimited_ocr_text"
     base_config_key = "text_config"
+    layer_types: list[str] | None = None
+    sliding_window: int | None = 128
+
+    def __post_init__(self, **kwargs):
+        if self.layer_types is None:
+            # Full attention on every layer keeps the KV cache complete: the sliding window is realized as a
+            # mask over generated tokens, while the image/prompt prefill is always retained.
+            self.layer_types = ["full_attention"] * self.num_hidden_layers
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
@@ -372,7 +406,7 @@ class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
 class UnlimitedOcrVisionEncoder(CLIPVisionModel):
     main_input_name = "patch_embeds"
 
-    def __init__(self, config: "UnlimitedOcrVisionEncoderConfig"):
+    def __init__(self, config: UnlimitedOcrVisionEncoderConfig):
         super().__init__(config)
         del self.post_layernorm
 
@@ -451,18 +485,96 @@ class UnlimitedOcrTextPreTrainedModel(DeepseekOcr2TextPreTrainedModel):
 
 
 class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
-    pass
+    def _create_attention_mask(self, inputs_embeds, attention_mask, past_key_values, position_ids):
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        if self.config.sliding_window is None:
+            return create_causal_mask(**mask_kwargs)
+
+        # The sliding window only spans the generated tokens: the prefill (image + prompt) stays fully
+        # visible. We track the prefill length on the cache so it is stable across decode steps, then keep
+        # those positions attendable on top of the sliding-window-causal mask (while preserving causality).
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if past_seen_tokens == 0:
+            prefill_length = inputs_embeds.shape[1]
+            if past_key_values is not None:
+                past_key_values.prefill_length = prefill_length
+        else:
+            prefill_length = getattr(past_key_values, "prefill_length", past_seen_tokens)
+
+        def prefill_overlay(batch_idx, head_idx, q_idx, kv_idx):
+            return kv_idx < prefill_length
+
+        return create_sliding_window_causal_mask(
+            **mask_kwargs,
+            or_mask_function=and_masks(prefill_overlay, causal_mask_function),
+        )
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        causal_mask = self._create_attention_mask(inputs_embeds, attention_mask, past_key_values, position_ids)
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 class UnlimitedOcrModel(DeepseekOcr2Model):
     def __init__(self, config: UnlimitedOcrConfig):
         super().__init__(config)
         self.multi_modal_projector = nn.Linear(
-            config.vision_config.sam_config.hidden_size + config.vision_config.encoder_config.hidden_size,
+            config.vision_config.sam_config.downsample_channels[-1] + config.vision_config.encoder_config.hidden_size,
             config.text_config.hidden_size,
         )
         embed_std = 1 / torch.sqrt(torch.tensor(config.text_config.hidden_size, dtype=torch.float32))
         self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size) * embed_std)
+        self.view_separator = nn.Parameter(torch.randn(config.text_config.hidden_size) * embed_std)
 
     def get_image_features(
         self,

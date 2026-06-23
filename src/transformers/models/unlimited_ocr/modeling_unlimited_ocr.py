@@ -37,7 +37,7 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
-from ...masking_utils import create_causal_mask
+from ...masking_utils import and_masks, causal_mask_function, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -60,6 +60,7 @@ from .configuration_unlimited_ocr import (
     UnlimitedOcrSamVisionConfig,
     UnlimitedOcrTextConfig,
     UnlimitedOcrVisionConfig,
+    UnlimitedOcrVisionEncoderConfig,
 )
 
 
@@ -1137,7 +1138,7 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
     input_modalities = ("image",)
     _input_embed_layer = "patch_embedding"
 
-    def __init__(self, config: "UnlimitedOcrVisionEncoderConfig"):
+    def __init__(self, config: UnlimitedOcrVisionEncoderConfig):
         super().__init__(config)
         embed_dim = config.hidden_size
 
@@ -1557,7 +1558,7 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -1567,13 +1568,7 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        causal_mask = self._create_attention_mask(inputs_embeds, attention_mask, past_key_values, position_ids)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -1595,6 +1590,36 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
             past_key_values=past_key_values,
         )
 
+    def _create_attention_mask(self, inputs_embeds, attention_mask, past_key_values, position_ids):
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        if self.config.sliding_window is None:
+            return create_causal_mask(**mask_kwargs)
+
+        # The sliding window only spans the generated tokens: the prefill (image + prompt) stays fully
+        # visible. We track the prefill length on the cache so it is stable across decode steps, then keep
+        # those positions attendable on top of the sliding-window-causal mask (while preserving causality).
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if past_seen_tokens == 0:
+            prefill_length = inputs_embeds.shape[1]
+            if past_key_values is not None:
+                past_key_values.prefill_length = prefill_length
+        else:
+            prefill_length = getattr(past_key_values, "prefill_length", past_seen_tokens)
+
+        def prefill_overlay(batch_idx, head_idx, q_idx, kv_idx):
+            return kv_idx < prefill_length
+
+        return create_sliding_window_causal_mask(
+            **mask_kwargs,
+            or_mask_function=and_masks(prefill_overlay, causal_mask_function),
+        )
+
 
 @auto_docstring(
     custom_intro="""
@@ -1609,16 +1634,14 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
 
         self.vision_tower = UnlimitedOcrVisionModel(config.vision_config)
         self.multi_modal_projector = nn.Linear(
-            config.vision_config.sam_config.hidden_size + config.vision_config.encoder_config.hidden_size,
+            config.vision_config.sam_config.downsample_channels[-1] + config.vision_config.encoder_config.hidden_size,
             config.text_config.hidden_size,
         )
 
         self.vocab_size = config.text_config.vocab_size
 
         self.language_model = UnlimitedOcrTextModel(config.text_config)
-
-        # Learnable separator between local and global views (initialized in `_init_weights`).
-        self.view_separator = nn.Parameter(torch.empty(config.text_config.hidden_size))
+        self.view_separator = nn.Parameter(torch.randn(config.text_config.hidden_size) * embed_std)
         embed_std = 1 / torch.sqrt(torch.tensor(config.text_config.hidden_size, dtype=torch.float32))
         self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size) * embed_std)
         self.post_init()

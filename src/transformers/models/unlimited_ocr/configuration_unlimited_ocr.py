@@ -146,6 +146,14 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
         Method for selecting top-k experts in MoE layers.
     mlp_layer_types (`list[str]`, *optional*):
         MLP type (`"dense"` or `"sparse"`) for each decoder layer, e.g. `["dense", "sparse", "sparse", ...]`.
+    layer_types (`list[str]`, *optional*):
+        Attention type for each decoder layer. Defaults to `"full_attention"` on every layer so the KV cache
+        retains all tokens; the sliding window (`sliding_window`) is applied as a mask over generated tokens
+        only, not by truncating the cache.
+    sliding_window (`int`, *optional*, defaults to 128):
+        If set, each token additionally attends only to the last `sliding_window` tokens. The image and prompt
+        tokens processed during prefill stay fully visible (they are never evicted); the window only applies
+        across generated tokens. Set to `None` for full causal attention.
     """
 
     model_type = "unlimited_ocr_text"
@@ -204,8 +212,14 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
     moe_intermediate_size: int = 1407
     base_config_key = "text_config"
     mlp_layer_types: list[str] | None = None
+    layer_types: list[str] | None = None
+    sliding_window: int | None = 128
 
     def __post_init__(self, **kwargs):
+        if self.layer_types is None:
+            # Full attention on every layer keeps the KV cache complete: the sliding window is realized as a
+            # mask over generated tokens, while the image/prompt prefill is always retained.
+            self.layer_types = ["full_attention"] * self.num_hidden_layers
         self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
