@@ -295,11 +295,6 @@ class UnlimitedOcrCausalLMOutputWithPast(DeepseekOcr2CausalLMOutputWithPast):
 
 
 class UnlimitedOcrPreTrainedModel(DeepseekOcr2PreTrainedModel):
-    # The text model keeps the image/prompt prefill fully visible by tracking its length on the cache and
-    # building the attention mask from it. This stateful, data-dependent masking cannot be traced into a single
-    # graph, so full-graph compilation is unsupported.
-    _can_compile_fullgraph = False
-
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -526,16 +521,11 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
         if self.config.sliding_window is None:
             return create_causal_mask(**mask_kwargs)
 
-        # The sliding window only spans the generated tokens: the prefill (image + prompt) stays fully
-        # visible. We track the prefill length on the cache so it is stable across decode steps, then keep
-        # those positions attendable on top of the sliding-window-causal mask (while preserving causality).
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if past_seen_tokens == 0:
-            prefill_length = inputs_embeds.shape[1]
+        prefill_length = getattr(past_key_values, "prefill_length", None)
+        if prefill_length is None:
+            prefill_length = torch.tensor(inputs_embeds.shape[1], device=inputs_embeds.device)
             if past_key_values is not None:
                 past_key_values.prefill_length = prefill_length
-        else:
-            prefill_length = getattr(past_key_values, "prefill_length", past_seen_tokens)
 
         def prefill_overlay(batch_idx, head_idx, q_idx, kv_idx):
             return kv_idx < prefill_length
