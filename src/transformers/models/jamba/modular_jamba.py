@@ -100,8 +100,6 @@ class JambaMambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    layer_type = "linear_attention"
-
     def __init__(self, config: JambaConfig, layer_idx):
         super().__init__()
         self.config = config
@@ -168,6 +166,8 @@ class JambaMambaMixer(nn.Module):
                 "The fast path is not available because on of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
                 " is None. To install follow https://github.com/state-spaces/mamba/#installation and https://github.com/Dao-AILab/causal-conv1d."
             )
+
+        self.layer_type = "linear_attention"
 
     def cuda_kernels_forward(
         self,

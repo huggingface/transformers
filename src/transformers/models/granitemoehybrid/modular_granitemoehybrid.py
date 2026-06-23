@@ -127,7 +127,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
-        self.layer_type = config.layers_block_type[layer_idx]
+        self.block_type = config.layers_block_type[layer_idx]
 
         # Allow non-MoE (dense)
         self.block_sparse_moe = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
