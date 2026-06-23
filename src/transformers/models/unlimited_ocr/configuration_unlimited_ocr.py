@@ -92,7 +92,7 @@ class UnlimitedOcrVisionEncoderConfig(PreTrainedConfig):
     hidden_size: int = 768
     intermediate_size: int = 3072
     projection_dim: int = 512
-    num_hidden_layers: int = 12
+    num_hidden_layers = 24
     num_attention_heads: int = 12
     num_channels: int = 3
     image_size: int | list[int] | tuple[int, int] | None = 224
@@ -194,7 +194,7 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
     vocab_size: int = 32000
     hidden_size: int = 4096
     intermediate_size: int = 11008
-    num_hidden_layers: int = 32
+    num_hidden_layers: int = 12
     num_attention_heads: int = 32
     num_key_value_heads: int | None = None
     hidden_act: str = "silu"

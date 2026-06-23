@@ -251,6 +251,7 @@ class UnlimitedOcrVisionEncoderConfig(CLIPVisionConfig):
 
     model_type = "unlimited_ocr_vision_encoder"
     base_config_key = "encoder_config"
+    num_hidden_layers = 24
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
@@ -287,6 +288,7 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
     model_type = "unlimited_ocr_text"
     base_config_key = "text_config"
     layer_types: list[str] | None = None
+    num_hidden_layers: int = 12
     sliding_window: int | None = 128
 
     def __post_init__(self, **kwargs):
