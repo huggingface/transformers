@@ -1229,11 +1229,11 @@ class Molmo2Attention(Olmo2Attention):
 
 
 class Molmo2MLP(Phi3MLP):
-    def __init__(self, input_dim: int, intermediate_size: int, hidden_act: str):
+    def __init__(self, config: Molmo2TextConfig):
         nn.Module.__init__(self)
-        self.ff_proj = nn.Linear(input_dim, intermediate_size * 2, bias=False)
-        self.ff_out = nn.Linear(intermediate_size, input_dim, bias=False)
-        self.act = ACT2FN[hidden_act]
+        self.ff_proj = nn.Linear(config.hidden_size, config.intermediate_size * 2, bias=False)
+        self.ff_out = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.act = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.ff_proj(hidden_states)
@@ -1250,7 +1250,7 @@ class Molmo2DecoderLayer(Phi3DecoderLayer):
         self.self_attn = Molmo2Attention(config, layer_idx)
         self.attn_norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.residual_dropout)
-        self.mlp = Molmo2MLP(config.hidden_size, config.intermediate_size, config.hidden_act)
+        self.mlp = Molmo2MLP(config)
         self.ff_norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
