@@ -301,6 +301,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("metaclip_2", "MetaClip2Model"),
         ("mgp-str", "MgpstrForSceneTextRecognition"),
         ("mimi", "MimiModel"),
+        ("minicpm3", "MiniCPM3Model"),
         ("minicpmv4_6", "MiniCPMV4_6Model"),
         ("minimax", "MiniMaxModel"),
         ("minimax_m2", "MiniMaxM2Model"),
@@ -339,6 +340,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mvp", "MvpModel"),
         ("nanochat", "NanoChatModel"),
         ("nemotron", "NemotronModel"),
+        ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
+        ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingEncoder"),
         ("nemotron_h", "NemotronHModel"),
         ("nllb-moe", "NllbMoeModel"),
         ("nomic_bert", "NomicBertModel"),
@@ -504,6 +507,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("video_llama_3_vision", "VideoLlama3VisionModel"),
         ("video_llava", "VideoLlavaModel"),
         ("videomae", "VideoMAEModel"),
+        ("videoprism", "VideoPrismClipModel"),
+        ("videoprism_vision_model", "VideoPrismVisionModel"),
         ("vilt", "ViltModel"),
         ("vipllava", "VipLlavaModel"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
@@ -743,6 +748,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
         ("mellum", "MellumForCausalLM"),
+        ("minicpm3", "MiniCPM3ForCausalLM"),
         ("minimax", "MiniMaxForCausalLM"),
         ("minimax_m2", "MiniMaxM2ForCausalLM"),
         ("minimax_m3_vl_text", "MiniMaxM3VLForCausalLM"),
@@ -866,6 +872,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
         ("videomae", "VideoMAEModel"),
+        ("videoprism_vision_model", "VideoPrismVisionModel"),
         ("vit", "ViTModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
@@ -1003,6 +1010,7 @@ MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         ("timesformer", "TimesformerForVideoClassification"),
         ("videomae", "VideoMAEForVideoClassification"),
+        ("videoprism_vision_model", "VideoPrismForVideoClassification"),
         ("vivit", "VivitForVideoClassification"),
         ("vjepa2", "VJEPA2ForVideoClassification"),
     ]
@@ -1361,6 +1369,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("markuplm", "MarkupLMForSequenceClassification"),
         ("mbart", "MBartForSequenceClassification"),
         ("megatron-bert", "MegatronBertForSequenceClassification"),
+        ("minicpm3", "MiniCPM3ForSequenceClassification"),
         ("minimax", "MiniMaxForSequenceClassification"),
         ("ministral", "MinistralForSequenceClassification"),
         ("ministral3", "Ministral3ForSequenceClassification"),
@@ -1720,6 +1729,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_RNNT_MAPPING_NAMES = OrderedDict(
     [
         # Model for RNN Transducer (RNN-T) mapping.
+        ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
         ("parakeet_rnnt", "ParakeetForRNNT"),
     ]
 )
@@ -1794,6 +1804,7 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("metaclip_2", "MetaClip2Model"),
         ("siglip", "SiglipModel"),
         ("siglip2", "Siglip2Model"),
+        ("videoprism", "VideoPrismClipModel"),
     ]
 )
 

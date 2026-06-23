@@ -680,7 +680,7 @@ def require_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
     except Exception as _:
         kernels_available = False
 
@@ -721,7 +721,7 @@ def require_all_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
     except Exception as _:
         kernels_available = False
 
@@ -1144,6 +1144,11 @@ def require_torch_gpu(test_case):
 def require_torch_mps(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
     return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
+
+
+def require_rocm(test_case):
+    """Decorator marking a test that requires a ROCm (AMD) GPU and PyTorch."""
+    return unittest.skipUnless(torch_device == "cuda" and IS_ROCM_SYSTEM, "test requires a ROCm (AMD) GPU")(test_case)
 
 
 def require_large_cpu_ram(test_case, memory: float = 80):

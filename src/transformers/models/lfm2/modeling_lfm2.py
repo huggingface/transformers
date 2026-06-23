@@ -360,6 +360,7 @@ class Lfm2ShortConv(nn.Module):
         x: torch.Tensor,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        seq_idx: torch.IntTensor | None = None,
     ):
         seqlen = x.shape[1]
 
@@ -376,6 +377,20 @@ class Lfm2ShortConv(nn.Module):
                 conv_out += self.conv.bias
 
             conv_out = conv_out.unsqueeze(-1)
+        elif seq_idx is not None and x.shape[0] == 1:
+            # Per-segment conv so the receptive field cannot cross packed-sample boundaries.
+            if past_key_values is not None:
+                conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
+                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
+            si = seq_idx[0]
+            change = (si[1:] != si[:-1]).nonzero(as_tuple=True)[0] + 1
+            bounds = torch.cat([change.new_zeros(1), change, change.new_full((1,), si.numel())]).tolist()
+            parts = []
+            for i in range(len(bounds) - 1):
+                s, e = bounds[i], bounds[i + 1]
+                if e > s:
+                    parts.append(self.conv(Bx[:, :, s:e])[..., : e - s])
+            conv_out = torch.cat(parts, dim=-1)
         else:
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
@@ -397,7 +412,7 @@ class Lfm2ShortConv(nn.Module):
     ):
         if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, past_key_values, attention_mask, seq_idx=seq_idx)
-        return self.slow_forward(hidden_states, past_key_values, attention_mask)
+        return self.slow_forward(hidden_states, past_key_values, attention_mask, seq_idx=seq_idx)
 
 
 class Lfm2DecoderLayer(GradientCheckpointingLayer):
