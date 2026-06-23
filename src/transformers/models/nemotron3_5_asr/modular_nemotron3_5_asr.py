@@ -339,22 +339,18 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
 
 @dataclass
 class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
-    r"""
+    """
     encoder_past_key_values (`Cache`, *optional*):
         Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
         (cache-aware streaming). Pass it to the next chunk's forward.
-    padding_cache (`Cache`, *optional*):
+    padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
         Updated unified streaming conv cache (subsampling Conv2d + conformer depthwise Conv1d), returned when
         encoding audio with `use_cache=True`. Pass it to the next chunk's forward.
-
-    Defined standalone (rather than subclassing [`NemotronAsrStreamingRNNTOutput`]) and the conv cache typed as
-    the generic [`Cache`]: the encoder is reused as-is via `AutoModel`, so referencing its concrete conv-cache
-    class here would make the modular converter copy the whole encoder conv stack into this file as dead code.
     """
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
-    decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
+    decoder_cache: "NemotronAsrStreamingEncoderCausalConvPaddingCache" | None = None
 
     encoder_past_key_values: Cache | None = None
     padding_cache: Cache | None = None
