@@ -207,29 +207,33 @@ class Mamba2ModelTester:
             torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-3, rtol=1e-3)
         )
 
-    def create_and_check_mamba2_chunked_prefill(self, config, *args, device="cpu"):
+    def create_and_check_mamba2_chunked_prefill(self, config, input_ids, *args, device="cpu"):
         model = Mamba2Model(config=config)
         model.to(device)
         model.eval()
 
-        L = 8
-        inputs_embeds = torch.randn(1, L, config.hidden_size, device=device)
+        input_ids = input_ids[:1].to(device)
+        prefill_len = input_ids.shape[1] // 2 + 1
+        prompt = input_ids[:, :prefill_len]
+        next_token = input_ids[:, prefill_len : prefill_len + 1]
+        distractors = input_ids[:, prefill_len + 1 :]
+        multi_input = torch.cat([next_token, distractors], dim=1)
 
-        cache_tbt = DynamicCache(config=config)
-        outputs_tbt = []
-        for t in range(L):
-            out = model(inputs_embeds=inputs_embeds[:, t : t + 1, :], cache_params=cache_tbt, use_cache=True)
-            outputs_tbt.append(out.last_hidden_state)
-        result_tbt = torch.cat(outputs_tbt, dim=1)
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, cache_params=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache_params=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
 
-        cache_chunk = DynamicCache(config=config)
-        out_first = model(inputs_embeds=inputs_embeds[:, :1, :], cache_params=cache_chunk, use_cache=True)
-        out_rest = model(inputs_embeds=inputs_embeds[:, 1:, :], cache_params=cache_chunk, use_cache=True)
-        result_chunk = torch.cat([out_first.last_hidden_state, out_rest.last_hidden_state], dim=1)
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, cache_params=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache_params=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
-            torch.allclose(result_tbt, result_chunk, atol=1e-4, rtol=1e-4),
-            msg=f"Max diff: {(result_tbt - result_chunk).abs().max().item():.6f}",
+            torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
+            msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
         )
 
     def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args, gradient_checkpointing=False):
@@ -280,12 +284,16 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
 
-    def test_mamba2_chunked_prefill(self):
-        # Runs on torch_device: exercises the slow path on CPU and, when an accelerator with
-        # mamba-ssm / causal-conv1d is present, the CUDA fast path.
+    def test_mamba2_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    def test_mamba2_chunked_prefill_torch_device(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs, device=torch_device)
 
+    @require_torch_accelerator
     @require_mamba_2_ssm
     @require_causal_conv1d
     def test_mamba2_slow_vs_fast_forward(self):
@@ -295,6 +303,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     # This test adjusts n_groups to half the original setting and effectively
     # creates a grouped SSD configuration in the mamba2 layers
     # See https://github.com/huggingface/transformers/pull/37533/
+    @require_torch_accelerator
     @require_mamba_2_ssm
     @require_causal_conv1d
     def test_mamba2_slow_vs_fast_forward_grouped(self):
