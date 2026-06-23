@@ -755,18 +755,100 @@ class VideoPrismForVideoClassificationTest(VideoPrismModelTest, unittest.TestCas
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    @unittest.skip(reason="VideoPrismVisionModel does not record intermediate attentions")
     def test_attention_outputs(self):
-        pass
+        """Attentions come from the spatial then temporal VideoPrismVisionModel backbone."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        model_class = VideoPrismForVideoClassification
 
-    @unittest.skip(
-        reason="VideoPrismVisionModel does not record intermediate hidden states"
-    )
+        num_spatial_layers = self.model_tester.num_spatial_layers
+        num_temporal_layers = self.model_tester.num_temporal_layers
+        num_patches = self.model_tester.num_patches
+        num_frames = self.model_tester.num_frames
+        num_attention_heads = self.model_tester.num_attention_heads
+
+        inputs_dict["output_attentions"] = True
+        inputs_dict["output_hidden_states"] = False
+        model = model_class._from_config(config, attn_implementation="eager")
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+        attentions = outputs.attentions
+        self.assertEqual(len(attentions), num_spatial_layers + num_temporal_layers)
+
+        for layer_idx in range(num_spatial_layers):
+            self.assertListEqual(
+                list(attentions[layer_idx].shape[-3:]),
+                [num_attention_heads, num_patches, num_patches],
+            )
+        for layer_idx in range(num_spatial_layers, num_spatial_layers + num_temporal_layers):
+            self.assertListEqual(
+                list(attentions[layer_idx].shape[-3:]),
+                [num_attention_heads, num_frames, num_frames],
+            )
+
+        inputs_dict["output_attentions"] = True
+        inputs_dict["output_hidden_states"] = True
+        model = model_class._from_config(config, attn_implementation="eager")
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+        self.assertIsNotNone(outputs.attentions)
+        self.assertIsNotNone(outputs.hidden_states)
+        self.assertEqual(len(outputs.attentions), num_spatial_layers + num_temporal_layers)
+        self.assertEqual(len(outputs.hidden_states), 1 + num_spatial_layers + num_temporal_layers)
+
     def test_hidden_states_output(self):
-        pass
+        """Hidden states: spatial tokens, then temporal tokens, captured from the vision backbone."""
+
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class._from_config(config, attn_implementation="eager")
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+            num_spatial_layers = self.model_tester.num_spatial_layers
+            num_temporal_layers = self.model_tester.num_temporal_layers
+            expected_num_layers = 1 + num_spatial_layers + num_temporal_layers
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.num_patches, self.model_tester.hidden_size],
+            )
+            self.assertListEqual(
+                list(hidden_states[num_spatial_layers].shape[-2:]),
+                [self.model_tester.num_patches, self.model_tester.hidden_size],
+            )
+            self.assertListEqual(
+                list(hidden_states[num_spatial_layers + 1].shape[-2:]),
+                [self.model_tester.num_frames, self.model_tester.hidden_size],
+            )
+            self.assertListEqual(
+                list(hidden_states[-1].shape[-2:]),
+                [
+                    self.model_tester.num_patches * self.model_tester.num_frames,
+                    self.model_tester.hidden_size,
+                ],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model_class = VideoPrismForVideoClassification
+
+        inputs_dict["output_hidden_states"] = True
+        check_hidden_states_output(inputs_dict, config, model_class)
+
+        del inputs_dict["output_hidden_states"]
+        config.output_hidden_states = True
+        check_hidden_states_output(inputs_dict, config, model_class)
 
     @unittest.skip(
-        reason="VideoPrismVisionModel does not record intermediate hidden states or attentions"
+        reason="VideoPrismVisionModel does not expose common hidden_states/attentions fields for retain-grad checks."
     )
     def test_retain_grad_hidden_states_attentions(self):
         pass
