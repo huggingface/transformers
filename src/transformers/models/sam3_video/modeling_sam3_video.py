@@ -55,7 +55,7 @@ def _load_cv_utils_kernel_once():
         return
 
     try:
-        cv_utils_kernel = get_kernel("kernels-community/cv-utils")
+        cv_utils_kernel = get_kernel("kernels-community/cv-utils", version=1)
     except Exception as e:
         logger.warning_once(
             f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "

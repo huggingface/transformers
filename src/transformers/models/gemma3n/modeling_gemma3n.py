@@ -1827,10 +1827,8 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: Gemma3nTextConfig
 
     def __init__(self, config: Gemma3nTextConfig):
@@ -2028,18 +2026,18 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             special_audio_mask = input_ids == self.config.audio_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0] * image_features.shape[1]}",
             )
 
         n_audio_tokens = special_audio_mask.sum()
-        special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_audio_mask = special_audio_mask.unsqueeze(-1).to(inputs_embeds.device)
         if audio_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_audio_mask].numel() == audio_features.numel(),
+                n_audio_tokens * inputs_embeds.shape[-1] == audio_features.numel(),
                 f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {audio_features.shape[0] * audio_features.shape[1]}",
             )
 
@@ -2112,7 +2110,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             vision_input_ids = torch.where(vision_mask, input_ids, dummy_vision_token_id).to(inputs_embeds.device)
             vision_embeds = self.embed_vision(input_ids=vision_input_ids)
             vision_embeds = vision_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            expanded_vision_mask = vision_mask.unsqueeze(-1).expand_as(inputs_embeds)
+            expanded_vision_mask = vision_mask.unsqueeze(-1)
             inputs_embeds = torch.where(expanded_vision_mask, vision_embeds, inputs_embeds)
 
             # Handle audio tokens (>= embed_audio.vocab_offset)
@@ -2121,7 +2119,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             audio_input_ids = torch.where(audio_mask, input_ids, dummy_audio_token_id).to(inputs_embeds.device)
             audio_embeds = self.embed_audio(input_ids=audio_input_ids)
             audio_embeds = audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            expanded_audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
+            expanded_audio_mask = audio_mask.unsqueeze(-1)
             inputs_embeds = torch.where(expanded_audio_mask, audio_embeds, inputs_embeds)
         else:
             per_layer_inputs = None

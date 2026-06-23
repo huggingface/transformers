@@ -38,7 +38,7 @@ def my_loss_fn(outputs, labels, num_items_in_batch):
 
 - `outputs` is the raw model output (`outputs.logits` has shape `(batch, seq_len, vocab_size)`).
 - `labels` is the token ids popped from the input batch by [`Trainer`] before the forward pass.
-- `num_items_in_batch` is the total non-padding token count across the full accumulated batch. [`Trainer`] skips automatic loss normalization when a custom loss function is provided, so your function must handle normalization directly.
+- `num_items_in_batch` is the number of prediction targets across the full accumulated batch. For causal LM models it counts the shifted labels (`labels[..., 1:]`), since the label shift leaves position 0 of every sequence without a target. See [Loss scaling](./grad_accumulation#loss-scaling) for details. [`Trainer`] skips automatic loss normalization when a custom loss function is provided, so your function must handle normalization directly.
 
 ```py
 trainer = Trainer(

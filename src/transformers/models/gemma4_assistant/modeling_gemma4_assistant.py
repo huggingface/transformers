@@ -110,7 +110,6 @@ class Gemma4AssistantPreTrainedModel(PreTrainedModel):
 class Gemma4AssistantForCausalLM(Gemma4AssistantPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: Gemma4AssistantConfig):
@@ -167,6 +166,13 @@ class Gemma4AssistantForCausalLM(Gemma4AssistantPreTrainedModel, GenerationMixin
         if inputs_embeds is None or shared_kv_states is None:
             raise ValueError("inputs_embeds and shared_kv_states cannot be None.")
 
+        # Main and assistant model can be split in Multi-GPU settings; we ensure device consistency
+        source_device = inputs_embeds.device
+        target_device = self.pre_projection.weight.device
+
+        inputs_embeds = inputs_embeds.to(target_device)
+        shared_kv_states = {k: (v[0].to(target_device), v[1].to(target_device)) for k, v in shared_kv_states.items()}
+
         inputs_embeds = self.pre_projection(inputs_embeds)
         bidirectional_masks = self.create_attention_masks(inputs_embeds, attention_mask, shared_kv_states)
 
@@ -189,8 +195,8 @@ class Gemma4AssistantForCausalLM(Gemma4AssistantPreTrainedModel, GenerationMixin
             logits = self.lm_head(last_hidden_state)
 
         return Gemma4AssistantOutput(
-            last_hidden_state=projected_state,
-            logits=logits,
+            last_hidden_state=projected_state.to(source_device),
+            logits=logits.to(source_device),
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

@@ -268,12 +268,12 @@ class AudioFlamingo3ModelOutputWithPast(BaseModelOutputWithPast):
     audio_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for AudioFlamingo3 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class AudioFlamingo3CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -447,7 +447,6 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
 )
 class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
     _tp_plan = None
-    _sp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
@@ -568,7 +567,7 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
 )
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
     _keep_in_fp32_modules_strict = ["embed_positions"]
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tied_weights_keys = None
 
     def __init__(self, config):
         super().__init__(config)

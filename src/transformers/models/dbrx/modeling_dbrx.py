@@ -642,9 +642,7 @@ def load_balancing_loss_func(
 
 class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: DbrxConfig):
