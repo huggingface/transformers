@@ -76,10 +76,43 @@ def arange_for_pooling(
     )
 
 
+def resize_and_normalize_image(
+    backend: "TorchvisionBackend",
+    image_chw: torch.Tensor,
+    output_size: list[int],
+    resample: PILImageResampling,
+    do_rescale: bool,
+    rescale_factor: float,
+    do_normalize: bool,
+    image_mean: list[float],
+    image_std: list[float],
+) -> torch.Tensor:
+    input_dtype = image_chw.dtype
+    resized = backend.resize(
+        image_chw,
+        size=SizeDict(height=output_size[0], width=output_size[1]),
+        resample=resample,
+        antialias=False,
+    )
+
+    if image_chw.dtype != torch.uint8:
+        raise TypeError(f"Molmo2 expects float images or uint8 images, but got {image_chw.dtype}")
+    resized = torch.clip(resized, 0, 255).to(input_dtype)
+
+    resized = resized.to(torch.float32)
+    if do_rescale and input_dtype == torch.uint8:
+        resized = resized / (1.0 / rescale_factor)
+    if do_normalize:
+        mean = resized.new_tensor(image_mean)[:, None, None]
+        std = resized.new_tensor(image_std)[:, None, None]
+        resized = (resized - mean) / std
+    return resized
+
+
 def build_resized_image(
     backend: "TorchvisionBackend",
     image_chw: torch.Tensor,
-    base_image_input_size: list[int],
+    base_image_input_size: int,
     resample: PILImageResampling,
     do_rescale: bool,
     rescale_factor: float,
@@ -88,30 +121,19 @@ def build_resized_image(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    input_dtype = image_chw.dtype
-    chw_resized = backend.resize(
+    chw_resized = resize_and_normalize_image(
+        backend,
         image_chw,
-        size=SizeDict(height=base_image_input_size[0], width=base_image_input_size[1]),
-        resample=resample,
-        antialias=False,
+        [base_image_input_size, base_image_input_size],
+        resample,
+        do_rescale=do_rescale,
+        rescale_factor=rescale_factor,
+        do_normalize=do_normalize,
+        image_mean=image_mean,
+        image_std=image_std,
     )
-    if torch.is_floating_point(image_chw):
-        chw_resized = torch.clip(chw_resized, 0.0, 1.0).to(input_dtype)
-    else:
-        if image_chw.dtype != torch.uint8:
-            raise TypeError(f"Molmo2 expects float images or uint8 images, but got {image_chw.dtype}")
-        chw_resized = torch.clip(chw_resized, 0, 255).to(input_dtype)
-
-    chw_normalized = chw_resized.to(torch.float32)
-    if do_rescale and input_dtype == torch.uint8:
-        chw_normalized = chw_normalized / (1.0 / rescale_factor)
-    if do_normalize:
-        mean = chw_normalized.new_tensor(image_mean)[:, None, None]
-        std = chw_normalized.new_tensor(image_std)[:, None, None]
-        chw_normalized = (chw_normalized - mean) / std
-    resized = chw_normalized.permute(1, 2, 0).unsqueeze(0)
-    crop_patch_w = base_image_input_size[1] // image_patch_size
-    crop_patch_h = base_image_input_size[0] // image_patch_size
+    resized = chw_resized.permute(1, 2, 0).unsqueeze(0)
+    crop_patch_h = crop_patch_w = base_image_input_size // image_patch_size
     resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
     return resized, resize_idx
 
@@ -173,7 +195,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     def _build_frame_patches(
         self,
         frame_chw: torch.Tensor,
-        base_image_input_size: list[int],
+        base_image_input_size: int,
         resample: PILImageResampling,
         do_rescale: bool,
         rescale_factor: float,
@@ -216,7 +238,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        base_image_input_size = [size.height, size.width]
+        if size.height != size.width:
+            raise ValueError(f"Molmo2 only supports a square `size`, got height={size.height}, width={size.width}.")
+        base_image_input_size = size.height
         image_pooling_h, image_pooling_w = pooling_size
 
         all_crops: list[torch.Tensor] = []

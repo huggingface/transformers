@@ -20,7 +20,7 @@
 
 
 import math
-import numpy as np
+
 import torch
 from torch.nn import functional as F
 
@@ -48,18 +48,17 @@ def select_tiling(height: int, width: int, patch_size: int, max_num_crops: int) 
                 tilings.append((tile_height, tile_width))
     tilings.sort(key=lambda x: (x[0] * x[1], x[0]))
 
-    candidate_resolutions = np.array(tilings, dtype=np.int32) * patch_size
-    original_size = np.stack([height, width], dtype=np.float32)
+    candidate_resolutions = torch.tensor(tilings, dtype=torch.int32) * patch_size
+    original_size = torch.tensor([height, width], dtype=torch.float32)
 
-    with np.errstate(divide="ignore"):
-        required_scales = candidate_resolutions.astype(np.float32) / original_size
-    required_scale = np.min(required_scales, axis=-1, keepdims=True)
+    required_scales = candidate_resolutions.to(torch.float32) / original_size
+    required_scale = required_scales.amin(dim=-1, keepdim=True)
 
-    if np.all(required_scale < 1):
-        return tilings[np.argmax(required_scale)]
+    if torch.all(required_scale < 1):
+        return tilings[int(required_scale.argmax())]
 
-    required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
-    return tilings[np.argmin(required_scale)]
+    required_scale = torch.where(required_scale < 1.0, 10e9, required_scale)
+    return tilings[int(required_scale.argmin())]
 
 
 def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
@@ -121,12 +120,10 @@ def resize_and_normalize_image(
         resample=resample,
         antialias=False,
     )
-    if torch.is_floating_point(image_chw):
-        resized = torch.clip(resized, 0.0, 1.0).to(input_dtype)
-    else:
-        if image_chw.dtype != torch.uint8:
-            raise TypeError(f"Molmo2 expects float images or uint8 images, but got {image_chw.dtype}")
-        resized = torch.clip(resized, 0, 255).to(input_dtype)
+
+    if image_chw.dtype != torch.uint8:
+        raise TypeError(f"Molmo2 expects float images or uint8 images, but got {image_chw.dtype}")
+    resized = torch.clip(resized, 0, 255).to(input_dtype)
 
     resized = resized.to(torch.float32)
     if do_rescale and input_dtype == torch.uint8:
@@ -141,7 +138,7 @@ def resize_and_normalize_image(
 def build_resized_image(
     backend: "TorchvisionBackend",
     image_chw: torch.Tensor,
-    base_image_input_size: list[int],
+    base_image_input_size: int,
     resample: PILImageResampling,
     do_rescale: bool,
     rescale_factor: float,
@@ -153,7 +150,7 @@ def build_resized_image(
     chw_resized = resize_and_normalize_image(
         backend,
         image_chw,
-        base_image_input_size,
+        [base_image_input_size, base_image_input_size],
         resample,
         do_rescale=do_rescale,
         rescale_factor=rescale_factor,
@@ -162,8 +159,7 @@ def build_resized_image(
         image_std=image_std,
     )
     resized = chw_resized.permute(1, 2, 0).unsqueeze(0)
-    crop_patch_w = base_image_input_size[1] // image_patch_size
-    crop_patch_h = base_image_input_size[0] // image_patch_size
+    crop_patch_h = crop_patch_w = base_image_input_size // image_patch_size
     resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
     return resized, resize_idx
 
@@ -193,7 +189,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_chw: torch.Tensor,
         max_crops: int,
         overlap_margins: list[int],
-        base_image_input_size: list[int],
+        base_image_input_size: int,
         resample: PILImageResampling,
         do_rescale: bool,
         rescale_factor: float,
@@ -203,9 +199,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_patch_size: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Tile `image_chw` into overlapping square crops and return per-patch global indices with overlap patches collapsed to a single owner."""
-        if base_image_input_size[0] != base_image_input_size[1]:
-            raise ValueError(f"Expected square base_image_input_size, got {base_image_input_size}")
-        crop_size = base_image_input_size[0]
+        crop_size = base_image_input_size
         left_margin, right_margin = overlap_margins
         crop_patches = crop_size // image_patch_size
         window_patches = crop_patches - (left_margin + right_margin)
@@ -252,7 +246,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_chw: torch.Tensor,
         max_crops: int,
         overlap_margins: list[int],
-        base_image_input_size: list[int],
+        base_image_input_size: int,
         resample: PILImageResampling,
         do_rescale: bool,
         rescale_factor: float,
@@ -263,14 +257,10 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_pooling_w: int,
         image_pooling_h: int,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        if isinstance(base_image_input_size, int):
-            base_image_input_size = (base_image_input_size, base_image_input_size)
-
         base_image_input_d = image_patch_size
         pooling_w = image_pooling_w
         pooling_h = image_pooling_h
-        crop_patch_w = base_image_input_size[1] // base_image_input_d
-        crop_patch_h = base_image_input_size[0] // base_image_input_d
+        crop_patch_h = crop_patch_w = base_image_input_size // base_image_input_d
 
         crop_arr, patch_idx_arr = self._build_overlapping_crops(
             image_chw,
@@ -348,7 +338,9 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        base_image_input_size = [size.height, size.width]
+        if size.height != size.width:
+            raise ValueError(f"Molmo2 only supports a square `size`, got height={size.height}, width={size.width}.")
+        base_image_input_size = size.height
         image_pooling_h, image_pooling_w = pooling_size
 
         all_grids: list[torch.Tensor] = []

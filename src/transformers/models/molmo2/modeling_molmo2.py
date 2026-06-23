@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -36,11 +37,11 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...masking_utils import create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from .configuration_molmo2 import Molmo2AdapterConfig, Molmo2Config, Molmo2TextConfig, Molmo2VitConfig
@@ -454,18 +455,19 @@ class Molmo2VisionBackbone(PreTrainedModel):
 class Molmo2RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Molmo2TextConfig, rope_type: str | None = None):
+    def __init__(self, config: Molmo2Config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+
         self.config = config
-        self.rope_type = rope_type or config.rope_parameters["rope_type"]
-        rope_init_fn = (
-            self.compute_default_rope_parameters
-            if self.rope_type == "default"
-            else ROPE_INIT_FUNCTIONS[self.rope_type]
-        )
-        inv_freq, self.attention_scaling = rope_init_fn(config)
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
@@ -671,11 +673,11 @@ class Molmo2Attention(nn.Module):
 
 
 class Molmo2MLP(nn.Module):
-    def __init__(self, input_dim: int, intermediate_size: int, hidden_act: str):
+    def __init__(self, config: Molmo2TextConfig):
         super().__init__()
-        self.ff_proj = nn.Linear(input_dim, intermediate_size * 2, bias=False)
-        self.ff_out = nn.Linear(intermediate_size, input_dim, bias=False)
-        self.act = ACT2FN[hidden_act]
+        self.ff_proj = nn.Linear(config.hidden_size, config.intermediate_size * 2, bias=False)
+        self.ff_out = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.act = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.ff_proj(hidden_states)
@@ -692,7 +694,7 @@ class Molmo2DecoderLayer(GradientCheckpointingLayer):
         self.self_attn = Molmo2Attention(config, layer_idx)
         self.attn_norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.residual_dropout)
-        self.mlp = Molmo2MLP(config.hidden_size, config.intermediate_size, config.hidden_act)
+        self.mlp = Molmo2MLP(config)
         self.ff_norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
@@ -768,13 +770,11 @@ class Molmo2PostNormDecoderLayer(Molmo2DecoderLayer):
 class Molmo2Embedding(nn.Module):
     def __init__(
         self,
-        num_embeddings: int,
-        num_new_embeddings: int,
-        features: int,
+        config: Molmo2TextConfig,
     ):
         super().__init__()
-        self.embedding = nn.Parameter(torch.zeros(num_embeddings, features))
-        self.new_embedding = nn.Parameter(torch.zeros(num_new_embeddings, features))
+        self.embedding = nn.Parameter(torch.zeros(config.vocab_size, config.hidden_size))
+        self.new_embedding = nn.Parameter(torch.zeros(config.additional_vocab_size, config.hidden_size))
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         return F.embedding(input_ids, torch.cat([self.embedding, self.new_embedding], dim=0))
@@ -821,11 +821,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
     def __init__(self, config: Molmo2TextConfig):
         super().__init__(config)
         if config.additional_vocab_size is not None:
-            self.wte = Molmo2Embedding(
-                config.vocab_size,
-                config.additional_vocab_size,
-                config.hidden_size,
-            )
+            self.wte = Molmo2Embedding(config)
         else:
             self.wte = nn.Embedding(config.vocab_size, config.hidden_size)
         self.emb_drop = nn.Dropout(config.embedding_dropout)
@@ -834,9 +830,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.rotary_embs = nn.ModuleDict({"default": Molmo2RotaryEmbedding(config, rope_type="default")})
-        if config.rope_scaling_layers:
-            self.rotary_embs["scaling"] = Molmo2RotaryEmbedding(config)
+        self.rotary_emb = Molmo2RotaryEmbedding(config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -892,17 +886,16 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        position_embeddings = {key: self.rotary_embs[key](hidden_states, position_ids) for key in self.rotary_embs}
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for layer_idx, decoder_block in enumerate(self.blocks[: self.config.num_hidden_layers]):
-            rope_key = "scaling" if layer_idx in self.config.rope_scaling_layers else "default"
             hidden_states = decoder_block(
                 hidden_states,
                 attention_mask=causal_mask_mapping,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                position_embeddings=position_embeddings[rope_key],
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
