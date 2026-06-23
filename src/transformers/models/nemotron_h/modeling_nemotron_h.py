@@ -119,6 +119,8 @@ class NemotronHMamba2Mixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
+    layer_type = "linear_attention"
+
     def __init__(self, config: NemotronHConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config

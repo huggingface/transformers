@@ -457,6 +457,8 @@ class OlmoHybridGatedDeltaNet(nn.Module):
     - Supports allow_neg_eigval: scales beta by 2.0 to allow range [0, 2]
     """
 
+    layer_type = "linear_attention"
+
     def __init__(self, config: OlmoHybridConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

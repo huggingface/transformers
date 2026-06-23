@@ -84,6 +84,8 @@ class FalconMambaMixer(nn.Module):
     and is why FalconMamba is called **selective** state spaces)
     """
 
+    layer_type = "linear_attention"
+
     def __init__(self, config: FalconMambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__()
         self.config = config

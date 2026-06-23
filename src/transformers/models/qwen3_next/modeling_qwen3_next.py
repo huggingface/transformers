@@ -496,6 +496,8 @@ def torch_recurrent_gated_delta_rule(
 
 
 class Qwen3NextGatedDeltaNet(nn.Module):
+    layer_type = "linear_attention"
+
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

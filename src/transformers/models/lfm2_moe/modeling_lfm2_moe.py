@@ -374,6 +374,8 @@ is_fast_path_available = all(kernel_modules)
 
 
 class Lfm2MoeShortConv(nn.Module):
+    layer_type = "conv"
+
     def __init__(
         self,
         config: Lfm2MoeConfig,

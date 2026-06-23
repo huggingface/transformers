@@ -187,6 +187,8 @@ class ZambaMambaMixer(nn.Module):
     `self.out_proj`. The pre-activations, coming from different mamba heads, are then concatenated and fed into `self.out_proj`.
     """
 
+    layer_type = "linear_attention"
+
     def __init__(self, config: ZambaConfig, layer_idx):
         super().__init__()
         self.config = config
