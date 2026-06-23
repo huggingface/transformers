@@ -2032,7 +2032,7 @@ class ProcessorMixin(PushToHubMixin):
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
         **kwargs,
-    ) -> str | torch.Tensor | BatchFeature:
+    ) -> str | list[int] | list[list[int]] | np.ndarray | "torch.Tensor" | BatchFeature:
         """
         Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
         conversations to turn them into a single tokenizable string.
