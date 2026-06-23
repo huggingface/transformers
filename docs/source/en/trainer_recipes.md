@@ -250,9 +250,9 @@ Checkpoint resuming requires optimizer and scheduler state files in the checkpoi
 
 ### JIT checkpointing
 
-With periodic checkpointing (`save_strategy="steps"` or `"epoch"`), any training progress between the last saved checkpoint and an interruption is lost. On shared clusters with preemptible workloads (e.g., [Kueue](https://kueue.sigs.k8s.io/)), jobs can be terminated at any time, and that gap can mean hours of wasted compute.
+With periodic checkpointing (save_strategy="steps" or "epoch"), you lose any training progress between the last saved checkpoint and an interruption. On shared clusters with preemptible workloads such as [Kueue](https://kueue.sigs.k8s.io/), jobs can be terminated at any time, so that gap can mean hours of wasted compute.
 
-JIT (Just-In-Time) checkpointing closes this gap. When the trainer receives a SIGTERM signal, it saves a checkpoint at the exact point training was interrupted, so you resume with zero loss of progress. It works alongside periodic checkpointing: periodic saves guard against crashes and hardware failures, while JIT saves guard against preemption and graceful shutdowns.
+JIT (Just-In-Time) checkpointing closes this gap. When the trainer receives a SIGTERM signal, it saves a checkpoint at the exact point training was interrupted, so you resume with minimal loss of progress. It works alongside periodic checkpointing. Periodic saves guard against crashes and hardware failures, while JIT saves guard against preemption and graceful shutdowns.
 
 Enable it by setting `enable_jit_checkpoint=True` in [`TrainingArguments`].
 
@@ -265,7 +265,7 @@ training_args = TrainingArguments(
 )
 ```
 
-When SIGTERM is received, the trainer waits for the current training step to finish, saves a checkpoint, and stops training gracefully. A sentinel file (`checkpoint-is-incomplete.txt`) is written during the save and removed once the checkpoint is fully written, so incomplete checkpoints are easy to detect when resuming.
+When SIGTERM is received, [`Trainer`] waits for the current training step to finish, saves a checkpoint, and stops training gracefully. A sentinel file (`checkpoint-is-incomplete.txt`) is written when the save begins and removed once the checkpoint is fully written. If a checkpoint directory still contains this file, the save was interrupted before completing. [`Trainer`] doesn't check for it automatically, so inspect for it yourself before resuming.
 
 Resume from the JIT checkpoint the same way as any other checkpoint.
 
@@ -300,4 +300,4 @@ Use `--signal=TERM@<seconds>` in your sbatch script to send SIGTERM before the j
 </hfoption>
 </hfoptions>
 
-Calculate the required grace period as the longest possible training step time plus the checkpoint saving time. For example, if a training step takes up to 2 minutes and saving a checkpoint takes 2 minutes, set at least 240 seconds of grace time.
+Calculate the required grace period as the longest possible training step time plus the checkpoint saving time, plus the 3 second `kill_wait` delay before the checkpoint begins. For example, if a training step takes up to 2 minutes and saving a checkpoint takes 2 minutes, set at least 243 seconds of grace time.
