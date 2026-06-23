@@ -17,58 +17,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 from collections.abc import Sequence
 from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
 from transformers.configuration_utils import PreTrainedConfig
+from transformers.modeling_rope_utils import RotaryEmbeddingConfigMixin
 from transformers.utils import auto_docstring
 
-
-STEP3P7_VISION_ENCODER_CONFIG_ARGS = r"""
-    width (`int`, *optional*, defaults to 1536):
-        Hidden size of the vision encoder.
-    layers (`int`, *optional*, defaults to 47):
-        Number of hidden layers in the vision encoder.
-    heads (`int`, *optional*, defaults to 16):
-        Number of attention heads in the vision encoder.
-    num_channels (`int`, *optional*, defaults to 3):
-        Number of input image channels.
-    image_size (`int`, *optional*, defaults to 728):
-        Size of the full image input expected by the vision encoder.
-    mlp_ratio (`float`, *optional*, defaults to `8960 / 1536`):
-        Ratio used to derive the intermediate size of the vision MLP layers.
-    patch_size (`int`, *optional*, defaults to 14):
-        Patch size used by the vision encoder.
-    hidden_act (`str`, *optional*, defaults to `"quick_gelu"`):
-        Activation function used by the vision encoder MLP layers.
-    layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-        Epsilon used by layer normalization in the vision encoder.
-    use_cls_token (`bool`, *optional*, defaults to `False`):
-        Whether to prepend a class token to the vision patch sequence.
-    use_ln_pre (`bool`, *optional*, defaults to `True`):
-        Whether to apply layer normalization before the vision transformer.
-    use_ln_post (`bool`, *optional*, defaults to `False`):
-        Whether to apply layer normalization after the vision transformer.
-    use_abs_posemb (`bool`, *optional*, defaults to `True`):
-        Whether to add absolute position embeddings in the vision encoder.
-    use_rope2d (`bool`, *optional*, defaults to `True`):
-        Whether to use 2D rotary position embeddings in the vision encoder.
-    ls_init_value (`float`, *optional*, defaults to 0.1):
-        Initial value for layer scale parameters in the vision encoder.
-"""
+from ...backbone_utils import BackboneConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
 @strict
-@auto_docstring(custom_args=STEP3P7_VISION_ENCODER_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
-class Step3p7VisionEncoderConfig(PreTrainedConfig):
+@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
+class Step3p7VisionEncoderConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    width (`int`, *optional*, defaults to 1536):
+    hidden_size (`int`, *optional*, defaults to 1536):
         Hidden size of the vision encoder.
-    layers (`int`, *optional*, defaults to 47):
+    num_hidden_layers (`int`, *optional*, defaults to 47):
         Number of hidden layers in the vision encoder.
-    heads (`int`, *optional*, defaults to 16):
+    num_attention_heads (`int`, *optional*, defaults to 16):
         Number of attention heads in the vision encoder.
     num_channels (`int`, *optional*, defaults to 3):
         Number of input image channels.
@@ -80,108 +51,35 @@ class Step3p7VisionEncoderConfig(PreTrainedConfig):
         Patch size used by the vision encoder.
     hidden_act (`str`, *optional*, defaults to `"quick_gelu"`):
         Activation function used by the vision encoder MLP layers.
-    use_cls_token (`bool`, *optional*, defaults to `False`):
-        Whether to prepend a class token to the vision patch sequence.
-    use_ln_pre (`bool`, *optional*, defaults to `True`):
-        Whether to apply layer normalization before the vision transformer.
-    use_ln_post (`bool`, *optional*, defaults to `False`):
-        Whether to apply layer normalization after the vision transformer.
-    use_abs_posemb (`bool`, *optional*, defaults to `True`):
-        Whether to add absolute position embeddings in the vision encoder.
-    use_rope2d (`bool`, *optional*, defaults to `True`):
-        Whether to use 2D rotary position embeddings in the vision encoder.
-    ls_init_value (`float`, *optional*, defaults to 0.1):
+    layerscale_value (`float`, *optional*, defaults to 0.1):
         Initial value for layer scale parameters in the vision encoder.
     """
 
-    model_type = "perception_encoder"
+    model_type = "stepfun3p7_vision"
 
-    width: int = 1536
-    layers: int = 47
-    heads: int = 16
+    hidden_size: int = 1536
+    num_hidden_layers: int = 47
+    num_attention_heads: int = 16
     num_channels: int = 3
     image_size: int = 728
     mlp_ratio: float | int = 8960 / 1536
     patch_size: int = 14
     hidden_act: str = "quick_gelu"
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
+    initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
-    use_cls_token: bool = False
-    use_ln_pre: bool = True
-    use_ln_post: bool = False
-    use_abs_posemb: bool = True
-    use_rope2d: bool = True
-    ls_init_value: float = 0.1
+    qkv_bias: bool = True
+    layerscale_value: float = 0.1
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
 
     def __post_init__(self, **kwargs):
-        # Common config/modeling tests look for standard aliases. Keep the original checkpoint names too.
-        self.hidden_size = self.width
-        self.num_hidden_layers = self.layers
-        self.num_attention_heads = self.heads
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
         super().__post_init__(**kwargs)
-
-
-STEP3P7_TEXT_CONFIG_ARGS = r"""
-    hidden_size (`int`, *optional*, defaults to 4096):
-        Dimensionality of the decoder hidden states.
-    intermediate_size (`int`, *optional*, defaults to 11264):
-        Dimensionality of dense MLP intermediate states.
-    num_attention_heads (`int`, *optional*, defaults to 64):
-        Number of attention heads for each attention layer.
-    num_attention_groups (`int`, *optional*, defaults to 8):
-        Number of key/value attention groups.
-    num_hidden_layers (`int`, *optional*, defaults to 45):
-        Number of decoder layers.
-    vocab_size (`int`, *optional*, defaults to 128815):
-        Vocabulary size of the text model.
-    rms_norm_eps (`float`, *optional*, defaults to 1e-5):
-        Epsilon used by RMS normalization layers.
-    moe_intermediate_size (`int`, *optional*, defaults to 1280):
-        Intermediate size of routed MoE experts.
-    moe_num_experts (`int`, *optional*, defaults to 288):
-        Number of routed MoE experts.
-    moe_top_k (`int`, *optional*, defaults to 8):
-        Number of experts selected per token.
-    rope_theta (`float`, *optional*, defaults to 10000):
-        Base period used by rotary position embeddings.
-    rope_scaling (`dict[str, Any]`, *optional*):
-        Rotary embedding scaling configuration.
-    max_position_embeddings (`int`, *optional*, defaults to 128000):
-        Maximum position embedding index supported by the model.
-    share_expert_dim (`int`, *optional*, defaults to 1280):
-        Intermediate size of shared experts.
-    head_dim (`int`, *optional*, defaults to 128):
-        Dimensionality of each attention head.
-    layer_types (`list[str]`, *optional*):
-        Attention type for each decoder layer.
-    sliding_window (`int`, *optional*):
-        Sliding window size for sliding attention layers.
-    pad_token_id (`int`, *optional*, defaults to 1):
-        Padding token id.
-    attention_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout probability for attention weights.
-    initializer_range (`float`, *optional*, defaults to 0.02):
-        Standard deviation used to initialize model weights.
-    use_cache (`bool`, *optional*, defaults to `True`):
-        Whether the model should return key/value caches.
-    use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
-        Whether to use head-wise attention gates.
-    use_moe_router_bias (`bool`, *optional*, defaults to `False`):
-        Whether MoE router projections use a bias term.
-    moe_router_scaling_factor (`float`, *optional*, defaults to 1.0):
-        Scaling factor applied to MoE router scores.
-    need_fp32_gate (`bool`, *optional*, defaults to `False`):
-        Whether to compute router gates in float32.
-    attention_other_setting (`dict[str, Any]`, *optional*):
-        Additional attention settings from original checkpoints.
-    swiglu_limits (`list[float]`, *optional*):
-        Clamp limits for routed expert SwiGLU activations.
-    swiglu_limits_shared (`list[float]`, *optional*):
-        Clamp limits for shared expert SwiGLU activations.
-    yarn_only_types (`list[str]`, *optional*):
-        Layer type names that should use YaRN-style RoPE settings only.
-    moe_layers_enum (`tuple[int]`, *optional*):
-        Indices of layers that use MoE blocks.
-"""
 
 
 def _normalize_per_layer_values(
@@ -202,9 +100,31 @@ def _normalize_per_layer_values(
 
 
 @strict
-@auto_docstring(custom_args=STEP3P7_TEXT_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
-class Step3p7TextConfig(PreTrainedConfig):
+@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
+class Step3p7TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
+    vocab_size (`int`, *optional*, defaults to 128815):
+        Vocabulary size of the Step3p7 text decoder.
+    hidden_size (`int`, *optional*, defaults to 4096):
+        Dimension of the decoder hidden states.
+    intermediate_size (`int`, *optional*, defaults to 11264):
+        Intermediate size of dense MLP layers.
+    moe_intermediate_size (`int`, *optional*, defaults to 1280):
+        Intermediate size of routed MoE experts.
+    num_hidden_layers (`int`, *optional*, defaults to 45):
+        Number of decoder layers.
+    num_attention_heads (`int`, *optional*, defaults to 64):
+        Number of query attention heads.
+    num_key_value_heads (`int`, *optional*, defaults to 8):
+        Number of key/value attention heads. Defaults to `num_attention_groups`.
+    head_dim (`int`, *optional*, defaults to 128):
+        Dimension of each attention head.
+    layer_types (`list[str]`, *optional*):
+        Per-layer attention pattern, using `"full_attention"` or `"sliding_attention"`.
+    sliding_window (`int`, *optional*):
+        Window size used by layers whose `layer_types` entry is `"sliding_attention"`.
+    rope_parameters (`dict`, *optional*):
+        Rotary embedding parameters, optionally keyed by layer type.
     num_attention_groups (`int`, *optional*, defaults to 8):
         Number of key/value attention groups.
     moe_num_experts (`int`, *optional*, defaults to 288):
@@ -231,37 +151,80 @@ class Step3p7TextConfig(PreTrainedConfig):
         Clamp limits for routed expert SwiGLU activations.
     swiglu_limits_shared (`list`, *optional*):
         Clamp limits for shared expert SwiGLU activations.
+    partial_rotary_factors (`list`, *optional*):
+        Per-layer partial rotary factors from original Step3p7 checkpoints.
     yarn_only_types (`list[str]`, *optional*):
         Layer type names that should use YaRN-style RoPE settings only.
     moe_layers_enum (`tuple[int]`, `list[int]` or `str`, *optional*):
         Indices of layers that use MoE blocks.
+    mlp_layer_types (`list[str]`, *optional*):
+        Per-layer MLP type pattern. Uses `"dense"` for dense MLP layers and `"sparse"` for MoE layers.
     """
 
     model_type = "step3p5"
-    architectures = ["Step3p5ForCausalLM"]
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    attribute_map = {
+        "num_experts": "num_local_experts",
+    }
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.share_expert.gate_proj": "colwise",
+        "layers.*.share_expert.up_proj": "colwise",
+        "layers.*.share_expert.down_proj": "rowwise",
+        "layers.*.moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.moe.experts.down_proj": "rowwise",
+        "layers.*.moe.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        "layers.*.moe.gate": "ep_router",
+        "layers.*.moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.moe.experts.down_proj": "grouped_gemm",
+        "layers.*.moe.experts": "moe_tp_experts",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    vocab_size: int = 128815
 
     hidden_size: int = 4096
     intermediate_size: int = 11264
-    num_attention_heads: int = 64
-    num_attention_groups: int = 8
     num_hidden_layers: int = 45
-    vocab_size: int = 128815
+    num_attention_heads: int = 64
+    num_key_value_heads: int = 8
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 128000
+    initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    sliding_window: int | None = None
+    attention_dropout: float | int = 0.0
     moe_intermediate_size: int = 1280
+    num_experts_per_tok: int = 8
+    num_experts: int = 288
+    pad_token_id: int = 1
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    architectures = ["Step3p5ForCausalLM"]
+    num_attention_groups: int = 8
     moe_num_experts: int = 288
     moe_top_k: int = 8
     rope_theta: float | int | list[float | int] = 10000
     rope_scaling: dict[str, Any] | None = None
-    max_position_embeddings: int = 128000
     share_expert_dim: int = 1280
     head_dim: int = 128
     layer_types: list[str] | None = None
-    sliding_window: int | None = None
-    pad_token_id: int = 1
-    attention_dropout: float = 0.0
-    initializer_range: float = 0.02
-    use_cache: bool = True
-    tie_word_embeddings: bool = False
     use_head_wise_attn_gate: bool = False
     use_moe_router_bias: bool = False
     moe_router_scaling_factor: float = 1.0
@@ -269,65 +232,78 @@ class Step3p7TextConfig(PreTrainedConfig):
     attention_other_setting: dict[str, Any] | None = None
     swiglu_limits: list[float | int | None] | None = None
     swiglu_limits_shared: list[float | int | None] | None = None
+    partial_rotary_factors: list[float | int | None] | None = None
     yarn_only_types: list[str] | None = None
-    moe_layers_enum: tuple[int, ...] | list[int] | str = (
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17,
-        18,
-        19,
-        20,
-        21,
-        22,
-        23,
-        24,
-        25,
-        26,
-        27,
-        28,
-        29,
-        30,
-        31,
-        32,
-        33,
-        34,
-        35,
-        36,
-        37,
-        38,
-        39,
-        40,
-        41,
-        42,
-        43,
-        44,
-    )
+    moe_layers_enum: tuple[int, ...] | list[int] | str | None = None
+    mlp_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
-        self.layer_types = _normalize_per_layer_values(self.layer_types, self.num_hidden_layers)
+        if self.layer_types is None:
+            has_sliding_metadata = self.attention_other_setting is not None and self.sliding_window is not None
+            self.layer_types = [
+                "sliding_attention" if has_sliding_metadata and layer_idx % 2 == 0 else "full_attention"
+                for layer_idx in range(self.num_hidden_layers)
+            ]
+        else:
+            self.layer_types = _normalize_per_layer_values(self.layer_types, self.num_hidden_layers)
+
+        self.swiglu_limits = _normalize_per_layer_values(self.swiglu_limits, self.num_hidden_layers)
+        self.swiglu_limits_shared = _normalize_per_layer_values(self.swiglu_limits_shared, self.num_hidden_layers)
+        self.partial_rotary_factors = _normalize_per_layer_values(self.partial_rotary_factors, self.num_hidden_layers)
+
         if isinstance(self.rope_scaling, dict):
             self.rope_scaling = dict(self.rope_scaling)
+        if self.rope_parameters is not None:
+            self.rope_parameters = copy.deepcopy(self.rope_parameters)
+
         if isinstance(self.moe_layers_enum, str):
             self.moe_layers_enum = tuple(int(i) for i in self.moe_layers_enum.split(",") if i.strip())
         elif isinstance(self.moe_layers_enum, list):
             self.moe_layers_enum = tuple(self.moe_layers_enum)
+        elif self.moe_layers_enum is None:
+            self.moe_layers_enum = tuple(range(3, self.num_hidden_layers))
+
+        if self.mlp_layer_types is None:
+            moe_layers = set(self.moe_layers_enum)
+            self.mlp_layer_types = [
+                "sparse" if layer_idx in moe_layers else "dense" for layer_idx in range(self.num_hidden_layers)
+            ]
+        else:
+            self.mlp_layer_types = _normalize_per_layer_values(self.mlp_layer_types, self.num_hidden_layers)
+
+        self.num_experts = self.moe_num_experts
+        self.num_experts_per_tok = self.moe_top_k
         self.num_key_value_heads = self.num_attention_groups
         super().__post_init__(**kwargs)
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        rope_scaling = rope_scaling if rope_scaling is not None else self.rope_scaling
 
-STEP3P7_CONFIG_ARGS = r"""
+        if self.rope_parameters is None:
+            if self.layer_types is None:
+                self.rope_parameters = dict(rope_scaling or {})
+            else:
+                self.rope_parameters = {}
+                for layer_type in set(self.layer_types):
+                    uses_scaled_rope = not self.yarn_only_types or layer_type in self.yarn_only_types
+                    self.rope_parameters[layer_type] = dict(rope_scaling or {}) if uses_scaled_rope else {}
+        elif rope_scaling is not None:
+            if self.layer_types is not None and set(self.rope_parameters.keys()).issubset(self.layer_types):
+                for layer_type in set(self.layer_types):
+                    if not self.yarn_only_types or layer_type in self.yarn_only_types:
+                        self.rope_parameters.setdefault(layer_type, {}).update(rope_scaling)
+            else:
+                self.rope_parameters.update(rope_scaling)
+
+        self.standardize_rope_params()
+        return kwargs
+
+
+@strict
+@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
+class Step3p7Config(PreTrainedConfig):
+    r"""
     vision_config (`dict` or `Step3p7VisionEncoderConfig`, *optional*):
         Configuration of the Step3p7 vision encoder.
     text_config (`dict` or `Step3p7TextConfig`, *optional*):
@@ -336,13 +312,7 @@ STEP3P7_CONFIG_ARGS = r"""
         Whether the multimodal projector uses a bias term.
     image_token_id (`int`, *optional*, defaults to 151679):
         Token id used as image placeholder in text inputs.
-"""
-
-
-@strict
-@auto_docstring(custom_args=STEP3P7_CONFIG_ARGS, checkpoint="stepfun-ai/Step-3.7-Flash")
-class Step3p7Config(PreTrainedConfig):
-    r""" """
+    """
 
     sub_configs = {"vision_config": Step3p7VisionEncoderConfig, "text_config": Step3p7TextConfig}
     # This loader is a compatibility shim for original Step VL checkpoints
@@ -356,33 +326,16 @@ class Step3p7Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        shared_rope_scaling = kwargs.get("rope_scaling")
-        if isinstance(shared_rope_scaling, dict):
-            shared_rope_scaling = dict(shared_rope_scaling)
-
         if self.vision_config is None:
             self.vision_config = Step3p7VisionEncoderConfig()
         elif isinstance(self.vision_config, dict):
             self.vision_config = Step3p7VisionEncoderConfig(**self.vision_config)
 
         if self.text_config is None:
-            self.text_config = Step3p7TextConfig(rope_scaling=shared_rope_scaling)
+            self.text_config = Step3p7TextConfig()
         elif isinstance(self.text_config, dict):
-            text_config = dict(self.text_config)
-            if shared_rope_scaling is not None and "rope_scaling" not in text_config:
-                text_config["rope_scaling"] = shared_rope_scaling
-            self.text_config = Step3p7TextConfig(**text_config)
-        elif shared_rope_scaling is not None and self.text_config.rope_scaling is None:
-            self.text_config.rope_scaling = dict(shared_rope_scaling)
+            self.text_config = Step3p7TextConfig(**self.text_config)
 
-        self.hidden_size = self.text_config.hidden_size
-        self.intermediate_size = self.text_config.intermediate_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.num_attention_groups = self.text_config.num_attention_groups
-        self.num_key_value_heads = self.text_config.num_attention_groups
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.max_position_embeddings = self.text_config.max_position_embeddings
         super().__post_init__(**kwargs)
 
 

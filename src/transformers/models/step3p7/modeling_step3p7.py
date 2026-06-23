@@ -20,35 +20,33 @@
 import copy
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.activations import ACT2FN
+import transformers.models.ernie4_5.modeling_ernie4_5 as ernie4_5_modeling
+import transformers.models.llama.modeling_llama as llama_modeling
+import transformers.models.qwen3.modeling_qwen3 as qwen3_modeling
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.generation import GenerationMixin
 from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.modeling_layers import GradientCheckpointingLayer
-from transformers.modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from transformers.modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
-from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple
 
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...integrations import use_experts_implementation, use_kernelized_func
+from ...utils import ModelOutput
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionEncoderConfig
-
-
-logger = logging.get_logger(__name__)
-
-
-def rotate_half_vision(x: torch.Tensor) -> torch.Tensor:
-    """Rotate last dimension halves (used by RoPE)."""
-    x = x.reshape(*x.shape[:-1], -1, 2)
-    x1, x2 = x.unbind(dim=-1)
-    x = torch.stack((-x2, x1), dim=-1)
-    return x.reshape(*x.shape[:-2], -1)
 
 
 def apply_rotary_emb(freqs: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
@@ -59,7 +57,7 @@ def apply_rotary_emb(freqs: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
     rot_dim = freqs.shape[-1]
     assert rot_dim <= t.shape[-1], f"feature dimension {t.shape[-1]} is too small for rot_dim {rot_dim}"
     t_rot, t_pass = t[..., :rot_dim], t[..., rot_dim:]
-    t_rot = (t_rot * freqs.cos()) + (rotate_half_vision(t_rot) * freqs.sin())
+    t_rot = (t_rot * freqs.cos()) + (ernie4_5_modeling.rotate_half(t_rot) * freqs.sin())
     return torch.cat((t_rot, t_pass), dim=-1).to(dtype)
 
 
@@ -140,11 +138,11 @@ class Step3p7VisionEncoderRope2D(nn.Module):
 
 
 class Step3p7VisionEncoderLayerScale(nn.Module):
-    """Per-channel residual scaling used when ls_init_value is set."""
+    """Per-channel residual scaling."""
 
-    def __init__(self, dim: int, init_values: float) -> None:
+    def __init__(self, config: Step3p7VisionEncoderConfig) -> None:
         super().__init__()
-        self.lambda1 = nn.Parameter(torch.full((dim,), init_values))
+        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         return hidden_state * self.lambda1
@@ -153,11 +151,16 @@ class Step3p7VisionEncoderLayerScale(nn.Module):
 class Step3p7VisionEncoderMLP(nn.Module):
     """Feed-forward network used inside each transformer block."""
 
-    def __init__(self, hidden_size: int, intermediate_size: int, hidden_act: str) -> None:
+    def __init__(self, config: Step3p7VisionEncoderConfig) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(hidden_size, intermediate_size, bias=True)
-        self.activation = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(intermediate_size, hidden_size, bias=True)
+        in_features = out_features = config.hidden_size
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
+        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
+        if isinstance(config.hidden_act, str):
+            self.activation = ACT2FN[config.hidden_act]
+        else:
+            self.activation = config.hidden_act
+        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.fc1(hidden_state)
@@ -169,39 +172,31 @@ class Step3p7VisionEncoderMLP(nn.Module):
 class Step3p7VisionEncoderAttention(nn.Module):
     """Multi-head self attention with optional 2D RoPE."""
 
-    def __init__(
-        self,
-        hidden_size: int,
-        num_heads: int,
-        max_grid_height: int,
-        max_grid_width: int,
-        use_cls_token: bool = False,
-        use_rope2d: bool = True,
-        rope_theta: int | float = 10000,
-        rope_theta_rescale_factor: float = 1.0,
-    ):
+    def __init__(self, config: Step3p7VisionEncoderConfig):
         super().__init__()
-        if hidden_size % num_heads != 0:
-            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by num_heads ({num_heads}).")
-        self.num_heads = num_heads
-        self.head_dim = hidden_size // num_heads
+        self.config = config
+        hidden_size = config.hidden_size
+        if hidden_size % config.num_attention_heads != 0:
+            raise ValueError(
+                f"hidden_size ({hidden_size}) must be divisible by num_heads ({config.num_attention_heads})."
+            )
+        self.num_heads = config.num_attention_heads
+        self.head_dim = hidden_size // self.num_heads
         self.scale = self.head_dim**-0.5
         self.in_proj_weight = nn.Parameter(torch.zeros(hidden_size * 3, hidden_size))
         self.in_proj_bias = nn.Parameter(torch.zeros(hidden_size * 3))
         self.out_proj = nn.Linear(hidden_size, hidden_size, bias=True)
 
-        self.rope = None
-        if use_rope2d:
-            self.rope = Step3p7VisionEncoderRope2D(
-                dim=self.head_dim,
-                max_grid_height=max_grid_height,
-                max_grid_width=max_grid_width,
-                use_cls_token=use_cls_token,
-                theta=rope_theta,
-                theta_rescale_factor=rope_theta_rescale_factor,
-            )
+        grid_size = config.image_size // config.patch_size
+        self.rope = Step3p7VisionEncoderRope2D(
+            dim=self.head_dim,
+            max_grid_height=grid_size,
+            max_grid_width=grid_size,
+            use_cls_token=False,
+        )
 
     def forward(self, hidden_states: torch.Tensor, grid_hw: tuple[int, int]) -> torch.Tensor:
+        """Input shape: Batch x Time x Channel"""
         bsz, seq_len, _ = hidden_states.shape
         qkv = F.linear(
             hidden_states,
@@ -212,8 +207,7 @@ class Step3p7VisionEncoderAttention(nn.Module):
 
         q = q.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = k.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        if self.rope is not None:
-            q, k = self.rope(q, k, grid_hw=grid_hw)
+        q, k = self.rope(q, k, grid_hw=grid_hw)
         v = v.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         attn_output = F.scaled_dot_product_attention(q, k, v, is_causal=False, scale=self.scale)
@@ -221,39 +215,17 @@ class Step3p7VisionEncoderAttention(nn.Module):
         return self.out_proj(attn_output)
 
 
-class Step3p7VisionEncoderBlock(nn.Module):
+class Step3p7VisionEncoderBlock(GradientCheckpointingLayer):
     """A single Vision Transformer block (self-attention + MLP)."""
 
-    def __init__(
-        self,
-        hidden_size: int,
-        num_heads: int,
-        mlp_ratio: float,
-        hidden_act: str,
-        layer_norm_eps: float,
-        ls_init_value: float | None = None,
-        max_grid_height: int | None = None,
-        max_grid_width: int | None = None,
-        use_cls_token: bool = False,
-        use_rope2d: bool = True,
-    ):
-        super().__init__()
-        self.attn = Step3p7VisionEncoderAttention(
-            hidden_size,
-            num_heads,
-            max_grid_height=max_grid_height,
-            max_grid_width=max_grid_width,
-            use_cls_token=use_cls_token,
-            use_rope2d=use_rope2d,
-        )
-        self.ln_1 = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
-        self.ln_2 = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
-
-        intermediate = int(hidden_size * mlp_ratio)
-        self.mlp = Step3p7VisionEncoderMLP(hidden_size, intermediate, hidden_act)
-
-        self.ls_1 = Step3p7VisionEncoderLayerScale(hidden_size, ls_init_value)
-        self.ls_2 = Step3p7VisionEncoderLayerScale(hidden_size, ls_init_value)
+    def __init__(self, config: Step3p7VisionEncoderConfig):
+        GradientCheckpointingLayer.__init__(self)
+        self.attn = Step3p7VisionEncoderAttention(config)
+        self.ln_1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.ln_2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = Step3p7VisionEncoderMLP(config)
+        self.ls_1 = Step3p7VisionEncoderLayerScale(config)
+        self.ls_2 = Step3p7VisionEncoderLayerScale(config)
 
     def forward(self, hidden_states: torch.Tensor, grid_hw: tuple[int, int]) -> torch.Tensor:
         residual = hidden_states
@@ -268,42 +240,66 @@ class Step3p7VisionEncoderBlock(nn.Module):
         return hidden_states
 
 
-class Step3p7VisionEncoderTransformer(nn.Module):
-    """Stack of encoder blocks parameterised by Step35VisionEncoderConfig."""
+class Step3p7VisionEncoderEmbeddings(nn.Module):
+    """Patch and positional embeddings for the Step3p7 vision tower."""
 
-    def __init__(
-        self,
-        embed_dim: int,
-        depth: int,
-        num_heads: int,
-        mlp_ratio: float,
-        hidden_act: str,
-        layer_norm_eps: float,
-        ls_init_value: float | None = None,
-        max_grid_height: int | None = None,
-        max_grid_width: int | None = None,
-        use_cls_token: bool = False,
-        use_rope2d: bool = True,
-    ):
+    def __init__(self, config: Step3p7VisionEncoderConfig) -> None:
         super().__init__()
-        self.layers = depth
-        self.resblocks = nn.ModuleList(
-            [
-                Step3p7VisionEncoderBlock(
-                    embed_dim,
-                    num_heads,
-                    mlp_ratio,
-                    hidden_act,
-                    layer_norm_eps,
-                    max_grid_height=max_grid_height,
-                    max_grid_width=max_grid_width,
-                    use_cls_token=use_cls_token,
-                    use_rope2d=use_rope2d,
-                    ls_init_value=ls_init_value,
-                )
-                for _ in range(depth)
-            ]
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.patch_size = config.patch_size
+        self.image_size = config.image_size
+        self.posemb_grid_size = self.image_size // self.patch_size
+
+        self.conv1 = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.hidden_size,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            bias=False,
         )
+        self.ln_pre = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
+        self.positional_embedding = nn.Parameter(
+            (self.hidden_size**-0.5) * torch.randn(self.posemb_grid_size**2, self.hidden_size)
+        )
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """Interpolate Step3p7 absolute position embeddings for a target image size."""
+        grid_h, grid_w = height // self.patch_size, width // self.patch_size
+        return self.sample_abs_posemb(grid_h, grid_w)
+
+    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, tuple[int, int]]:
+        bsz, _, height, width = pixel_values.shape
+        grid_h, grid_w = height // self.patch_size, width // self.patch_size
+
+        hidden_state = self.conv1(pixel_values)
+        hidden_state = hidden_state.flatten(2).transpose(1, 2)
+        hidden_state = hidden_state + self.sample_abs_posemb(grid_h, grid_w)
+
+        return self.ln_pre(hidden_state), (grid_h, grid_w)
+
+    def sample_abs_posemb(self, grid_h: int, grid_w: int):
+        if self.posemb_grid_size == grid_h and self.posemb_grid_size == grid_w:
+            return self.positional_embedding[None, ...]
+
+        pos_embed = self.positional_embedding
+        pos_embed = (
+            pos_embed.reshape(1, self.posemb_grid_size, self.posemb_grid_size, -1).permute(0, 3, 1, 2).contiguous()
+        )
+        pos_embed = F.interpolate(pos_embed, size=(grid_h, grid_w), mode="bilinear", align_corners=False)
+        pos_embed = pos_embed.permute(0, 2, 3, 1).reshape(-1, self.hidden_size)
+
+        return pos_embed[None, ...]
+
+
+class Step3p7VisionEncoderTransformer(nn.Module):
+    """Stack of encoder blocks parameterised by Step3p7VisionEncoderConfig."""
+
+    def __init__(self, config: Step3p7VisionEncoderConfig):
+        nn.Module.__init__(self)
+        self.config = config
+        self.layers = config.num_hidden_layers
+        self.resblocks = nn.ModuleList([Step3p7VisionEncoderBlock(config) for _ in range(config.num_hidden_layers)])
 
     def forward(self, hidden_states: torch.Tensor, grid_hw: tuple[int, int]) -> torch.Tensor:
         for block in self.resblocks:
@@ -324,100 +320,37 @@ class Step3p7VisionEncoder(nn.Module):
         super().__init__()
         self.config = config
 
-        self.hidden_size = config.width
-        self.num_heads = config.heads
-        self.num_hidden_layers = config.layers
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.num_hidden_layers = config.num_hidden_layers
         self.patch_size = config.patch_size
         self.image_size = config.image_size
-        self.use_cls_token = config.use_cls_token
-        self.use_abs_posemb = config.use_abs_posemb
-        self.use_ln_post = config.use_ln_post
-
-        self.conv1 = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.hidden_size,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            bias=False,
-        )
-
-        self.ln_pre = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps) if config.use_ln_pre else nn.Identity()
-        self.ln_post = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps) if self.use_ln_post else nn.Identity()
 
         grid_size = self.image_size // self.patch_size
         self.base_grid = (grid_size, grid_size)
-
-        if self.use_cls_token:
-            self.class_embedding = nn.Parameter(torch.randn(self.hidden_size) * (self.hidden_size**-0.5))
-        else:
-            self.class_embedding = None
-
-        if self.use_abs_posemb:
-            self.posemb_grid_size = grid_size
-            self.positional_embedding = nn.Parameter(
-                (self.hidden_size**-0.5) * torch.randn(int(self.use_cls_token) + grid_size**2, self.hidden_size)
-            )
-
-        self.transformer = Step3p7VisionEncoderTransformer(
-            embed_dim=self.hidden_size,
-            depth=self.num_hidden_layers,
-            num_heads=self.num_heads,
-            mlp_ratio=config.mlp_ratio,
-            hidden_act=config.hidden_act,
-            layer_norm_eps=config.layer_norm_eps,
-            ls_init_value=config.ls_init_value,
-            max_grid_height=grid_size,
-            max_grid_width=grid_size,
-            use_cls_token=self.use_cls_token,
-            use_rope2d=config.use_rope2d,
-        )
+        self.embeddings = Step3p7VisionEncoderEmbeddings(config)
+        self.transformer = Step3p7VisionEncoderTransformer(config)
         self.vit_downsampler1 = nn.Conv2d(self.hidden_size, self.hidden_size * 2, kernel_size=3, stride=2, padding=1)
         self.vit_downsampler2 = nn.Conv2d(
             self.hidden_size * 2, self.hidden_size * 4, kernel_size=3, stride=2, padding=1
         )
 
-    def sample_abs_posemb(self, grid_h: int, grid_w: int):
-        if self.posemb_grid_size == grid_h and self.posemb_grid_size == grid_w:
-            return self.positional_embedding[None, ...]
+    @property
+    def conv1(self):
+        return self.embeddings.conv1
 
-        pos_embed = self.positional_embedding
-        if self.use_cls_token:
-            cls_token_embed, pos_embed = pos_embed[:1], pos_embed[1:]
+    @property
+    def ln_pre(self):
+        return self.embeddings.ln_pre
 
-        pos_embed = (
-            pos_embed.reshape(1, self.posemb_grid_size, self.posemb_grid_size, -1).permute(0, 3, 1, 2).contiguous()
-        )
-        pos_embed = F.interpolate(pos_embed, size=(grid_h, grid_w), mode="bilinear", align_corners=False)
-        pos_embed = pos_embed.permute(0, 2, 3, 1).reshape(-1, self.hidden_size)
-
-        if self.use_cls_token:
-            pos_embed = torch.cat([cls_token_embed, pos_embed], dim=0)
-
-        return pos_embed[None, ...]
+    @property
+    def positional_embedding(self):
+        return self.embeddings.positional_embedding
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """Args: pixel_values: image tensor of shape (B, C, H, W)."""
-        bsz, _, height, width = pixel_values.shape
-        grid_h, grid_w = height // self.patch_size, width // self.patch_size
-
-        hidden_state = self.conv1(pixel_values)  # (B, D, Gh, Gw)
-        hidden_state = hidden_state.flatten(2).transpose(1, 2)  # (B, Gh*Gw, D)
-
-        if self.use_cls_token:
-            cls_token = self.class_embedding.view(1, 1, -1).expand(bsz, -1, -1)
-            hidden_state = torch.cat([cls_token, hidden_state], dim=1)
-
-        if self.use_abs_posemb:
-            pos_emb = self.sample_abs_posemb(grid_h, grid_w)
-            hidden_state = hidden_state + pos_emb
-        hidden_state = self.ln_pre(hidden_state)
-        hidden_state = self.transformer(hidden_state, grid_hw=(grid_h, grid_w))
-
-        if self.use_ln_post:
-            hidden_state = self.ln_post(hidden_state)
-
-        if self.use_cls_token:
-            hidden_state = hidden_state[:, 1:, :]
+        hidden_state, grid_hw = self.embeddings(pixel_values)
+        hidden_state = self.transformer(hidden_state, grid_hw=grid_hw)
 
         return hidden_state
 
@@ -437,97 +370,137 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
 
+    def post_init(self):
+        super().post_init()
+        # Legacy Step3p7 checkpoint conversions are load-only compatibility shims.
+        # Freshly initialized models should save the canonical packed expert keys.
+        if getattr(self, "_weight_conversions", None) is None:
+            self._weight_conversions = []
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        text_config = getattr(self.config, "text_config", self.config)
+        std = getattr(text_config, "initializer_range", 0.02)
+        if isinstance(module, Step3p7MoEExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Step3p7RotaryEmbedding):
+            for layer_type in dict.fromkeys(module.rope_layer_types):
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), inv_freq)
+
 
 class Step3p7RotaryEmbedding(nn.Module):
-    """RoPE with per-layer overrides for `rope_theta` (a list in step3p7 checkpoints) and
-    `rope_parameters` (yarn-only layers disable the global `rope_scaling`)."""
+    """RoPE with Step3p7 layer-type parameters while using standardized ``rope_parameters``."""
 
-    def __init__(
-        self,
-        config: Step3p7TextConfig,
-        rope_theta: float | None = None,
-        rope_parameters: dict | None = None,
-        device=None,
-    ):
+    def __init__(self, config: Step3p7TextConfig, device=None):
         super().__init__()
-        # Shallow-copy the shared config so per-layer overrides don't leak between siblings.
-        # `rope_parameters` is deep-copied because `standardize_rope_params` mutates it.
         self.config = copy.copy(config)
-        if rope_theta is not None:
-            self.config.rope_theta = rope_theta
-        elif isinstance(self.config.rope_theta, list):
-            self.config.rope_theta = self.config.rope_theta[0]
-        # `rope_parameters` from PreTrainedConfig.convert_rope_params_to_dict already inherits
-        # `rope_theta` from the parent config — which may have been a list — so propagate the
-        # per-layer scalar here too.
-        baked = copy.deepcopy(rope_parameters) if rope_parameters else None
-        if baked is not None:
-            baked["rope_theta"] = self.config.rope_theta
-        self.config.rope_parameters = baked
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        self.rope_type = {}
+        self.rope_layer_types = []
 
-        self.rope_theta = self.config.rope_theta
-        self.partial_rotary_factor = getattr(self.config, "partial_rotary_factor", None) or 1.0
+        rope_parameters_by_key = {}
+        signature_to_key = {}
+        layer_type_counts = {}
+        for layer_idx, layer_type in enumerate(config.layer_types):
+            rope_parameters = self._get_layer_rope_parameters(config, layer_idx)
+            signature = (layer_type, tuple(sorted((key, repr(value)) for key, value in rope_parameters.items())))
+            if signature not in signature_to_key:
+                suffix = layer_type_counts.get(layer_type, 0)
+                rope_layer_type = layer_type if suffix == 0 else f"{layer_type}_{suffix}"
+                layer_type_counts[layer_type] = suffix + 1
+                signature_to_key[signature] = rope_layer_type
+                rope_parameters_by_key[rope_layer_type] = rope_parameters
+            self.rope_layer_types.append(signature_to_key[signature])
 
-        if baked:
-            self.rope_type = baked.get("rope_type", baked.get("type", "default"))
+        self.config.layer_types = list(rope_parameters_by_key)
+        self.config.rope_parameters = rope_parameters_by_key
+
+        for rope_layer_type, rope_parameters in rope_parameters_by_key.items():
+            self.rope_type[rope_layer_type] = rope_parameters["rope_type"]
+            rope_init_fn = (
+                self.compute_default_rope_parameters
+                if self.rope_type[rope_layer_type] == "default"
+                else ROPE_INIT_FUNCTIONS[self.rope_type[rope_layer_type]]
+            )
+            inv_freq, attention_scaling = rope_init_fn(self.config, device, layer_type=rope_layer_type)
+            self.register_buffer(f"{rope_layer_type}_inv_freq", inv_freq, persistent=False)
+            self.register_buffer(f"{rope_layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
+            setattr(self, f"{rope_layer_type}_attention_scaling", attention_scaling)
+
+    @staticmethod
+    def _get_layer_rope_parameters(config: Step3p7TextConfig, layer_idx: int) -> dict[str, Any]:
+        layer_type = config.layer_types[layer_idx]
+        if config.rope_parameters:
+            if set(config.rope_parameters.keys()).issubset(config.layer_types):
+                rope_parameters = copy.deepcopy(config.rope_parameters[layer_type])
+            else:
+                rope_parameters = copy.deepcopy(config.rope_parameters)
         else:
-            self.rope_type = "default"
+            rope_parameters = {"rope_type": "default"}
 
-        rope_init_fn = (
-            self.compute_default_rope_parameters
-            if self.rope_type == "default"
-            else ROPE_INIT_FUNCTIONS[self.rope_type]
+        if isinstance(config.rope_theta, list):
+            rope_theta = config.rope_theta[min(layer_idx, len(config.rope_theta) - 1)]
+        else:
+            rope_theta = rope_parameters.get("rope_theta", config.rope_theta)
+        rope_parameters["rope_theta"] = rope_theta
+        rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
+
+        if config.partial_rotary_factors is not None:
+            partial_rotary_factor = config.partial_rotary_factors[layer_idx]
+        else:
+            partial_rotary_factor = rope_parameters.get(
+                "partial_rotary_factor", getattr(config, "partial_rotary_factor", 1.0)
+            )
+        if partial_rotary_factor is not None:
+            rope_parameters["partial_rotary_factor"] = partial_rotary_factor
+        return rope_parameters
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Step3p7TextConfig | None = None,
+        device: "torch.device | None" = None,
+        seq_len: int | None = None,
+        layer_type: str | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation.
+        """
+        rope_parameters = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
+        base = rope_parameters["rope_theta"]
+        partial_rotary_factor = rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = config.head_dim
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+    def forward(self, x, position_ids, layer_type: str):
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float().to(x.device)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Step3p7TextConfig | None = None,
-        device: "torch.device | None" = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_theta
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim * partial_rotary_factor)
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
 
 
 @auto_docstring(
@@ -536,16 +509,18 @@ class Step3p7RotaryEmbedding(nn.Module):
     """
 )
 @dataclass
-class Step3p7ModelOutputWithPast(ModelOutput):
+class Step3p7ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
-        Hidden states produced by the vision path when image inputs are provided.
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    past_key_values: list[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
 
 
@@ -561,13 +536,11 @@ class Step3p7CausalLMOutputWithPast(ModelOutput):
         Language modeling loss when `labels` are provided.
     logits (`torch.FloatTensor`, *optional*):
         Prediction scores of the language modeling head.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        Hidden states produced by the vision path when image inputs are provided.
     """
 
     loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor = None
-    past_key_values: list[torch.FloatTensor] | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
@@ -576,36 +549,70 @@ class Step3p7CausalLMOutputWithPast(ModelOutput):
 class Step3p7MLP(nn.Module):
     def __init__(self, config, intermediate_size=None, swiglu_limit=None):
         super().__init__()
+        config = copy.copy(config)
+        config.hidden_act = "silu"
+        config.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        config.mlp_bias = False
+        config.swiglu_limit = swiglu_limit if swiglu_limit is not None else float("inf")
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN["silu"]
-        self.limit = swiglu_limit
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.limit = config.swiglu_limit
 
-    def forward(self, x):
-        up = self.up_proj(x)
-        gate = self.act_fn(self.gate_proj(x))
-        if self.limit is not None:
-            gate = gate.clamp(min=None, max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
-
-        return self.down_proj(gate * up)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        gate = self.gate_proj(x).clamp(max=self.limit)
+        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        return self.down_proj(self.act_fn(gate) * up)
 
 
-class Step3p7MoELinear(nn.Module):
-    def __init__(self, num_experts, in_features, out_features):
+@use_experts_implementation
+class Step3p7MoEExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
+
+    def __init__(self, config: Step3p7TextConfig, swiglu_limit=None):
         super().__init__()
-        self.num_experts = num_experts
-        self.in_features = in_features
-        self.out_features = out_features
-        self.weight = nn.Parameter(torch.zeros(num_experts, out_features, in_features))
+        config = copy.copy(config)
+        config.num_local_experts = config.moe_num_experts
+        config.intermediate_size = config.moe_intermediate_size
+        config.hidden_act = "silu"
+        config.swiglu_limit = swiglu_limit if swiglu_limit is not None else float("inf")
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.limit = config.swiglu_limit
 
-    def forward(self, x, expert_id):
-        x = F.linear(x.float(), self.weight[expert_id].float())
-        return x
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
+        final = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(mask[expert_idx])
+            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
+            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
+            final.index_add_(0, token_idx, current.to(final.dtype))
+        return final
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
+        # backends swapped in by `@use_experts_implementation` apply the same clamp +
+        # SiLU on top of their packed gate_up output instead of bypassing it.
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
+        return self.act_fn(gate) * up
 
 
 class Step3p7MoEMLP(nn.Module):
@@ -625,17 +632,12 @@ class Step3p7MoEMLP(nn.Module):
         else:
             self.custom_routing_function = None
         self.need_fp32_gate = config.need_fp32_gate
-        self.routed_scaling_factor = getattr(config, "moe_router_scaling_factor", 1.0)
+        self.routed_scaling_factor = config.moe_router_scaling_factor
 
         # gating
         self.gate = nn.Linear(self.hidden_size, self.num_experts, bias=False)
 
-        self.act_fn = ACT2FN["silu"]
-        self.limit = swiglu_limit
-
-        self.up_proj = Step3p7MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
-        self.gate_proj = Step3p7MoELinear(self.num_experts, self.hidden_size, self.moe_intermediate_size)
-        self.down_proj = Step3p7MoELinear(self.num_experts, self.moe_intermediate_size, self.hidden_size)
+        self.experts = Step3p7MoEExperts(config, swiglu_limit=swiglu_limit)
 
     def router_bias_func(self, gating_output: torch.Tensor, topk: int, renormalize: bool):
         gate_prob = torch.sigmoid(gating_output.float())
@@ -646,16 +648,6 @@ class Step3p7MoEMLP(nn.Module):
         if renormalize:
             expert_topk_weight = expert_topk_weight / (torch.sum(expert_topk_weight, dim=-1, keepdim=True) + 1e-20)
         return expert_topk_weight, indices
-
-    def get_expert_output(self, inputs: torch.Tensor, expert_id):
-        # if self.limit is None:
-        up = self.up_proj(inputs, expert_id)
-        gate = self.act_fn(self.gate_proj(inputs, expert_id))
-        if self.limit is not None:
-            gate = gate.clamp(min=None, max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
-
-        return self.down_proj(gate * up, expert_id)
 
     def forward(self, hidden_states):
         """ """
@@ -680,43 +672,16 @@ class Step3p7MoEMLP(nn.Module):
 
         routing_weights = routing_weights * self.routed_scaling_factor
 
-        final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
-        )
-
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be sollicitated
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-
-        # Loop over all available experts in the model and perform the computation on each expert
-        for expert_idx in range(self.num_experts):
-            idx, top_x = torch.where(expert_mask[expert_idx])
-
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = (
-                self.get_expert_output(current_state, expert_idx) * routing_weights[top_x, idx, None]
-            )
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states
 
 
 class Step3p7RMSNorm(nn.Module):
-    def __init__(
-        self,
-        hidden_size: int,
-        eps: float = 1e-5,
-    ) -> None:
+    def __init__(self, hidden_size: int, eps: float = 1e-5) -> None:
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
+        self.weight = nn.Parameter(torch.zeros(hidden_size))
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -732,110 +697,51 @@ class Step3p7RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    if q.shape[-1] == cos.shape[-1]:
+        return llama_modeling.apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=unsqueeze_dim)
 
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin):
-    """Applies Rotary Position Embedding to (q, k) on the first `cos.shape[-1]` dims."""
-    if cos.ndim == q.ndim - 1:
-        cos = cos.unsqueeze(1)
-        sin = sin.unsqueeze(1)
     rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
-    return torch.cat([q_embed, q_pass], dim=-1), torch.cat([k_embed, k_pass], dim=-1)
+    query_rot, query_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    key_rot, key_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+    query_rot, key_rot = llama_modeling.apply_rotary_pos_emb(query_rot, key_rot, cos, sin, unsqueeze_dim=unsqueeze_dim)
+    return torch.cat((query_rot, query_pass), dim=-1), torch.cat((key_rot, key_pass), dim=-1)
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class Step3p7Attention(nn.Module):
+@use_kernelized_func(apply_rotary_pos_emb)
+class Step3p7Attention(qwen3_modeling.Qwen3Attention):
     def __init__(self, config: Step3p7TextConfig, layer_idx):
-        super().__init__()
+        attention_config = copy.copy(config)
+        attention_config.attention_bias = False
+        enable_sliding_window = config.layer_types[layer_idx] == "sliding_attention"
+        if enable_sliding_window:
+            attention_config.num_attention_heads = config.attention_other_setting["num_attention_heads"]
+            attention_config.num_key_value_heads = config.attention_other_setting["num_attention_groups"]
+        else:
+            attention_config.num_attention_heads = config.num_attention_heads
+            attention_config.num_key_value_heads = config.num_attention_groups
+
+        nn.Module.__init__(self)
+        self.layer_type = config.layer_types[layer_idx]
         self.config = config
         self.layer_idx = layer_idx
-        self.num_attention_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_attention_groups
-
-        layer_types = getattr(config, "layer_types", []) or []
-        if layer_types:
-            enable_sliding_window = layer_types[layer_idx] == "sliding_attention"
-        else:
-            enable_sliding_window = layer_idx % 2 == 0
-
-        # Per-layer rope parameters: yarn-only layers disable rope scaling.
-        yarn_only_types = getattr(config, "yarn_only_types", None)
-        if yarn_only_types and layer_types[layer_idx] not in yarn_only_types:
-            rope_parameters = None
-        else:
-            rope_parameters = getattr(config, "rope_scaling", None)
-
-        # `rope_theta` may be a per-layer list; pick the entry for this layer.
-        rope_theta = config.rope_theta
-        if isinstance(rope_theta, list):
-            rope_theta = rope_theta[layer_idx]
-
-        if enable_sliding_window:
-            self.num_attention_heads = config.attention_other_setting["num_attention_heads"]
-            self.num_key_value_heads = config.attention_other_setting["num_attention_groups"]
-        self.sliding_window = config.sliding_window if enable_sliding_window else None
-
+        self.num_attention_heads = attention_config.num_attention_heads
+        self.num_key_value_heads = attention_config.num_key_value_heads
         self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_attention_heads)
         self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
-
-        self.rotary_emb = Step3p7RotaryEmbedding(config, rope_theta=rope_theta, rope_parameters=rope_parameters)
-
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
         self.q_size = self.num_attention_heads * self.head_dim
         self.kv_size = self.num_key_value_heads * self.head_dim
-        self.scaling = self.head_dim**-0.5
 
         self.q_proj = nn.Linear(config.hidden_size, self.q_size, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, self.kv_size, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, self.kv_size, bias=False)
         self.o_proj = nn.Linear(self.q_size, config.hidden_size, bias=False)
-        self.attention_dropout = getattr(config, "attention_dropout", 0.0)
         self.q_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.sliding_window = config.sliding_window if enable_sliding_window else None
 
         self.use_head_wise_attn_gate = config.use_head_wise_attn_gate
         if self.use_head_wise_attn_gate:
@@ -845,11 +751,10 @@ class Step3p7Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_value: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -858,17 +763,15 @@ class Step3p7Attention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         if self.use_head_wise_attn_gate:
             gate_states = self.g_proj(hidden_states)
-        cos, sin = self.rotary_emb(hidden_states, position_ids)
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, qwen3_modeling.eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -893,51 +796,29 @@ class Step3p7Attention(nn.Module):
         return attn_output, attn_weights
 
 
+def _get_layer_swiglu_limit(values: list[float | int | None] | None, layer_idx: int):
+    if not values:
+        return None
+    value = values[layer_idx]
+    return value if value is not None and value != 0 else None
+
+
 class Step3p7DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
         self.self_attn = Step3p7Attention(config, layer_idx)
-        layer_types = getattr(config, "layer_types", None) or []
-        if layer_types:
-            self.attention_type = layer_types[layer_idx]
-        else:
-            self.attention_type = "sliding_attention" if layer_idx % 2 == 0 else "full_attention"
+        self.attention_type = config.layer_types[layer_idx]
+        self.is_moe_layer = config.mlp_layer_types[layer_idx] == "sparse"
 
-        moe_layers_enum = getattr(config, "moe_layers_enum", None)
-        if moe_layers_enum is not None:
-            if isinstance(moe_layers_enum, str):
-                moe_layers_idx = [int(i) for i in moe_layers_enum.split(",") if i.strip()]
-            else:
-                moe_layers_idx = [int(i) for i in moe_layers_enum]
-        else:
-            moe_layers_idx = list(range(1, config.num_hidden_layers))
-        self.is_moe_layer = layer_idx in moe_layers_idx
-        self.use_moe = False
-
-        if (
-            config.swiglu_limits_shared
-            and config.swiglu_limits_shared[layer_idx] is not None
-            and config.swiglu_limits_shared[layer_idx] != 0
-        ):
-            swiglu_limit_shared = config.swiglu_limits_shared[layer_idx]
-        else:
-            swiglu_limit_shared = None
-        if (
-            config.swiglu_limits
-            and config.swiglu_limits[layer_idx] is not None
-            and config.swiglu_limits[layer_idx] != 0
-        ):
-            swiglu_limit = config.swiglu_limits[layer_idx]
-        else:
-            swiglu_limit = None
+        swiglu_limit_shared = _get_layer_swiglu_limit(config.swiglu_limits_shared, layer_idx)
+        swiglu_limit = _get_layer_swiglu_limit(config.swiglu_limits, layer_idx)
         if self.is_moe_layer:
             self.moe = Step3p7MoEMLP(config, swiglu_limit=swiglu_limit)  #
             self.share_expert = Step3p7MLP(
                 config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit_shared
             )
-            self.use_moe = True
         else:
             self.mlp = Step3p7MLP(config, intermediate_size=config.intermediate_size, swiglu_limit=swiglu_limit_shared)
 
@@ -949,8 +830,8 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_value: tuple[torch.Tensor] | None = None,
-        cache_position: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -958,9 +839,8 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            past_key_values=past_key_values,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -968,7 +848,7 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        if self.use_moe:
+        if self.is_moe_layer:
             share_output = self.share_expert(hidden_states)
             moe_output = self.moe(hidden_states)
             ffn_output = moe_output + share_output
@@ -983,14 +863,17 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Step3p7TextPreTrainedModel(Step3p7PreTrainedModel):
-    config_class = Step3p7TextConfig
+Step3p7PreTrainedModel._can_record_outputs = {
+    "hidden_states": Step3p7DecoderLayer,
+    "attentions": Step3p7Attention,
+}
 
 
 @auto_docstring
-class Step3p7TextModel(Step3p7TextPreTrainedModel):
+class Step3p7TextModel(Step3p7PreTrainedModel):
     _no_split_modules = ["Step3p7DecoderLayer"]
     base_model_prefix = "model"
+    config_class = Step3p7TextConfig
     config: Step3p7TextConfig
 
     def __init__(self, config: Step3p7TextConfig):
@@ -1003,20 +886,16 @@ class Step3p7TextModel(Step3p7TextPreTrainedModel):
             [Step3p7DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Step3p7RotaryEmbedding(config)
         self.gradient_checkpointing = False
-        layer_types = self.config.layer_types or []
-        self.has_sliding_layers = not layer_types or "sliding_attention" in layer_types
+        self.has_sliding_layers = "sliding_attention" in self.config.layer_types
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1025,93 +904,57 @@ class Step3p7TextModel(Step3p7TextPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else getattr(self.config, "return_dict", True)
+    ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
+            past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         hidden_states = inputs_embeds
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
+                "inputs_embeds": inputs_embeds,
             }
-            mask_kwargs["inputs_embeds"] = inputs_embeds
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-            }
-
-            # The sliding window alternating layers are not always activated depending on the config
+            causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
             if self.has_sliding_layers:
                 causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
-        # # create position embeddings to be shared across the decoder layers
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
+        position_embeddings = {
+            rope_layer_type: self.rotary_emb(hidden_states, position_ids, rope_layer_type)
+            for rope_layer_type in dict.fromkeys(self.rotary_emb.rope_layer_types)
+        }
 
-            layer_outputs = decoder_layer(
+        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=position_ids,
-                past_key_value=past_key_values,
-                output_attentions=output_attentions,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
+                position_embeddings=position_embeddings[self.rotary_emb.rope_layer_types[layer_idx]],
                 **kwargs,
             )
 
-            hidden_states = layer_outputs
-
         hidden_states = self.norm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
         )
 
 
@@ -1129,15 +972,9 @@ class Step3p7Model(Step3p7PreTrainedModel):
         self.vision_model = Step3p7VisionEncoder(config.vision_config)
         self.language_model = Step3p7TextModel(config.text_config)
         self.vit_large_projector = nn.Linear(
-            config.vision_config.width * 4, config.text_config.hidden_size, bias=config.projector_bias
+            config.vision_config.hidden_size * 4, config.text_config.hidden_size, bias=config.projector_bias
         )
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def _project_vision_features(self, image_features: torch.Tensor) -> torch.Tensor:
         """Run vit_downsampler1 + vit_downsampler2 + vit_large_projector on a (B, P, D) tensor."""
@@ -1148,6 +985,9 @@ class Step3p7Model(Step3p7PreTrainedModel):
         image_features = self.vision_model.vit_downsampler2(image_features)
         bsz, _, side, _ = image_features.shape
         image_features = image_features.view(bsz, -1, side * side).permute(0, 2, 1)
+        image_features = image_features.to(
+            device=self.vit_large_projector.weight.device, dtype=self.vit_large_projector.weight.dtype
+        )
         return self.vit_large_projector(image_features)
 
     def _get_image_features_tensor(
@@ -1158,16 +998,24 @@ class Step3p7Model(Step3p7PreTrainedModel):
         image_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
         if image_embeds is not None:
-            return image_embeds.view(-1, image_embeds.shape[-1]).to(self.dtype).to(self.device)
+            image_embeds = image_embeds.view(-1, image_embeds.shape[-1])
+            return image_embeds.to(
+                device=self.vit_large_projector.weight.device, dtype=self.vit_large_projector.weight.dtype
+            )
 
-        pixel_values = pixel_values.view(-1, *pixel_values.shape[-3:]).to(self.dtype).to(self.device)
+        vision_reference = self.vision_model.conv1.weight
+        pixel_values = pixel_values.view(-1, *pixel_values.shape[-3:]).to(
+            device=vision_reference.device, dtype=vision_reference.dtype
+        )
         base = self._project_vision_features(self.vision_model(pixel_values))
 
         patch = None
         if patch_pixel_values is not None:
             patch_pixel_values = patch_pixel_values.view(-1, *patch_pixel_values.shape[-3:])
             if patch_pixel_values.shape[0] > 0:
-                patch_pixel_values = patch_pixel_values.to(self.dtype).to(self.device)
+                patch_pixel_values = patch_pixel_values.to(
+                    device=vision_reference.device, dtype=vision_reference.dtype
+                )
                 patch = self._project_vision_features(self.vision_model(patch_pixel_values))
 
         if num_patches is None:
@@ -1192,13 +1040,33 @@ class Step3p7Model(Step3p7PreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
     ) -> torch.Tensor | BaseModelOutputWithPooling:
-        """Returns image features ready to be scattered into `inputs_embeds`."""
-        return_dict = return_dict if return_dict is not None else getattr(self.config, "return_dict", True)
+        r"""
+        Extract image features in the same order as Step3p7 image placeholders.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`, *optional*):
+                Base image pixel values returned by [`Step3VisionProcessor`].
+            patch_pixel_values (`torch.FloatTensor` of shape `(num_patches, num_channels, height, width)`, *optional*):
+                Pixel values for cropped high-resolution image patches.
+            num_patches (`torch.Tensor` or `list[int]`, *optional*):
+                Number of cropped image patches associated with each base image. Patch features are placed before
+                the corresponding base-image features.
+            image_embeds (`torch.FloatTensor` of shape `(num_image_tokens, hidden_size)`, *optional*):
+                Precomputed image features. If passed, the vision encoder is skipped.
+            output_hidden_states (`bool`, *optional*):
+                Whether to return image hidden states in a [`~modeling_outputs.BaseModelOutputWithPooling`].
+            return_dict (`bool`, *optional*):
+                Whether to return a [`~modeling_outputs.BaseModelOutputWithPooling`] instead of a tuple.
+
+        Returns:
+            `torch.Tensor` or [`~modeling_outputs.BaseModelOutputWithPooling`]: Flattened image features ready to
+            be scattered into `inputs_embeds`.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states
             if output_hidden_states is not None
-            else getattr(self.config, "output_hidden_states", False)
-            or getattr(self.config.vision_config, "output_hidden_states", False)
+            else self.config.output_hidden_states or self.config.vision_config.output_hidden_states
         )
         image_features = self._get_image_features_tensor(
             pixel_values=pixel_values,
@@ -1241,18 +1109,18 @@ class Step3p7Model(Step3p7PreTrainedModel):
         past_key_values: Cache | list[torch.FloatTensor] | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Step3p7ModelOutputWithPast:
         r"""
-        patch_pixel_values (`torch.FloatTensor`, *optional*):
-            Pixel values for cropped high-resolution image patches.
-        num_patches (`torch.Tensor`, *optional*):
-            Number of cropped image patches associated with each input image.
+        pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`, *optional*):
+            Base image pixel values returned by [`Step3VisionProcessor`].
+        patch_pixel_values (`torch.FloatTensor` of shape `(num_patches, num_channels, height, width)`, *optional*):
+            Pixel values for cropped high-resolution image patches returned by [`Step3VisionProcessor`].
+        num_patches (`torch.Tensor` or `list[int]`, *optional*):
+            Number of cropped image patches associated with each base image. Patch features are inserted before
+            the corresponding base-image features.
         image_embeds (`torch.FloatTensor`, *optional*):
-            Precomputed image embeddings to use instead of running the vision encoder.
-        cache_position (`torch.LongTensor`, *optional*):
-            Positions of the input sequence tokens in the cache.
+            Precomputed image features to use instead of running the vision encoder.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1278,7 +1146,6 @@ class Step3p7Model(Step3p7PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             return_dict=True,
             **kwargs,
         )
@@ -1305,20 +1172,9 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     def __init__(self, config: Step3p7Config):
         super().__init__(config)
         self.model = Step3p7Model(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.vocab_size = config.text_config.vocab_size
+        self.lm_head = nn.Linear(config.text_config.hidden_size, self.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     @property
     def language_model(self):
@@ -1339,18 +1195,19 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Step3p7CausalLMOutputWithPast:
         r"""
-        patch_pixel_values (`torch.FloatTensor`, *optional*):
-            Pixel values for cropped high-resolution image patches.
-        num_patches (`torch.Tensor`, *optional*):
-            Number of cropped image patches associated with each input image.
+        pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`, *optional*):
+            Base image pixel values returned by [`Step3VisionProcessor`].
+        patch_pixel_values (`torch.FloatTensor` of shape `(num_patches, num_channels, height, width)`, *optional*):
+            Pixel values for cropped high-resolution image patches returned by [`Step3VisionProcessor`].
+        num_patches (`torch.Tensor` or `list[int]`, *optional*):
+            Number of cropped image patches associated with each base image. Patch features are inserted before
+            the corresponding base-image features.
         image_embeds (`torch.FloatTensor`, *optional*):
-            Precomputed image embeddings to use instead of running the vision encoder.
-        cache_position (`torch.LongTensor`, *optional*):
-            Positions of the input sequence tokens in the cache.
+            Precomputed image features to use instead of running the vision encoder.
         """
         kwargs.pop("return_dict", None)
         outputs = self.model(
@@ -1364,12 +1221,12 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             return_dict=True,
             **kwargs,
         )
 
-        logits = self.lm_head(outputs.last_hidden_state)
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(outputs.last_hidden_state[:, slice_indices, :])
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
@@ -1386,6 +1243,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids,
+        next_sequence_length=None,
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
@@ -1393,7 +1251,6 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         num_patches=None,
         image_embeds=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration: bool = False,
         **kwargs,
@@ -1407,10 +1264,10 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
+            next_sequence_length=next_sequence_length,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_prefill,
             **kwargs,
@@ -1435,6 +1292,5 @@ __all__ = [
     "Step3p7Model",
     "Step3p7PreTrainedModel",
     "Step3p7TextModel",
-    "Step3p7TextPreTrainedModel",
     "Step3p7VisionEncoder",
 ]

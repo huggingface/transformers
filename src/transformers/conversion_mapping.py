@@ -570,6 +570,18 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^model(?!\.(language_model|vision_model))", target_patterns="model.language_model"
             ),
             WeightRenaming(
+                source_patterns=r"model\.vision_model\.conv1\.",
+                target_patterns="model.vision_model.embeddings.conv1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.vision_model\.ln_pre\.",
+                target_patterns="model.vision_model.embeddings.ln_pre.",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.vision_model\.positional_embedding",
+                target_patterns="model.vision_model.embeddings.positional_embedding",
+            ),
+            WeightRenaming(
                 source_patterns=r"model\.vision_model\.transformer\.resblocks\.(\d+)\.ls_(\d+)\.gamma",
                 target_patterns=r"model.vision_model.transformer.resblocks.\1.ls_\2.lambda1",
             ),
@@ -582,6 +594,41 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"model.vision_model.transformer.resblocks.\1.mlp.fc2.",
             ),
             WeightRenaming(source_patterns=r"^vit_large_projector", target_patterns="model.vit_large_projector"),
+            WeightConverter(
+                source_patterns=[
+                    "moe.gate_proj.weight",
+                    "moe.up_proj.weight",
+                ],
+                target_patterns="moe.experts.gate_up_proj",
+                operations=[Concatenate(dim=1)],
+            ),
+            WeightRenaming(source_patterns="moe.down_proj.weight", target_patterns="moe.experts.down_proj"),
+            WeightConverter(
+                source_patterns=[
+                    "moe.experts.*.gate_proj.weight",
+                    "moe.experts.*.up_proj.weight",
+                ],
+                target_patterns="moe.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="moe.experts.*.down_proj.weight",
+                target_patterns="moe.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="moe.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="moe.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
         ],
         "qwen2_audio": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),

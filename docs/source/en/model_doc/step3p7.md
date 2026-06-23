@@ -17,19 +17,19 @@ rendered properly in your Markdown viewer.
 
 # Step3p7
 
-Step3p7 is a multimodal vision-language model from StepFun. It combines a Step3p7 text decoder with a Step3p7 vision encoder and a multimodal projector to generate text conditioned on text and image inputs.
+Step3p7 is a multimodal vision-language model from StepFun. It combines a Step3p7 text decoder with a Step3p7 vision encoder and a multimodal projector to generate text conditioned on text and image inputs. The [Step 3.7 Flash model card](https://huggingface.co/stepfun-ai/Step-3.7-Flash) describes the checkpoint as a sparse Mixture-of-Experts vision-language model with a 196B-parameter language backbone, a 1.8B-parameter vision encoder, about 11B active parameters per token, a 256K context window, and selectable reasoning levels for balancing speed and depth.
 
-The Transformers implementation supports loading original Step3p7 checkpoints with the standard [`AutoConfig`], [`AutoProcessor`], and [`AutoModelForCausalLM`] APIs.
+The Transformers implementation supports loading original Step3p7 checkpoints with the standard [`AutoConfig`], [`AutoProcessor`], and [`AutoModelForMultimodalLM`] APIs.
 
 ## Usage example
 
 ```python
-from transformers import AutoModelForCausalLM, AutoProcessor
+from transformers import AutoModelForMultimodalLM, AutoProcessor
 
 model_id = "stepfun-ai/Step-3.7-Flash"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype="auto")
+model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto", dtype="auto")
 
 messages = [
     {
