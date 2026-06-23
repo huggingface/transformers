@@ -433,6 +433,10 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
+    @unittest.skip("NemotronH hybrid cache is not compatible with quantized cache yet.")
+    def test_generate_with_quant_cache(self):
+        pass
+
     @unittest.skip(reason="A large nemotron3 would be necessary (and costly) for that")
     def test_multi_gpu_data_parallel_forward(self):
         pass

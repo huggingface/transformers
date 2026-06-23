@@ -213,9 +213,13 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_matches_single(self):
-        model = Granite4VisionForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Granite4VisionForConditionalGeneration.from_pretrained(
+            self.model_id,
+            torch_dtype=torch.bfloat16,
+            attn_implementation={
+                "qformer_config": "eager",
+            },
+        ).to(torch_device)
 
         prompt = self.make_prompt("What do you see in this image?")
 

@@ -680,7 +680,7 @@ def require_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
     except Exception as _:
         kernels_available = False
 
@@ -721,7 +721,7 @@ def require_all_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], version=1)
     except Exception as _:
         kernels_available = False
 
@@ -1146,6 +1146,11 @@ def require_torch_mps(test_case):
     return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
 
 
+def require_rocm(test_case):
+    """Decorator marking a test that requires a ROCm (AMD) GPU and PyTorch."""
+    return unittest.skipUnless(torch_device == "cuda" and IS_ROCM_SYSTEM, "test requires a ROCm (AMD) GPU")(test_case)
+
+
 def require_large_cpu_ram(test_case, memory: float = 80):
     """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
     if not is_psutil_available():
@@ -1208,11 +1213,14 @@ def require_fp8(test_case):
 
 
 def require_cuda_capability_at_least(major, minor):
-    """Decorator to skip tests when CUDA capability is below the given version."""
+    """Decorator: when running on CUDA, skip if device capability is below the given
+    threshold. On non-CUDA backends this is a no-op — pair with :func:`require_torch_gpu`
+    if the test is CUDA-only, or leave alone if it should also run on other backends
+    (which won't be capability-gated)."""
     import torch
 
     if not torch.cuda.is_available():
-        return unittest.skip("CUDA not available")
+        return lambda test_case: test_case
     capability = torch.cuda.get_device_capability()
     return unittest.skipIf(capability < (major, minor), f"Requires CUDA capability >= {major}.{minor}")
 

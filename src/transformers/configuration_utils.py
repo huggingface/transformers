@@ -65,6 +65,7 @@ ALLOWED_LAYER_TYPES = (
     "chunked_attention",
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
+    "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
     "linear_attention",  # used in minimax
     "conv",  # used in LFMv2
     "mamba",
@@ -73,6 +74,7 @@ ALLOWED_LAYER_TYPES = (
     "dense",
     "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
+    "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
 )
 
 

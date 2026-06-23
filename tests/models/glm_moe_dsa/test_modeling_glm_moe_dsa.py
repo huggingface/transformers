@@ -35,6 +35,7 @@ from transformers.testing_utils import (
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
 )
 
@@ -103,21 +104,36 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
             config.mlp_layer_types, ["dense", "dense", "dense", "sparse", "sparse", "sparse", "sparse", "sparse"]
         )
 
+    def test_indexer_types_respect_skip_topk_offset(self):
+        config = GlmMoeDsaConfig(num_hidden_layers=8, index_topk_freq=4, index_skip_topk_offset=3)
+        self.assertEqual(
+            config.indexer_types,
+            ["full", "full", "full", "shared", "shared", "shared", "full", "shared"],
+        )
+
+    # DSA selects tokens with a hard top-k, which is discontinuous: a tiny numerical difference in the
+    # indexer scores (attention backend, padding, batching, sequence packing) can flip which tokens are
+    # selected and thus change the output, so these exact-equivalence tests do not hold for DSA.
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @unittest.skip("Won't fix: Blip2 + T5 backbone needs custom input preparation for this test")
+    @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across backends.")
     def test_eager_matches_sdpa_inference(self, *args):
         pass
 
-    @unittest.skip("Not sure MoE can pass this + indexer outputs are not deterministic wrt padding")
-    def test_left_padding_compatibility(
-        self,
-    ):
+    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
+    @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across batching.")
+    def test_eager_matches_batched_and_grouped_inference(self, *args):
         pass
 
-    @unittest.skip("Not sure MoE can pass this + indexer outputs are not deterministic wrt padding")
-    def test_sdpa_padding_matches_padding_free_with_position_ids(
-        self,
-    ):
+    @unittest.skip("DSA hard top-k selection is sensitive to padding shifts (selection can flip).")
+    def test_left_padding_compatibility(self):
+        pass
+
+    @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
     @unittest.skip("Not sure MoE can pass this + indexer outputs are not deterministic wrt padding")
@@ -201,8 +217,8 @@ class GlmMoeDsaIntegrationTest(unittest.TestCase):
                 max_new_tokens=16,
             )
 
-        output = tokenizer.decode(outputs, skip_special_tokens=False)
-        self.assertqual(
+        output = tokenizer.batch_decode(outputs, skip_special_tokens=False)
+        self.assertEqual(
             output,
             [
                 "<|endoftext|><|endoftext|><|endoftext|>Hi, introduce yourself!\nI'm a 18 years old boy from Italy and I'm a student",

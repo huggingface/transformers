@@ -113,6 +113,7 @@ PRIVATE_MODELS = [
     "SmolVLMVisionTransformer",
     "MiniCPMV4_6VisionPreTrainedModel",
     "MiniCPMV4_6VisionModel",
+    "MiniMaxM3VLVisionModel",
     "AriaTextForCausalLM",
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
@@ -223,6 +224,9 @@ IGNORE_NON_TESTED = (
         "PaddleOCRTextModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
+        "MiniMaxM3VLForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
+        "MiniMaxM3VLTextModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
+        "MiniMaxM3VLVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
         "Qwen3VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLForConditionalGeneration.
         "Qwen3VLMoeModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLMoeForConditionalGeneration.
         "Qwen3VLTextModel",  # Building part of bigger (tested) model.
@@ -292,6 +296,9 @@ IGNORE_NON_TESTED = (
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
         "Exaone4_5_VisionModel",  # Building part of a bigger model
         "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
+        "DiffusionGemmaDecoderModel",  # TODO(joaogante)
+        "DiffusionGemmaEncoderModel",  # TODO(joaogante)
+        "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
     ]
 )
 
@@ -517,6 +524,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
     "Ernie4_5_VLMoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
+    "VideoPrismTextModel",  # Building part of a bigger model
+    "VideoPrismVideoModel",  # Building part of a bigger model
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias

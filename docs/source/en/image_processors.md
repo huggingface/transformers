@@ -60,7 +60,8 @@ The [AutoClass](./model_doc/auto) API provides a convenient method to load an im
 
 Use [`~AutoImageProcessor.from_pretrained`] with the `backend` argument to select the backend. When `backend` is omitted (the default), torchvision is picked when it is installed and PIL is used otherwise. Note that `backend="pil"` is only supported for older models; newer models only expose the torchvision backend.
 
-> **Note:** a small set of older models (Chameleon, Flava, Idefics3, SmolVLM) use Lanczos interpolation that torchvision does not support, so they always default to the PIL backend regardless of torchvision availability. Pass `backend="torchvision"` explicitly to override this.
+> [!NOTE]
+> A small set of older models (Chameleon, Flava, Idefics3, SmolVLM) use Lanczos interpolation. Their default backend depends on your torchvision version. With torchvision > 0.27, Lanczos is supported natively and these models default to torchvision. Older torchvision version falls back to BICUBIC, so the default is PIL to preserve the original outputs. Pass `backend="torchvision"` explicitly to override the default.
 
 ```py
 from transformers import AutoImageProcessor
