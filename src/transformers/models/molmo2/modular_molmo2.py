@@ -1326,13 +1326,11 @@ class Molmo2PostNormDecoderLayer(Molmo2DecoderLayer):
 class Molmo2Embedding(nn.Module):
     def __init__(
         self,
-        num_embeddings: int,
-        num_new_embeddings: int,
-        features: int,
+        config: Molmo2TextConfig,
     ):
         super().__init__()
-        self.embedding = nn.Parameter(torch.zeros(num_embeddings, features))
-        self.new_embedding = nn.Parameter(torch.zeros(num_new_embeddings, features))
+        self.embedding = nn.Parameter(torch.zeros(config.vocab_size, config.hidden_size))
+        self.new_embedding = nn.Parameter(torch.zeros(config.additional_vocab_size, config.hidden_size))
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         return F.embedding(input_ids, torch.cat([self.embedding, self.new_embedding], dim=0))
@@ -1377,11 +1375,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
     def __init__(self, config: Molmo2TextConfig):
         super().__init__(config)
         if config.additional_vocab_size is not None:
-            self.wte = Molmo2Embedding(
-                config.vocab_size,
-                config.additional_vocab_size,
-                config.hidden_size,
-            )
+            self.wte = Molmo2Embedding(config)
         else:
             self.wte = nn.Embedding(config.vocab_size, config.hidden_size)
         self.emb_drop = nn.Dropout(config.embedding_dropout)
