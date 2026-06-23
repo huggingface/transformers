@@ -70,11 +70,6 @@ class Molmo2VitConfig(PreTrainedConfig):
             kwargs["attn_implementation"] = self.attn_implementation
         super().__post_init__(**kwargs)
 
-    @property
-    def image_num_patch(self):
-        h, w = self.image_default_input_size
-        return h // self.image_patch_size, w // self.image_patch_size
-
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
 @strict
