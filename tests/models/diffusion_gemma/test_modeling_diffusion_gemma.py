@@ -665,7 +665,7 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
 
         generation_outputs = model.generate(
-            **model_inputs, max_new_tokens=32, max_denoising_steps=2, cache_implementation=cache_implementation
+            **model_inputs, max_new_tokens=32, max_denoising_steps=2, disable_compile=True, cache_implementation=cache_implementation
         )
         self.assertTrue(generation_outputs.sequences.shape[1] > config.text_config.sliding_window)
 
