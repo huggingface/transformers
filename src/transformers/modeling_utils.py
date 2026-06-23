@@ -1399,7 +1399,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         correctly in the case of composite models (that is, the top level model should know about those properties from its children).
         """
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
-        # easily available. Seed with the class-level FSDP plan before the instance attribute shadows it.
+        # easily available.
         self._tp_plan, self._ep_plan, self._pp_plan, self._fsdp_plan = {}, {}, {}, {}
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
