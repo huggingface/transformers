@@ -105,7 +105,7 @@ model = VoxtralRealtimeForConditionalGeneration.from_pretrained(model_id, device
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 audio = ds[0]["audio"]["array"]
 # Manually pad the audio to account for right padding tokens required by the model
-xaudio = np.pad(audio, (0, processor.num_right_pad_tokens * processor.raw_audio_length_per_tok))
+audio = np.pad(audio, (0, processor.num_right_pad_tokens * processor.raw_audio_length_per_tok))
 
 first_chunk_inputs = processor(
     audio[:processor.num_samples_first_audio_chunk],

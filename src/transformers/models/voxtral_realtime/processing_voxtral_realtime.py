@@ -97,7 +97,7 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
 
     @property
     def num_right_pad_tokens(self):
-        return self.mistral_common_audio_config.n_right_pad_tokens
+        return self.mistral_common_audio_config.n_right_pad_tokens()
 
     @property
     def audio_length_per_tok(self):
