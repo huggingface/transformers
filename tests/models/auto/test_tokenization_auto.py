@@ -47,7 +47,6 @@ from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConf
 from transformers.models.auto.tokenization_auto import (
     MODEL_IDS_TO_TOKENIZERS_BACKEND,
     REGISTERED_FAST_ALIASES,
-    REGISTERED_TOKENIZER_CLASSES,
     TOKENIZER_MAPPING,
     TOKENIZER_MAPPING_NAMES,
     get_tokenizer_config,
@@ -435,7 +434,6 @@ class AutoTokenizerTest(unittest.TestCase):
                 del CONFIG_MAPPING._extra_content["custom"]
             if CustomConfig in TOKENIZER_MAPPING._extra_content:
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
-            REGISTERED_TOKENIZER_CLASSES.pop("CustomTokenizer", None)
 
     @require_tokenizers
     def test_new_tokenizer_fast_registration(self):
@@ -480,8 +478,6 @@ class AutoTokenizerTest(unittest.TestCase):
                 del CONFIG_MAPPING._extra_content["custom"]
             if CustomConfig in TOKENIZER_MAPPING._extra_content:
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
-            REGISTERED_TOKENIZER_CLASSES.pop("CustomTokenizer", None)
-            REGISTERED_TOKENIZER_CLASSES.pop("CustomTokenizerFast", None)
             REGISTERED_FAST_ALIASES.pop("CustomTokenizer", None)
 
     def test_from_pretrained_dynamic_tokenizer(self):
@@ -594,7 +590,6 @@ class AutoTokenizerTest(unittest.TestCase):
                 del CONFIG_MAPPING._extra_content["custom"]
             if CustomConfig in TOKENIZER_MAPPING._extra_content:
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
-            REGISTERED_TOKENIZER_CLASSES.pop("NewTokenizer", None)
 
     def test_from_pretrained_dynamic_tokenizer_legacy_format(self):
         tokenizer = AutoTokenizer.from_pretrained(
