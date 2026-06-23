@@ -1223,15 +1223,12 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, layer_idx)
             kv_length += additional_kv_length  # Add current canvas length
 
-            # `StaticSlidingLayer` concatenates new key with cache when cache is full instead
-            # of rolling back. Thus the final length is `window+query-1`, not fixed-length
-            # `sliding_window`. Adding another `query_length` will result on mask shape mismatch
-            # see: https://github.com/huggingface/transformers/blob/e6f08cf2c4d9f07b59573948407cdc4a2815de7d/src/transformers/cache_utils.py#L536-L539
+            # StaticSlidingLayers cannot go beyond sliding window, even with `additional_kv_length`!
             if layer_pattern == "sliding_attention" and past_key_values.is_compileable:
                 layer_idx = past_key_values.is_sliding.index(True)
                 sliding_layer = past_key_values.layers[layer_idx]
-                if sliding_layer.cumulative_length_int >= sliding_layer.max_cache_len:
-                    kv_length = kv_length - additional_kv_length + 1
+                if kv_length >= sliding_layer.max_cache_len + additional_kv_length:
+                    kv_length = sliding_layer.max_cache_len + additional_kv_length
 
             mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
             attention_mask = mask_interface(
