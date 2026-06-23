@@ -683,7 +683,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
     The CPMAnt Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
     """
 )
-class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
+class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):  # trf-ignore: TRF004
     # The LM head is tied to the *vocabulary slice* of the input embedding (see `tie_weights`), which
     # cannot be expressed as a plain whole-tensor entry here because the two weights have different
     # shapes, so the standard tied-key mapping is left empty and the tying is done in `tie_weights`.
