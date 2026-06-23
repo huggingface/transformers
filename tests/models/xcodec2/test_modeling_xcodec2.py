@@ -220,7 +220,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         exp_recon = torch.tensor(raw_data["recon_wav"])
         exp_codec_error = float(raw_data["codec_error"])
 
-        model_id = "bezzam/xcodec2"
+        model_id = "bezzam/xcodec2-hf"
         model = Xcodec2Model.from_pretrained(model_id, attn_implementation="eager").to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
@@ -263,7 +263,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         exp_recons = [torch.tensor(r) for r in raw_data["recon_wavs"]]
         exp_codec_errors = raw_data["codec_errors"]
 
-        model_id = "bezzam/xcodec2"
+        model_id = "bezzam/xcodec2-hf"
         model = Xcodec2Model.from_pretrained(model_id, attn_implementation="eager").to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 

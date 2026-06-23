@@ -1092,7 +1092,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> audio = dataset["train"]["audio"][0]["array"]
 
-        >>> model_id = "bezzam/xcodec2"
+        >>> model_id = "HKUSTAudio/xcodec2-hf"
         >>> model = Xcodec2Model.from_pretrained(model_id)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 

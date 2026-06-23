@@ -28,7 +28,7 @@ from ...utils.type_validators import interval
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="bezzam/xcodec2")
+@auto_docstring(checkpoint="HKUSTAudio/xcodec2-hf")
 @strict
 class Xcodec2Config(PreTrainedConfig):
     r"""

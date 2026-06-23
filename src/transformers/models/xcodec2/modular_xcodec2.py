@@ -53,7 +53,7 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
 from ..voxtral.modeling_voxtral import VoxtralPreTrainedModel
 
 
-@auto_docstring(checkpoint="bezzam/xcodec2")
+@auto_docstring(checkpoint="HKUSTAudio/xcodec2-hf")
 @strict
 class Xcodec2Config(LlamaConfig):
     r"""
@@ -752,7 +752,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> audio = dataset["train"]["audio"][0]["array"]
 
-        >>> model_id = "bezzam/xcodec2"
+        >>> model_id = "HKUSTAudio/xcodec2-hf"
         >>> model = Xcodec2Model.from_pretrained(model_id)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 

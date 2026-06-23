@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-02-06 and contributed to Hugging Face Transformers on 2026-06-16.*
+*This model was published in HF papers on 2025-02-06 and contributed to Hugging Face Transformers on 2026-06-23.*
 
 # X-Codec2
 
@@ -32,7 +32,7 @@ About its architecture:
 - **Single-Stage Feature Scalar Quantization (FSQ)**: Unlike the multi-layer residual VQ in most approaches (e.g., [DAC](./dac), [EnCodec](./encodec), [X-Codec](./xcodec), [Mimi](./mimi.md)), X-Codec2 uses a single-layer of Feature Scalar Quantization (FSQ) for stability and compatibility with causal, autoregressive LLMs.
 - **Transformer-Friendly Design**: The 1D token structure of X-Codec2 naturally aligns with the autoregressive modeling in LLMs like LLaMA, improving training efficiency and downstream compatibility.
 
-A model checkpoint is available at [bezzam/xcodec2](https://huggingface.co/bezzam/xcodec2).
+A model checkpoint is available at [HKUSTAudio/xcodec2-hf](https://huggingface.co/HKUSTAudio/xcodec2-hf).
 
 This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam) and [Steven Zheng](https://huggingface.co/Steveeeeeeen).
 The original modeling code can be found [here](https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py), while their training code is [here](https://github.com/zhenye234/X-Codec-2.0).
@@ -45,7 +45,7 @@ Here is a quick example of how to encode and decode an audio using this model:
 from datasets import Audio, load_dataset
 from transformers import AutoFeatureExtractor, AutoModel
 
-model_id = "bezzam/xcodec2"
+model_id = "HKUSTAudio/xcodec2-hf"
 model = AutoModel.from_pretrained(model_id, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
@@ -81,7 +81,7 @@ from datasets import Audio, load_dataset
 from transformers import AutoFeatureExtractor, AutoModel
 
 batch_size = 2
-model_id = "bezzam/xcodec2"
+model_id = "HKUSTAudio/xcodec2-hf"
 model = AutoModel.from_pretrained(model_id, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
@@ -121,7 +121,7 @@ from datasets import Audio, load_dataset
 from transformers import AutoFeatureExtractor, AutoModel
 
 batch_size = 4
-model_id = "bezzam/xcodec2"
+model_id = "HKUSTAudio/xcodec2-hf"
 model = AutoModel.from_pretrained(model_id, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
