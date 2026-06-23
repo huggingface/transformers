@@ -18,25 +18,27 @@ rendered properly in your Markdown viewer.
 
 This guide explains how to write kernels that go beyond a stateless `forward` replacement. It covers two capabilities the extended `KernelConfig` API supports:
 
-1. **Parameter transformation** — the kernel expects weights in a different layout than the original model (for example, renamed or merged parameters).
-2. **Module fusion** — the kernel replaces multiple adjacent modules with a single fused implementation.
+1. Parameter transformation: the kernel expects weights in a different layout than the original model (for example, renamed or merged parameters).
+2. Module fusion: the kernel replaces multiple adjacent modules with a single fused implementation.
 
-For basic kernels (stateless `forward` replacements with no parameter changes), see the [kernels library](https://github.com/huggingface/kernels) documentation.
+For basic kernels (stateless `forward` replacements with no parameter changes), see the [kernels](https://github.com/huggingface/kernels) library documentation.
 
 ## Two-class pattern
 
 Any kernel that carries its own parameters follows a two-class pattern.
 
-- `KernelName`: contains only the `forward` pass. The `kernels` library uses this class to kernelize the model. It must be stateless as the library does not allow stateful kernel classes.
-- `KernelNameLayout`: an `nn.Module` that holds the parameters and monkey-patches the original module before the checkpoint is loaded. At runtime, `kernelize` replaces its `forward` with `KernelName`'s `forward`. You do not need to define `forward`, Transformers injects one automatically with the same signature as `KernelName.forward`.
+- `KernelName`: contains only the `forward` pass. The `kernels` library uses this class to kernelize the model because it does not allow stateful kernel classes.
+- `KernelNameLayout`: an `nn.Module` that holds the parameters and monkey-patches the original module before the checkpoint is loaded. At runtime, `kernelize` replaces its `forward` with the `forward` from `KernelName`'. You do not need to define `forward`. Transformers injects one automatically with the same signature as `KernelName.forward`.
 
-**The naming convention is strict: the layout class must be named `{KernelName}Layout` and defined in the same module as `KernelName`. Transformers discovers it automatically.**
+> [!IMPORTANT]
+
+The naming convention is strict. The layout class must be named `{KernelName}Layout` and defined in the same module as `KernelName`.
 
 ## Parameter transformation
 
 Use this pattern when the kernel expects weights under different names or in a different shape than the original model checkpoint.
 
-The `KernelNameLayout` class has the **same `__init__` signature as the module it replaces** and declares a `conversion_mapping` class attribute that tells Transformers how to remap checkpoint keys to the new parameter names.
+The `KernelNameLayout` class has the same `__init__` signature as the module it replaces and declares a `conversion_mapping` class attribute that tells Transformers how to remap checkpoint keys to the new parameter names (see [Dynamic weight loading](../weightconverter) for more details).
 
 ```python
 import torch
@@ -67,7 +69,7 @@ class layers:
 > [!NOTE]
 > The `layers` class is required by the `kernels` library to expose the kernel entry point.
 
-Load this kernel by passing the repo and class name to `KernelConfig`. The key is the **original** module class name from the model; the value points to the `KernelName` class (not the Layout) in the repo.
+Load this kernel by passing the repo and class name to [`KernelConfig`]. The key is the original module class name from the model. The value points to the `KernelName` class (not the `Layout`) in the repo.
 
 ```python
 from transformers import AutoModelForCausalLM, KernelConfig
@@ -89,7 +91,7 @@ When the model loads, Transformers:
 
 ## Module fusion
 
-Use this pattern when a kernel replaces multiple adjacent modules with a single fused implementation. Because the fused module combines parameters from several original modules, the `KernelNameLayout.__init__` receives the **instantiated child modules** rather than their constructor arguments.
+Use this pattern when a kernel replaces multiple adjacent modules with a single fused implementation. Because the fused module combines parameters from several original modules, the `KernelNameLayout.__init__` receives the instantiated child modules rather than their constructor arguments.
 
 ```python
 import torch
@@ -134,7 +136,7 @@ class layers:
     RMSNormMLP = RMSNormMLP
 ```
 
-To fuse modules, pass a **tuple of `(class_name, path_pattern)` pairs** as the key in `KernelConfig` instead of a plain string. All patterns must share the same parent module (Transformers fuses the children in that parent). The `*` wildcard matches any single path segment.
+To fuse modules, pass a tuple of `(class_name, path_pattern)` pairs as the key in `KernelConfig` instead of a plain string. All patterns must share the same parent module (Transformers fuses the children in that parent). The `*` wildcard matches any single path segment.
 
 ```python
 from transformers import AutoModelForCausalLM, KernelConfig
