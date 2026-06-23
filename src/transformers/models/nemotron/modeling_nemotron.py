@@ -215,6 +215,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+# Copied from transformers.models.llama.modeling_llama.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -258,7 +259,6 @@ class NemotronAttention(nn.Module):
 
         self.partial_rotary_factor = config.rope_parameters["partial_rotary_factor"]
         self.is_causal = True
-        self.rotary_emb = NemotronRotaryEmbedding(config=config)
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)

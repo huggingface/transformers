@@ -18,7 +18,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask, create_recurrent_padding_mask
+from ...masking_utils import create_causal_mask, create_linear_attention_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -184,7 +184,7 @@ class Lfm2MoeModel(MixtralModel):
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "conv": create_recurrent_padding_mask(**mask_kwargs),
+                "conv": create_linear_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

@@ -32,7 +32,8 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput, Seq2SeqLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import maybe_autocast
 from ..auto.modeling_auto import AutoModel
 from .configuration_moshi import MoshiConfig, MoshiDepthConfig
@@ -403,6 +404,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+# Copied from transformers.models.llama.modeling_llama.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -411,7 +413,7 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -476,7 +478,7 @@ class MoshiAttention(nn.Module):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         codebook_idx: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -1705,11 +1707,13 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
 
-        # update last_hidden_state that'll be used in the depth decoder
-        model_kwargs["last_hidden_state"] = outputs.get("last_hidden_state")[:, -1:]
-
+        # update last_hidden_state that'll be used in the depth decoder. ``.clone()`` breaks the
+        # view into the main decoder's cudagraph output buffer — otherwise the depth decoder reads
+        # the slice *after* the next main-decoder step has already overwritten it.
+        last_hidden_state = outputs.get("last_hidden_state")[:, -1:].clone()
+        model_kwargs["last_hidden_state"] = last_hidden_state
         # dirty, but we need to make a last depth_decoder.generate
-        self.last_hidden_state = outputs.get("last_hidden_state")[:, -1:]
+        self.last_hidden_state = last_hidden_state
         return model_kwargs
 
     def get_input_embeddings(self):

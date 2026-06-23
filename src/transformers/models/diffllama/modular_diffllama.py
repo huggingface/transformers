@@ -26,6 +26,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import logging
 from ..gemma.modeling_gemma import GemmaForCausalLM
 from ..llama.modeling_llama import (
+    LlamaAttention,
     LlamaDecoderLayer,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -34,7 +35,7 @@ from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
-    repeat_kv,
+    eager_attention_forward,
 )
 from ..mistral.modeling_mistral import MistralMLP
 from .configuration_diffllama import DiffLlamaConfig
@@ -58,31 +59,7 @@ class DiffLlamaRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
-
-
-class DiffLlamaAttention(nn.Module):
+class DiffLlamaAttention(LlamaAttention):
     """Multi-headed differential attention (https://arxiv.org/abs/2410.05258).
 
     Computes ``(softmax(Q1 K1ᵀ) - λ · softmax(Q2 K2ᵀ)) · V`` as **two standard attention calls**
@@ -96,32 +73,12 @@ class DiffLlamaAttention(nn.Module):
     back to the memory-efficient / math kernel. Benchmarks at production shapes (prefill, long
     context, training-sized batches) show the two-call version is **~30 % faster** than the
     V-doubling version even though it issues an extra kernel launch — the gain from picking the
-    fast Flash/cuDNN kernel dominates the launch overhead. The V-doubling trick only wins on
-    tiny decode shapes where launches dominate, and those are usually compiled / cuda-graphed away.
-
-    Concretely, this layout also makes Flash Attention 2 actually usable on diffllama — Flash
-    requires ``head_dim_v == head_dim_q``, which the two-call structure satisfies.
+    fast Flash/cuDNN kernel dominates the launch overhead. Flash Attention 2 also requires
+    ``head_dim_v == head_dim_q``, which only the two-call structure satisfies.
     """
 
     def __init__(self, config: DiffLlamaConfig, layer_idx: int | None = None):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-
-        self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads)
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = 1.0 / math.sqrt(self.head_dim)
-        self.is_causal = True
-
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
-
+        super().__init__(config, layer_idx)
         self.lambda_init = lambda_init_fn(layer_idx)
         self.lambda_q1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
         self.lambda_k1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
@@ -137,15 +94,12 @@ class DiffLlamaAttention(nn.Module):
         past_key_values: Cache | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        bsz, q_len, _ = hidden_states.size()
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = (
-            self.k_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        )
-        value_states = (
-            self.v_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        )
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -155,20 +109,33 @@ class DiffLlamaAttention(nn.Module):
 
         # Split V into two halves and broadcast each back to ``num_kv_heads`` heads (the dispatch's
         # ``repeat_kv`` will then expand them to ``num_heads`` like K).
-        v1, v2 = (v.repeat(1, 2, 1, 1) for v in torch.chunk(value_states, 2, dim=1))
+        value_states1, value_states2 = (v.repeat(1, 2, 1, 1) for v in torch.chunk(value_states, 2, dim=1))
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        attn_kwargs = {
-            "dropout": 0.0 if not self.training else self.attention_dropout,
-            "scaling": self.scaling,
-            **kwargs,
-        }
+        # Both calls share Q and K, so their attention weights are mathematically identical —
+        # return just the first call's; concatenating would double the key dim incorrectly.
         attn_output1, attn_weights = attention_interface(
-            self, query_states, key_states, v1, attention_mask, **attn_kwargs
+            self,
+            query_states,
+            key_states,
+            value_states1,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
         )
-        attn_output2, _ = attention_interface(self, query_states, key_states, v2, attention_mask, **attn_kwargs)
+        attn_output2, _ = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states2,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
         attn_output = torch.cat([attn_output1, attn_output2], dim=-1)
 
         # Chunk along the head axis and apply the learned lambda — realises the differential
@@ -183,7 +150,7 @@ class DiffLlamaAttention(nn.Module):
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
         attn_output = attn_output1 - lambda_full * attn_output2
         attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
-        attn_output = attn_output.reshape(bsz, q_len, -1)
+        attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -196,11 +163,6 @@ class DiffLlamaDecoderLayer(LlamaDecoderLayer):
 
 
 class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)

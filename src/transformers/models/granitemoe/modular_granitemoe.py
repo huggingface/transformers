@@ -18,9 +18,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -30,7 +28,13 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
-from ..mixtral.modeling_mixtral import MixtralDecoderLayer, MixtralForCausalLM, MixtralModel, load_balancing_loss_func
+from ..mixtral.modeling_mixtral import (
+    MixtralDecoderLayer,
+    MixtralExperts,
+    MixtralForCausalLM,
+    MixtralModel,
+    load_balancing_loss_func,
+)
 from .configuration_granitemoe import GraniteMoeConfig
 
 
@@ -64,47 +68,8 @@ class GraniteMoeTopKRouter(nn.Module):
         return top_k_index, top_k_weights, router_logits
 
 
-@use_experts_implementation
-class GraniteMoeExperts(nn.Module):
-    """Collection of expert weights stored as 3D tensors. Default ``grouped_mm`` / ``batched_mm``
-    implementations (selected by ``config._experts_implementation``) are fullgraph-compilable; the
-    fallback eager forward below mirrors the original ``GraniteMoeMoE.forward`` and is the only
-    branch that hits the data-dependent ``.tolist()`` path."""
-
-    def __init__(self, config: GraniteMoeConfig):
-        super().__init__()
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        # Eager fallback — per-expert scatter/gather using a Python loop. NOT compilable; the
-        # ``grouped_mm`` / ``batched_mm`` interfaces registered by ``@use_experts_implementation``
-        # are what users get by default.
-        final_hidden_states = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            expert_mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = F.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = F.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
-        return final_hidden_states
+class GraniteMoeExperts(MixtralExperts):
+    pass
 
 
 class GraniteMoeMoE(nn.Module):
@@ -175,9 +140,6 @@ class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    # The eager experts forward still has a Python loop, but ``@use_experts_implementation``
-    # defaults to ``grouped_mm`` / ``batched_mm`` which are compilable. Users who explicitly opt
-    # into ``experts_implementation="eager"`` lose compile; that's a documented trade-off.
     _can_compile_fullgraph = True
 
     @torch.no_grad()
