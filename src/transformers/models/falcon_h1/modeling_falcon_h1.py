@@ -368,8 +368,6 @@ class FalconH1Mixer(nn.Module):
     - The use of gated RMS normalization layer is optional
     """
 
-    layer_type = "linear_attention"
-
     def __init__(self, config: FalconH1Config, layer_idx: int):
         super().__init__()
         self.num_heads = config.mamba_n_heads
@@ -475,6 +473,8 @@ class FalconH1Mixer(nn.Module):
 
         self.zxbcdt_multipliers = config.ssm_multipliers
         self.ssm_in_multiplier = config.ssm_in_multiplier
+
+        self.layer_type = "linear_attention"
 
     def cuda_kernels_forward(
         self,

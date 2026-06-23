@@ -337,8 +337,6 @@ def torch_recurrent_gated_delta_rule(
 
 
 class Qwen3NextGatedDeltaNet(nn.Module):
-    layer_type = "linear_attention"
-
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -404,6 +402,8 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 "torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
+
+        self.layer_type = "linear_attention"
 
     def fix_query_key_value_ordering(self, mixed_qkvz, mixed_ba):
         """
@@ -581,10 +581,10 @@ class Qwen3NextDecoderLayer(Qwen3MoeDecoderLayer):
         self.hidden_size = config.hidden_size
 
         # token mixer
-        self.layer_type = config.layer_types[layer_idx]
-        if self.layer_type == "linear_attention":
+        self.block_type = config.layer_types[layer_idx]
+        if self.block_type == "linear_attention":
             self.linear_attn = Qwen3NextGatedDeltaNet(config, layer_idx)
-        elif self.layer_type == "full_attention":
+        elif self.block_type == "full_attention":
             self.self_attn = Qwen3NextAttention(config, layer_idx)
 
         if (layer_idx not in config.mlp_only_layers) and (
@@ -611,14 +611,14 @@ class Qwen3NextDecoderLayer(Qwen3MoeDecoderLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Token Mixer
-        if self.layer_type == "linear_attention":
+        if self.block_type == "linear_attention":
             hidden_states = self.linear_attn(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
                 **kwargs,
             )
-        elif self.layer_type == "full_attention":
+        elif self.block_type == "full_attention":
             # Self Attention
             hidden_states, _ = self.self_attn(
                 hidden_states=hidden_states,

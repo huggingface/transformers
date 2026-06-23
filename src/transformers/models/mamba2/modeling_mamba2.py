@@ -126,8 +126,6 @@ class Mamba2Mixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    layer_type = "linear_attention"
-
     def __init__(self, config: Mamba2Config, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__()
         self.num_heads = config.num_heads
@@ -220,6 +218,8 @@ class Mamba2Mixer(nn.Module):
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
+
+        self.layer_type = "linear_attention"
 
     @torch.no_grad()
     def init_mamba2_weights(self):

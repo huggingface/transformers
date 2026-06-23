@@ -389,8 +389,6 @@ class BambaMixer(nn.Module):
     - We ported most of the refactors in https://github.com/huggingface/transformers/pull/35154, which is (as of Dec 18, 2024) unmerged
     """
 
-    layer_type = "linear_attention"
-
     def __init__(self, config: BambaConfig, layer_idx: int):
         super().__init__()
         self.num_heads = config.mamba_n_heads
@@ -482,6 +480,8 @@ class BambaMixer(nn.Module):
             )
         else:
             logger.warning_once("The fast path for Bamba will be used when running the model on a GPU")
+
+        self.layer_type = "linear_attention"
 
     def cuda_kernels_forward(
         self,
@@ -903,7 +903,7 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = BambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.pre_ff_layernorm = BambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.layer_type = layer_type
+        self.block_type = layer_type
         if layer_type == "linear_attention":
             self.mamba = BambaMixer(config=config, layer_idx=layer_idx)
         elif layer_type == "full_attention":
@@ -925,7 +925,7 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        if self.layer_type == "linear_attention":
+        if self.block_type == "linear_attention":
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
@@ -933,7 +933,7 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
                 **kwargs,
             )
             self_attn_weights = None
-        elif self.layer_type == "full_attention":
+        elif self.block_type == "full_attention":
             hidden_states, self_attn_weights = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
