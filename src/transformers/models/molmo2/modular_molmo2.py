@@ -311,9 +311,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
             patch_idx[:, :-1, :, -right_margin:] = -1
 
         patch_idx = patch_idx.permute(0, 2, 1, 3).reshape(-1)
-        patch_idx = patch_idx[patch_idx >= 0].reshape(
-            src_height // image_patch_size, src_width // image_patch_size
-        )
+        patch_idx = patch_idx[patch_idx >= 0].reshape(src_height // image_patch_size, src_width // image_patch_size)
 
         return crops, patch_idx
 
