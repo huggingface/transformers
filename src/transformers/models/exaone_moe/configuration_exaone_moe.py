@@ -109,12 +109,9 @@ class ExaoneMoeConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
-    # Exaone-MoE names its expert config fields `num_experts` / `num_shared_experts`; alias the
-    # DeepSeek-V3 names so the inherited router / MoE / experts read them without per-class overrides.
     attribute_map = {
         "n_routed_experts": "num_experts",
         "num_local_experts": "num_experts",
-        "n_shared_experts": "num_shared_experts",
     }
     mlp_layer_types: list[str] | None = None
     first_k_dense_replace: int = 1

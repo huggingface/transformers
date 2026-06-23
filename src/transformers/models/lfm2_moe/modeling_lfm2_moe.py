@@ -192,15 +192,16 @@ class Lfm2MoeExperts(nn.Module):
         return final_hidden_states
 
 
-class Lfm2MoeTopkRouter(nn.Module):
+class Lfm2MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_experts
-        self.routed_scaling_factor = config.routed_scaling_factor
         self.norm_topk_prob = config.norm_topk_prob
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.routed_scaling_factor = config.routed_scaling_factor
         self.use_expert_bias = config.use_expert_bias
-        self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))
 
     def forward(self, hidden_states, expert_bias=None):
         router_logits = F.linear(hidden_states, self.weight)
@@ -221,9 +222,9 @@ class Lfm2MoeTopkRouter(nn.Module):
 class Lfm2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.use_expert_bias = config.use_expert_bias
-        self.gate = Lfm2MoeTopkRouter(config)
         self.experts = Lfm2MoeExperts(config)
+        self.gate = Lfm2MoeTopKRouter(config)
+        self.use_expert_bias = config.use_expert_bias
         if self.use_expert_bias:
             self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
 
@@ -571,7 +572,7 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
         if isinstance(module, Lfm2MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Lfm2MoeTopkRouter):
+        elif isinstance(module, Lfm2MoeTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Lfm2MoeSparseMoeBlock):
             if module.use_expert_bias:

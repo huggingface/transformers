@@ -33,7 +33,8 @@ from ..lfm2.modeling_lfm2 import (
 )
 from ..llama.modeling_llama import LlamaForCausalLM, LlamaPreTrainedModel, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralModel
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeTopKRouter
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_lfm2_moe import Lfm2MoeConfig
 
 
@@ -74,15 +75,11 @@ class Lfm2MoeExperts(Qwen2MoeExperts):
         self.act_fn = F.silu
 
 
-class Lfm2MoeTopkRouter(nn.Module):
+class Lfm2MoeTopKRouter(Qwen2MoeTopKRouter):
     def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        super().__init__(config)
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.norm_topk_prob = config.norm_topk_prob
         self.use_expert_bias = config.use_expert_bias
-        self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))
 
     def forward(self, hidden_states, expert_bias=None):
         router_logits = F.linear(hidden_states, self.weight)
@@ -100,12 +97,10 @@ class Lfm2MoeTopkRouter(nn.Module):
         return router_logits, routing_weights, selected_experts
 
 
-class Lfm2MoeSparseMoeBlock(nn.Module):
+class Lfm2MoeSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.use_expert_bias = config.use_expert_bias
-        self.gate = Lfm2MoeTopkRouter(config)
-        self.experts = Lfm2MoeExperts(config)
         if self.use_expert_bias:
             self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
 
@@ -145,7 +140,7 @@ class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
         if isinstance(module, Lfm2MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Lfm2MoeTopkRouter):
+        elif isinstance(module, Lfm2MoeTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Lfm2MoeSparseMoeBlock):
             if module.use_expert_bias:

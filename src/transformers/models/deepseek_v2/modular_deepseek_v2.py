@@ -153,9 +153,7 @@ def apply_rotary_emb(
 
 
 class DeepseekV2Experts(Qwen2MoeExperts):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_experts = config.n_routed_experts
+    pass
 
 
 class DeepseekV2TopkRouter(nn.Module):
