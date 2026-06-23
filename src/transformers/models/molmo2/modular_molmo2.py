@@ -163,12 +163,10 @@ def resize_and_normalize_image(
         resample=resample,
         antialias=False,
     )
-    if torch.is_floating_point(image_chw):
-        resized = torch.clip(resized, 0.0, 1.0).to(input_dtype)
-    else:
-        if image_chw.dtype != torch.uint8:
-            raise TypeError(f"Molmo2 expects float images or uint8 images, but got {image_chw.dtype}")
-        resized = torch.clip(resized, 0, 255).to(input_dtype)
+
+    if image_chw.dtype != torch.uint8:
+        raise TypeError(f"Molmo2 expects float images or uint8 images, but got {image_chw.dtype}")
+    resized = torch.clip(resized, 0, 255).to(input_dtype)
 
     resized = resized.to(torch.float32)
     if do_rescale and input_dtype == torch.uint8:
