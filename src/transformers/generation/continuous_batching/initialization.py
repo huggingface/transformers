@@ -123,9 +123,8 @@ def ensure_decode_fast_path_is_available(
     available, and no user-provided max blocks per request, set it to the fallback default."""
     # Then, if the decode fast path is not turned off, check if it is available
     if cb_config.max_blocks_per_request != 0:
-        # NOTE: For CUDA, block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
         cuda_available = torch.cuda.is_available()
-        fa_cuda = is_flash_attention_requested(config, version=3) and cuda_available
+        fa_cuda = is_flash_attention_requested(config, version=[2, 3]) and cuda_available
         # XPU support is given through its kernel variation `kernels-community/flash-attn2`
         xpu_available = is_torch_xpu_available()
         fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
@@ -145,7 +144,7 @@ def ensure_decode_fast_path_is_available(
                 logger.warning(
                     f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
                     "because the attention implementation and device combination is not supported. Supported "
-                    "combinations are Flash Attention 3 on CUDA, or Flash Attention 2 on XPU through "
+                    "combinations are Flash Attention 2/3 on CUDA, or Flash Attention 2 on XPU through "
                     "`kernels-community/flash-attn2`. "
                     f"Got {config._attn_implementation = }, {cuda_available = }, {xpu_available = }."
                 )
