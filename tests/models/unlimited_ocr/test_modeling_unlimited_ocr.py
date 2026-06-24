@@ -255,12 +255,17 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_small_model_integration_test_multi_page_document_parsing(self):
         model = UnlimitedOcrForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device).eval()
-        image = load_image(
+        image1 = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
             )
         )
-        inputs = self.processor(images=image, text="<image>\nMulti page parsing.", return_tensors="pt").to(
+        image2 = load_image(
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
+            )
+        )
+        inputs = self.processor(images=[image1, image2], text="<image><image>\nMulti page parsing.", crop_to_patches=False, return_tensors="pt").to(
             model.device
         )
 
