@@ -295,7 +295,7 @@ class Ernie4_5_MoeStatics(nn.Module):
         super().__init__()
 
         num_experts_groups = 1
-        num_experts = config.moe_num_experts
+        num_experts = config.num_experts
 
         self.e_score_correction_bias = nn.Parameter(
             torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
@@ -317,7 +317,7 @@ class Ernie4_5_MoeExperts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.moe_num_experts
+        self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
@@ -354,10 +354,10 @@ class Ernie4_5_MoeExperts(nn.Module):
 class Ernie4_5_MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.weight = nn.Parameter(torch.zeros(config.moe_num_experts, config.hidden_size, dtype=torch.float32))
+        self.weight = nn.Parameter(torch.zeros(config.num_experts, config.hidden_size, dtype=torch.float32))
         self.moe_statics = Ernie4_5_MoeStatics(config)
-        self.top_k = config.moe_k
-        self.num_experts = config.moe_num_experts
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
         self.norm_min = config.moe_norm_min
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -383,8 +383,8 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_dim = config.hidden_size
-        self.num_experts = config.moe_num_experts
-        self.top_k = config.moe_k
+        self.num_experts = config.num_experts
+        self.top_k = config.num_experts_per_tok
         self.gate = Ernie4_5_MoeTopKRouter(config)
         self.experts = Ernie4_5_MoeExperts(config)
 
@@ -664,8 +664,8 @@ class Ernie4_5_MoeForCausalLM(Ernie4_5_MoePreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)
 
         self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.moe_num_experts
-        self.num_experts_per_tok = config.moe_k
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()

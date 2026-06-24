@@ -99,8 +99,9 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
         "layers.*.mlp.down_proj": "rowwise",
     }
 
+    # Only kept for BC
     attribute_map = {
-        "num_experts": "n_routed_experts",
+        "num_local_experts": "n_routed_experts",
     }
 
     vocab_size: int = 129280
@@ -139,6 +140,7 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
     index_head_dim: int = 128
     index_n_heads: int = 64
     mlp_bias: bool = False
+    num_experts: int = 256
     head_dim: int = 64
     first_k_dense_replace: int = 3
     pretraining_tp = AttributeError()

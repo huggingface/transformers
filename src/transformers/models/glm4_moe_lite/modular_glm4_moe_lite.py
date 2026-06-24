@@ -83,7 +83,9 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
     attribute_map = {
+        # BC: `num_local_experts` was used by we opt for `num_experts` for our own code base
         "num_experts": "n_routed_experts",
+        "num_local_experts": "n_routed_experts",
         "head_dim": "qk_rope_head_dim",
     }
 
