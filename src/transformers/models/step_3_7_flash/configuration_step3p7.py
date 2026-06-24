@@ -174,7 +174,11 @@ class Step3p7TextConfig(PretrainedConfig):
         output = super().to_dict()
         torch_dtype = getattr(self, "torch_dtype", None)
         if torch_dtype is not None:
-            output["torch_dtype"] = torch_dtype
+            import torch
+            if isinstance(torch_dtype, torch.dtype):
+                output["torch_dtype"] = str(torch_dtype).split(".")[-1]
+            else:
+                output["torch_dtype"] = torch_dtype
         return output
 
 
@@ -182,6 +186,7 @@ class Step3p7Config(PretrainedConfig):
     # This loader is a compatibility shim for original Step VL checkpoints
     # whose top-level config model_type is `step3p7`.
     model_type = "step3p7"
+    sub_configs = {"vision_config": Step3p7VisionConfig, "text_config": Step3p7TextConfig}
 
     def __init__(
         self,
