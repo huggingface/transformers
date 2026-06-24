@@ -1003,7 +1003,7 @@ class VideoLlama3Processor(Qwen3VLProcessor):
         )
         ProcessorMixin.__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         num_video_tokens = [
             grid_thw.prod() // merge_size**2
             for grid_thw, merge_size in zip(video_inputs["video_grid_thw"], video_inputs["video_merge_sizes"])

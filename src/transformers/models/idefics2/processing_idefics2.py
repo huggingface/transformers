@@ -57,6 +57,8 @@ class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Idefics2Processor(ProcessorMixin):
+    valid_processor_kwargs = Idefics2ProcessorKwargs
+
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str | None = None, **kwargs
     ):

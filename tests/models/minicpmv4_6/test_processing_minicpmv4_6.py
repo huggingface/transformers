@@ -74,6 +74,23 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(inputs["pixel_values_videos"], torch.Tensor)
         self.assertEqual(inputs["pixel_values_videos"].shape[0], 1)
 
+    def test_video_processing_slice_mode(self):
+        """Test that the processor correctly handles video inputs when slice mode is on."""
+        processor = self.get_processor()
+        processor.video_processor.slice_mode = True
+        processor.video_processor.scale_resolution = 100
+        text = self.prepare_text_inputs(modalities=["video"], batch_size=2)
+        first_video = [np.random.randint(255, size=(3, 500, 800), dtype=np.uint8)] * 6
+        second_video = [np.random.randint(255, size=(3, 200, 200), dtype=np.uint8)] * 6
+        video_input = [np.array(first_video), np.array(second_video)]
+
+        inputs = processor(text=text, videos=video_input, do_sample_frames=False, return_tensors="pt")
+
+        self.assertListEqual(list(inputs["input_ids"].shape), [2, 324])
+        self.assertIsInstance(inputs["pixel_values_videos"], torch.Tensor)
+        self.assertListEqual(list(inputs["pixel_values_videos"].shape), [1, 3, 14, 72576])
+        self.assertIn("target_sizes_videos", inputs)
+
     def test_text_only_processing(self):
         """Test that the processor works with text-only input (no images)."""
         processor = self.get_processor()
