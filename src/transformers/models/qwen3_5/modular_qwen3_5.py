@@ -46,6 +46,9 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextPreTrainedModel,
     Qwen3NextRMSNorm,
     apply_mask_to_padding_states,
+    causal_conv1d_packed_torch,
+    maybe_set_cu_seqlens_for_packing,
+    seq_idx_from_cu_seqlens,
 )
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLVisionConfig
 from ..qwen3_vl.modeling_qwen3_vl import (
@@ -262,16 +265,21 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
             if cache_params is not None:
                 new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
                 cache_params.update_conv_state(new_conv_state, self.layer_idx)
+            # Packed sequences: keep the causal conv from mixing tokens across sequence boundaries.
+            cu_seqlens = None if use_precomputed_states else kwargs.get("cu_seq_lens_q")
             if self.causal_conv1d_fn is not None:
+                seq_idx = kwargs.get("seq_idx")
+                if seq_idx is None and cu_seqlens is not None:
+                    seq_idx = seq_idx_from_cu_seqlens(cu_seqlens)
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
                     weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
                     activation=self.activation,
-                    seq_idx=kwargs.get("seq_idx"),
+                    seq_idx=seq_idx,
                 )
             else:
-                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
+                mixed_qkv = causal_conv1d_packed_torch(self.conv1d, mixed_qkv, cu_seqlens)
             if use_precomputed_states:
                 mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
@@ -529,6 +537,10 @@ class Qwen3_5TextModel(Qwen3NextModel):
             position_ids = position_ids[1:]
         else:
             text_position_ids = None
+
+        # Recover packed-sequence boundaries from `position_ids` so the linear-attention layers do not
+        # leak state across sequences when only `position_ids` is passed (the standard packing interface).
+        maybe_set_cu_seqlens_for_packing(text_position_ids, inputs_embeds.shape[0], kwargs)
 
         causal_mask = create_causal_mask(
             config=self.config,

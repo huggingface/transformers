@@ -31,7 +31,11 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_flash_attention_utils import (
+    FlashAttentionKwargs,
+    _is_packed_sequence,
+    prepare_fa_kwargs_from_position_ids,
+)
 from ...modeling_layers import (
     GenericForQuestionAnswering,
     GenericForSequenceClassification,
@@ -370,6 +374,32 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x * inv_norm
 
 
+def seq_idx_from_cu_seqlens(cu_seqlens):
+    """Build the per-token sequence index `(1, total_len)` that `causal_conv1d_fn` uses to keep packed
+    sequences separated, from cumulative sequence lengths."""
+    return torch.repeat_interleave(
+        torch.arange(cu_seqlens.numel() - 1, device=cu_seqlens.device, dtype=torch.int32),
+        cu_seqlens.diff(),
+    ).unsqueeze(0)
+
+
+def causal_conv1d_packed_torch(conv1d, hidden_states, cu_seqlens):
+    """Torch fallback for the short causal conv that does not leak across packed-sequence boundaries.
+
+    `hidden_states` is `(batch, conv_dim, seq_len)`. When `cu_seqlens` is given, each packed sub-sequence
+    is convolved independently (zero left-context), matching what the fused kernel does via `seq_idx`.
+    """
+    seq_len = hidden_states.shape[-1]
+    if cu_seqlens is None:
+        return F.silu(conv1d(hidden_states)[:, :, :seq_len])
+    bounds = cu_seqlens.tolist()
+    segments = [
+        F.silu(conv1d(hidden_states[:, :, start:end])[:, :, : end - start])
+        for start, end in zip(bounds[:-1], bounds[1:])
+    ]
+    return torch.cat(segments, dim=-1)
+
+
 def torch_chunk_gated_delta_rule(
     query,
     key,
@@ -380,8 +410,31 @@ def torch_chunk_gated_delta_rule(
     initial_state=None,
     output_final_state=False,
     use_qk_l2norm_in_kernel=False,
+    cu_seqlens=None,
     **kwargs,
 ):
+    # Variable-length / packed inputs: `cu_seqlens` marks the boundaries of the sequences packed
+    # into the (single) batch row. Process each sub-sequence independently so that neither attention
+    # nor the recurrent state leaks across sequence boundaries (the FLA kernel does this internally,
+    # but the torch fallback would otherwise run the recurrence straight through the boundaries).
+    if cu_seqlens is not None:
+        cu_seqlens = cu_seqlens.tolist()
+        outputs = [
+            torch_chunk_gated_delta_rule(
+                query[:, start:end],
+                key[:, start:end],
+                value[:, start:end],
+                g[:, start:end],
+                beta[:, start:end],
+                chunk_size=chunk_size,
+                initial_state=None,
+                output_final_state=False,
+                use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
+            )[0]
+            for start, end in zip(cu_seqlens[:-1], cu_seqlens[1:])
+        ]
+        return torch.cat(outputs, dim=1), None
+
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
         query = l2norm(query, dim=-1, eps=1e-6)
@@ -641,16 +694,21 @@ class Qwen3NextGatedDeltaNet(nn.Module):
             if cache_params is not None:
                 new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
                 cache_params.update_conv_state(new_conv_state, self.layer_idx)
+            # Packed sequences: keep the causal conv from mixing tokens across sequence boundaries.
+            cu_seqlens = None if use_precomputed_states else kwargs.get("cu_seq_lens_q")
             if self.causal_conv1d_fn is not None:
+                seq_idx = kwargs.get("seq_idx")
+                if seq_idx is None and cu_seqlens is not None:
+                    seq_idx = seq_idx_from_cu_seqlens(cu_seqlens)
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
                     weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
                     activation=self.activation,
-                    seq_idx=kwargs.get("seq_idx"),
+                    seq_idx=seq_idx,
                 )
             else:
-                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
+                mixed_qkv = causal_conv1d_packed_torch(self.conv1d, mixed_qkv, cu_seqlens)
             if use_precomputed_states:
                 mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
@@ -915,6 +973,23 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
             init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
 
 
+def maybe_set_cu_seqlens_for_packing(position_ids, batch_size, kwargs):
+    """Derive cumulative sequence lengths from packed `position_ids` for the linear-attention path.
+
+    The gated-delta-net kernels need `cu_seqlens` to know where each packed sequence starts and ends.
+    Mirroring the standard Flash-Attention path, recover them from packed `position_ids` so that callers
+    only need to pass `position_ids` (as for every other model) rather than explicit `cu_seq_lens_*`.
+    No-op when sequences are not packed or when the varlen kwargs were already provided.
+    """
+    if kwargs.get("cu_seq_lens_q") is not None or not _is_packed_sequence(position_ids, batch_size):
+        return
+    (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(position_ids)
+    kwargs["cu_seq_lens_q"] = cu_seq_lens_q
+    kwargs["cu_seq_lens_k"] = cu_seq_lens_k
+    kwargs["max_length_q"] = max_length_q
+    kwargs["max_length_k"] = max_length_k
+
+
 class Qwen3NextModel(Qwen3NextPreTrainedModel):
     def __init__(self, config: Qwen3NextConfig):
         super().__init__(config)
@@ -954,6 +1029,10 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
+
+        # Recover packed-sequence boundaries from `position_ids` so the linear-attention layers do not
+        # leak state across sequences when only `position_ids` is passed (the standard packing interface).
+        maybe_set_cu_seqlens_for_packing(position_ids, inputs_embeds.shape[0], kwargs)
 
         causal_mask = create_causal_mask(
             config=self.config,
