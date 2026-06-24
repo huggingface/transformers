@@ -42,6 +42,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
+from ..qwen3_next.modeling_qwen3_next import l2norm
 from .configuration_olmo_hybrid import OlmoHybridConfig
 
 
@@ -528,12 +529,6 @@ def torch_chunk_gated_delta_rule(
         output_final_state=output_final_state,
         use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
     )
-
-
-def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
-    """This function is intended to align with the l2norm implementation in the FLA library."""
-    inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
-    return x * inv_norm
 
 
 def torch_recurrent_gated_delta_rule(
