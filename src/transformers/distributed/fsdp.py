@@ -96,7 +96,7 @@ def _get_input_output_embeddings(model: nn.Module) -> tuple[nn.Module | None, nn
 
 
 def is_norm_and_head_pair(no_reshard_targets: list[tuple[str, nn.Module]], model: nn.Module) -> bool:
-    if len(modules) != 2:
+    if len(no_reshard_targets) != 2:
         return False
     input_embed, output_head = _get_input_output_embeddings(model)
     head_modules = {module for module in (input_embed, output_head) if module is not None}
