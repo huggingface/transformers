@@ -57,7 +57,8 @@ def get_vision_position_ids(
 
     Args:
         grid_thw: `(num_images_or_videos, 3)`
-        spatial_merge_size: merge block size — a single value used for all images
+        spatial_merge_size: merge block size — either a single `int` (same for all images)
+            or a `(num_images_or_videos,)` tensor (per-image).
         kwargs: optional caller kwargs — if it contains `"position_ids"` it is popped and returned.
 
     Returns:
@@ -66,10 +67,11 @@ def get_vision_position_ids(
     if kwargs is not None and (position_ids := kwargs.pop("position_ids", None)) is not None:
         return position_ids
     device = grid_thw.device
-    merge_size = int(spatial_merge_size)
+    if isinstance(spatial_merge_size, int):
+        spatial_merge_size = torch.tensor([spatial_merge_size], device=device).expand(len(grid_thw))
 
     position_ids = []
-    for t, h, w in grid_thw.tolist():
+    for (t, h, w), merge_size in zip(grid_thw.tolist(), spatial_merge_size.tolist()):
         hpos_ids, wpos_ids = torch.meshgrid(
             torch.arange(h, device=device),
             torch.arange(w, device=device),
