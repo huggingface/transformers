@@ -45,6 +45,7 @@ class NougatProcessor(ProcessorMixin):
         model_inputs = super().__call__(images=images, text=text, **kwargs)
         if text is not None and images is not None:
             model_inputs["labels"] = model_inputs.pop("input_ids")
+            model_inputs.pop("attention_mask", None)
         return model_inputs
 
     def post_process_generation(self, *args, **kwargs):

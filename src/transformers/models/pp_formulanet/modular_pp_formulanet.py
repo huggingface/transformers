@@ -142,7 +142,11 @@ class PPFormulaNetImageProcessor(NougatImageProcessor):
     size = {"height": 768, "width": 768}
 
 
-@auto_docstring
+# Don't copy default values from Nougat!
+class PPFormulaNetProcessorKwargs(ProcessingKwargs, total=False):
+    pass
+
+
 class PPFormulaNetProcessor(NougatProcessor):
     r"""
     [`PPFormulaNetProcessor`] offers all the functionalities of [`PPFormulaNetImageProcessor`] and [`NougatTokenizer`]. See the
@@ -169,7 +173,7 @@ class PPFormulaNetProcessor(NougatProcessor):
     def __call__(
         self,
         images: ImageInput,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[PPFormulaNetProcessorKwargs],
     ) -> BatchFeature:
         r"""
         images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -182,7 +186,7 @@ class PPFormulaNetProcessor(NougatProcessor):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            ProcessingKwargs,
+            PPFormulaNetProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

@@ -56,15 +56,15 @@ class Ovis2Processor(ProcessorMixin):
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         grid = image_inputs["grids"][image_idx].tolist()
-        row, col = grid[0], grid[1]
+        num_rows, num_cols = grid[0], grid[1]
         placeholder = f"<IMG_START>{'<IMG_ATOM>' * self.image_seq_length}<IMG_GRID>"
-        if row * col > 1:
-            for r in range(row):
-                for c in range(col):
+        if num_rows * num_cols > 1:
+            for row in range(num_rows):
+                for col in range(num_cols):
                     placeholder += f"{'<IMG_ATOM>' * self.image_seq_length}"
-                    if c < col - 1:
+                    if col < num_cols - 1:
                         placeholder += "<IMG_COL>"
-                if r < row - 1:
+                if row < num_rows - 1:
                     placeholder += "<IMG_ROW>"
         placeholder += "<IMG_END>"
         return placeholder

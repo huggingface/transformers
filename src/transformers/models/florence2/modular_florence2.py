@@ -157,14 +157,7 @@ class Florence2Config(PreTrainedConfig):
 
 
 class Florence2ProcessorKwargs(LlavaProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-            "add_special_tokens": False,
-        },
-    }
+    pass
 
 
 @auto_docstring
@@ -260,10 +253,8 @@ class Florence2Processor(ProcessorMixin):
             prompts.append(prompt)
         return prompts
 
-    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        images, text, videos, audio = super().prepare_inputs_layout(
-            images=images, text=text, videos=videos, audio=audio, **kwargs
-        )
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
 
         if text is None and images is not None:
             logger.warning_once("You are using Florence-2 without a text prefix.")
@@ -275,7 +266,7 @@ class Florence2Processor(ProcessorMixin):
         if images is not None and text is not None:
             text = [self.image_token + self.tokenizer.bos_token + sample + self.tokenizer.eos_token for sample in text]
 
-        return images, text, videos, audio
+        return images, text, None, None
 
     def validate_inputs(
         self,

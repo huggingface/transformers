@@ -58,8 +58,7 @@ def detect_special_tokens(post_processor, single_key="single"):
     if post_processor["type"] == "Sequence":
         # nested processors, e.g. ByteLevel + TemplateProcessing
         for sub in post_processor["processors"]:
-            output = detect_special_tokens(sub)
-            if output:
+            if output := detect_special_tokens(sub):
                 return output
     # BertProcessing has explicit "sep"/"cls" fields
     if post_processor["type"] == "BertProcessing":
@@ -140,18 +139,16 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         if videos is None and text is None:
             raise ValueError("You have to specify at least videos or text.")
 
-    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        images, text, videos, audio = super().prepare_inputs_layout(
-            images=images, text=text, videos=videos, audio=audio, **kwargs
-        )
+    def prepare_inputs_layout(self, text=None, videos=None, **kwargs):
+        _, text, videos, _ = super().prepare_inputs_layout(text=text, videos=videos, **kwargs)
         if text is not None and videos is not None and self.num_query_tokens is not None:
             text = [self.video_token + sample for sample in text]
-        return images, text, videos, audio
+        return None, text, videos, None
 
     def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
         replacement = self.video_token * self.num_query_tokens * 4
         if self.added_bos_token:
-            replacement += self.added_bos_token
+            replacement = f"{self.added_bos_token}{replacement}"
         return replacement
 
     @property

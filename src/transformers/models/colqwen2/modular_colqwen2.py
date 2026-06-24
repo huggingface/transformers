@@ -66,8 +66,6 @@ class ColQwen2Processor(ColPaliProcessor):
         """
         ProcessorMixin.__init__(self, image_processor, tokenizer, chat_template=chat_template)
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
-        self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
-
         self.visual_prompt_prefix = visual_prompt_prefix or (
             "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"
         )
@@ -94,7 +92,6 @@ class ColQwen2Processor(ColPaliProcessor):
                 suffix = self.query_augmentation_token * 10
 
             text = [f"{self.query_prefix}{sample}{suffix}\n" for sample in text]
-            output_kwargs["text_kwargs"].setdefault("max_length", 50)
 
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
 
@@ -111,12 +108,12 @@ class ColQwen2Processor(ColPaliProcessor):
                 )
         return model_inputs
 
-    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
         images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
         if images is not None:
             images = make_flat_list_of_images(images)
             text = [self.visual_prompt_prefix] * len(images)
-        return images, text, videos, audio
+        return images, text, None, None
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         merge_length = self.image_processor.merge_size**2

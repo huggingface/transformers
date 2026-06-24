@@ -109,8 +109,7 @@ class QianfanOCRProcessor(ProcessorMixin):
 
         # Keep track of how many image/videos per sample we have, and in which order
         text = [text] if isinstance(text, str) else text
-        pattern = re.compile(f"(?P<image>{re.escape(self.image_token)})|(?P<video>{re.escape(self.video_token)})")
-        visuals_order = [match.lastgroup for sample in text for match in re.finditer(pattern, sample)]
+        visuals_order = [match.lastgroup for sample in text for match in re.finditer(self.pattern, sample)]
         model_inputs = super().__call__(images=images, text=text, videos=videos, **output_kwargs)
 
         # Merge image and video pixel into a single array, as model expects only `pixel_values` as arg

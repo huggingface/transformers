@@ -48,9 +48,9 @@ class MgpstrProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(self, text=None, images=None, **kwargs):
         model_inputs = super().__call__(images=images, text=text, **kwargs)
-        model_inputs.pop("attention_mask", None)
         if text is not None and images is not None:
             model_inputs["labels"] = model_inputs.pop("input_ids")
+            model_inputs.pop("attention_mask", None)
         return model_inputs
 
     def batch_decode(self, sequences):

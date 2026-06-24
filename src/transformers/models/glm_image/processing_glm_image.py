@@ -137,7 +137,7 @@ class GlmImageProcessor(ProcessorMixin):
 
         # Build prompt with target shape and combine grids in a single loop
         # Format: [sample0_source_grids..., sample0_target_grids, sample1_source_grids..., sample1_target_grids, ...]
-        # Note: In i2i mode, batches are homogeneous (same number of source images per sample)
+        # Note: In image2image mode, batches are homogeneous (same number of source images per sample)
         num_source_images = images_per_sample[0] if images_per_sample else 0
 
         all_grids = []
@@ -171,8 +171,6 @@ class GlmImageProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        videos=None,
-        audio=None,
         **kwargs: Unpack[GlmImageImagesKwargs],
     ):
         images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
@@ -191,7 +189,7 @@ class GlmImageProcessor(ProcessorMixin):
                     sample = f"{sample}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.bos_token}"
                 processed_text.append(sample)
 
-        return images, processed_text, videos, audio
+        return images, processed_text, None, None
 
     def validate_inputs(
         self,

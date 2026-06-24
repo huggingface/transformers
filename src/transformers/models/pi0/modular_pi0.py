@@ -60,10 +60,6 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-IMAGE_TOKEN = "<image>"
-EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
-
-
 @auto_docstring
 @requires(backends=("vision", "torch"))
 class PI0Processor(ProcessorMixin):
@@ -85,17 +81,19 @@ class PI0Processor(ProcessorMixin):
 
         self.image_seq_length = image_processor.image_seq_length
 
-        if not hasattr(tokenizer, "image_token"):
-            image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
+        if not hasattr(tokenizer, "<image>"):
+            # Just add to vocab if not yet there. Note that the model isn't yet converted and
+            # can be modified when lerobot team decided to adopt it
+            self.image_token = "<image>"
+            image_token = AddedToken(self.image_token, normalized=False, special=True)
             tokens_to_add = {"additional_special_tokens": [image_token]}
             tokenizer.add_special_tokens(tokens_to_add)
-            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
-            self.image_token = IMAGE_TOKEN
+            self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         else:
             self.image_token_id = tokenizer.image_token_id
             self.image_token = tokenizer.image_token
 
-        tokenizer.add_tokens(EXTRA_TOKENS)
+        tokenizer.add_tokens([f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)])
         tokenizer.add_bos_token = False
         tokenizer.add_eos_token = False
 

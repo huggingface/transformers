@@ -70,6 +70,8 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         videos: VideoInput | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
+        # MiniCPM needs to override `__call__` due to `_prepend_local_ids`, i.e. we add local image id inside text
+        # Current `replace_image_tokens` API assumes that each image-placeholder doesn't depend on the other!
         images, text, videos, _ = self.prepare_inputs_layout(images=images, text=text, videos=videos, **kwargs)
         self.validate_inputs(images=images, text=text, videos=videos, **kwargs)
 

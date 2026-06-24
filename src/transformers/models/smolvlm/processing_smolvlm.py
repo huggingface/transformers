@@ -140,14 +140,14 @@ class SmolVLMProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
-    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
+    def prepare_inputs_layout(self, images=None, text=None, videos=None, **kwargs):
         if images is not None:
             images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
-        return super().prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        return super().prepare_inputs_layout(images=images, text=text, videos=videos, **kwargs)
 
-    def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+    def validate_inputs(self, images=None, text=None, videos=None, **kwargs):
+        super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
         if text is None and images is None and videos is None:
             raise ValueError("You must provide one of `text`, `images` or `videos`.")
         if text is None and ((images is None) ^ (videos is not None)):

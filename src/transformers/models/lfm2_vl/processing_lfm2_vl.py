@@ -91,6 +91,7 @@ class Lfm2VlProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
+        # The arg is supposed to be in `images_kwargs` but was assigned in `text_kwargs` when shipping
         merged_kwargs["images_kwargs"]["use_image_special_tokens"] = merged_kwargs["text_kwargs"].pop(
             "use_image_special_tokens"
         )
@@ -127,17 +128,13 @@ class Lfm2VlProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        videos=None,
-        audio=None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        images, text, *_ = super().prepare_inputs_layout(
-            images=images, text=text, videos=videos, audio=audio, **kwargs
-        )
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
         if images is not None:
             images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
-        return images, text, videos, audio
+        return images, text, None, None
 
     def validate_inputs(
         self,

@@ -59,10 +59,10 @@ class Cohere2VisionProcessor(ProcessorMixin):
             ]
         )
 
-    def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
+    def validate_inputs(self, images=None, text=None, **kwargs):
         if text is None:
             raise ValueError("You have to specify text.")
-        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        super().validate_inputs(images=images, text=text, **kwargs)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         num_patches = image_inputs["num_patches"][image_idx]

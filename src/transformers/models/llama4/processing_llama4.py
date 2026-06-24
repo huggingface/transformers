@@ -118,16 +118,14 @@ class Llama4Processor(ProcessorMixin):
 
         return img_string
 
-    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        images, text, videos, audio = super().prepare_inputs_layout(
-            images=images, text=text, videos=videos, audio=audio, **kwargs
-        )
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
         if images is not None:
             images = make_flat_list_of_images(images)
-        return images, text, videos, audio
+        return images, text, None, None
 
-    def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+    def validate_inputs(self, images=None, text=None, **kwargs):
+        super().validate_inputs(images=images, text=text, **kwargs)
         if text is None:
             raise ValueError("You have to specify text.")
 

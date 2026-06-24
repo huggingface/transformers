@@ -15,7 +15,7 @@
 
 
 from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import BatchFeature, MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_vision_available
 from ...utils.import_utils import requires
@@ -74,12 +74,13 @@ class Emu3Processor(ProcessorMixin):
         self.downsample_ratio = 8
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[Emu3ProcessorKwargs],
-    ):
+    ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
             Emu3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -104,14 +105,12 @@ class Emu3Processor(ProcessorMixin):
             model_inputs["image_sizes"] = [[height, width]] * len(text)
         return model_inputs
 
-    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        images, text, *_ = super().prepare_inputs_layout(
-            images=images, text=text, videos=videos, audio=audio, **kwargs
-        )
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
         if images is not None and text is not None:
             # Add BOS once per sample; GPT tokenizer doesn't add it automatically
             text = [f"{self.bos_token}{sample}" for sample in text]
-        return images, text, videos, audio
+        return images, text, None, None
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         height, width = image_inputs["image_sizes"][image_idx]

@@ -125,7 +125,8 @@ class PaliGemmaProcessor(ProcessorMixin):
         return_tensors = kwargs["text_kwargs"].get("return_tensors")
         result = super().__call__(images=images, text=text, **kwargs)
 
-        # TODO: ideally we would control label generation separately, now that we always return token_type_ids.
+        # NOTE: ideally users should build 'labels' with data collator, since we return token_type_ids.
+        # Kept only for BC!
         if "token_type_ids" in result:
             labels = np.array(result["input_ids"])
             labels[np.array(result["token_type_ids"]) == 0] = -100
@@ -133,18 +134,20 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         return BatchFeature(data=result, tensor_type=return_tensors)
 
-    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
         text = "" or text
         images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
 
         if images is not None and text is not None:
             if not any(IMAGE_TOKEN in sample for sample in text):
+                # BC branch that cannot be deleted atp, relies on hidden magic to infer text with placeholders :(
                 logger.warning(
                     "You are passing both `text` and `images` to `PaliGemmaProcessor`. The processor expects special "
                     "image tokens in the text, as many tokens as there are images per each text. It is recommended to "
                     "add `<image>` tokens in the very beginning of your text. For this call, we will infer how many images "
                     "each text has and add special tokens."
                 )
+                # DON'T replace below code with `image_utils.make_nested_list_of_images`, they aren't identical
                 if is_valid_image(images):
                     images_per_sample = [[images]] * len(text)
                 elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
@@ -175,7 +178,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                     )
                 text = new_text
 
-        return images, text, videos, audio
+        return images, text, None, None
 
     def validate_inputs(
         self,
