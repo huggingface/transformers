@@ -494,12 +494,6 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
-    """This function is intended to align with the l2norm implementation in the FLA library."""
-    inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
-    return x * inv_norm
-
-
 def torch_chunk_gated_delta_rule(
     query,
     key,
@@ -534,6 +528,12 @@ def torch_chunk_gated_delta_rule(
         output_final_state=output_final_state,
         use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
     )
+
+
+def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+    """This function is intended to align with the l2norm implementation in the FLA library."""
+    inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
+    return x * inv_norm
 
 
 def torch_recurrent_gated_delta_rule(
