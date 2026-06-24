@@ -23,6 +23,11 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GotOcr2Processor
+    # `num_image_tokens` is controlled via kwargs, tho overriding each testcase is overkill
+    # just use higher `max_length` in tests
+    image_unstructured_max_length = 300
+    image_text_kwargs_max_length = 300
+    image_text_kwargs_override_max_length = 300
 
     @classmethod
     def _setup_tokenizer(cls):

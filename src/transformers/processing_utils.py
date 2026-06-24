@@ -762,7 +762,7 @@ class ProcessorMixin(PushToHubMixin):
             # Some processors use nested struct, we need to flatten back if needed
             images = make_flat_list_of_images(images)
             for idx in range(len(images)):
-                replacement_text = self.replace_image_token(processed_images, image_idx=idx)
+                replacement_text = self.replace_image_token(processed_images, image_idx=idx, **kwargs)
                 image_replacements.append(replacement_text)
         return processed_images, image_replacements
 
@@ -773,7 +773,7 @@ class ProcessorMixin(PushToHubMixin):
         if getattr(self, "video_token", None) is not None:
             videos = make_batched_videos(videos)
             for idx in range(len(videos)):
-                replacement_text = self.replace_video_token(processed_videos, video_idx=idx)
+                replacement_text = self.replace_video_token(processed_videos, video_idx=idx, **kwargs)
                 video_replacements.append(replacement_text)
 
         return processed_videos, video_replacements
@@ -784,7 +784,7 @@ class ProcessorMixin(PushToHubMixin):
         audio_replacements = []
         if getattr(self, "audio_token", None) is not None:
             for idx in range(len(audio)):
-                replacement_text = self.replace_audio_token(processed_audio, audio_idx=idx)
+                replacement_text = self.replace_audio_token(processed_audio, audio_idx=idx, **kwargs)
                 audio_replacements.append(replacement_text)
 
         return processed_audio, audio_replacements
