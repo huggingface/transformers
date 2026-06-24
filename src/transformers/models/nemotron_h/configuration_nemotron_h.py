@@ -81,7 +81,7 @@ class NemotronHConfig(PreTrainedConfig):
     """
 
     model_type = "nemotron_h"
-    attribute_map = {"layer_types": "layers_block_type"}
+    attribute_map = {"layer_types": "layers_block_type", "num_experts": "n_routed_experts"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 131072

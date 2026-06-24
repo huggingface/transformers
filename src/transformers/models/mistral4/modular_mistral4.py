@@ -68,7 +68,7 @@ class Mistral4TopkRouter(DeepseekV2TopkRouter):
         self.norm_topk_prob = config.norm_topk_prob
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)
         scores = router_logits.softmax(-1)
         group_scores = (

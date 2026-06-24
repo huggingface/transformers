@@ -97,7 +97,7 @@ class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
         self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias

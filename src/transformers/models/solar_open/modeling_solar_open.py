@@ -107,18 +107,18 @@ class SolarOpenMLP(nn.Module):
 class SolarOpenTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.num_experts = config.n_routed_experts
         self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
+        self.norm_topk_prob = config.norm_topk_prob
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
-        self.weight = nn.Parameter(torch.empty((self.num_experts, config.hidden_size)))
-        self.norm_topk_prob = config.norm_topk_prob
         self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias

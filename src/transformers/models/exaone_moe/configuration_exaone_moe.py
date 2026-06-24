@@ -110,7 +110,6 @@ class ExaoneMoeConfig(PreTrainedConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
     attribute_map = {
-        "n_routed_experts": "num_experts",
         "num_local_experts": "num_experts",
     }
     mlp_layer_types: list[str] | None = None

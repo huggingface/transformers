@@ -149,10 +149,10 @@ class LongcatFlashMLP(nn.Module):
 class LongcatFlashTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.num_experts = config.n_routed_experts
 
         self.top_k = config.moe_topk
+        self.num_experts = config.num_experts
+        self.hidden_dim = config.hidden_size
         self.routed_scaling_factor = config.routed_scaling_factor
         self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
         self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
@@ -161,7 +161,7 @@ class LongcatFlashTopkRouter(nn.Module):
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.classifier.weight.type(torch.float32))
         scores = router_logits.softmax(dim=-1)
         topk_indices = self.get_topk_indices(scores)

@@ -37,7 +37,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     eager_attention_forward,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeTopKRouter
 
 
 logger = logging.get_logger(__name__)
@@ -156,20 +156,16 @@ class DeepseekV2Experts(Qwen2MoeExperts):
     pass
 
 
-class DeepseekV2TopkRouter(nn.Module):
+class DeepseekV2TopkRouter(Qwen2MoeTopKRouter):
     def __init__(self, config: DeepseekV2Config):
-        super().__init__()
-        self.config = config
-        self.num_experts = config.n_routed_experts
-        self.top_k = config.num_experts_per_tok
+        super().__init__(config)
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
         self.num_group = config.n_group
         self.topk_group = config.topk_group
-        self.weight = nn.Parameter(torch.empty((self.num_experts, config.hidden_size)))
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.softmax(dim=-1, dtype=torch.float32)
         if self.topk_method == "greedy":

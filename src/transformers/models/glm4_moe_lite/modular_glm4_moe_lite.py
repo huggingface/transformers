@@ -84,6 +84,7 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
+        "num_experts": "n_routed_experts",
         "head_dim": "qk_rope_head_dim",
     }
 

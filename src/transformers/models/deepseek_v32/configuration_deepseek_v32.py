@@ -84,7 +84,10 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
 
-    attribute_map = {"num_local_experts": "num_experts"}
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+        "num_experts": "n_routed_experts",
+    }
 
     vocab_size: int = 129280
     hidden_size: int = 7168
@@ -122,7 +125,6 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     index_head_dim: int = 128
     index_n_heads: int = 64
     mlp_bias: bool = False
-    num_experts: int = 256
     head_dim: int = 64
     first_k_dense_replace: int = 3
     layer_types: list[str] | None = None
