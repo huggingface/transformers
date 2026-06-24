@@ -99,8 +99,7 @@ def is_norm_and_head_pair(modules: list[tuple[str, Any]]) -> bool:
 
 def _resolve_tied_embed_lm_head_plan(
     fsdp_plan: dict[str, str],
-    *,
-    tie_word_embeddings: bool,
+    model: nn.Module,
 ) -> dict[str, str]:
     """
     Rewrite the plan so tied embed/lm_head weights are wrapped once.
@@ -114,23 +113,25 @@ def _resolve_tied_embed_lm_head_plan(
         "model.norm": "keep_full_weight",
         "model.embed_tokens": "keep_full_weight"}
     """
-    if not tie_word_embeddings:
+    tied_keys = getattr(model, "all_tied_weights_keys", None) or {}
+    if not tied_keys:
         return fsdp_plan
 
-    embed_module_key = next(
-        (key for key in fsdp_plan if key == "embed_tokens" or key.endswith(".embed_tokens")),
-        None,
-    )
-    if embed_module_key is None:
+    target_param, source_param = next(iter(tied_keys.items()))
+    head_module = target_param.rsplit(".", 1)[0]
+    embed_module = source_param.rsplit(".", 1)[0]
+    
+    if embed_module not in fsdp_plan:
         return fsdp_plan
-
+    
     adapted_plan = fsdp_plan.copy()
-    adapted_plan.pop(embed_module_key, None)
-    if fsdp_plan.get("lm_head") == "keep_full_weight":
-        adapted_plan.pop("lm_head", None)
-        adapted_plan[embed_module_key] = "keep_full_weight"
+    adapted_plan.pop(embed_module, None)
+    
+    if fsdp_plan.get(head_module) == "keep_full_weight":
+        adapted_plan.pop(head_module, None)
+        adapted_plan[embed_module] = "keep_full_weight"
+    
     return adapted_plan
-
 
 def expand_fsdp_plan(
     model, fsdp_plan: dict[str, str]
@@ -204,7 +205,7 @@ def apply_fully_sharded_data_parallel(model, fsdp_mesh):
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
     tie_word_embeddings = getattr(model.config, "tie_word_embeddings", False)
 
-    adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, tie_word_embeddings=tie_word_embeddings)
+    adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
 
     for module_name, module in reshard_targets:
