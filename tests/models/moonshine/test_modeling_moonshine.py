@@ -151,6 +151,38 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_training_loss_no_double_shift(self):
+        # forward shifts labels into decoder_input_ids, so loss must be plain CE against the labels (no second shift)
+        from torch.nn import CrossEntropyLoss
+
+        from transformers.models.moonshine.modeling_moonshine import MoonshineEncoderModelOutput
+
+        config = self.model_tester.get_config()
+        config.pad_token_id = self.model_tester.pad_token_id
+        model = MoonshineForConditionalGeneration(config).to(torch_device).eval()
+        vocab_size = config.vocab_size
+
+        torch.manual_seed(0)
+        bsz, enc_len, dec_len = 2, 10, 6
+        enc_hidden = torch.randn(bsz, enc_len, config.hidden_size, device=torch_device)
+        encoder_outputs = MoonshineEncoderModelOutput(last_hidden_state=enc_hidden, attention_mask=None)
+        labels = torch.randint(3, vocab_size, (bsz, dec_len), device=torch_device)
+        padded = labels.clone()
+        padded[0, -1] = -100
+        padded[1, -2:] = -100
+
+        def aligned_ce(logits, lbl):
+            return CrossEntropyLoss()(logits.reshape(-1, vocab_size), lbl.reshape(-1))
+
+        def double_shift_ce(logits, lbl):
+            return CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
+
+        for lbl in (labels, padded):
+            with torch.no_grad():
+                out = model(encoder_outputs=encoder_outputs, labels=lbl, use_cache=False)
+            self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
+            self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
