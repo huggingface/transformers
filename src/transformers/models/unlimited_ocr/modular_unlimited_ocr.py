@@ -129,7 +129,11 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
             else:
                 num_columns, num_rows = 1, 1
             image_spatial_crop.append([num_columns, num_rows])
+        # TODO: Rename and cleanup
         batch_feature["image_spatial_crop"] = torch.tensor(image_spatial_crop, dtype=torch.long)
+        batch_feature["num_local_patches"] = (
+            batch_feature["image_spatial_crop"][:, 0] * batch_feature["image_spatial_crop"][:, 1]
+        )
         return batch_feature
 
 

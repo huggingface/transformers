@@ -251,6 +251,9 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
                 num_columns, num_rows = 1, 1
             image_spatial_crop.append([num_columns, num_rows])
         batch_feature["image_spatial_crop"] = torch.tensor(image_spatial_crop, dtype=torch.long)
+        batch_feature["num_local_patches"] = (
+            batch_feature["image_spatial_crop"][:, 0] * batch_feature["image_spatial_crop"][:, 1]
+        )
         return batch_feature
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
