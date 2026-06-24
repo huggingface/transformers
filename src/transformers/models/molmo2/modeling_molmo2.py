@@ -688,6 +688,7 @@ class Molmo2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Molmo2TextConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config
+        self.norm_after = config.norm_after
 
         self.self_attn = Molmo2Attention(config, layer_idx)
         self.attn_norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -705,8 +706,11 @@ class Molmo2DecoderLayer(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
+        # `norm_after` selects post-norm (normalize each sublayer's *output*) over the default
+        # pre-norm (normalize each sublayer's *input*) -- a config flag instead of a subclass.
         residual = hidden_states
-        hidden_states = self.attn_norm(hidden_states)
+        if not self.norm_after:
+            hidden_states = self.attn_norm(hidden_states)
 
         # Self Attention
         hidden_states, _ = self.self_attn(
@@ -718,49 +722,17 @@ class Molmo2DecoderLayer(GradientCheckpointingLayer):
             use_cache=use_cache,
             **kwargs,
         )
-
+        if self.norm_after:
+            hidden_states = self.attn_norm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.ff_norm(hidden_states)
+        if not self.norm_after:
+            hidden_states = self.ff_norm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-
-        hidden_states = residual + self.dropout(hidden_states)
-        return hidden_states
-
-
-class Molmo2PostNormDecoderLayer(Molmo2DecoderLayer):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        **kwargs,
-    ) -> torch.Tensor:
-        residual = hidden_states
-
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-        )
-        hidden_states = self.attn_norm(hidden_states)
-
-        hidden_states = residual + self.dropout(hidden_states)
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.ff_norm(hidden_states)
-
+        if self.norm_after:
+            hidden_states = self.ff_norm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
         return hidden_states
 
@@ -785,7 +757,6 @@ class Molmo2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Molmo2DecoderLayer",
-        "Molmo2PostNormDecoderLayer",
         "Molmo2VisionEncoderLayer",
         "Molmo2GQAAttention",
     ]
@@ -823,9 +794,8 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         else:
             self.wte = nn.Embedding(config.vocab_size, config.hidden_size)
         self.emb_drop = nn.Dropout(config.embedding_dropout)
-        decoder_layer = Molmo2PostNormDecoderLayer if config.norm_after else Molmo2DecoderLayer
         self.blocks = nn.ModuleList(
-            [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Molmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = Molmo2RotaryEmbedding(config)
