@@ -134,6 +134,7 @@ class FunAsrNanoConfig(PreTrainedConfig):
     adaptor_attention_heads: int = 8
     adaptor_dropout_rate: float = 0.0
     initializer_range: float = 0.02
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_encoder_config, dict):
