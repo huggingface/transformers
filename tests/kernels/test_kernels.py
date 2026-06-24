@@ -708,3 +708,100 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
 
         result_mapping = kernel_config.kernel_mapping
         self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")
+
+
+class TestMsaAttentionDeviceConsistency(TestCasePlus):
+    """Fast, CPU-only regression tests for the MSA attention helper ``_sparse_attention``.
+
+    These tests do **not** require a CUDA device or the MSA hub kernel.  They
+    patch ``_msa_sparse_atten_op`` so the actual CuTe-DSL kernel is never
+    invoked, and focus solely on the tensor-device consistency logic that was
+    broken before the fix (GitHub PR #46848).
+
+    The bug: when ``bsz == 1`` and ``cache_position`` lived on the CPU,
+    ``valid_k`` was cast to ``torch.int32`` without an explicit ``device``
+    argument, landing on CPU.  Concatenating it with the GPU-side zero tensor
+    then raised::
+
+        RuntimeError: Expected all tensors to be on the same device, but found
+        at least two devices, cuda:0 and cpu!
+
+    The fix adds ``device=q.device`` to the ``.to()`` call so ``valid_k``
+    always follows the query tensor's device.
+    """
+
+    def _make_module(self):
+        """Return a minimal mock that satisfies ``_sparse_attention``'s module API."""
+        cfg = MagicMock()
+        cfg._attn_implementation = "msa_stub"
+
+        indexer = MagicMock()
+        indexer.block_size = 128
+        indexer.topk_blocks = 4
+
+        module = MagicMock()
+        module.config = cfg
+        module.indexer = indexer
+        module._msa_validated = True  # skip hardware validation
+        return module
+
+    def _run_sparse_attention(self, device, cache_position_device):
+        """Exercise ``_sparse_attention`` with tensors on *device* and a
+        ``cache_position`` that lives on *cache_position_device*.
+
+        ``_msa_sparse_atten_op`` is patched to a lightweight stub so the test
+        runs without the actual kernel or a CUDA GPU.
+        """
+        from transformers.integrations.msa_attention import _sparse_attention
+
+        bsz, num_q_heads, q_len, head_dim = 1, 4, 1, 128
+        num_kv_heads, k_len = 2, 16
+
+        query = torch.randn(bsz, num_q_heads, q_len, head_dim, device=device)
+        key = torch.randn(bsz, num_kv_heads, k_len, head_dim, device=device)
+        value = torch.randn(bsz, num_kv_heads, k_len, head_dim, device=device)
+        # block_indices: [bsz, num_kv_heads, q_len, topk]
+        block_indices = torch.zeros(bsz, num_kv_heads, q_len, 4, dtype=torch.long, device=device)
+        # cache_position intentionally on a *different* device to reproduce the bug
+        cache_position = torch.tensor([7], device=cache_position_device)
+
+        captured = {}
+
+        def _stub_op(q, k, v, q2k, cu_seqlens_q, cu_seqlens_k, *args, **kwargs):
+            captured["cu_seqlens_k"] = cu_seqlens_k
+            return torch.zeros_like(q)
+
+        with patch(
+            "transformers.integrations.msa_attention._msa_sparse_atten_op",
+            side_effect=_stub_op,
+        ):
+            _sparse_attention(
+                self._make_module(),
+                query,
+                key,
+                value,
+                scaling=head_dim**-0.5,
+                block_indices=block_indices,
+                block_size=128,
+                cache_position=cache_position,
+            )
+
+        return captured["cu_seqlens_k"]
+
+    def test_cu_seqlens_k_device_matches_query_cpu(self):
+        """CPU tensors: cu_seqlens_k must stay on CPU regardless of cache_position."""
+        cu_seqlens_k = self._run_sparse_attention(device="cpu", cache_position_device="cpu")
+        self.assertEqual(
+            cu_seqlens_k.device.type,
+            "cpu",
+            f"Expected cu_seqlens_k on cpu, got {cu_seqlens_k.device}",
+        )
+
+    def test_cu_seqlens_k_values_bsz1_single_token(self):
+        """When bsz==1 and cache_position=[7], cu_seqlens_k must be [0, 8]."""
+        cu_seqlens_k = self._run_sparse_attention(device="cpu", cache_position_device="cpu")
+        expected = torch.tensor([0, 8], dtype=torch.int32)
+        self.assertTrue(
+            torch.equal(cu_seqlens_k.cpu(), expected),
+            f"Expected cu_seqlens_k == {expected.tolist()}, got {cu_seqlens_k.tolist()}",
+        )
