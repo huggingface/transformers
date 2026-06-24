@@ -109,9 +109,6 @@ class ExaoneMoeConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
-    attribute_map = {
-        "num_local_experts": "num_experts",
-    }
     mlp_layer_types: list[str] | None = None
     first_k_dense_replace: int = 1
     moe_intermediate_size: int = 1024

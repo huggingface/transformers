@@ -24,8 +24,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..mixtral.modeling_mixtral import MixtralExperts
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from .configuration_deepseek_v3 import DeepseekV3Config
 
 
@@ -124,10 +123,8 @@ class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
         return router_logits, topk_weights, topk_indices
 
 
-class DeepseekV3Experts(MixtralExperts):
-    def __init__(self, config):
-        super().__init__(config)
-        self.intermediate_dim = config.moe_intermediate_size
+class DeepseekV3Experts(Qwen2MoeExperts):
+    pass
 
 
 class DeepseekV3MoE(DeepseekV2Moe):

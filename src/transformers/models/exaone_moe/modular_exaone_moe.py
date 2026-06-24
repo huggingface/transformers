@@ -85,9 +85,6 @@ class ExaoneMoeConfig(Exaone4Config):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
-    attribute_map = {
-        "num_local_experts": "num_experts",
-    }
 
     vocab_size: int = 102400
     hidden_size: int = 4096

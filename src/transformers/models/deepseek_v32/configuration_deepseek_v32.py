@@ -85,7 +85,6 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     }
 
     attribute_map = {
-        "num_local_experts": "n_routed_experts",
         "num_experts": "n_routed_experts",
     }
 

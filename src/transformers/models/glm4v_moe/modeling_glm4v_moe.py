@@ -256,7 +256,7 @@ class Glm4vMoeTextExperts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
@@ -1510,7 +1510,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         super().__init__(config)
         self.model = Glm4vMoeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.num_experts = config.text_config.num_local_experts
+        self.num_experts = config.text_config.num_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
 
         self.post_init()
