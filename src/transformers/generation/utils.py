@@ -1971,8 +1971,12 @@ class GenerationMixin(ContinuousMixin):
             # with a longer prompt or a larger `max_new_tokens` (up to that ceiling) reuse the same cache instead of
             # triggering a reallocation (and a `torch.compile` recompilation). Without it, the cache is sized to the
             # current call's `max_length` only. See #46424.
-            if generation_config.max_cache_len is not None:
-                max_cache_length = max(max_cache_length, generation_config.max_cache_len)
+            # Honor both `generation_config.max_cache_len` and the documented `cache_config["max_cache_len"]` path.
+            configured_max_cache_len = generation_config.max_cache_len
+            if configured_max_cache_len is None and generation_config.cache_config is not None:
+                configured_max_cache_len = generation_config.cache_config.get("max_cache_len")
+            if configured_max_cache_len is not None:
+                max_cache_length = max(max_cache_length, configured_max_cache_len)
             cache_batch_size = max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size
             model_kwargs[cache_name] = self._prepare_static_cache(
                 cache_implementation=generation_config.cache_implementation,
