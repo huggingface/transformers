@@ -188,6 +188,8 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
         resized_videos_grouped = {}
 
         for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
             B, T, C, H, W = stacked_videos.shape
             num_frames, height, width = T, H, W
             if do_resize:

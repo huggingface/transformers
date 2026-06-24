@@ -116,6 +116,8 @@ class PagedAttentionCache:
     for the sliding-attention group, although it is not needed.
     """
 
+    _min_block_size = 4
+
     def __init__(
         self,
         config: PreTrainedConfig,
@@ -148,8 +150,8 @@ class PagedAttentionCache:
 
         # Extract cache dimensions. Default used to be 32, now it's 256 to be compatible with flash_with_kvcache.
         self.block_size = continuous_batching_config.block_size
-        if self.block_size <= 0:
-            raise ValueError(f"Block size must be positive, but got {self.block_size}")
+        if self.block_size < self._min_block_size:
+            raise ValueError(f"Block size must be at least {self._min_block_size}, but got {self.block_size}")
 
         # Group layers depending on the attention mix
         layer_groups, group_types = group_layers_by_attn_type(config)
@@ -248,12 +250,17 @@ class PagedAttentionCache:
         # Initialize the cache
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
-        # We add two extra blocks to the cache as a padding zone that no BlockManager ever allocates from: one for the
-        # sentinel index (marks the spot of a new token in the read indices) and one for the trash index (for padding,
-        # block is never used so writes are silently discarded)
+        # We add two extra blocks to the cache as a padding zone that no BlockManager ever allocates from.
+        # The first one is zeroed and then never written to. Its first index is the read trash, from which padding
+        # tokens read their KV cache, and its second index is the sentinel index, to indicate where to store the new key
+        # or values indices for sliding window attention groups.
+        # The second is the write trash, where padding tokens can safely write their KV cache (it's never read from).
+        block_based_shape = (num_blocks + 2, self.block_size, self.num_key_value_heads, self.head_dim)
+
         self.cache_shape = ((num_blocks + 2) * self.block_size, self.num_key_value_heads, self.head_dim)
-        self.sentinel_index = self.cache_shape[0] - 1
-        self.trash_index = self.sentinel_index - 1
+        self.read_trash_index = num_blocks * self.block_size
+        self.sentinel_index = num_blocks * self.block_size + 1  # since block size >= 4 >= 2, this is safe
+        self.write_trash_index = (num_blocks + 1) * self.block_size
         for _ in range(group_size):
             new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
             new_layer_value_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
@@ -261,6 +268,9 @@ class PagedAttentionCache:
             torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
+            # Write 0s in the read trash block so that the padding tokens read always 0-valued KV cache
+            new_layer_key_cache.view(block_based_shape)[num_blocks].fill_(0)
+            new_layer_value_cache.view(block_based_shape)[num_blocks].fill_(0)
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
         # Block management data structures
@@ -276,7 +286,7 @@ class PagedAttentionCache:
                 self.num_full_attention_groups += 1
             elif group_type == "sliding_attention":
                 cm = SlidingAttentionCacheAllocator(
-                    i, self.block_size, config.sliding_window, self.sentinel_index, self.trash_index
+                    i, self.block_size, config.sliding_window, self.sentinel_index, self.write_trash_index
                 )
                 self.num_sliding_attention_groups += 1
                 self.max_sliding_window_blocks_per_request = cm._max_blocks_per_request
@@ -292,9 +302,10 @@ class PagedAttentionCache:
         # For block table support, we lazy init the name of the block table key
         self._block_table_key = None
 
-    def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
-        """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful. The
-        number of newly allocated blocks needed is predicted by the following rules:
+    def blocks_needed(self, num_requested_blocks: int, allocated_blocks: int) -> int:
+        """Returns the number of physical blocks needed to allocate (num_requested_blocks) blocks to a request that
+        already has (allocated_blocks) blocks. The number of newly allocated blocks needed is predicted by the
+        following rules:
         - for full attention groups: since there is no sliding window for full attention layers, one requested block is
             always equivalent to one newly allocated block for EACH full attention group
         - for sliding window groups: because of the sliding window, the number of blocks allocated to a request is
@@ -308,7 +319,15 @@ class PagedAttentionCache:
         if self.num_sliding_attention_groups:
             blocks_left = max(self.max_sliding_window_blocks_per_request - allocated_blocks, 0)
             needed_blocks += min(blocks_left, num_requested_blocks) * self.num_sliding_attention_groups
-        return needed_blocks <= self.get_num_free_blocks()
+        return needed_blocks
+
+    def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
+        """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful."""
+        return self.blocks_needed(num_requested_blocks, allocated_blocks) <= self.get_num_free_blocks()
+
+    def blocks_in_use(self, request_id: str) -> int:
+        """Returns the total number of physical blocks currently referenced by a request across all layer groups."""
+        return sum(len(cm.block_table.get(request_id, ())) for cm in self.group_cache_managers)
 
     def allocate_blocks(self, n_blocks: int, request_id: str, allocated_blocks: int) -> int | None:
         """Allocate cache blocks across all layer groups for a given request. Actual allocation is done by the cache
@@ -504,6 +523,24 @@ class PagedAttentionCache:
         # FIXME: consolidate the cache into a single tensor of shape (group_size, 2, *self.k_or_v_cache_shape)
         # This will allow for  better .update and a single copy instead of one per cache tensor
 
+    def compute_max_num_forks(self, source_request_id: str) -> int:
+        """Computes the maximum number of children requests that can be forked from the source request."""
+        # Count, across all groups, the new blocks each fork would have to allocate (i.e. non-shareable blocks)
+        blocks_needed_per_fork = 0
+        for cm in self.group_cache_managers:
+            block_ids = cm.block_table[source_request_id]
+            shareable_blocks = 0
+            if cm.uses_block_sharing:
+                for block_id in block_ids:
+                    if not self._block_manager._id_to_block[block_id].is_complete:
+                        break
+                    shareable_blocks += 1
+            blocks_needed_per_fork += len(block_ids) - shareable_blocks
+        # If every block can be shared, no new allocations are needed and any number of forks is possible
+        if blocks_needed_per_fork == 0:
+            return 2**31  # absurdly large number, virtually infinite number of forks
+        return self.get_num_free_blocks() // blocks_needed_per_fork
+
     def fork_request(self, source_request_id: str, destination_request_ids: list[str]) -> tuple[list[int], list[int]]:
         """Fork the cache of a request (state) into the one of a list of requests with the given (dst_request_ids)."""
         # These lists will be the accumulators for the source and destination blocks for the cache copy
@@ -611,6 +648,8 @@ class PagedAttentionMemoryHandler:
             + k * self.num_groups * 8                  # write_index: [num_groups, M] int64
             + k * self.num_groups * 8                  # read_index: [num_groups, N + M] (M part only, int64)
         )
+        # TODO: the above could be refined by introducing the max_requests_per_batch, but then there is a min() and this
+        # is no longer a simple polynomial. Could be worth checking into.
         # -- N·M terms: cost per (page × batch token) --------------------------------------
         coeff_nm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (N·M part only)
         # -- M² terms: cost per (batch token squared) --------------------------------------

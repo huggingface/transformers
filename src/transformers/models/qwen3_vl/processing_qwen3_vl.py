@@ -103,7 +103,7 @@ class Qwen3VLProcessor(ProcessorMixin):
         for frame_idx in range(num_frames):
             curr_time = curr_timestamp[frame_idx]
             video_placeholder += f"<{curr_time:.1f} seconds>"
-            video_placeholder += self.vision_start_token + "<|placeholder|>" * frame_seqlen + self.vision_end_token
+            video_placeholder += self.vision_start_token + self.video_token * frame_seqlen + self.vision_end_token
         return video_placeholder
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):

@@ -61,7 +61,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
-from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, requires
+from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, is_torchvision_greater_or_equal, requires
 
 
 if is_vision_available():
@@ -232,10 +232,11 @@ class TorchvisionBackend(BaseImageProcessor):
                 interpolation = resample
         else:
             interpolation = tvF.InterpolationMode.BILINEAR
-        if interpolation == tvF.InterpolationMode.LANCZOS:
+        if interpolation == tvF.InterpolationMode.LANCZOS and not is_torchvision_greater_or_equal("0.27"):
             logger.warning_once(
-                "You have used a torchvision backend image processor with LANCZOS resample which not yet supported for torch.Tensor. "
-                "BICUBIC resample will be used as an alternative. Please fall back to a pil backend image processor if you "
+                "You have used a torchvision backend image processor with LANCZOS resample which is not supported "
+                "for torch.Tensor with torchvision < 0.27. BICUBIC resample will be used as an alternative. "
+                "Please upgrade torchvision to 0.27+ or fall back to a pil backend image processor if you "
                 "want full consistency with the original model."
             )
             interpolation = tvF.InterpolationMode.BICUBIC

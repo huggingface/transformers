@@ -225,7 +225,7 @@ class Qwen3OmniMoeAudioEncoderConfig(Qwen2_5OmniAudioEncoderConfig):
     max_source_positions (`int`, *optional*, defaults to 1500):
         Maximum sequence length for the inputs
     n_window (`int`, *optional*, defaults to 100):
-        Number of windwos
+        Number of windows
     output_dim (`int`, *optional*, defaults to 3584):
         Dimensionality of the output
     n_window_infer (`int`, *optional*, defaults to `400`):
@@ -280,23 +280,18 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     ignore_keys_at_rope_validation = {"mrope_section", "interleaved", "mrope_interleaved"}
 
     vocab_size: int = 3584
@@ -399,7 +394,7 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     vocab_size: int = 3072
@@ -1158,12 +1153,13 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
         self.rotary_emb = Qwen3OmniMoeThinkerTextRotaryEmbedding(config)
 
 
+@auto_docstring
 @dataclass
 class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
-    Args:
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
     rope_deltas: torch.LongTensor | None = None
@@ -1262,7 +1258,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         position_ids=None,
         past_key_values=None,
         inputs_embeds=None,
-        rope_deltas=None,
         labels=None,
         use_cache=None,
         output_router_logits: bool | None = None,
@@ -1664,7 +1659,7 @@ class Qwen3OmniMoeTalkerModel(Qwen3VLMoeTextModel):
 
 class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     _tied_weights_keys = {"codec_head": "model.codec_embedding.weight"}
-    _tp_plan = {"codec_head": "colwise_allgather"}
+    _tp_plan = {"codec_head": "colwise_gather_output"}
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"
@@ -2370,7 +2365,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                 raise NotImplementedError(f"Speaker {speaker} not implemented")
             if input_ids.shape[0] != 1:
                 raise NotImplementedError("Qwen3-Omni currently does not support batched inference with audio output")
-            talker_supppressed_tokens = [
+            talker_suppressed_tokens = [
                 i
                 for i in range(
                     self.config.talker_config.text_config.vocab_size - 1024,
@@ -2386,7 +2381,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                 "temperature": talker_temperature,
                 "eos_token_id": self.config.talker_config.codec_eos_token_id,
                 "repetition_penalty": talker_repetition_penalty,
-                "suppress_tokens": talker_supppressed_tokens,
+                "suppress_tokens": talker_suppressed_tokens,
                 "output_hidden_states": True,
                 "return_dict_in_generate": True,
             }
@@ -2505,7 +2500,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             inputs_embeds=talker_input_embed,
             trailing_text_hidden=trailing_text_hidden,
             tts_pad_embed=tts_pad_embed,
-            talker_input_ids=talker_input_id,  # Not use input_ids to prevent repetation penalty out of bound
+            talker_input_ids=talker_input_id,  # Not use input_ids to prevent repetition penalty out of bound
             **talker_kwargs,
         )
         talker_codes = (

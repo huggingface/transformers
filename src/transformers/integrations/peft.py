@@ -58,7 +58,7 @@ if is_accelerate_available():
     from accelerate.utils import get_balanced_memory, infer_auto_device_map
 
 # Minimum PEFT version supported for the integration
-MIN_PEFT_VERSION = "0.18.2"
+MIN_PEFT_VERSION = "0.19.0"
 
 
 logger = logging.get_logger(__name__)
@@ -191,7 +191,7 @@ class FlattenDims(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        raise NotImplementedError("Reversing flatteing operatio is not supported.")
+        raise NotImplementedError("Reversing flattening operation is not supported.")
 
     def __repr__(self):
         return f"{self.__class__.__name__}(dims={self.dims})"
@@ -220,7 +220,7 @@ class PermuteDims(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        raise NotImplementedError("Reversing flatteing operatio is not supported yet.")
+        raise NotImplementedError("Reversing flattening operation is not supported yet.")
 
     def __repr__(self):
         return f"{self.__class__.__name__}(dims={self.dims})"
@@ -284,12 +284,12 @@ def build_peft_weight_mapping(
                 # For source, we capture the original weights + the lora weights
                 new_source_patterns = []
                 for pat in list(orig_conversion._original_source_patterns):
-                    # we replace the weight pattern to colllect loras
+                    # we replace the weight pattern to collect loras
                     pat = pat.rsplit(".", 1)[0]
                     # note: the source state_dict does *not* contain the adapter name
                     new_source_patterns.append(f"{pat}.{lora}.*")
 
-                # the gate_up_proj is the innner PEFT ParamWrapper, so we need to use base_layer
+                # the gate_up_proj is the inner PEFT ParamWrapper, so we need to use base_layer
                 pat = orig_conversion._original_target_patterns[0]
                 pat = pat.replace("gate_up_proj", "base_layer")
                 # we make sure the target key is correct, add '.weight' because the parameter is targeted directly
@@ -323,7 +323,7 @@ def build_peft_weight_mapping(
                 # For source, we capture the original weights + the lora weights
                 new_source_patterns = []
                 for pat in list(orig_conversion._original_source_patterns):
-                    # we replace the weight pattern to colllect loras
+                    # we replace the weight pattern to collect loras
                     pat = pat.rsplit(".", 1)[0]
                     # note: the source state_dict does *not* contain the adapter name
                     new_source_patterns.append(f"{pat}.{lora}.*")
@@ -415,7 +415,7 @@ class PeftAdapterMixin:
     prompt tuning, prompt learning are out of scope as these adapters are not "injectable" into a torch module. For
     using these methods, please refer to the usage guide of PEFT library.
 
-    With this mixin, if the correct PEFT version is installed (>= 0.18.0), it is possible to:
+    With this mixin, if the correct PEFT version is installed (>= 0.19.0), it is possible to:
 
     - Load an adapter stored on a local path or in a remote Hub repository, and inject it in the model
     - Attach new adapters in the model and train them with Trainer or by your own.
@@ -583,6 +583,13 @@ class PeftAdapterMixin:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
             inject_adapter_in_model(peft_config, self, adapter_name)
 
+        adapter_key_markers = {adapter_name}
+        if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
+            adapter_key_markers.add(peft_config.peft_type.value.lower())
+
+        def is_adapter_key(key: str) -> bool:
+            return any(marker in key for marker in adapter_key_markers)
+
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
 
@@ -670,9 +677,9 @@ class PeftAdapterMixin:
             state_dict=adapter_state_dict,
             checkpoint_files=checkpoint_files,
             load_config=load_config,
-            # pass expected keys explicitly, otherwise they are determined from the state_dict, which can contain
-            # unexpected entries, like "layer.SCB" from a bnb layer.
-            expected_keys=[n for n, _ in self.named_parameters()],
+            # Pass expected keys explicitly while excluding non-adapter parameters.
+            # Otherwise `caching_allocator_warmup` sizes for the full base model.
+            expected_keys=[n for n, _ in self.named_parameters() if is_adapter_key(n)],
         )
 
         if peft_config.inference_mode:
@@ -682,13 +689,6 @@ class PeftAdapterMixin:
             for module in self.modules():
                 if isinstance(module, BaseTunerLayer):
                     module.requires_grad_(False)
-
-        adapter_key_markers = {adapter_name}
-        if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
-            adapter_key_markers.add(peft_config.peft_type.value.lower())
-
-        def is_adapter_key(key: str) -> bool:
-            return any(marker in key for marker in adapter_key_markers)
 
         loading_info.missing_keys = {k for k in loading_info.missing_keys if is_adapter_key(k)}
 
