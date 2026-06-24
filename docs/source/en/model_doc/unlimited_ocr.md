@@ -33,16 +33,13 @@ This model was contributed by [guarin](https://huggingface.co/guarin).
 The original code can be found [here](https://github.com/baidu/Unlimited-OCR).
 
 > [!TIP]
-> Unlimited-OCR supports two inference configurations: the default "gundam" mode uses 640×640 tiles with dynamic cropping for high-resolution documents, and "base" mode uses a single 1024×1024 global view for standard-resolution inputs. Gundam mode is enabled by default via the image processor (`crop_to_patches=True`, `tile_size=640`).
+> Unlimited-OCR supports two inference configurations: the default "gundam" mode uses 640x640 tiles with dynamic cropping for high-resolution documents, and "base" mode uses a single 1024x1024 global view for standard-resolution inputs. Gundam mode is enabled by default via the image processor (`crop_to_patches=True`, `tile_size=640`).
 
 > [!TIP]
 > For multi-page documents, pass all page images together with one `<image>` token per page in the text prompt. The model processes all pages jointly within a single context window.
 
 > [!TIP]
 > The Reference Sliding Window Attention (R-SWA) applies only to generated tokens. All image and prompt tokens from the prefill remain fully visible throughout decoding, so long documents do not lose context from earlier pages.
-
-> [!TIP]
-> Use `<image>\nFree OCR.` for plain text extraction and `<image>\nDocument parsing.` for richer structured output.
 
 <hfoptions id="usage">
 <hfoption id="Single-page OCR">
@@ -54,36 +51,13 @@ model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", devic
 processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
 
 image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
-inputs = processor(images=image, text="<image>\nFree OCR.", return_tensors="pt").to(model.device)
+inputs = processor(images=image, text="<image>\ndocument parsing.", return_tensors="pt").to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=4096)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 # "R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\nName/Phone Ext. : (...)"
 ```
 
-</hfoption>
-<hfoption id="Document parsing">
-
-Use the `Document parsing.` prompt for richer structured output such as markdown-formatted documents.
-
-```python
-from transformers import AutoProcessor, AutoModelForImageTextToText
-
-model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", device_map="auto")
-processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
-
-image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
-inputs = processor(
-    images=image,
-    text="<image>\nDocument parsing.",
-    return_tensors="pt",
-).to(model.device)
-
-output = model.generate(**inputs, max_new_tokens=4096)
-processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-```
-
-</hfoption>
 <hfoption id="Multi-page OCR">
 
 Multi-page documents can be parsed jointly in a single forward pass by passing all page images together. Include one `<image>` token per page in the text prompt so the model processes all pages as a continuous document.
@@ -101,7 +75,7 @@ num_pages = 2
 
 inputs = processor(
     images=[page1, page2],
-    text="<image>" * num_pages + "\nMulti page document parsing.",
+    text="<image>" * num_pages + "\nMulti page parsing.",
     return_tensors="pt",
 ).to(model.device)
 
