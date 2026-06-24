@@ -243,7 +243,7 @@ def apply_fully_sharded_data_parallel(
     else:
         for name, module in no_reshard_targets:
             fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
-            logger.debug(f"Applied fully_shard to {module_name} (reshard=False)")
+            logger.debug(f"Applied fully_shard to {name} (reshard=False)")
 
     # Apply FSDP2 to the root module
     fully_shard(model, mesh=fsdp_mesh, **fsdp_policy_kwargs)
