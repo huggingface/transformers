@@ -378,7 +378,7 @@ class StaticLayer(CacheLayerMixin):
         super().__init__()
         self.max_cache_len = max_cache_len
         # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
-        self.cumulative_length = torch.tensor([0], dtype=int)
+        self.cumulative_length = torch.tensor(0, dtype=int)
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
@@ -610,7 +610,7 @@ class StaticIndexedLayer(StaticLayer):
         self.is_indexer_initialized: bool = False
         # The indexer update runs independently of (and after) the main K/V `update` in the attention
         # forward, so it tracks its own cumulative length rather than reusing `self.cumulative_length`.
-        self.indexer_cumulative_length = torch.tensor([0], dtype=int)
+        self.indexer_cumulative_length = torch.tensor(0, dtype=int)
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
         self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
