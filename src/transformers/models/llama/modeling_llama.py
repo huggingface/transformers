@@ -51,15 +51,57 @@ logger = logging.get_logger(__name__)
 
 @use_kernel_forward_from_hub("RMSNorm")
 class LlamaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+    def __init__(self, hidden_size, eps: float = 1e-6, has_weight: bool = True) -> None:
         """
-        LlamaRMSNorm is equivalent to T5LayerNorm
+        LlamaRMSNorm is equivalent to T5LayerNorm.
+
+        Args:
+            hidden_size: dimension over which RMS is computed.
+            eps: numerical stability epsilon.
+            has_weight: when True (default), the per-channel weight is a learned
+                Parameter and applied at the end of forward. When False, the
+                norm is "weightless" (FlashNorm Proposition 1, arXiv:2407.09577):
+                the per-channel multiply is skipped via PyTorch's
+                ``F.rms_norm(weight=None)`` C++ kernel, which can deliver a
+                meaningful end-to-end speedup on FlashNorm-folded checkpoints.
+                The weight tensor is still allocated as a buffer of ones (so
+                ``.to(device)`` moves it correctly and so existing flashnorm-folded
+                HF checkpoints, which carry the all-ones tensors for HF
+                compatibility, load cleanly without unexpected-key warnings),
+                but it is not a Parameter and is not multiplied into the output.
+
+        Note: when the ``@use_kernel_forward_from_hub("RMSNorm")`` decorator
+        is configured to swap ``forward`` for a hub-loaded kernel, that kernel
+        may not honor ``has_weight=False`` unless its author specifically
+        supports the flag.
         """
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.has_weight = has_weight
+        weight_data = torch.ones(hidden_size)
+        if has_weight:
+            self.weight = nn.Parameter(weight_data)
+        else:
+            # Persistent buffer so the buffer keys are present in state_dict.
+            # This matches the existing flashnorm-folded HF checkpoints in the
+            # `weightless-rmsnorm` collection, which still carry the all-ones
+            # tensors for compatibility with stock HF Transformers loading.
+            # Without persistent=True, those keys would show up as
+            # `unexpected_keys` during from_pretrained.
+            self.register_buffer("weight", weight_data, persistent=True)
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if not self.has_weight:
+            # Weightless path: route through PyTorch's F.rms_norm C++ kernel,
+            # which branches on weight=None and skips the per-channel multiply.
+            input_dtype = hidden_states.dtype
+            return torch.nn.functional.rms_norm(
+                hidden_states.to(torch.float32),
+                (self.weight.shape[-1],),
+                None,
+                self.variance_epsilon,
+            ).to(input_dtype)
+        # Default weighted path (unchanged from before this change).
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -67,7 +109,7 @@ class LlamaRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}, has_weight={self.has_weight}"
 
 
 class LlamaRotaryEmbedding(nn.Module):
@@ -297,8 +339,17 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = LlamaAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = LlamaMLP(config)
-        self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        flashnorm_folded = getattr(config, "flashnorm_folded", False)
+        self.input_layernorm = LlamaRMSNorm(
+            config.hidden_size,
+            eps=config.rms_norm_eps,
+            has_weight=not flashnorm_folded,
+        )
+        self.post_attention_layernorm = LlamaRMSNorm(
+            config.hidden_size,
+            eps=config.rms_norm_eps,
+            has_weight=not flashnorm_folded,
+        )
 
     def forward(
         self,
@@ -362,7 +413,11 @@ class LlamaModel(LlamaPreTrainedModel):
         self.layers = nn.ModuleList(
             [LlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = LlamaRMSNorm(
+            config.hidden_size,
+            eps=config.rms_norm_eps,
+            has_weight=not getattr(config, "flashnorm_folded", False),
+        )
         self.rotary_emb = LlamaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
