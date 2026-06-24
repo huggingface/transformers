@@ -170,8 +170,8 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip(reason="xLSTM cache slicing test case is an edge case")
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    @unittest.skip(reason="xLSTM cache slicing test case is an edge case")
     def test_generate_from_inputs_embeds(self, _, num_beams):
         pass
 

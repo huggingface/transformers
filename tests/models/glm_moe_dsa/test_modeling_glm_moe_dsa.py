@@ -147,8 +147,8 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="Qwen2Moe flash attention does not support right padding")
 
-    @unittest.skip("DSA indexer mask shape mismatch with assisted decoding")
     @parameterized.expand([("random",), ("same",)])
+    @unittest.skip("DSA indexer mask shape mismatch with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
