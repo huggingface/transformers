@@ -35,6 +35,7 @@ torchrun --nproc_per_node=2 examples/scripts/sft_neuron.py \
 
 import os
 
+import torch
 from datasets import load_dataset
 from accelerate import ParallelismConfig
 from transformers import AutoModelForCausalLM, AutoConfig
@@ -83,11 +84,13 @@ def main(script_args, training_args, model_args):
         **kwargs,
     )
 
+    if int(os.environ.get("COMPILE", "0")):
+        model = torch.compile(model, backend="neuron")
+
     # ---------------------------------------------------------------------------
     # Dataset
     # ---------------------------------------------------------------------------
     dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
-
     # ---------------------------------------------------------------------------
     # Trainer
     # ---------------------------------------------------------------------------

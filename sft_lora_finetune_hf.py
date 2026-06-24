@@ -3,6 +3,7 @@
 LoRA finetuning with Tensor Parallelism on AWS Trainium.
 Supports TP sharding across Neuron cores for memory-efficient training.
 """
+
 import argparse
 import math
 import os
@@ -36,13 +37,10 @@ def build_optimizer(model, lr, weight_decay):
             params_no_decay.append(param)
 
     return torch.optim.AdamW(
-        [
-            {"params": params_decay, "weight_decay": weight_decay},
-            {"params": params_no_decay, "weight_decay": 0.0}
-        ],
+        [{"params": params_decay, "weight_decay": weight_decay}, {"params": params_no_decay, "weight_decay": 0.0}],
         lr=lr,
         betas=(0.9, 0.95),
-        foreach=False  # Required for TP (DTensor compatibility)
+        foreach=False,  # Required for TP (DTensor compatibility)
     )
 
 
@@ -84,7 +82,7 @@ def pack_dataset(tokenizer, dataset_name, max_seq_len):
 
     # Pack into (max_seq_len + 1) sized sequences for input/label pairs
     n_seqs = len(all_tokens) // (max_seq_len + 1)
-    all_tokens = all_tokens[:n_seqs * (max_seq_len + 1)]
+    all_tokens = all_tokens[: n_seqs * (max_seq_len + 1)]
 
     packed = torch.tensor(all_tokens, dtype=torch.long)
     packed = packed.view(n_seqs, max_seq_len + 1)
@@ -170,11 +168,7 @@ def main():
 
     if tp_size > 1:
         # Create 2D mesh: (data parallel, tensor parallel)
-        mesh = init_device_mesh(
-            "neuron",
-            (world_size // tp_size, tp_size),
-            mesh_dim_names=("dp", "tp")
-        )
+        mesh = init_device_mesh("neuron", (world_size // tp_size, tp_size), mesh_dim_names=("dp", "tp"))
         tp_mesh = mesh["tp"]
         dp_mesh = mesh["dp"]
         dp_size = dp_mesh.size()
@@ -187,10 +181,7 @@ def main():
 
     # Load tokenizer
     log("Loading tokenizer and dataset")
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.model_name_or_path,
-        trust_remote_code=args.trust_remote_code
-    )
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, trust_remote_code=args.trust_remote_code)
     if not tokenizer.pad_token:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -259,14 +250,11 @@ def main():
 
     # Calculate training steps
     rows_per_dp = packed.size(0) // dp_size
-    steps_per_epoch = rows_per_dp // (
-        args.per_device_train_batch_size * args.gradient_accumulation_steps
-    )
+    steps_per_epoch = rows_per_dp // (args.per_device_train_batch_size * args.gradient_accumulation_steps)
     total_steps = steps_per_epoch * args.num_train_epochs
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(
-        optimizer,
-        lambda step: cosine_schedule(step, args.warmup_steps, total_steps)
+        optimizer, lambda step: cosine_schedule(step, args.warmup_steps, total_steps)
     )
 
     global_batch = args.per_device_train_batch_size * args.gradient_accumulation_steps * dp_size
