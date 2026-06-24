@@ -117,6 +117,8 @@
         title: Kernels
       - local: kernel_doc/loading_kernels
         title: Loading kernels
+      - local: kernel_doc/writing_kernels
+        title: Writing kernels
       title: Kernels
     - local: perf_torch_compile
       title: torch.compile
