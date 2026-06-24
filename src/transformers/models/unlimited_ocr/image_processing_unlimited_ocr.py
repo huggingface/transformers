@@ -257,7 +257,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         flat_local_list = [patch for item in ordered_local if item is not None for patch in item]
 
         # --- Global view (batched by shape group) ---
-        global_target_size = size.height if crop_to_patches else tile_size
+        global_target_size = size.height
 
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_global_grouped = {}
@@ -278,8 +278,6 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         if flat_local_list:
             data["pixel_values_local"] = flat_local_list
 
-        batch_feature = BatchFeature(data=data, tensor_type=return_tensors)
-
         # Compute per-image spatial crop grid and local-patch counts.
         image_spatial_crop = []
         num_local_patches = []
@@ -296,11 +294,13 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
             image_spatial_crop.append([num_columns, num_rows])
 
         # TODO: rename
-        batch_feature["image_spatial_crop"] = torch.tensor(
-            image_spatial_crop, dtype=torch.long, device=images[0].device
+        data["image_spatial_crop"] = image_spatial_crop
+        data["num_local_patches"] = num_local_patches
+
+        return BatchFeature(
+            data=data,
+            tensor_type=return_tensors,
         )
-        batch_feature["num_local_patches"] = torch.tensor(num_local_patches, dtype=torch.long, device=images[0].device)
-        return batch_feature
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
         """
