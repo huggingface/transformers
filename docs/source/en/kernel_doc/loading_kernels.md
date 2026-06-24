@@ -41,6 +41,24 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+## AMD GPUs
+
+AMD GPUs report their device type as `cuda` in PyTorch. Transformers detects ROCm at runtime and routes supported operations to [AITER](https://github.com/ROCm/aiter) Triton kernels built for AMD hardware. You don't need to set the device type yourself.
+
+Set `use_kernels=True` and AITER kernels load automatically on a ROCm machine.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    use_kernels=True,
+    device_map="cuda"
+)
+```
+
+Browse available AITER builds for ROCm in the [kernels-community](https://huggingface.co/kernels-community/kernels) collection.
+
 ## Attention kernels
 
 Load attention kernels from the Hub with the `attn_implementation` argument.
