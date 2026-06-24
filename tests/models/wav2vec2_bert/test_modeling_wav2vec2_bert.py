@@ -85,7 +85,6 @@ class Wav2Vec2BertModelTester:
         tdnn_kernel=(3, 3),
         tdnn_dilation=(1, 2),
         xvector_output_dim=2,
-        position_embeddings_type="relative",
         scope=None,
     ):
         self.parent = parent
@@ -114,7 +113,6 @@ class Wav2Vec2BertModelTester:
         self.tdnn_kernel = tdnn_kernel
         self.tdnn_dilation = tdnn_dilation
         self.xvector_output_dim = xvector_output_dim
-        self.position_embeddings_type = position_embeddings_type
 
         self.output_seq_length = self.seq_length
         self.encoder_seq_length = self.output_seq_length
