@@ -252,7 +252,6 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
     routed_scaling_factor: float = 1.0
     topk_group: int | None = None
     topk_method: str | None = "greedy"
-    norm_topk_prob: bool | None = False
     num_experts_per_tok: int | None = None
     moe_intermediate_size: int = 1407
 

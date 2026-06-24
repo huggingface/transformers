@@ -158,6 +158,7 @@ class DeepseekV2Experts(Qwen2MoeExperts):
 class DeepseekV2TopkRouter(Qwen2MoeTopKRouter):
     def __init__(self, config: DeepseekV2Config):
         super().__init__(config)
+        del self.norm_topk_prob
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
         self.num_group = config.n_group

@@ -604,6 +604,7 @@ class DeepseekOcr2TextConfig(DeepseekV2Config):
     # Remove unused attributes inherited from DeepseekV2Config
     first_k_dense_replace = AttributeError()
     kv_lora_rank = AttributeError()
+    norm_topk_prob = AttributeError()
     q_lora_rank = AttributeError()
     qk_nope_head_dim = AttributeError()
     qk_rope_head_dim = AttributeError()
