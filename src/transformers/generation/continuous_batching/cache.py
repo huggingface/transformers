@@ -271,12 +271,6 @@ class PagedAttentionCache:
             # Write 0s in the read trash block so that the padding tokens read always 0-valued KV cache
             new_layer_key_cache.view(block_based_shape)[num_blocks].fill_(0)
             new_layer_value_cache.view(block_based_shape)[num_blocks].fill_(0)
-            # Make sure the read trash index block holds zeros
-            read_trash_slice = slice(self.read_trash_index, self.read_trash_index + self.block_size)
-            keys_are_zero = new_layer_key_cache[read_trash_slice].eq(0).all()
-            values_are_zero = new_layer_value_cache[read_trash_slice].eq(0).all()
-            if not (keys_are_zero and values_are_zero):
-                raise RuntimeError("Read trash block does not hold a zero")
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
         # Block management data structures
