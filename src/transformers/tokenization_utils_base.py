@@ -305,7 +305,7 @@ class BatchEncoding(UserDict, Generic[_V]):
     @property
     def is_fast(self) -> bool:
         """
-        TOOD: ita i will rm this `bool`: Whether or not this BatchEncoding was created by a fast tokenizer.
+        TODO: ita i will rm this `bool`: Whether or not this BatchEncoding was created by a fast tokenizer.
         """
         return self._encodings is not None
 
