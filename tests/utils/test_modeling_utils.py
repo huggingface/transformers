@@ -1161,6 +1161,40 @@ class ModelUtilsTest(TestCasePlus):
             torch.testing.assert_close(outputs1[0].cpu(), outputs2[0].cpu())
 
     @slow
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_onload_dtype(self):
+        from accelerate.utils import align_module_device
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # load model with full disk offloading
+            model = AutoModelForCausalLM.from_pretrained(
+                "inference-optimization/DSV4-tiny-empty",
+                device_map="auto",
+                max_memory={},
+                offload_folder=tmp_dir,
+                offload_buffers=True,
+            )
+
+            # note that `model.dtype` and the dtype of `tid2eid` differ
+            offloaded = model.model.layers[0].mlp.gate.tid2eid
+            self.assertEqual(offloaded.dtype, torch.int64)
+            self.assertEqual(model.dtype, torch.bfloat16)
+
+            # the dtype used to load from disk should match
+            index = model.model.layers[0].mlp.gate._hf_hook.weights_map.dataset.index
+            weights_info = index["model.layers.0.mlp.gate.tid2eid"]
+            weights_info_type = getattr(torch, weights_info["dtype"])
+            self.assertEqual(weights_info_type, offloaded.dtype)
+            self.assertEqual(weights_info_type, torch.int64)
+
+            # the onloaded dtype should be the weight dtype, not the model dtype
+            with align_module_device(model.model.layers[0].mlp.gate):
+                self.assertEqual(model.model.layers[0].mlp.gate.tid2eid.dtype, offloaded.dtype)
+                self.assertEqual(model.model.layers[0].mlp.gate.tid2eid.dtype, torch.int64)
+
+    @slow
     @require_torch
     def test_from_pretrained_non_contiguous_checkpoint(self):
         # See: https://github.com/huggingface/transformers/pull/28414
