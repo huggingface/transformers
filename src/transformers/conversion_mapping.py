@@ -104,6 +104,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
+    "openpangu_v2": "qwen2_moe",
     # class-based mappings
     "PaliGemmaModel": "LlavaModel",
     "AyaVisionModel": "LlavaModel",

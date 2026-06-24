@@ -320,6 +320,7 @@ if TYPE_CHECKING:
     from .oneformer import *
     from .openai import *
     from .openai_privacy_filter import *
+    from .openpangu_v2 import *
     from .opt import *
     from .ovis2 import *
     from .owlv2 import *

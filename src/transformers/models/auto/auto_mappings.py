@@ -429,6 +429,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("oneformer", "OneFormerConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
         ("openai_privacy_filter", "OpenAIPrivacyFilterConfig"),
+        ("openpangu_v2", "OpenPanguV2Config"),
         ("opt", "OPTConfig"),
         ("ovis2", "Ovis2Config"),
         ("owlv2", "Owlv2Config"),
