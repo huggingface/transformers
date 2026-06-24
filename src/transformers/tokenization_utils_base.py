@@ -3446,8 +3446,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         spec's `start_anchor`). Generated chunks fed via `stream.feed()` are then classified
         correctly even when the chat template emitted assistant-turn content (e.g., `<think>\\n`)
         that the model continues from."""
-        tmpl = response_template if response_template is not None else getattr(self, "response_template", None)
-        if tmpl is None:
+        template = response_template if response_template is not None else getattr(self, "response_template", None)
+        if template is None:
             raise AttributeError(
                 "This tokenizer does not have a `response_template` set; cannot create a response event stream."
             )
@@ -3457,7 +3457,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 raise ValueError(
                     "`prefix=` must be a single sequence (str, list[int], or 1D tensor) for `get_response_parser`."
                 )
-        return ResponseParser(tmpl, prefix=prefix)
+        return ResponseParser(template, prefix=prefix)
 
 
 def get_fast_tokenizer_file(tokenization_files: list[str]) -> str:

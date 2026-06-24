@@ -163,12 +163,8 @@ _PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
 
 def _apply_transform(transform: Any, scope: dict) -> Any:
-    """Recursively walk a transform template. A string matching the whole-string
-    placeholder pattern `{name}` is replaced with the value of `name` in
-    `scope`, with the value's type preserved (so `"{content}"` resolving to a
-    dict stays a dict). Strings without any placeholder are literals. Mixing
-    a placeholder with literal text in the same string is rejected at
-    template load time; see `validate_transform_strings`."""
+    """Recursively walk a transform template, which is used to restructure
+    parsed output into the actual shape we want."""
     if isinstance(transform, dict):
         return {k: _apply_transform(v, scope) for k, v in transform.items()}
     if isinstance(transform, list):

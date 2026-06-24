@@ -71,16 +71,23 @@ class ResponseTemplate:
 
 
 def _compile_anchor(scope: str, field: dict, literal_key: str, pattern_key: str) -> tuple[Any, list[str] | None, bool]:
-    """The start and end anchors for a region can be either regexes, a single literal string, or a list of
-    literal strings (an "any of these" alternation). Although all forms get compiled to a regex for matching,
-    we keep the literal strings around too - when present, the parser can emit regions more quickly, since it
-    knows exactly how many trailing bytes might be a partial-match prefix (and that a finished literal match
-    can never be extended by future bytes, with the one exception of literals that are prefixes of others in
-    the same list).
+    """Compile a region's start/end anchor. An anchor can be:
 
-    Returns `(compiled_re, literals, can_extend)` where `literals` is `None` for regex anchors and a list of
-    literal strings otherwise; `can_extend` is `True` iff one literal in the list is a strict prefix of
-    another, in which case a successful match at the buffer edge could still be lengthened by future input.
+    - a regex (`pattern_key`),
+    - a single literal string (`literal_key`), or
+    - a list of literal strings (`literal_key`), in which case any of these match
+
+    All forms compile to a regex for matching, but we keep the literal strings around too: when present,
+    the parser can emit regions faster, since it knows exactly how many trailing bytes might be a
+    partial-match prefix (and that a finished literal match can never be extended by future bytes, except
+    when a literal is a strict prefix of another in the same list).
+
+    Returns `(compiled_re, literals, can_extend)`:
+
+    - `compiled_re`: the compiled pattern.
+    - `literals`: the literal strings, or `None` for a regex anchor.
+    - `can_extend`: `True` iff one literal is a strict prefix of another, in which case a match at the
+      buffer edge could still be lengthened by future input.
     """
     if literal_key in field and pattern_key in field:
         raise ValueError(f"{scope}: cannot specify both '{literal_key}' and '{pattern_key}'")

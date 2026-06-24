@@ -122,8 +122,6 @@ class ResponseParser:
         self._finalized = True
         return self._output, events
 
-    # Matt: The private methods below cover the internals of the class and are mostly agent-written.
-
     def _process(self, events: list[dict], eos: bool) -> None:
         while True:
             watch = self._watchlist()
