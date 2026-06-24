@@ -25,9 +25,10 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import auto_docstring
+from ...utils import TensorType, auto_docstring
 
 
 class UnlimitedOcrImageProcessorKwargs(ImagesKwargs, total=False):
@@ -207,39 +208,79 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        size,
+        size: SizeDict,
         crop_to_patches: bool,
         min_patches: int,
         max_patches: int,
         tile_size: int,
-        resample,
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean,
-        image_std,
+        image_mean: "float | list[float] | None",
+        image_std: "float | list[float] | None",
         disable_grouping: bool | None,
-        return_tensors,
+        return_tensors: "str | TensorType | None",
         **kwargs,
     ) -> BatchFeature:
-        batch_feature = super()._preprocess(
-            images,
-            size=size,
-            crop_to_patches=crop_to_patches,
-            min_patches=min_patches,
-            max_patches=max_patches,
-            tile_size=tile_size,
-            resample=resample,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            disable_grouping=disable_grouping,
-            return_tensors=return_tensors,
-            **kwargs,
-        )
+        # --- Local patches (batched by shape group) ---
+        num_local_patches_grouped = {}
+        local_patches_grouped = {}
 
+        if crop_to_patches:
+            grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+
+            for shape, stacked_images in grouped_images.items():
+                h, w = shape[-2:]
+                if max(h, w) > tile_size:
+                    stacked_patches, n_patches = self.crop_image_to_patches(
+                        stacked_images,
+                        min_patches=min_patches,
+                        max_patches=max_patches,
+                        tile_size=tile_size,
+                        resample=resample,
+                    )
+                    flat_patches = stacked_patches.reshape(-1, *stacked_patches.shape[2:])
+                    flat_patches = self.rescale_and_normalize(
+                        flat_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                    )
+                    local_patches_grouped[shape] = flat_patches.reshape(stacked_patches.shape)
+                    num_local_patches_grouped[shape] = [n_patches] * stacked_images.shape[0]
+                else:
+                    local_patches_grouped[shape] = [None] * stacked_images.shape[0]
+                    num_local_patches_grouped[shape] = [0] * stacked_images.shape[0]
+
+            ordered_local = reorder_images(local_patches_grouped, grouped_images_index)
+        else:
+            ordered_local = []
+
+        flat_local_list = [patch for item in ordered_local if item is not None for patch in item]
+
+        # --- Global view (batched by shape group) ---
+        global_target_size = size.height if crop_to_patches else tile_size
+
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_global_grouped = {}
+        for shape, stacked in grouped_images.items():
+            h, w = shape[-2:]
+            scale = global_target_size / max(h, w)
+            new_h = round(h * scale)
+            new_w = round(w * scale)
+            stacked = self.resize(stacked, SizeDict(height=new_h, width=new_w), resample=resample)
+            stacked = self.pad_to_square(stacked, background_color=self.background_color)
+            stacked = self.rescale_and_normalize(
+                stacked, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_global_grouped[shape] = stacked
+        all_pixel_values_global = reorder_images(processed_global_grouped, grouped_images_index)
+
+        data = {"pixel_values": all_pixel_values_global}
+        if flat_local_list:
+            data["pixel_values_local"] = flat_local_list
+
+        batch_feature = BatchFeature(data=data, tensor_type=return_tensors)
+
+        # Compute per-image spatial crop grid and local-patch counts.
         image_spatial_crop = []
         num_local_patches = []
         for image in images:
