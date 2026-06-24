@@ -1,4 +1,4 @@
-# Copyright 2025 Alibaba DAMO Academy and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 Alibaba DAMO Academy and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,10 +13,9 @@
 # limitations under the License.
 """Processor for Fun-ASR-Nano."""
 
-import numpy as np
-
+from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 
@@ -24,6 +23,21 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "audio_kwargs": {
+            "sampling_rate": 16000,
+        },
+        "text_kwargs": {
+            "padding": True,
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
+    }
+
+
+@auto_docstring
 class FunAsrNanoProcessor(ProcessorMixin):
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "FunAsrNanoFeatureExtractor"
@@ -39,9 +53,10 @@ class FunAsrNanoProcessor(ProcessorMixin):
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
-            The token to use for audio placeholders.
+            The token used as a placeholder for audio in the text.
         audio_downsample_rate (`int`, *optional*, defaults to 1):
-            Downsampling ratio applied by the audio adaptor, used to expand audio placeholder tokens.
+            Downsampling ratio applied by the audio adaptor, used to expand the audio placeholder token to the right
+            number of audio tokens.
         """
         if tokenizer is not None and tokenizer.convert_tokens_to_ids(audio_token) is None:
             raise ValueError(f"Audio token {audio_token!r} is not present in the tokenizer vocabulary.")
@@ -54,10 +69,9 @@ class FunAsrNanoProcessor(ProcessorMixin):
     def __call__(
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        audio: np.ndarray | list[np.ndarray] | None = None,
+        audio: AudioInput | None = None,
         sampling_rate: int | None = None,
-        return_tensors: str | None = None,
-        **kwargs,
+        **kwargs: Unpack[FunAsrNanoProcessorKwargs],
     ) -> BatchFeature:
         r"""
         sampling_rate (`int`, *optional*):
@@ -66,32 +80,43 @@ class FunAsrNanoProcessor(ProcessorMixin):
         if text is None:
             raise ValueError("You need to specify `text` input to process.")
 
-        is_batched_text = isinstance(text, list)
-        text = list(text) if is_batched_text else [text]
+        output_kwargs = self._merge_kwargs(
+            FunAsrNanoProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        audio_kwargs = output_kwargs["audio_kwargs"]
+        text_kwargs = output_kwargs["text_kwargs"]
+        return_tensors = text_kwargs.pop("return_tensors", None)
+
+        text = list(text) if isinstance(text, list) else [text]
+
         audio_features = None
         if audio is not None:
+            audio = make_list_of_audio(audio)
             audio_features = self.feature_extractor(
                 audio,
-                sampling_rate=sampling_rate or self.feature_extractor.sampling_rate,
+                sampling_rate=sampling_rate or audio_kwargs.get("sampling_rate"),
                 return_tensors=return_tensors,
             )
 
             num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
-            num_audios = 1 if isinstance(audio, np.ndarray) and audio.ndim == 1 else len(audio)
+            num_audios = len(audio)
             if num_audio_tokens != num_audios:
                 raise ValueError(
                     f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} "
                     f"in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}."
                 )
 
+            # Expand each audio placeholder into as many tokens as the (downsampled) audio feature length.
             audio_lengths = audio_features["feature_lengths"].tolist()
             expanded_text = []
             for sample in text:
                 replace_str = []
                 while self.audio_token in sample:
                     audio_length = audio_lengths.pop(0)
-                    num_audio_tokens = (audio_length - 1) // self.audio_downsample_rate + 1
-                    replace_str.append(self.audio_token * int(num_audio_tokens))
+                    num_tokens = (audio_length - 1) // self.audio_downsample_rate + 1
+                    replace_str.append(self.audio_token * int(num_tokens))
                     sample = sample.replace(self.audio_token, "<placeholder>", 1)
 
                 while "<placeholder>" in sample:
@@ -99,20 +124,15 @@ class FunAsrNanoProcessor(ProcessorMixin):
                 expanded_text.append(sample)
             text = expanded_text
 
-        tokenizer_kwargs = kwargs.copy()
-        tokenizer_kwargs.setdefault("padding", True)
-        text_inputs = self.tokenizer(
-            text,
-            return_tensors=return_tensors,
-            **tokenizer_kwargs,
-        )
+        text_inputs = self.tokenizer(text, return_tensors=return_tensors, **text_kwargs)
 
         if audio_features is not None:
             return BatchFeature(data={**text_inputs, **audio_features})
 
         return BatchFeature(data=dict(text_inputs))
 
-    # `decode` / `batch_decode` are inherited from `ProcessorMixin` and forward to the tokenizer.
+    # `decode` and `batch_decode` are inherited from `ProcessorMixin` and forward to the tokenizer; the base `decode`
+    # already handles batches, so no custom override is needed here.
 
     @property
     def model_input_names(self):

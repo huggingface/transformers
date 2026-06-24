@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Alibaba DAMO Academy and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 Alibaba DAMO Academy and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -66,33 +66,37 @@ CHAT_TEMPLATE = (
 def load_original_checkpoint(checkpoint_path: str) -> dict:
     """Load the original FunASR model.pt checkpoint."""
     state_dict = torch.load(checkpoint_path, map_location="cpu")
-    if "model" in state_dict:
+    if "state_dict" in state_dict:
+        state_dict = state_dict["state_dict"]
+    elif "model" in state_dict:
         state_dict = state_dict["model"]
     return state_dict
 
 
-def convert_encoder_key(key: str) -> str | None:
-    """Convert original encoder key to HF format (keys already match)."""
-    if key.startswith("audio_encoder."):
-        return key
-    return None
+def convert_key(key: str) -> str | None:
+    """Map an original FunASR checkpoint key to the HF (split) layout.
 
+    The HF model is split into a base [`FunAsrNanoModel`] (holding the audio encoder, adaptor and the *headless*
+    language model) plus a separate `lm_head`, mirroring AudioFlamingo3 / Voxtral. The mapping is therefore:
 
-def convert_adaptor_key(key: str) -> str | None:
-    """Convert original adaptor key to HF format (keys already match)."""
-    if key.startswith("audio_adaptor."):
-        return key
-    return None
+        audio_encoder.*       -> model.audio_encoder.*
+        audio_adaptor.*       -> model.audio_adaptor.*
+        llm.model.*           -> model.language_model.*
+        llm.lm_head.weight    -> lm_head.weight
 
-
-def convert_llm_key(key: str) -> str | None:
-    """Convert original LLM key to HF format.
-
-    Original: llm.model.layers.0.self_attn.q_proj.weight
-    Target:   language_model.model.layers.0.self_attn.q_proj.weight
+    Returns `None` for keys that are not used by the generation path (e.g. the CTC / timestamp branch).
     """
-    if key.startswith("llm."):
-        return "language_model." + key[4:]
+    if key.startswith("audio_encoder."):
+        return "model." + key
+    if key.startswith("audio_adaptor."):
+        return "model." + key
+    if key.startswith("llm.lm_head."):
+        # Keep lm_head.weight explicitly. Although tie_word_embeddings=True, this model load path
+        # does not retie lm_head from the embeddings, and the source already stores lm_head == embeddings.
+        # safetensors deduplicates the shared storage, so this adds no extra disk over the embeddings.
+        return "lm_head." + key[len("llm.lm_head.") :]
+    if key.startswith("llm.model."):
+        return "model.language_model." + key[len("llm.model.") :]
     return None
 
 
@@ -166,14 +170,11 @@ def convert_checkpoint(
     unconverted_keys = []
 
     for key, value in original_state_dict.items():
-        new_key = convert_encoder_key(key)
-        if new_key is None:
-            new_key = convert_adaptor_key(key)
-        if new_key is None:
-            new_key = convert_llm_key(key)
-
+        new_key = convert_key(key)
         if new_key is not None:
-            converted_state_dict[new_key] = value
+            # Cast every weight to bfloat16 so the checkpoint is dtype-consistent with the
+            # bf16 LLM (and the old hub layout); the source SAN-M encoder/adaptor are stored in F32.
+            converted_state_dict[new_key] = value.to(torch.bfloat16)
         else:
             # CTC / timestamp branch is not used for the generation path and is intentionally dropped.
             unconverted_keys.append(key)
@@ -185,8 +186,10 @@ def convert_checkpoint(
         if len(unconverted_keys) > 20:
             print(f"  ... and {len(unconverted_keys) - 20} more")
 
+    # Keep the serialized config dtype consistent with the bf16 weights.
+    config.dtype = "bfloat16"
     print("Initializing HF model...")
-    model = FunAsrNanoForConditionalGeneration(config)
+    model = FunAsrNanoForConditionalGeneration(config).to(torch.bfloat16)
 
     print("Loading converted weights...")
     missing, unexpected = model.load_state_dict(converted_state_dict, strict=False)

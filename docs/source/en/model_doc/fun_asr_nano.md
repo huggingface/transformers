@@ -167,6 +167,11 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 [[autodoc]] FunAsrNanoEncoder
     - forward
 
+## FunAsrNanoModel
+
+[[autodoc]] FunAsrNanoModel
+    - forward
+
 ## FunAsrNanoForConditionalGeneration
 
 [[autodoc]] FunAsrNanoForConditionalGeneration
