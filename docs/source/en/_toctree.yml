@@ -1121,6 +1121,8 @@
         title: MusicGen Melody
       - local: model_doc/nemotron_asr_streaming
         title: NemotronAsrStreaming
+      - local: model_doc/nemotron3_5_asr
+        title: Nemotron 3.5 ASR
       - local: model_doc/parakeet
         title: Parakeet
       - local: model_doc/pe_audio
