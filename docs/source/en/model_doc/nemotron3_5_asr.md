@@ -19,41 +19,166 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Nemotron3_5Asr is the **multilingual** extension of [NemotronAsr](./nemotron_asr) (`nvidia/nemotron-3.5-asr-streaming-0.6b`).
-It reuses the entire cache-aware streaming [Fast Conformer](https://huggingface.co/papers/2305.05084) encoder, RNN-T
-(Recurrent Neural Network Transducer) head, feature extraction, and streaming generation of [`NemotronAsr`], and adds
-**language-ID prompt conditioning** so a single model transcribes 40 language-locales.
-
-The target language is turned into a one-hot vector, broadcast across the encoder time axis, concatenated with the
-encoder output, and fused back to the encoder hidden size by a small MLP (`prompt_kernel`) before the joint network.
-Pass the language through the processor's `language` argument (Whisper-style; a locale such as `"en-US"`/`"de-DE"`, a
-bare code such as `"de"`, or `"auto"` for automatic language detection). In `auto` mode the model appends an `<xx-XX>` language tag
-after the transcript's terminal punctuation. The tag is a special token, so `decode`/`batch_decode` with the default
-`skip_special_tokens=True` strip it (clean transcript); pass `skip_special_tokens=False` to keep it for language labeling.
+TODO
 
 ## Usage
 
+### Offline transcription
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
 ```python
-from transformers import AutoProcessor, Nemotron3_5AsrForRNNT
-from datasets import load_dataset, Audio
+from transformers import pipeline
+
+pipe = pipeline(
+    "automatic-speech-recognition",
+    model="nvidia/nemotron-3.5-asr-streaming-0.6b",
+    revision="refs/pr/20",
+)
+out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
+print(out)
+```
+
+> [!NOTE]
+> The pipeline uses the default language prompt (index 0, `en-US`). For explicit language conditioning or automatic detection, pass the processor's `language` argument (see the AutoModel tab).
+
+</hfoption>
+<hfoption id="AutoModel">
+
+The language prompt is created by the processor, so the language travels with the inputs into `generate`.
+
+```python
+from transformers import AutoModelForRNNT, AutoProcessor
+from transformers.audio_utils import load_audio
 
 model_id = "nvidia/nemotron-3.5-asr-streaming-0.6b"
-processor = AutoProcessor.from_pretrained(model_id)
-model = Nemotron3_5AsrForRNNT.from_pretrained(model_id).eval()
+revision = "refs/pr/20"
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, device_map="auto")
 
-ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+audio = load_audio(
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+    sampling_rate=processor.feature_extractor.sampling_rate,
+)
 
 # Condition on a known language ...
-inputs = processor(ds[0]["audio"]["array"], sampling_rate=16000, language="en-US")
-generated = model.generate(**inputs)
-print(processor.batch_decode(generated.sequences, skip_special_tokens=True))
+inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate, language="en-US")
+inputs.to(model.device, dtype=model.dtype)
+output = model.generate(**inputs, return_dict_in_generate=True)
+print(processor.decode(output.sequences, skip_special_tokens=True))
 
-# ... or let the model detect it and keep the emitted language tag.
-inputs = processor(ds[0]["audio"]["array"], sampling_rate=16000, language="auto")
-generated = model.generate(**inputs)
-print(processor.batch_decode(generated.sequences, skip_special_tokens=False))
+# ... or let the model detect it and keep the emitted <xx-XX> language tag.
+inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate, language="auto")
+inputs.to(model.device, dtype=model.dtype)
+output = model.generate(**inputs, return_dict_in_generate=True)
+print(processor.decode(output.sequences, skip_special_tokens=False))
 ```
+
+</hfoption>
+</hfoptions>
+
+### Streaming transcription
+> [!NOTE]
+> This is an experimental feature and the API is subject to change.
+
+For real-time transcription, audio is split into chunks following:
+
+```python
+from threading import Thread
+from transformers import AutoModelForRNNT, AutoProcessor, TextIteratorStreamer
+from transformers.audio_utils import load_audio
+
+model_id = "nvidia/nemotron-3.5-asr-streaming-0.6b"
+revision = "refs/pr/20"
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, device_map="auto")
+
+processor.set_num_lookahead_tokens(6)
+print(f"Streaming latency: {processor.streaming_latency_ms} ms")
+
+# The language prompt rides along on every chunk; use a locale (e.g. "de-DE") or "auto".
+language = "en-US"
+
+sampling_rate = processor.feature_extractor.sampling_rate
+audio = load_audio(
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
+    sampling_rate=sampling_rate,
+)
+
+first_chunk_inputs = processor(
+    audio[: processor.num_samples_first_audio_chunk],
+    sampling_rate=sampling_rate,
+    is_streaming=True,
+    is_first_audio_chunk=True,
+    language=language,
+    return_tensors="pt",
+)
+first_chunk_inputs = first_chunk_inputs.to(model.device, dtype=model.dtype)
+
+
+def input_features_generator():
+    yield first_chunk_inputs.input_features[:, : processor.num_mel_frames_first_audio_chunk, :]
+
+    mel_frame_idx = processor.num_mel_frames_first_audio_chunk
+    hop_length = processor.feature_extractor.hop_length
+    n_fft = processor.feature_extractor.n_fft
+
+    start_idx = mel_frame_idx * hop_length - n_fft // 2
+    while (end_idx := start_idx + processor.num_samples_per_audio_chunk) < audio.shape[0]:
+        inputs = processor(
+            audio[start_idx:end_idx],
+            sampling_rate=sampling_rate,
+            is_streaming=True,
+            is_first_audio_chunk=False,
+            language=language,
+            return_tensors="pt",
+        )
+        inputs = inputs.to(model.device, dtype=model.dtype)
+        yield inputs.input_features
+
+        mel_frame_idx += processor.num_mel_frames_per_audio_chunk
+        start_idx = mel_frame_idx * hop_length - n_fft // 2
+
+
+streamer = TextIteratorStreamer(processor.tokenizer, skip_special_tokens=True)
+generate_kwargs = {
+    **first_chunk_inputs,
+    "input_features": input_features_generator(),
+    "streamer": streamer,
+}
+thread = Thread(target=model.generate, kwargs=generate_kwargs)
+thread.start()
+
+# Iterate over the streamer to get text chunks as they are generated
+print("Model output (streaming):", end=" ", flush=True)
+for text_chunk in streamer:
+    print(text_chunk, end="", flush=True)
+thread.join()
+```
+
+#### Streaming latency
+
+The latency is set by `num_lookahead_tokens`, the right attention context (lookahead, in subsampled encoder frames) each chunk waits for before it is emitted. A larger value lets each chunk see more future audio: better accuracy at the cost of higher latency. Inspect the supported trade-offs, select one, and read back the resulting latency:
+
+```python
+from transformers import AutoProcessor
+
+processor = AutoProcessor.from_pretrained("nvidia/nemotron-3.5-asr-streaming-0.6b", revision="refs/pr/20")
+
+# Each supported `num_lookahead_tokens` mapped to its streaming latency in milliseconds:
+print(processor.supported_streaming_latencies_ms)
+# {3: 320, 0: 80, 6: 560, 13: 1120}
+
+# Select a right attention context (this also re-derives the streaming chunk sizes used above):
+processor.set_num_lookahead_tokens(6)
+
+# Latency of the current selection:
+print(processor.streaming_latency_ms)
+# 560
+```
+
+`set_num_lookahead_tokens` sizes the chunks the processor emits, and the matching `num_lookahead_tokens` must reach `generate` (in the snippet above it travels through `**inputs`/`**first_chunk_inputs`, which carries `num_lookahead_tokens`). Streaming `generate` raises if it is omitted.
 
 ## Nemotron3_5AsrConfig
 

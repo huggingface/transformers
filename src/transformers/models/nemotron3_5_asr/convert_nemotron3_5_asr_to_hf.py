@@ -390,13 +390,17 @@ def convert_rnnt_config(nemo_config, encoder_config, prompt_intermediate_size):
     activation = jointnet.get("activation", "relu")
     max_symbols_per_step = nemo_config.get("decoding", {}).get("greedy", {}).get("max_symbols", 10)
 
-    num_prompts, _ = _resolve_prompt_conditioning(nemo_config)
+    num_prompts, prompt_dictionary = _resolve_prompt_conditioning(nemo_config)
+    # Match NeMo's default of `target_lang="auto"`: condition on the auto language-detection slot when no
+    # `prompt_ids` are provided.
+    default_prompt_id = int(prompt_dictionary.get("auto", 101))
 
     print(
         f"RNN-T config: vocab_size={vocab_size} (including blank token), "
         f"decoder_hidden={decoder_hidden_size}, joint_hidden={joint_hidden_size}, "
         f"decoder_layers={num_decoder_layers}, max_symbols_per_step={max_symbols_per_step}, "
-        f"num_prompts={num_prompts}, prompt_intermediate_size={prompt_intermediate_size}"
+        f"num_prompts={num_prompts}, prompt_intermediate_size={prompt_intermediate_size}, "
+        f"default_prompt_id={default_prompt_id}"
     )
 
     return Nemotron3_5AsrConfig(
@@ -411,6 +415,7 @@ def convert_rnnt_config(nemo_config, encoder_config, prompt_intermediate_size):
         blank_token_id=blank_token_id,
         num_prompts=num_prompts,
         prompt_intermediate_size=prompt_intermediate_size,
+        default_prompt_id=default_prompt_id,
     )
 
 

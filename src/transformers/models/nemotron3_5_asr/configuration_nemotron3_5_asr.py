@@ -49,6 +49,10 @@ class Nemotron3_5AsrConfig(PreTrainedConfig):
     prompt_intermediate_size (`int`, *optional*, defaults to 2048):
         Hidden size of the `prompt_kernel` fusion MLP (`Linear(hidden + num_prompts -> intermediate)
         -> ReLU -> Linear(intermediate -> hidden)`).
+    default_prompt_id (`int`, *optional*, defaults to 101):
+        Prompt index used to condition the model when `prompt_ids` is not provided. Defaults to the
+        `auto` language-detection slot (index 101 in the NeMo prompt dictionary), matching NeMo's default
+        of `target_lang="auto"`: the model detects the language itself and emits an `<xx-XX>` tag.
 
     Example:
     ```python
@@ -77,6 +81,7 @@ class Nemotron3_5AsrConfig(PreTrainedConfig):
     durations: list[int] | tuple[int, ...] = ()
     num_prompts: int = 128
     prompt_intermediate_size: int = 2048
+    default_prompt_id: int = 101
 
     def __post_init__(self, **kwargs):
         if self.decoder_hidden_size != self.joint_hidden_size:

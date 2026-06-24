@@ -67,6 +67,7 @@ class Nemotron3_5AsrForRNNTModelTester:
         pad_token_id=2,
         num_prompts=8,
         prompt_intermediate_size=16,
+        default_prompt_id=3,
         is_training=True,
     ):
         self.parent = parent
@@ -87,6 +88,7 @@ class Nemotron3_5AsrForRNNTModelTester:
         self.max_symbols_per_step = max_symbols_per_step
         self.pad_token_id = pad_token_id
         self.num_prompts = num_prompts
+        self.default_prompt_id = default_prompt_id
         self.prompt_intermediate_size = prompt_intermediate_size
         self.is_training = is_training
 
@@ -123,6 +125,7 @@ class Nemotron3_5AsrForRNNTModelTester:
             blank_token_id=self.blank_token_id,
             num_prompts=self.num_prompts,
             prompt_intermediate_size=self.prompt_intermediate_size,
+            default_prompt_id=self.default_prompt_id,
         )
 
     def prepare_config_and_inputs(self):
@@ -198,14 +201,16 @@ class Nemotron3_5AsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertFalse(torch.allclose(logits_a, logits_b))
 
     def test_missing_prompt_ids_defaults(self):
-        """Without `prompt_ids` the model defaults to prompt index 0 (with a warning) and still runs."""
+        """Without `prompt_ids` the model defaults to `config.default_prompt_id` (with a warning) and still runs."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = Nemotron3_5AsrForRNNT(config=config).to(torch_device).eval()
         no_prompt = {k: v.to(torch_device) for k, v in inputs_dict.items() if k != "prompt_ids"}
-        zeros = torch.zeros(no_prompt["input_features"].shape[0], dtype=torch.long, device=torch_device)
+        default_prompt = torch.full(
+            (no_prompt["input_features"].shape[0],), config.default_prompt_id, dtype=torch.long, device=torch_device
+        )
         with torch.no_grad():
             default_logits = model(**no_prompt).logits
-            explicit_logits = model(**no_prompt, prompt_ids=zeros).logits
+            explicit_logits = model(**no_prompt, prompt_ids=default_prompt).logits
         torch.testing.assert_close(default_logits, explicit_logits)
 
     @unittest.skip(reason="Nemotron3_5AsrForRNNT does not use inputs_embeds")
@@ -276,9 +281,10 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUp(cls):
-        cls.checkpoint_name = "/raid/eustache/nemotron3_5_asr_hf"
+        cls.checkpoint_name = "nvidia/nemotron-3.5-asr-streaming-0.6b"
+        cls.revision = "refs/pr/20"
         cls.dtype = torch.float32
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -304,7 +310,9 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
             expected = json.load(f)
 
         samples = self._load_datasamples(1)
-        model = Nemotron3_5AsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+        model = Nemotron3_5AsrForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+        )
 
         # `expected["results"]` maps each prompting mode -> {"transcriptions", "token_ids"}: `"en-US"` forces
         # the language via the prompt, `"auto"` lets the model detect it (it emits the `<en-US>` tag itself).
@@ -339,7 +347,9 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
             expected = json.load(f)
 
         samples = self._load_datasamples(5)
-        model = Nemotron3_5AsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+        model = Nemotron3_5AsrForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+        )
 
         # `expected["results"]` maps each prompting mode -> {"transcriptions", "token_ids"}: `"en-US"` forces
         # the language via the prompt, `"auto"` lets the model detect it (it emits the `<en-US>` tag itself).
@@ -399,7 +409,9 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3",
             sampling_rate=sampling_rate,
         )
-        model = Nemotron3_5AsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto").eval()
+        model = Nemotron3_5AsrForRNNT.from_pretrained(
+            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+        )
 
         # Select the streaming right attention context (lookahead, in subsampled encoder frames). This sizes
         # the audio/mel chunks the processor emits and must reach `generate` so the forward matches; it travels
