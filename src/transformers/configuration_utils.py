@@ -445,11 +445,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             key = super().__getattribute__("attribute_map")[key]
 
         # HeterogeneousConfigMixin: per-layer attributes are ambiguous on the global config,
-        # so delegate access handling to the mixin before falling back to regular attribute lookup.
-        handle_heterogeneous_attribute_access = super().__getattribute__("_handle_heterogeneous_attribute_access")
-        heterogeneous_attribute_access_result = handle_heterogeneous_attribute_access(key)
-        if heterogeneous_attribute_access_result.has_value:
-            return heterogeneous_attribute_access_result.value
+        # so make sure access is valid or intentionally allowed.
+        super().__getattribute__("_validate_heterogeneous_config_attribute_access")(key)
 
         return super().__getattribute__(key)
 

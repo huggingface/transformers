@@ -94,6 +94,15 @@ class TestHeterogeneousConfig(unittest.TestCase):
         # Other attributes are unaffected
         self.assertEqual(config.per_layer_config[0].hidden_size, 64)
 
+    def test_per_layer_config_reassignment_uses_existing_global_fallback(self):
+        config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}})
+
+        config.per_layer_config = {1: {"num_key_value_heads": 1}}
+
+        self.assertEqual(config.to_dict()["per_layer_config"], {"1": {"num_key_value_heads": 1}})
+        self.assertEqual(config.per_layer_config[0].num_key_value_heads, 4)
+        self.assertEqual(config.per_layer_config[1].num_key_value_heads, 1)
+
     def test_per_layer_values_matching_global_are_removed_from_sparse_config(self):
         config = _tiny_llama_config(
             per_layer_config={
@@ -194,7 +203,6 @@ class TestHeterogeneousConfig(unittest.TestCase):
 
         keys = list(config)
 
-        self.assertFalse(config.allow_global_per_layer_attribute_access)
         self.assertNotIn("num_key_value_heads", keys)
         self.assertIn("hidden_size", keys)
 
