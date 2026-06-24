@@ -33,7 +33,7 @@ This model was contributed by [guarin](https://huggingface.co/guarin).
 The original code can be found [here](https://github.com/baidu/Unlimited-OCR).
 
 > [!TIP]
-> Unlimited-OCR supports two inference configurations: the default "gundam" mode uses 640x640 tiles with dynamic cropping for high-resolution documents, and "base" mode uses a single 1024x1024 global view for standard-resolution inputs. Gundam mode is enabled by default via the image processor (`crop_to_patches=True`, `tile_size=640`).
+> Unlimited-OCR supports two inference configurations: the default "gundam" mode uses 640x640 tiles with dynamic cropping for high-resolution documents, and "base" mode uses a single 1024x1024 global view for standard-resolution inputs. Gundam mode is enabled by default via the image processor (`crop_to_patches=True`).
 
 > [!TIP]
 > For multi-page documents, pass all page images together with one `<image>` token per page in the text prompt. The model processes all pages jointly within a single context window.
