@@ -32,11 +32,11 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from .configuration_radio import RADIOConfig
+from .configuration_radio import RADIOConfig as RadioConfig
 
 
 @dataclass
-class RADIOModelOutput(ModelOutput):
+class RadioModelOutput(ModelOutput):
     """Output of [`RADIOModel`].
 
     Args:
@@ -53,10 +53,10 @@ class RADIOModelOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor | None = None
 
 
-class RADIOInputConditioner(nn.Module):
+class RadioInputConditioner(nn.Module):
     """Normalizes pixel values; arithmetic is done in float32 then cast back."""
 
-    def __init__(self, config: RADIOConfig):
+    def __init__(self, config: RadioConfig):
         super().__init__()
         self.register_buffer("norm_mean", torch.tensor(config.norm_mean).view(-1, 1, 1), persistent=True)
         self.register_buffer("norm_std", torch.tensor(config.norm_std).view(-1, 1, 1), persistent=True)
@@ -66,14 +66,14 @@ class RADIOInputConditioner(nn.Module):
         return normalized.to(pixel_values.dtype)
 
 
-class RADIOPatchEmbeddings(nn.Module):
+class RadioPatchEmbeddings(nn.Module):
     """Cropped Position Embedding (CPE) patch generator.
 
     Splits the image into patches, projects them, adds a resolution-interpolated
     absolute position embedding, and prepends learned cls + register tokens.
     """
 
-    def __init__(self, config: RADIOConfig):
+    def __init__(self, config: RadioConfig):
         super().__init__()
         self.patch_size = config.patch_size
         self.embed_dim = config.hidden_size
@@ -118,7 +118,7 @@ class RADIOPatchEmbeddings(nn.Module):
         return torch.cat([prefix, patches], dim=1)
 
 
-class RADIOMLP(nn.Module):
+class RadioMLP(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         in_features = out_features = config.hidden_size
@@ -137,7 +137,7 @@ class RADIOMLP(nn.Module):
         return hidden_state
 
 
-class RADIOLayerScale(nn.Module):
+class RadioLayerScale(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
@@ -174,8 +174,8 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class RADIOSelfAttention(nn.Module):
-    def __init__(self, config: RADIOConfig):
+class RadioSelfAttention(nn.Module):
+    def __init__(self, config: RadioConfig):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -224,13 +224,13 @@ class RADIOSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-class RADIOSelfOutput(nn.Module):
+class RadioSelfOutput(nn.Module):
     """
-    The residual connection is defined in RADIOLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in RadioLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
-    def __init__(self, config: RADIOConfig):
+    def __init__(self, config: RadioConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -241,11 +241,11 @@ class RADIOSelfOutput(nn.Module):
         return hidden_states
 
 
-class RADIOAttention(nn.Module):
-    def __init__(self, config: RADIOConfig):
+class RadioAttention(nn.Module):
+    def __init__(self, config: RadioConfig):
         super().__init__()
-        self.attention = RADIOSelfAttention(config)
-        self.output = RADIOSelfOutput(config)
+        self.attention = RadioSelfAttention(config)
+        self.output = RadioSelfOutput(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         self_attn_output, _ = self.attention(hidden_states)
@@ -268,7 +268,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
-class RADIODropPath(nn.Module):
+class RadioDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: float | None = None) -> None:
@@ -282,7 +282,7 @@ class RADIODropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class RADIOSwiGLUFFN(nn.Module):
+class RadioSwiGLUFFN(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         in_features = out_features = config.hidden_size
@@ -299,24 +299,24 @@ class RADIOSwiGLUFFN(nn.Module):
         return self.weights_out(hidden)
 
 
-class RADIOLayer(GradientCheckpointingLayer):
+class RadioLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
-    def __init__(self, config: RADIOConfig) -> None:
+    def __init__(self, config: RadioConfig) -> None:
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = RADIOAttention(config)
-        self.layer_scale1 = RADIOLayerScale(config)
-        self.drop_path = RADIODropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.attention = RadioAttention(config)
+        self.layer_scale1 = RadioLayerScale(config)
+        self.drop_path = RadioDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if config.use_swiglu_ffn:
-            self.mlp = RADIOSwiGLUFFN(config)
+            self.mlp = RadioSwiGLUFFN(config)
         else:
-            self.mlp = RADIOMLP(config)
-        self.layer_scale2 = RADIOLayerScale(config)
+            self.mlp = RadioMLP(config)
+        self.layer_scale2 = RadioLayerScale(config)
 
     def forward(
         self,
@@ -329,7 +329,7 @@ class RADIOLayer(GradientCheckpointingLayer):
         # first residual connection
         hidden_states = self.drop_path(self_attention_output) + hidden_states
 
-        # in RADIO, layernorm is also applied after self-attention
+        # in Radio, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
         layer_output = self.mlp(layer_output)
         layer_output = self.layer_scale2(layer_output)
@@ -340,10 +340,10 @@ class RADIOLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-class RADIOEncoder(nn.Module):
-    def __init__(self, config: RADIOConfig):
+class RadioEncoder(nn.Module):
+    def __init__(self, config: RadioConfig):
         super().__init__()
-        self.layer = nn.ModuleList([RADIOLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([RadioLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
         for layer in self.layer:
@@ -353,11 +353,11 @@ class RADIOEncoder(nn.Module):
 
 @auto_docstring
 class RADIOPreTrainedModel(PreTrainedModel):
-    config_class = RADIOConfig
+    config_class = RadioConfig
     base_model_prefix = ""
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["RADIOLayer"]
+    _no_split_modules = ["RadioLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
 
@@ -373,21 +373,21 @@ class RADIOPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
-        elif isinstance(module, RADIOPatchEmbeddings):
+        elif isinstance(module, RadioPatchEmbeddings):
             init.trunc_normal_(module.position_embedding, mean=0.0, std=std)
             init.trunc_normal_(module.cls_register_token, mean=0.0, std=std)
-        elif isinstance(module, RADIOLayerScale):
+        elif isinstance(module, RadioLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
 
 
 @auto_docstring
 class RADIOModel(RADIOPreTrainedModel):
-    def __init__(self, config: RADIOConfig):
+    def __init__(self, config: RadioConfig):
         super().__init__(config)
         self.config = config
-        self.input_conditioner = RADIOInputConditioner(config)
-        self.embeddings = RADIOPatchEmbeddings(config)
-        self.encoder = RADIOEncoder(config)
+        self.input_conditioner = RadioInputConditioner(config)
+        self.embeddings = RadioPatchEmbeddings(config)
+        self.encoder = RadioEncoder(config)
         self.register_buffer("summary_idxs", torch.tensor(config.summary_idxs, dtype=torch.long), persistent=True)
         self.post_init()
 
@@ -402,7 +402,7 @@ class RADIOModel(RADIOPreTrainedModel):
         return conditioner
 
     @auto_docstring
-    def forward(self, pixel_values: torch.Tensor, **kwargs) -> RADIOModelOutput:
+    def forward(self, pixel_values: torch.Tensor, **kwargs) -> RadioModelOutput:
         pixel_values = self.input_conditioner(pixel_values)
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.encoder(hidden_states, **kwargs)
@@ -412,7 +412,7 @@ class RADIOModel(RADIOPreTrainedModel):
         summary = all_summary[:, self.summary_idxs].flatten(1)
         features = hidden_states[:, num_skip:]
 
-        return RADIOModelOutput(summary=summary, features=features, last_hidden_state=hidden_states)
+        return RadioModelOutput(summary=summary, features=features, last_hidden_state=hidden_states)
 
 
 __all__ = ["RADIOModel", "RADIOPreTrainedModel"]

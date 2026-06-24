@@ -23,7 +23,7 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ..dinov2.modeling_dinov2 import Dinov2Attention, Dinov2Layer, Dinov2LayerScale, Dinov2MLP
-from .configuration_radio import RADIOConfig
+from .configuration_radio import RADIOConfig as RadioConfig
 
 
 logger = logging.get_logger(__name__)
@@ -32,7 +32,7 @@ __all__ = ["RADIOModel", "RADIOPreTrainedModel"]
 
 
 @dataclass
-class RADIOModelOutput(ModelOutput):
+class RadioModelOutput(ModelOutput):
     """Output of [`RADIOModel`].
 
     Args:
@@ -49,10 +49,10 @@ class RADIOModelOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor | None = None
 
 
-class RADIOInputConditioner(nn.Module):
+class RadioInputConditioner(nn.Module):
     """Normalizes pixel values; arithmetic is done in float32 then cast back."""
 
-    def __init__(self, config: RADIOConfig):
+    def __init__(self, config: RadioConfig):
         super().__init__()
         self.register_buffer("norm_mean", torch.tensor(config.norm_mean).view(-1, 1, 1), persistent=True)
         self.register_buffer("norm_std", torch.tensor(config.norm_std).view(-1, 1, 1), persistent=True)
@@ -62,14 +62,14 @@ class RADIOInputConditioner(nn.Module):
         return normalized.to(pixel_values.dtype)
 
 
-class RADIOPatchEmbeddings(nn.Module):
+class RadioPatchEmbeddings(nn.Module):
     """Cropped Position Embedding (CPE) patch generator.
 
     Splits the image into patches, projects them, adds a resolution-interpolated
     absolute position embedding, and prepends learned cls + register tokens.
     """
 
-    def __init__(self, config: RADIOConfig):
+    def __init__(self, config: RadioConfig):
         super().__init__()
         self.patch_size = config.patch_size
         self.embed_dim = config.hidden_size
@@ -114,26 +114,26 @@ class RADIOPatchEmbeddings(nn.Module):
         return torch.cat([prefix, patches], dim=1)
 
 
-class RADIOMLP(Dinov2MLP):
+class RadioMLP(Dinov2MLP):
     pass
 
 
-class RADIOLayerScale(Dinov2LayerScale):
+class RadioLayerScale(Dinov2LayerScale):
     pass
 
 
-class RADIOAttention(Dinov2Attention):
+class RadioAttention(Dinov2Attention):
     pass
 
 
-class RADIOLayer(Dinov2Layer):
+class RadioLayer(Dinov2Layer):
     pass
 
 
-class RADIOEncoder(nn.Module):
-    def __init__(self, config: RADIOConfig):
+class RadioEncoder(nn.Module):
+    def __init__(self, config: RadioConfig):
         super().__init__()
-        self.layer = nn.ModuleList([RADIOLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([RadioLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
         for layer in self.layer:
@@ -143,11 +143,11 @@ class RADIOEncoder(nn.Module):
 
 @auto_docstring
 class RADIOPreTrainedModel(PreTrainedModel):
-    config_class = RADIOConfig
+    config_class = RadioConfig
     base_model_prefix = ""
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["RADIOLayer"]
+    _no_split_modules = ["RadioLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
 
@@ -163,21 +163,21 @@ class RADIOPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
-        elif isinstance(module, RADIOPatchEmbeddings):
+        elif isinstance(module, RadioPatchEmbeddings):
             init.trunc_normal_(module.position_embedding, mean=0.0, std=std)
             init.trunc_normal_(module.cls_register_token, mean=0.0, std=std)
-        elif isinstance(module, RADIOLayerScale):
+        elif isinstance(module, RadioLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
 
 
 @auto_docstring
 class RADIOModel(RADIOPreTrainedModel):
-    def __init__(self, config: RADIOConfig):
+    def __init__(self, config: RadioConfig):
         super().__init__(config)
         self.config = config
-        self.input_conditioner = RADIOInputConditioner(config)
-        self.embeddings = RADIOPatchEmbeddings(config)
-        self.encoder = RADIOEncoder(config)
+        self.input_conditioner = RadioInputConditioner(config)
+        self.embeddings = RadioPatchEmbeddings(config)
+        self.encoder = RadioEncoder(config)
         self.register_buffer("summary_idxs", torch.tensor(config.summary_idxs, dtype=torch.long), persistent=True)
         self.post_init()
 
@@ -192,7 +192,7 @@ class RADIOModel(RADIOPreTrainedModel):
         return conditioner
 
     @auto_docstring
-    def forward(self, pixel_values: torch.Tensor, **kwargs) -> RADIOModelOutput:
+    def forward(self, pixel_values: torch.Tensor, **kwargs) -> RadioModelOutput:
         pixel_values = self.input_conditioner(pixel_values)
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.encoder(hidden_states, **kwargs)
@@ -202,4 +202,4 @@ class RADIOModel(RADIOPreTrainedModel):
         summary = all_summary[:, self.summary_idxs].flatten(1)
         features = hidden_states[:, num_skip:]
 
-        return RADIOModelOutput(summary=summary, features=features, last_hidden_state=hidden_states)
+        return RadioModelOutput(summary=summary, features=features, last_hidden_state=hidden_states)
