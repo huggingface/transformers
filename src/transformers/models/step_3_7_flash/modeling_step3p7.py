@@ -35,7 +35,7 @@ from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutpu
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
-from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple
+from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_int
 from transformers.utils.generic import merge_with_config_defaults
 from transformers.utils.output_capturing import capture_outputs
 
@@ -265,61 +265,90 @@ class Step3p7VisionEncoder(nn.Module):
         return hidden_states
 
 
-class Step3p7VisionModel(nn.Module):
-    # both absolute position_embeddings (Clip, siglip) + 2d rope (like minimax)
+class Step3p7VisionEmbeddings(nn.Module):
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size
-        self.patch_size = config.patch_size
+        self.embed_dim = config.hidden_size
         self.image_size = config.image_size
-
-        self.conv1 = nn.Conv2d(
+        self.patch_size = config.patch_size
+        self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
-            out_channels=self.hidden_size,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
+            out_channels=config.hidden_size,
+            kernel_size=config.patch_size,
+            stride=config.patch_size,
             bias=False,
         )
-        self.pre_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
-        self.posemb_grid_size = self.image_size // self.patch_size
-        self.positional_embedding = nn.Parameter(
-            (self.hidden_size**-0.5) * torch.randn(self.posemb_grid_size**2, self.hidden_size)
-        )
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-        self.model = Step3p7VisionEncoder(config)
-        self.vit_downsampler1 = nn.Conv2d(self.hidden_size, self.hidden_size * 2, kernel_size=3, stride=2, padding=1)
-        self.vit_downsampler2 = nn.Conv2d(
-            self.hidden_size * 2, self.hidden_size * 4, kernel_size=3, stride=2, padding=1
-        )
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and no class embeddings.
 
-    def sample_abs_posemb(self, grid_h: int, grid_w: int):
-        if self.posemb_grid_size == grid_h and self.posemb_grid_size == grid_w:
-            return self.positional_embedding[None, ...]
-        pos_embed = self.positional_embedding
-        pos_embed = (
-            pos_embed.reshape(1, self.posemb_grid_size, self.posemb_grid_size, -1).permute(0, 3, 1, 2).contiguous()
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+        num_positions = self.position_embedding.weight.shape[0]
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        if not torch.jit.is_tracing() and new_height == sqrt_num_positions and new_width == sqrt_num_positions:
+            return self.position_embedding.weight.unsqueeze(0)
+        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
+        dim = embeddings.shape[-1]
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bilinear",
+            align_corners=False,
         )
-        pos_embed = F.interpolate(pos_embed, size=(grid_h, grid_w), mode="bilinear", align_corners=False)
-        return pos_embed.permute(0, 2, 3, 1).reshape(1, -1, self.hidden_size)
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return patch_pos_embed
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        _, _, height, width = pixel_values.shape
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
+        return embeddings
+
+
+class Step3p7VisionModel(nn.Module):
+    def __init__(self, config: Step3p7VisionConfig):
+        super().__init__()
+        self.config = config
+        self.embeddings = Step3p7VisionEmbeddings(config)
+        self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.encoder = Step3p7VisionEncoder(config)
+        self.downsampler = nn.Sequential(
+            nn.Conv2d(config.hidden_size, config.hidden_size * 2, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(config.hidden_size * 2, config.hidden_size * 4, kernel_size=3, stride=2, padding=1),
+        )
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
-        grid_h, grid_w = height // self.patch_size, width // self.patch_size
-        hidden_state = self.conv1(pixel_values)
-        hidden_state = hidden_state.flatten(2).transpose(1, 2)
-        hidden_state = hidden_state + self.sample_abs_posemb(grid_h, grid_w)
+        grid_h, grid_w = height // self.embeddings.patch_size, width // self.embeddings.patch_size
+        hidden_state = self.embeddings(pixel_values, interpolate_pos_encoding=True)
         hidden_state = self.pre_layernorm(hidden_state)
-        hidden_state = self.model(hidden_state, grid_hw=(grid_h, grid_w))
-
-        B, P = hidden_state.shape[:2]
-        HW = int(P**0.5)
-        hidden_state = hidden_state.permute(0, 2, 1).view(B, -1, HW, HW)
-        hidden_state = self.vit_downsampler1(hidden_state)
-        hidden_state = self.vit_downsampler2(hidden_state)
-        B, C, HW, HW = hidden_state.shape
-        return hidden_state.view(B, -1, HW * HW).permute(0, 2, 1)
+        hidden_state = self.encoder(hidden_state, grid_hw=(grid_h, grid_w))
+        batch_size, num_patches, channels = hidden_state.shape
+        grid_size = int(num_patches**0.5)
+        hidden_state = hidden_state.permute(0, 2, 1).view(batch_size, channels, grid_size, grid_size)
+        hidden_state = self.downsampler(hidden_state)
+        return hidden_state.flatten(2).permute(0, 2, 1)
 
 
 # Text model
@@ -338,18 +367,26 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
 
-    _vision_attn_converters = [
-        WeightConverter(
-            source_patterns=["self_attn.in_proj_weight"],
-            target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
-            operations=[Chunk(dim=0)],
-        ),
-        WeightConverter(
-            source_patterns=["self_attn.in_proj_bias"],
-            target_patterns=["self_attn.q_proj.bias", "self_attn.k_proj.bias", "self_attn.v_proj.bias"],
-            operations=[Chunk(dim=0)],
-        ),
-    ]
+    # Scoped to vision_model so the reverse (save-path) converter does not incorrectly
+    # concatenate language-model GQA q/k/v weights (which are unequal in size).
+    _vision_attn_converters = []
+    _w = WeightConverter(
+        source_patterns=["self_attn.in_proj_weight"],
+        target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+        operations=[Chunk(dim=0)],
+    )
+    _w.scope_prefix = "vision_model"
+    _w.base_model_prefix = "model"
+    _vision_attn_converters.append(_w)
+    _w = WeightConverter(
+        source_patterns=["self_attn.in_proj_bias"],
+        target_patterns=["self_attn.q_proj.bias", "self_attn.k_proj.bias", "self_attn.v_proj.bias"],
+        operations=[Chunk(dim=0)],
+    )
+    _w.scope_prefix = "vision_model"
+    _w.base_model_prefix = "model"
+    _vision_attn_converters.append(_w)
+    del _w
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -357,14 +394,10 @@ class Step3p7PreTrainedModel(PreTrainedModel):
         if hasattr(module, "_compute_2d_freqs") and hasattr(module, "freqs_cache"):
             cache = module._compute_2d_freqs()
             module.register_buffer("freqs_cache", cache, persistent=False)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        register_checkpoint_conversion_mapping(cls.__name__, cls._vision_attn_converters, overwrite=True)
-        key_mapping = getattr(cls, "_checkpoint_conversion_mapping", None)
-        if key_mapping is not None and kwargs.get("key_mapping") is None:
-            kwargs["key_mapping"] = copy.deepcopy(key_mapping)
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        if isinstance(module, Step3p7VisionEmbeddings):
+            module.register_buffer(
+                "position_ids", torch.arange(module.num_positions).expand((1, -1)), persistent=False
+            )
 
 
 class Step3p7RotaryEmbedding(nn.Module):
@@ -785,6 +818,7 @@ class Step3p7TextModel(Step3p7TextPreTrainedModel):
     _no_split_modules = ["Step3p7DecoderLayer"]
     config_class = Step3p7TextConfig
     config: Step3p7TextConfig
+    _can_record_outputs = {"hidden_states": Step3p7DecoderLayer}
 
     def __init__(self, config: Step3p7TextConfig):
         super().__init__(config)
@@ -886,23 +920,24 @@ class Step3p7Model(Step3p7PreTrainedModel):
         input_ids: torch.Tensor,
         multimodal_embeddings=None,
     ) -> torch.Tensor:
-        input_ids = input_ids.squeeze(0)
         embed = self.language_model.get_input_embeddings()
         if multimodal_embeddings is None:
-            inputs_embeds = embed(input_ids)
-        else:
-            is_text = input_ids != self.config.image_token_id
-            text_embeds = embed(input_ids[is_text])
-            inputs_embeds = torch.empty(
-                input_ids.shape[0], text_embeds.shape[-1], dtype=text_embeds.dtype, device=text_embeds.device
+            return embed(input_ids)
+        # Process each batch item separately so batch_size > 1 works (during beam search).
+        results = []
+        for b in range(input_ids.shape[0]):
+            ids = input_ids[b]
+            is_text = ids != self.config.image_token_id
+            text_embeds = embed(ids[is_text])
+            item_embeds = torch.empty(
+                ids.shape[0], text_embeds.shape[-1], dtype=text_embeds.dtype, device=text_embeds.device
             )
-            inputs_embeds[is_text] = text_embeds
+            item_embeds[is_text] = text_embeds
             image_mask = ~is_text
-            inputs_embeds[image_mask] = torch.cat([e.reshape(-1, e.shape[-1]) for e in multimodal_embeddings]).to(
-                text_embeds
-            )
-        inputs_embeds = inputs_embeds.unsqueeze(0)
-        return inputs_embeds
+            if image_mask.any() and b < len(multimodal_embeddings):
+                item_embeds[image_mask] = multimodal_embeddings[b].reshape(-1, text_embeds.shape[-1]).to(text_embeds)
+            results.append(item_embeds)
+        return torch.stack(results, dim=0)
 
     def get_image_features(
         self,
@@ -1009,13 +1044,16 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             operations=[Concatenate(dim=1)],
         ),
     ]
+    # TODO: will clean this up when i push a clean checkpoint
     _checkpoint_conversion_mapping = {
         "^vision_model": "model.vision_model",
         r"^model(?!\.(language_model|vision_model))": "model.language_model",
         "^vit_large_projector": "model.multi_modal_projector",
         "^multi_modal_projector": "model.multi_modal_projector",
-        ".transformer.resblocks.": ".model.layers.",
-        ".transformer.": ".model.",
+        ".conv1.weight": ".embeddings.patch_embedding.weight",
+        ".positional_embedding": ".embeddings.position_embedding.weight",
+        ".transformer.resblocks.": ".encoder.layers.",
+        ".transformer.": ".encoder.",
         ".ln_pre.": ".pre_layernorm.",
         ".ls_1.gamma": ".ls_1.scale",
         ".ls_2.gamma": ".ls_2.scale",
@@ -1029,10 +1067,21 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         ".moe.router_bias": ".mlp.gate.e_score_correction_bias",
         ".moe.down_proj.weight": ".mlp.experts.down_proj",
         ".share_expert.": ".mlp.shared_experts.",
+        ".vit_downsampler1.": ".downsampler.0.",
+        ".vit_downsampler2.": ".downsampler.1.",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     base_model_prefix = "model"
     config: Step3p7Config
+
+    @classmethod
+    # TODO: will clean this up when i push a clean checkpoint
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        register_checkpoint_conversion_mapping(cls.__name__, cls._vision_attn_converters, overwrite=True)
+        key_mapping = getattr(cls, "_checkpoint_conversion_mapping", None)
+        if key_mapping is not None and kwargs.get("key_mapping") is None:
+            kwargs["key_mapping"] = copy.deepcopy(key_mapping)
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     def __init__(self, config: Step3p7Config):
         Step3p7PreTrainedModel.__init__(self, config)
@@ -1047,6 +1096,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1097,7 +1147,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1122,8 +1172,11 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         is_first_iteration=False,
         **kwargs,
     ):
+        input_ids_for_super = input_ids
+        if is_first_iteration and inputs_embeds is not None and input_ids is not None and input_ids.shape[-1] == 0:
+            input_ids_for_super = None
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
+            input_ids_for_super,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
