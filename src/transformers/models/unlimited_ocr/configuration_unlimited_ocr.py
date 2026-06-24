@@ -284,7 +284,10 @@ class UnlimitedOcrConfig(PreTrainedConfig):
             self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
 
         if self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
+            text_cls = self.sub_configs["text_config"]
+            text_keys = text_cls().to_dict().keys()
+            text_kwargs = {key: kwargs.pop(key) for key in text_keys if key in kwargs}
+            self.text_config = text_cls(**text_kwargs)
         elif isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         if self.vision_config is None:
