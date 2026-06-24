@@ -1366,14 +1366,8 @@ class MimiPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
+        super()._init_weights(module)
+        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
@@ -1392,15 +1386,6 @@ class MimiPreTrainedModel(PreTrainedModel):
             init.ones_(module.initialized)
             init.ones_(module.cluster_usage)
             init.zeros_(module.embed_sum)
-        elif isinstance(module, MimiRotaryEmbedding):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-            buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
 
 
 @auto_docstring(

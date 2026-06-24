@@ -415,6 +415,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, MLCDVisionEmbeddings):
             factor = self.config.initializer_factor
@@ -439,11 +440,6 @@ class MLCDPreTrainedModel(PreTrainedModel):
             factor = self.config.initializer_factor
             pos_emb_std = (module.config.hidden_size // module.config.num_attention_heads // 2) ** -0.5 * factor
             init.normal_(module.class_pos_emb, mean=0.0, std=pos_emb_std)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
         elif isinstance(module, MLCDRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)
