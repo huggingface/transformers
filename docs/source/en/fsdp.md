@@ -48,6 +48,8 @@ rendered properly in your Markdown viewer.
         step               step               step
 ```
 
+This guide configures FSDP2 through [`Trainer`] and Accelerate. To shard a model at load time for a custom training loop or inference, pass [`DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] instead. Both paths drive the same FSDP2 implementation. See [DistributedConfig](./distributed_config).
+
 ## Sharding strategies
 
 FSDP2 controls sharding with [`~TrainingArguments.fsdp_config`]. Set `fsdp=True` to enable FSDP, and set `reshard_after_forward` in the FSDP config to choose the memory and throughput tradeoff.
