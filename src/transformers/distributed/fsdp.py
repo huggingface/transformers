@@ -85,15 +85,27 @@ def _get_fsdp_policy_kwargs(distributed_config: DistributedConfig | None) -> dic
     return fsdp_policy_kwargs
 
 
-def is_norm_and_head_pair(modules: list[tuple[str, Any]]) -> bool:
-    """Match the canonical tail pair: one final norm + the output head (or tied embedding)."""
+def _get_input_output_embeddings(model: nn.Module) -> tuple[nn.Module | None, nn.Module | None]:
+    input_embed = None
+    output_head = None
+    if hasattr(model, "get_input_embeddings"):
+        input_embed = model.get_input_embeddings()
+    if hasattr(model, "get_output_embeddings"):
+        output_head = model.get_output_embeddings()
+    return input_embed, output_head
+
+
+def is_norm_and_head_pair(modules: list[tuple[str, nn.Module]], model: nn.Module) -> bool:
     if len(modules) != 2:
         return False
+    input_embed, output_head = _get_input_output_embeddings(model)
+    head_modules = {module for module in (input_embed, output_head) if module is not None}
+
     module_names = [name for name, _ in modules]
+    module_objects = [module for _, module in modules]
+
     has_final_norm = any(name == "norm" or name.endswith(".norm") for name in module_names)
-    has_output_head = any(
-        name in {"lm_head", "embed_tokens"} or name.endswith((".lm_head", ".embed_tokens")) for name in module_names
-    )
+    has_output_head = any(module in head_modules for module in module_objects)
     return has_final_norm and has_output_head
 
 
@@ -117,9 +129,14 @@ def _resolve_tied_embed_lm_head_plan(
     if not tied_keys:
         return fsdp_plan
 
-    head_param, embed_param = next(iter(tied_keys.items()))
-    head_module = head_param.rsplit(".", 1)[0]
-    embed_module = embed_param.rsplit(".", 1)[0]
+    input_embed, output_head = _get_input_output_embeddings(model)
+    name_by_module = {module: name for name, module in model.named_modules()}
+    embed_module = name_by_module.get(input_embed)
+    head_module = name_by_module.get(output_head)
+
+    if embed_module is None or head_module is None:
+        return fsdp_plan
+
     adapted_plan = fsdp_plan.copy()
     adapted_plan.pop(embed_module, None)
 
@@ -131,7 +148,8 @@ def _resolve_tied_embed_lm_head_plan(
 
 
 def expand_fsdp_plan(
-    model, fsdp_plan: dict[str, str]
+    model: nn.Module,
+    fsdp_plan: dict[str, str],
 ) -> tuple[list[tuple[str, nn.Module]], list[tuple[str, nn.Module]]]:
     """Expand plan keys into reshard and no-reshard ``(module_name, module)`` shard targets."""
     module_lookup = dict(model.named_modules())
@@ -181,7 +199,9 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
         logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
 
 
-def apply_fully_sharded_data_parallel(model, fsdp_mesh):
+def apply_fully_sharded_data_parallel(
+    model: nn.Module, fsdp_mesh: torch.distributed.device_mesh.DeviceMesh
+) -> nn.Module:
     """
     Apply FSDP2 (fully_shard) to a model.
     """
@@ -211,7 +231,7 @@ def apply_fully_sharded_data_parallel(model, fsdp_mesh):
 
     # Optimization: when the keep buffer is exactly the (final_norm, lm_head/embed)
     # tail pair, bundle them into one fully_shard so that we dont need to do all-gather during backward pass.
-    if is_norm_and_head_pair(no_reshard_targets):
+    if is_norm_and_head_pair(no_reshard_targets, model):
         module_names = [name for name, _ in no_reshard_targets]
         modules = [module for _, module in no_reshard_targets]
         fully_shard(modules, mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
