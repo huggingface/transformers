@@ -614,8 +614,6 @@ class CausalLMOutputWithPast(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Language modeling loss (for next-token prediction).
-        mtp_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when MTP is enabled and `labels` are provided):
-            Multi-Token Prediction auxiliary loss. Weighting is left to the trainer.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -637,7 +635,6 @@ class CausalLMOutputWithPast(ModelOutput):
     """
 
     loss: torch.FloatTensor | None = None
-    mtp_loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
     past_key_values: Cache | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
