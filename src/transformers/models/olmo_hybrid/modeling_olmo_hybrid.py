@@ -530,13 +530,19 @@ def torch_chunk_gated_delta_rule(
     )
 
 
+def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+    """This function is intended to align with the l2norm implementation in the FLA library."""
+    inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
+    return x * inv_norm
+
+
 def torch_recurrent_gated_delta_rule(
     query, key, value, g, beta, initial_state, output_final_state, use_qk_l2norm_in_kernel=False
 ):
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
-        query = query * torch.rsqrt((query * query).sum(dim=-1, keepdim=True) + 1e-6)
-        key = key * torch.rsqrt((key * key).sum(dim=-1, keepdim=True) + 1e-6)
+        query = l2norm(query, dim=-1, eps=1e-6)
+        key = l2norm(key, dim=-1, eps=1e-6)
     query, key, value, beta, g = [
         x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
     ]
