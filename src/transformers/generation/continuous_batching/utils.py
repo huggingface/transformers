@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import queue
+from abc import abstractmethod
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -19,11 +20,29 @@ from math import ceil, log2
 from typing import Any
 
 import torch
+from torch import nn
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import is_torch_greater_or_equal
 
+from ...generation.configuration_utils import GenerationConfig
+from ..logits_process import LogitsProcessorList
 from .requests import FutureRequestState, RequestState, RequestStatus, logger
+
+
+# We cannot use `PreTrainedModel` for circular import reasons, so this helps keep track of the basic types
+class ProtoPretrainedModel(nn.Module):
+    config: PretrainedConfig
+    dtype: torch.dtype
+    device: torch.device
+
+    @abstractmethod
+    def set_attn_implementation(self, attn_implementation: str) -> None:
+        pass
+
+    @abstractmethod
+    def _get_logits_processor(self, generation_config: GenerationConfig) -> LogitsProcessorList:
+        pass
 
 
 class CudaGraphBuffer:
@@ -72,6 +91,23 @@ class WorkloadHints:
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""
     return config._attn_implementation in ["paged|eager", "paged|sdpa"]
+
+
+def find_num_kv_heads(config: PretrainedConfig) -> int:
+    """Finds the number of key-value heads for the given config."""
+    for attr in ["num_key_value_heads", "num_attention_heads"]:
+        if hasattr(config, attr) and getattr(config, attr, None) is not None:
+            return getattr(config, attr)
+    raise ValueError(f"num_key_value_heads or num_attention_heads could not be found in the config:\n{config}")
+
+
+def find_head_dim(config: PretrainedConfig) -> int:
+    """Finds the head dimension for the given config."""
+    if hasattr(config, "head_dim") and config.head_dim is not None:
+        return config.head_dim
+    if hasattr(config, "hidden_size") and hasattr(config, "num_attention_heads"):
+        return config.hidden_size // config.num_attention_heads  # will crash if any is None
+    raise ValueError(f"head_dim or (hidden_size and num_attention_heads) could not be found in the config:\n{config}")
 
 
 def pad_to_interval(size: int, interval_size: int, max_value: int) -> int:
@@ -179,6 +215,30 @@ def build_attention_mask(
             masked += torch.tril(minus_inf, diagonal=sliding_diagonal)
         # Replace in attention mask
         attention_mask[..., query_range, key_range] = masked
+
+
+def check_modality_support(input_modalities: str | list[str]) -> str | None:
+    """Check if CB supports the given input modalities and returns the extra modality if there is one."""
+    input_modalities = [input_modalities] if isinstance(input_modalities, str) else input_modalities
+
+    # We only support text and image or text and audio for now
+    supported_modalities = set(input_modalities).intersection({"text", "image", "audio"})
+    if len(supported_modalities) not in {1, 2} or "text" not in supported_modalities:
+        raise ValueError(f"This model supports {input_modalities = } but CB only supports text+image or text+audio.")
+
+    # Throw a warning if the model supports modalities that are not in CB's supported set
+    unsupported_modalities = set(input_modalities) - supported_modalities
+    if len(unsupported_modalities) > 0:
+        logger.warning(
+            f"This model supports {input_modalities = } but CB only supports text+image or text+audio. "
+            f"The following modalities will be ignored: {unsupported_modalities = }"
+        )
+
+    # Return the non-textual modality if there is one
+    if len(supported_modalities) == 2:
+        supported_modalities.remove("text")
+        return supported_modalities.pop()
+    return None
 
 
 def create_warmup_future_states(

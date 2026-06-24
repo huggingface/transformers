@@ -194,6 +194,10 @@ class OffloadingManager:
         victims: list[RequestState] = []
         while demand > free_blocks and starved and num_active - len(victims) > 1:
             state, blocks_needed = starved.pop()
+            # If a request already consumed its MM inputs, since they cannot be retrieved, it cannot be offloaded
+            # TODO: FIXME: not true for CPU offloading + we should support this
+            if state.multimodal_inputs is not None and len(state.multimodal_inputs) == 0:
+                continue
             victims.append(state)
             demand -= blocks_needed
             free_blocks += self.cache.blocks_in_use(state.request_id)  # approximation because of prefix sharing
