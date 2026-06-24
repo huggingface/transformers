@@ -117,13 +117,9 @@ def _resolve_tied_embed_lm_head_plan(
     if not tied_keys:
         return fsdp_plan
 
-    target_param, source_param = next(iter(tied_keys.items()))
-    head_module = target_param.rsplit(".", 1)[0]
-    embed_module = source_param.rsplit(".", 1)[0]
-    
-    if embed_module not in fsdp_plan:
-        return fsdp_plan
-    
+    head_param, embed_param = next(iter(tied_keys.items()))
+    head_module = head_param.rsplit(".", 1)[0]
+    embed_module = embed_param.rsplit(".", 1)[0]
     adapted_plan = fsdp_plan.copy()
     adapted_plan.pop(embed_module, None)
     
