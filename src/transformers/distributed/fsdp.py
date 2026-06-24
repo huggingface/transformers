@@ -122,12 +122,13 @@ def _resolve_tied_embed_lm_head_plan(
     embed_module = embed_param.rsplit(".", 1)[0]
     adapted_plan = fsdp_plan.copy()
     adapted_plan.pop(embed_module, None)
-    
+
     if fsdp_plan.get(head_module) == "keep_full_weight":
         adapted_plan.pop(head_module, None)
         adapted_plan[embed_module] = "keep_full_weight"
-    
+
     return adapted_plan
+
 
 def expand_fsdp_plan(
     model, fsdp_plan: dict[str, str]
