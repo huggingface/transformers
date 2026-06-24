@@ -90,6 +90,26 @@ class MyModelImageProcessorPil(PilBackend):
 > [!TIP]
 > See [`LlavaOnevisionImageProcessorPil`] for reference.
 
+### Add post-processing methods
+
+Add post-processing methods directly to the processor class. Post-processing methods are called with the model outputs (`outputs`) and any additional arguments required for the specific post-processing method.
+
+```py
+class MyModelImageProcessor(TorchvisionBackend):
+    ...
+
+    def post_process_my_task(self, outputs, ...):
+        ...
+```
+
+Post-processors return either a list of simple objects (`list[str]` or `list[torch.Tensor]`) or a list of complex objects (`list[MyTaskPostProcessorOutput]` or `list[dict]`). Post-processor outputs are defined in `src/transformers/image_processing_outputs.py` and inherit from [`BatchFeature`].
+
+```py
+class MyTaskPostProcessorOutput(BatchFeature):
+    predictions: torch.Tensor
+    scores: torch.Tensor
+```
+
 ## Video processor
 
 Add a video processor when the model consumes videos or sampled video frames.
@@ -182,6 +202,14 @@ class MyModelImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 ```
 
 Add focused tests for behavior the mixin can't infer, such as custom resizing rules or model-specific kwargs.
+
+Post-processing test mixins are available in `tests/test_image_processing_common.py` and are added on top of [`ImageProcessingTestMixin`].
+
+```py
+class MyModelImageProcessingTest(ImageProcessingTestMixin, MyTaskPostProcessTestMixin, unittest.TestCase):
+```
+
+The tests automatically verify that the correct mixins are used for your model. Mixins for new tasks must be added to `tests/test_image_processing_common.py`.
 
 ### Video processor tests
 
