@@ -21,10 +21,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V3.2-Exp")
@@ -145,12 +142,8 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
-
+        # BC: re-route `num_experts` to `n_routed_experts`
         if (num_experts := kwargs.get("num_experts")) is not None:
-            logger.warning_once(
-                "Detected `num_experts` being passed to the config. Please use `n_routed_experts` instead. "
-                "Setting it to `n_routed_experts` instead."
-            )
             self.n_routed_experts = num_experts
         # Default to MoE from the second layer and on
         if self.mlp_layer_types is None:
