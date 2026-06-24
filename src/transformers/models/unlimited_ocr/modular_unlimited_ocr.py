@@ -22,14 +22,11 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
+from ...generation import GenerationMixin
+from ...generation.utils import GenerationMode
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...masking_utils import (
-    and_masks,
-    causal_mask_function,
-    create_causal_mask,
-    create_sliding_window_causal_mask,
-)
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -350,6 +347,109 @@ class UnlimitedOcrVisionEncoderConfig(CLIPVisionConfig):
     patch_size: int | list[int] | tuple[int, int] | None = 14
 
 
+class UnlimitedOcrDynamicCache(DynamicCache):
+    """DynamicCache with a fixed-size ring buffer for generated tokens.
+
+    All prefill (image + prompt) tokens are kept intact; generated tokens are stored in a
+    ``sliding_window``-sized ring buffer that is overwritten in place. This mirrors the reference
+    model's sliding-window attention (each generated token attends to all prefill tokens plus the
+    last ``sliding_window`` generated tokens) and keeps the cached tensors at a constant
+    ``prefill + sliding_window`` length from the very first decode step onwards.
+
+    The constant length is what makes generation fast: the cuDNN SDPA backend re-plans its kernel
+    on every distinct key/value sequence length, so a cache that grows by one each step (the plain
+    `DynamicCache`) stalls ~400ms per step on CPU re-planning. With a constant length cuDNN plans
+    once and reuses it. The not-yet-filled ring slots during the first ``sliding_window`` steps are
+    hidden by the attention mask built in `UnlimitedOcrTextModel._create_attention_mask`.
+
+    `get_seq_length()` returns the *logical* cumulative token count so `generate()` computes correct
+    position ids; the physically stored length is bounded at ``prefill + sliding_window``.
+    """
+
+    def __init__(self, config=None):
+        super().__init__(config=config)
+        self._sliding_window = getattr(config, "sliding_window", None) if config is not None else None
+        self._ring_prefill: dict[int, int] = {}
+        self._ring_pos: dict[int, int] = {}
+        self._n_gen: dict[int, int] = {}
+        self._cum_len: dict[int, int] = {}
+
+    def update(self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int, *args, **kwargs):
+        if self._sliding_window is None:
+            return super().update(key_states, value_states, layer_idx, *args, **kwargs)
+
+        layer = self.layers[layer_idx]
+        if not layer.is_initialized:
+            layer.lazy_initialization(key_states, value_states)
+
+        seq_len = key_states.shape[-2]
+        self._cum_len[layer_idx] = self._cum_len.get(layer_idx, 0) + seq_len
+
+        if layer_idx not in self._ring_prefill:
+            if seq_len > 1:
+                # Prefill: accumulate normally (single forward, so no re-planning concern).
+                layer.keys = torch.cat([layer.keys, key_states], dim=-2)
+                layer.values = torch.cat([layer.values, value_states], dim=-2)
+                return layer.keys, layer.values
+            # First decode step: record the prefill boundary and pre-allocate the whole ring up front
+            # so the cached length is constant (prefill + sliding_window) for every subsequent step.
+            self._ring_prefill[layer_idx] = layer.keys.shape[-2]
+            self._ring_pos[layer_idx] = 0
+            self._n_gen[layer_idx] = 0
+            ring = torch.zeros(
+                *layer.keys.shape[:-2],
+                self._sliding_window,
+                layer.keys.shape[-1],
+                dtype=layer.keys.dtype,
+                device=layer.keys.device,
+            )
+            layer.keys = torch.cat([layer.keys, ring], dim=-2)
+            layer.values = torch.cat([layer.values, torch.zeros_like(ring)], dim=-2)
+
+        pfl = self._ring_prefill[layer_idx]
+        rpos = self._ring_pos[layer_idx]
+        for t in range(seq_len):
+            slot = pfl + rpos
+            layer.keys[..., slot : slot + 1, :] = key_states[..., t : t + 1, :]
+            layer.values[..., slot : slot + 1, :] = value_states[..., t : t + 1, :]
+            rpos = (rpos + 1) % self._sliding_window
+            self._n_gen[layer_idx] = min(self._n_gen[layer_idx] + 1, self._sliding_window)
+        self._ring_pos[layer_idx] = rpos
+
+        # Always return the full fixed-size buffer; unfilled ring slots are masked out by the model.
+        return layer.keys, layer.values
+
+    def decode_kv_layout(self, layer_idx: int = 0) -> tuple[int, int] | None:
+        """`(kv_total, kv_valid)` for the upcoming decode step, or `None` if the ring is inactive.
+
+        `kv_total` is the constant physical length (`prefill + sliding_window`) and `kv_valid` is the
+        number of leading entries that hold real keys/values (`prefill + filled ring slots`) once this
+        step's token has been written. Slots in `[kv_valid, kv_total)` are unfilled and must be masked.
+        """
+        if self._sliding_window is None:
+            return None
+        if layer_idx in self._ring_prefill:
+            prefill_len = self._ring_prefill[layer_idx]
+            n_gen_after = min(self._n_gen[layer_idx] + 1, self._sliding_window)
+        elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
+            # First decode step: the ring has not been allocated yet, so the current physical length is
+            # exactly the prefill length and this step writes the first generated token.
+            prefill_len = self.layers[layer_idx].keys.shape[-2]
+            n_gen_after = 1
+        else:
+            return None
+        return prefill_len + self._sliding_window, prefill_len + n_gen_after
+
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        return self._cum_len.get(layer_idx, 0)
+
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
+        cum = self._cum_len.get(layer_idx, 0)
+        if layer_idx not in self._ring_prefill:
+            return cum + query_length, 0
+        return self._ring_prefill[layer_idx] + self._sliding_window, 0
+
+
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
 @strict
 class UnlimitedOcrVisionConfig(DeepseekOcr2VisionConfig):
@@ -414,8 +514,8 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
-            # Full attention on every layer keeps the KV cache complete: the sliding window is realized as a
-            # mask over generated tokens, while the image/prompt prefill is always retained.
+            # Full attention on every layer keeps the KV cache complete; the ring-buffer logic in
+            # UnlimitedOcrDynamicCache limits generated tokens to `sliding_window` entries at runtime.
             self.layer_types = ["full_attention"] * self.num_hidden_layers
         if self.mlp_layer_types is None:
             # Some configs may use `first_k_dense_replace` instead of `layer_types`/`mlp_layer_types`
@@ -691,19 +791,26 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
         if self.config.sliding_window is None:
             return create_causal_mask(**mask_kwargs)
 
-        prefill_length = getattr(past_key_values, "prefill_length", None)
-        if prefill_length is None:
-            prefill_length = torch.tensor(inputs_embeds.shape[1], device=inputs_embeds.device)
-            if past_key_values is not None:
-                past_key_values.prefill_length = prefill_length
+        # Ring-buffer decode (single query token): the cache returns a constant-length buffer of
+        # [prefill tokens] + [sliding_window ring slots]. Attention is order-agnostic over keys (RoPE
+        # is baked into the cached keys), so the query may attend to every *filled* slot — that is all
+        # prefill tokens plus the generated tokens currently in the ring, i.e. the model's sliding
+        # window. We only need to hide the not-yet-filled ring slots during the first window of steps.
+        # Keeping the mask shape constant (even when all slots are valid) lets the cuDNN SDPA backend
+        # plan its kernel once instead of re-planning every step.
+        layout = past_key_values.decode_kv_layout() if isinstance(past_key_values, UnlimitedOcrDynamicCache) else None
+        if inputs_embeds.shape[1] == 1 and layout is not None:
+            kv_total, kv_valid = layout
+            min_value = torch.finfo(inputs_embeds.dtype).min
+            mask = torch.zeros(
+                inputs_embeds.shape[0], 1, 1, kv_total, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+            )
+            if kv_valid < kv_total:
+                mask[..., kv_valid:] = min_value
+            return mask
 
-        def prefill_overlay(batch_idx, head_idx, q_idx, kv_idx):
-            return kv_idx < prefill_length
-
-        return create_sliding_window_causal_mask(
-            **mask_kwargs,
-            or_mask_function=and_masks(prefill_overlay, causal_mask_function),
-        )
+        # Prefill: standard full causal mask so image tokens can attend to each other correctly.
+        return create_causal_mask(**mask_kwargs)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -725,7 +832,7 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+            past_key_values = UnlimitedOcrDynamicCache(config=self.config)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -997,6 +1104,32 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
             model_inputs["image_spatial_crop"] = image_spatial_crop
 
         return model_inputs
+
+    def _prepare_cache_for_generation(
+        self, generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
+    ):
+        # `generate()` would otherwise build a plain `DynamicCache` whose KV grows unbounded, making decode
+        # O(n²). For the default dynamic-cache case we instead use `UnlimitedOcrDynamicCache`, which keeps all
+        # prefill tokens but bounds generated tokens to `sliding_window` entries via a ring buffer (O(n) total).
+        # Caches that need rollback (assisted/contrastive) or an explicit `cache_implementation` defer to super.
+        uses_default_dynamic_cache = (
+            model_kwargs.get("past_key_values") is None
+            and generation_config.use_cache
+            and generation_config.cache_implementation is None
+            and generation_mode not in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH)
+            and self._supports_default_dynamic_cache()
+        )
+        if uses_default_dynamic_cache:
+            model_kwargs["past_key_values"] = UnlimitedOcrDynamicCache(
+                config=self.config.get_text_config(decoder=True)
+            )
+            return
+        # Defer every other case (static/quantized/offloaded caches, encoder-decoder, no cache, ...)
+        # to the base implementation. Called on `GenerationMixin` directly rather than via `super()`
+        # so the modular converter doesn't try to inline a method that isn't in the modeling lineage.
+        return GenerationMixin._prepare_cache_for_generation(
+            self, generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
+        )
 
 
 __all__ = [

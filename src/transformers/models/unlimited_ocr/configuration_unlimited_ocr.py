@@ -225,8 +225,8 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
-            # Full attention on every layer keeps the KV cache complete: the sliding window is realized as a
-            # mask over generated tokens, while the image/prompt prefill is always retained.
+            # Full attention on every layer keeps the KV cache complete; the ring-buffer logic in
+            # UnlimitedOcrDynamicCache limits generated tokens to `sliding_window` entries at runtime.
             self.layer_types = ["full_attention"] * self.num_hidden_layers
         if self.mlp_layer_types is None:
             # Some configs may use `first_k_dense_replace` instead of `layer_types`/`mlp_layer_types`
