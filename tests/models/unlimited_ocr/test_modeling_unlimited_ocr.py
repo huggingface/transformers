@@ -173,9 +173,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
             )
         )
-        inputs = self.processor(images=image, text="<image>\ndocument parsing.", return_tensors="pt").to(
-            model.device, dtype=torch.bfloat16
-        )
+        inputs = self.processor(images=image, text="<image>\ndocument parsing.", return_tensors="pt").to(model.device)
         generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         EXPECTED_DECODED_TEXT = Expectations(
@@ -199,7 +197,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
             images=image,
             text="<image>\ndocument parsing.",
             return_tensors="pt",
-        ).to(model.device, dtype=torch.bfloat16)
+        ).to(model.device)
         generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False)
         EXPECTED_DECODED_TEXT = Expectations(
@@ -229,7 +227,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
             text=["<image>\ndocument parsing.", "<image>\ndocument parsing."],
             return_tensors="pt",
             padding=True,
-        ).to(model.device, dtype=torch.bfloat16)
+        ).to(model.device)
         generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         decoded = self.processor.batch_decode(
             generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
