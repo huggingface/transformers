@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## DistributedConfig
 
-Enable expert parallelism with the [`DistributedConfig`] class and the `enable_expert_parallel` argument.
+Enable expert parallelism with the [`DistributedConfig`] class and the `enable_expert_parallel` argument. See [DistributedConfig](./distributed_config) for the full set of sharding fields.
 
 ```py
 import os

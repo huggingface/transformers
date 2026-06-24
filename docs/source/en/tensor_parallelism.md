@@ -73,7 +73,7 @@ torchrun --nproc-per-node 4 train_tp.py
 
 ## ParallelismConfig
 
-Pass [`~accelerate.parallelism_config.ParallelismConfig`] explicitly when combining TP with other parallelism techniques like [FSDP](./fsdp).
+Pass [`~accelerate.parallelism_config.ParallelismConfig`] explicitly when combining TP with other parallelism techniques like [FSDP](./fsdp) under [`Trainer`]. To combine the strategies outside of [`Trainer`], at load time, use [`DistributedConfig`] with [`~PreTrainedModel.from_pretrained`]. See [N-D parallelism](./distributed_config#n-d-parallelism).
 
 ```py
 import torch
@@ -97,5 +97,6 @@ args = TrainingArguments(
 
 ## Next steps
 
+- See [DistributedConfig](./distributed_config) to shard with tensor parallelism at load time through [`~PreTrainedModel.from_pretrained`], without [`Trainer`].
 - Read the [Tensor Parallelism](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) chapter from The Ultra-Scale Playbook for more details about how it works.
 - Read the [tensor parallelism inference guide](./perf_infer_gpu_multi) to learn more about partitioning strategies, manual TP plans, and implementation details.
