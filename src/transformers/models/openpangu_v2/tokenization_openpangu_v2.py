@@ -33,6 +33,7 @@ class OpenPanguV2Tokenizer(TokenizersBackend):
         add_prefix_space: bool = False,
         **kwargs,
     ):
+        print("[YCHDEBUG] init OpenPanguV2Tokenizer", flush=True)
         
         self._vocab = vocab or {}
         self._merges = merges or []
