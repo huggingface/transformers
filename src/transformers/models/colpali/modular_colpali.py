@@ -81,6 +81,9 @@ class ColPaliProcessor(PaliGemmaProcessor):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
+        if text is not None and images is not None:
+            raise ValueError("Only one of text or images can be processed at a time")
+
         kwargs["return_token_type_ids"] = True
         output_kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,

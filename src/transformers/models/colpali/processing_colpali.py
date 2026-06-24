@@ -110,6 +110,9 @@ class ColPaliProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **labels** -- Labels compatible with training if `suffix` is not None
         """
+        if text is not None and images is not None:
+            raise ValueError("Only one of text or images can be processed at a time")
+
         kwargs["return_token_type_ids"] = True
         output_kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,

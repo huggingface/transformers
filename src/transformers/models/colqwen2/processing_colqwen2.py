@@ -29,6 +29,7 @@ from ...utils import auto_docstring, is_torch_available
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
 
 class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -92,6 +93,9 @@ class ColQwen2Processor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **labels** -- Labels compatible with training if `suffix` is not None
         """
+        if text is not None and images is not None:
+            raise ValueError("Only one of text or images can be processed at a time")
+
         output_kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -110,10 +114,13 @@ class ColQwen2Processor(ProcessorMixin):
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
 
         if images is not None:
-            # DDP-aware pixel_values re-padding
+            # NOTE: The following adjustment ensures correct behavior with DDP on multiple GPUs.
             offsets = model_inputs["image_grid_thw"][:, 1] * model_inputs["image_grid_thw"][:, 2]
             pixel_values = list(torch.split(model_inputs["pixel_values"], offsets.tolist()))
-            model_inputs["pixel_values"] = torch.nn.utils.rnn.pad_sequence(pixel_values, batch_first=True)
+            max_num_patches = max(pixel.shape[0] for pixel in pixel_values)
+            model_inputs["pixel_values"] = torch.stack(
+                [F.pad(pixel, (0, 0, 0, max_num_patches - pixel.shape[0])) for pixel in pixel_values]
+            )  # (batch_size, max_num_patches, pixel_values)
 
             if suffix is not None:
                 # add labels for training if needed
