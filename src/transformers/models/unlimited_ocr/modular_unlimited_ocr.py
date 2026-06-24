@@ -22,7 +22,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import ImageInput, SizeDict
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...masking_utils import (
     and_masks,
     causal_mask_function,
