@@ -97,7 +97,7 @@ class ColQwen2Processor(ColPaliProcessor):
 
             text = [f"{self.query_prefix}{sample}{suffix}\n" for sample in text]
 
-        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        model_inputs = ProcessorMixin.__call__(images=images, text=text, **output_kwargs)
 
         if images is not None:
             # NOTE: The following adjustment ensures correct behavior with DDP on multiple GPUs.

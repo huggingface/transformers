@@ -101,7 +101,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
             if output_kwargs["text_kwargs"].get("max_length", None) is not None:
                 output_kwargs["text_kwargs"]["max_length"] += self.image_seq_length
 
-        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        model_inputs = ProcessorMixin.__call__(images=images, text=text, **output_kwargs)
         if images is not None:
             model_inputs["labels"] = model_inputs["input_ids"].masked_fill(model_inputs["token_type_ids"] == 0, -100)
         return model_inputs
