@@ -2191,9 +2191,14 @@ class Trainer:
                 if self.args.n_gpu > 1 and num_items_in_batch.dim() == 0:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
-                # Divide by number of devices with the same batch
+                # Divide out ranks that replicate the batch (gather over-counts them). The native
+                # "accelerate" SP backend instead shards the sequence, so its ranks hold disjoint tokens
+                # and the gathered count is already global: exclude sp_size from the divisor.
                 if pc := getattr(self.accelerator, "parallelism_config", None):
-                    num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
+                    divisor = pc.non_data_parallel_size
+                    if pc.sp_enabled and pc.sp_backend == "accelerate":
+                        divisor //= pc.sp_size
+                    num_items_in_batch = num_items_in_batch // divisor
 
         return num_items_in_batch
 
@@ -2343,9 +2348,12 @@ class Trainer:
         len_dataloader = len(dataloader) if has_length(dataloader) else None
         total_train_batch_size = self.get_total_train_batch_size(args)
 
-        # Account for Sequence Parallelism (SP) dataloader adapter's effect
+        # The DeepSpeed (ALST) SP adapter packs sp_size micro-batches into one, shortening the dataloader,
+        # so scale it back up to recover steps-per-epoch. The "accelerate" backend shards in place and
+        # leaves len() unchanged, so it needs no adjustment.
+        pc = getattr(self.accelerator, "parallelism_config", None)
         sp_size = self.get_sp_size()
-        if sp_size > 1 and len_dataloader is not None:
+        if sp_size > 1 and len_dataloader is not None and pc is not None and pc.sp_backend == "deepspeed":
             len_dataloader = len_dataloader * sp_size
 
         # Case 2: We have a dataloader length and can extrapolate
