@@ -42,19 +42,79 @@ class MixtralConfig(PreTrainedConfig):
     model_type = "mixtral"
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 1000000.0
+    # TP plan (for inference/generation).
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+
+    # TP + Sequence Parallelism plan (for training).
+    base_model_sp_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "norm": "activation",
+    }
+    # Expert-only EP plan: shards MoE experts along the expert axis; gate stays replicated.
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+    # Inference TP + EP (complete plan — no runtime merge).
+    base_model_tp_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+    # Training SP + EP (complete plan — no runtime merge).
+    base_model_sp_ep_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "norm": "activation",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    # FSDP2 plan (see Qwen3Config.base_model_fsdp_plan for shape rationale).
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
     }
     attribute_map = {"num_experts": "num_local_experts"}
 

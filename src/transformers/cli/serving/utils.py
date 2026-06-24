@@ -491,7 +491,7 @@ class DirectStreamer:
         self._tokenizer = tokenizer
         self._loop = loop
         self._queue = queue
-        self._decode_stream = DecodeStream([], skip_special_tokens)
+        self._decode_stream: DecodeStream = DecodeStream([], skip_special_tokens)
         self._stc_id = tool_config["stc_id"] if tool_config else None
         self._etc_id = tool_config["etc_id"] if tool_config else None
         self._inside_tool_call = False
@@ -523,7 +523,7 @@ class DirectStreamer:
 
             is_start_or_end_token = _advance_thinking_state(self, token_id)
 
-            text = self._decode_stream.step(self._tokenizer, token_id)
+            text = self._decode_stream.step(self._tokenizer, token_id)  # ty:ignore[unresolved-attribute]
             if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
                 continue
             if self._inside_thinking:
@@ -575,7 +575,7 @@ class CBStreamer:
         self._loop = loop
         self._queue = queue
         self._tokenizer = tokenizer
-        self._decode_stream = DecodeStream([], True)
+        self._decode_stream: DecodeStream = DecodeStream([], True)
         self._stc_id = tool_config["stc_id"] if tool_config else None
         self._etc_id = tool_config["etc_id"] if tool_config else None
         self._inside_tool_call = False
@@ -602,7 +602,7 @@ class CBStreamer:
 
             is_start_or_end_token = _advance_thinking_state(self, token_id)
 
-            text = self._decode_stream.step(self._tokenizer, token_id)
+            text = self._decode_stream.step(self._tokenizer, token_id)  # ty:ignore[unresolved-attribute]
             if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
                 continue
             if self._inside_thinking:

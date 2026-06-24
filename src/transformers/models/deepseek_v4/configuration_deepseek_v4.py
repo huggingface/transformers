@@ -130,10 +130,16 @@ class DeepseekV4Config(PreTrainedConfig):
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.self_attn.compressor.indexer.q_b_proj": "colwise",
         "layers.*.self_attn.compressor.indexer.scorer.weights_proj": "colwise",
         "layers.*.self_attn.compressor.indexer.scorer": "all_reduce",
+    }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 129280

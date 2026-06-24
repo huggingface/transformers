@@ -138,18 +138,23 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     ignore_keys_at_rope_validation = {"mrope_section", "interleaved", "mrope_interleaved"}
 
     vocab_size: int = 3584
@@ -263,22 +268,55 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
     model_type = "qwen3_omni_moe_talker_code_predictor"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerCodePredictor`
+    # TP plan (for inference/generation).
+    # All activations are plain tensors — compatible with KV cache and autoregressive
+    # decode (seq_len=1). Each rank holds a full copy of activations between layers.
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+    }
+
+    # TP + Sequence Parallelism plan (for training).
+    # Activations between layers are sharded on the sequence dimension (Shard(1)),
+    # reducing per-rank activation memory by tp_size. In exchange, extra collectives
+    # (all-gather before attention/MLP, reduce-scatter after) are needed.
+    # Not compatible with autoregressive decode (because seq_len=1 can't be split across ranks)
+    # or KV cache (which stores plain tensors).
+    base_model_sp_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
+        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
+        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
+        "norm": "activation",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    # FSDP2 plan. Values are sharding strategies; runtime flags (cpu_offload, mixed_precision)
+    # live on DistributedConfig. All entries marked `keep_full_weight` are bundled
+    # into a single fully_shard([...]) call at apply time so they share one all-gather.
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 2048
@@ -357,26 +395,84 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+    }
+    base_model_sp_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
+        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
+        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
+        "norm": "activation",
     }
     base_model_ep_plan = {
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+    # Inference TP + EP (per-layer overrides applied in `_update_parallel_plans`).
+    base_model_tp_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+    # Training SP + EP (per-layer overrides applied in `_update_parallel_plans`).
+    base_model_sp_ep_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
+        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
+        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
+        "norm": "activation",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 3072
@@ -409,8 +505,89 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         self.sliding_window = self.sliding_window
+        self.sliding_window = self.sliding_window if self.use_sliding_window else None
         self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
         super().__post_init__(**kwargs)
+        self._update_parallel_plans()
+
+    def _is_moe_layer(self, layer_idx: int) -> bool:
+        return (layer_idx not in self.mlp_only_layers) and (
+            self.num_experts > 0 and (layer_idx + 1) % self.decoder_sparse_step == 0
+        )
+
+    def _update_parallel_plans(self):
+        self._update_sp_plan()
+        self._update_sp_ep_plan()
+        self._update_tp_ep_plan()
+
+    def _update_sp_plan(self):
+        self.base_model_sp_plan = self.base_model_sp_plan.copy()
+
+        for i in range(self.num_hidden_layers):
+            if self._is_moe_layer(i):
+                self.base_model_sp_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather_split",
+                        f"layers.{i}.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+                        f"layers.{i}.mlp.experts.down_proj": "moe_tp_down_rowwise",
+                        f"layers.{i}.mlp.experts": "moe_experts_allreduce",
+                    }
+                )
+            else:
+                self.base_model_sp_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather",
+                        f"layers.{i}.mlp.gate_proj": "colwise",
+                        f"layers.{i}.mlp.up_proj": "colwise",
+                        f"layers.{i}.mlp.down_proj": "rowwise_reduce_scatter",
+                    }
+                )
+
+    def _update_sp_ep_plan(self):
+        self.base_model_sp_ep_plan = self.base_model_sp_ep_plan.copy()
+
+        for i in range(self.num_hidden_layers):
+            if self._is_moe_layer(i):
+                self.base_model_sp_ep_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather_split",
+                        f"layers.{i}.mlp.gate": "ep_router",
+                        f"layers.{i}.mlp.experts.gate_up_proj": "grouped_gemm",
+                        f"layers.{i}.mlp.experts.down_proj": "grouped_gemm",
+                        f"layers.{i}.mlp.experts": "moe_experts_allreduce",
+                    }
+                )
+            else:
+                self.base_model_sp_ep_plan.update(
+                    {
+                        f"layers.{i}.mlp": "module_allgather",
+                        f"layers.{i}.mlp.gate_proj": "colwise",
+                        f"layers.{i}.mlp.up_proj": "colwise",
+                        f"layers.{i}.mlp.down_proj": "rowwise_reduce_scatter",
+                    }
+                )
+
+    def _update_tp_ep_plan(self):
+        self.base_model_tp_ep_plan = self.base_model_tp_ep_plan.copy()
+
+        for i in range(self.num_hidden_layers):
+            if self._is_moe_layer(i):
+                self.base_model_tp_ep_plan.update(
+                    {
+                        f"layers.{i}.mlp.gate": "ep_router",
+                        f"layers.{i}.mlp.experts.gate_up_proj": "grouped_gemm",
+                        f"layers.{i}.mlp.experts.down_proj": "grouped_gemm",
+                        f"layers.{i}.mlp.experts": "moe_experts_allreduce",
+                    }
+                )
+            else:
+                self.base_model_tp_ep_plan.update(
+                    {
+                        f"layers.{i}.mlp.gate_proj": "colwise",
+                        f"layers.{i}.mlp.up_proj": "colwise",
+                        f"layers.{i}.mlp.down_proj": "rowwise_allreduce",
+                    }
+                )
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")

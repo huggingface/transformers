@@ -100,9 +100,9 @@ class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
 
     base_model_tp_plan = {
         "blocks.*.attn.qkv": "colwise",
-        "blocks.*.attn.proj": "rowwise",
+        "blocks.*.attn.proj": "rowwise_allreduce",
         "blocks.*.mlp.fc1": "colwise",
-        "blocks.*.mlp.fc2": "rowwise",
+        "blocks.*.mlp.fc2": "rowwise_allreduce",
     }
 
     hidden_size: int = 1280
@@ -140,13 +140,19 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.text_moe.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.text_moe.experts.down_proj": "moe_tp_down_rowwise",
+        "layers.*.mlp.text_moe.experts": "moe_experts_allreduce",
+        "layers.*.mlp.vision_moe.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.vision_moe.experts.down_proj": "moe_tp_down_rowwise",
+        "layers.*.mlp.vision_moe.experts": "moe_experts_allreduce",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     ignore_keys_at_rope_validation = {"mrope_section"}
 

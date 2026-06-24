@@ -371,7 +371,7 @@ def _grouped_linear(
         out = _grouped_mm(input, weight, offs=offs)
     else:
         # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
-        out = _grouped_mm(input, weight.transpose(-2, -1), offs=offs)
+        out = _grouped_mm(input, weight.transpose(-2, -1).contiguous(), offs=offs)
 
     if bias is not None:
         # We should be able to pass bias to the grouped_mm call, but it's not yet supported.
@@ -446,6 +446,12 @@ def grouped_mm_experts_forward(
     proj_out = _grouped_linear(
         selected_hidden_states_g, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
+    # Mid-mask (bwd path). The up grouped_mm leaves sentinel rows of `proj_out` uninit. This
+    # matters in BACKWARD: the masked_fill_ backward zeros the gradient at sentinel rows (select,
+    # so even NaN → 0) before the non-linearity bwd's garbage can reach grad(gate_up_proj[_bias]).
+    # Forward needs no masking here (the down grouped_mm skips these rows) — the value-zeroing is
+    # just a harmless side effect.
+    proj_out.masked_fill_(sentinel_mask, 0.0)
 
     # Apply gating or activation
     if self.has_gate:

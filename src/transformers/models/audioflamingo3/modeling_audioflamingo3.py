@@ -447,6 +447,7 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
 )
 class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
     _tp_plan = None
+    _sp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 

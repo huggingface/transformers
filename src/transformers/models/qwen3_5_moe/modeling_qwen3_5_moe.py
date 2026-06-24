@@ -1800,8 +1800,12 @@ def load_balancing_loss_func(
 @auto_docstring
 class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_ep_plan = {"lm_head": "colwise_allgather"}
+    _sp_ep_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: Qwen3_5MoeTextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
@@ -1906,7 +1910,12 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    config: Qwen3_5MoeConfig
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_ep_plan = {"lm_head": "colwise_allgather"}
+    _sp_ep_plan = {"lm_head": "colwise_loss_parallel"}
 
     def __init__(self, config):
         super().__init__(config)

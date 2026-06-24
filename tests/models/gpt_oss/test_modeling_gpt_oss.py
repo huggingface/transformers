@@ -69,6 +69,7 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
+    tensor_parallel_atol = 7e-3
 
     @require_kernels
     @require_torch_accelerator

@@ -45,6 +45,15 @@ class Qwen3MoeModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen3MoeModel
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Make the tiny config build alternating dense/sparse layers so the SP plan is exercised
+        # against both a dense Qwen3MoeMLP and a sparse Qwen3MoeSparseMoeBlock. decoder_sparse_step=2
+        # makes even layers dense and odd layers MoE; pin >=2 layers so a sparse layer actually
+        # exists (don't rely on the shared tester num_hidden_layers default staying >= 2).
+        self.num_hidden_layers = max(self.num_hidden_layers, 2)
+        self.decoder_sparse_step = 2
+
 
 @require_torch
 class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
