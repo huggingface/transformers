@@ -132,21 +132,31 @@ def _resolve_tied_embed_lm_head_plan(
     return adapted_plan
 
 
-def expand_fsdp_plan(model, fsdp_plan: dict[str, str]) -> list[tuple[str, nn.Module, str]]:
-    """Expand plan keys into ``(module_name, module, sharding_strategy)`` shard targets."""
+def expand_fsdp_plan(
+    model, fsdp_plan: dict[str, str]
+) -> tuple[list[tuple[str, nn.Module]], list[tuple[str, nn.Module]]]:
+    """Expand plan keys into reshard and no-reshard ``(module_name, module)`` shard targets."""
     module_lookup = dict(model.named_modules())
-    shard_targets: list[tuple[str, nn.Module, str]] = []
+    reshard_targets: list[tuple[str, nn.Module]] = []
+    no_reshard_targets: list[tuple[str, nn.Module]] = []
 
     for plan_key, sharding_strategy in fsdp_plan.items():
         if plan_key in module_lookup:
-            shard_targets.append((plan_key, module_lookup[plan_key], sharding_strategy))
+            target = (plan_key, module_lookup[plan_key])
+            if sharding_strategy == "keep_full_weight":
+                no_reshard_targets.append(target)
+            else:
+                reshard_targets.append(target)
             continue
 
         for module_name, module in module_lookup.items():
             if replace_layer_number_by_wildcard(module_name) == plan_key:
-                shard_targets.append((module_name, module, sharding_strategy))
+                if sharding_strategy == "keep_full_weight":
+                    no_reshard_targets.append((module_name, module))
+                else:
+                    reshard_targets.append((module_name, module))
 
-    return shard_targets
+    return reshard_targets, no_reshard_targets
 
 
 def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) -> None:
@@ -195,15 +205,7 @@ def apply_fully_sharded_data_parallel(model, fsdp_mesh):
     tie_word_embeddings = getattr(model.config, "tie_word_embeddings", False)
 
     adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, tie_word_embeddings=tie_word_embeddings)
-    shard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
-
-    reshard_targets = []
-    no_reshard_targets = []
-    for module_name, module, sharding_strategy in shard_targets:
-        if sharding_strategy == "keep_full_weight":
-            no_reshard_targets.append((module_name, module))
-        else:
-            reshard_targets.append((module_name, module))
+    reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
 
     for module_name, module in reshard_targets:
         fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
