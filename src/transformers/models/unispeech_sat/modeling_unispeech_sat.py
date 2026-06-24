@@ -30,6 +30,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
@@ -342,7 +343,7 @@ class UniSpeechSatAttention(nn.Module):
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -381,7 +382,7 @@ class UniSpeechSatAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, None
+        return attn_output, attn_weights
 
 
 class UniSpeechSatFeedForward(nn.Module):
@@ -431,7 +432,7 @@ class UniSpeechSatEncoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ):
         attn_residual = hidden_states
-        hidden_states, _, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
 
@@ -541,7 +542,7 @@ class UniSpeechSatEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
     ):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states, _, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
         hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
@@ -1262,6 +1263,7 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
             param.requires_grad = False
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -1357,6 +1359,7 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
             param.requires_grad = False
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -1520,6 +1523,7 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
         return input_lengths
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

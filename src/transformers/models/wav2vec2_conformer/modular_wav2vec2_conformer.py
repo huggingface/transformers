@@ -242,7 +242,7 @@ def _apply_relative_position_encoding(module, query, key, attention_mask, relati
     # 1. project positional embeddings
     proj_relative_position_embeddings = module.linear_pos(relative_position_embeddings)
     proj_relative_position_embeddings = proj_relative_position_embeddings.view(
-        relative_position_embeddings.size(0), -1, module.num_heads, module.head_size
+        *relative_position_embeddings.shape[:2], -1, module.head_size
     )
     proj_relative_position_embeddings = proj_relative_position_embeddings.permute(0, 2, 3, 1)
 

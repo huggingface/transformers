@@ -15,6 +15,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_layers import GradientCheckpointingLayer
@@ -152,8 +153,8 @@ class WavLMAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_bias: torch.Tensor | None = None,
-        index=0,
-        **kwargs,
+        index: int = 0,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Attention layer with relative attention"""
         bsz, tgt_len, _ = hidden_states.size()
@@ -313,9 +314,16 @@ class WavLMEncoderLayer(GradientCheckpointingLayer):
         self.feed_forward = WavLMFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, position_bias=None, index=0, **kwargs):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_bias: torch.Tensor | None = None,
+        index: int = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
         attn_residual = hidden_states
-        hidden_states, attn_weights, position_bias = self.attention(
+        hidden_states, _, position_bias = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
@@ -349,10 +357,16 @@ class WavLMEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
         self.feed_forward = WavLMFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, position_bias=None, **kwargs):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_bias: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights, position_bias = self.attention(
+        hidden_states, _, position_bias = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
@@ -380,8 +394,8 @@ class WavLMEncoder(nn.Module):
     def forward(
         self,
         hidden_states,
-        attention_mask=None,
-        **kwargs,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         if attention_mask is not None:
             # make sure padded tokens output 0
@@ -432,8 +446,8 @@ class WavLMEncoderStableLayerNorm(nn.Module):
     def forward(
         self,
         hidden_states,
-        attention_mask=None,
-        **kwargs,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         if attention_mask is not None:
             # make sure padded tokens are not attended to
@@ -1207,6 +1221,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
             param.requires_grad = False
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -1302,6 +1317,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
             param.requires_grad = False
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -1465,6 +1481,7 @@ class WavLMForXVector(WavLMPreTrainedModel):
         return input_lengths
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

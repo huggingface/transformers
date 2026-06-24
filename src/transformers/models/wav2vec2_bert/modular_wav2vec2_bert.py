@@ -7,6 +7,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
@@ -203,11 +204,9 @@ def _apply_relative_key_position_encoding(module, query, key, attention_mask):
     relative_position_bias = relative_position_attn_weights * module.scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask + relative_position_bias
-    else:
-        attention_mask = relative_position_bias
+        relative_position_bias = attention_mask + relative_position_bias
 
-    return query, attention_mask
+    return query, relative_position_bias
 
 
 class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
@@ -829,6 +828,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
             param.requires_grad = False
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -892,6 +892,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -946,6 +947,7 @@ class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

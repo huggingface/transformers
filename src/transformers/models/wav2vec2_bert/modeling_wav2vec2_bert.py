@@ -15,6 +15,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
@@ -266,7 +267,7 @@ def _apply_relative_position_encoding(module, query, key, attention_mask, relati
     # 1. project positional embeddings
     proj_relative_position_embeddings = module.linear_pos(relative_position_embeddings)
     proj_relative_position_embeddings = proj_relative_position_embeddings.view(
-        relative_position_embeddings.size(0), -1, module.num_heads, module.head_size
+        *relative_position_embeddings.shape[:2], -1, module.head_size
     )
     proj_relative_position_embeddings = proj_relative_position_embeddings.permute(0, 2, 3, 1)
 
@@ -310,11 +311,9 @@ def _apply_relative_key_position_encoding(module, query, key, attention_mask):
     relative_position_bias = relative_position_attn_weights * module.scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask + relative_position_bias
-    else:
-        attention_mask = relative_position_bias
+        relative_position_bias = attention_mask + relative_position_bias
 
-    return query, attention_mask
+    return query, relative_position_bias
 
 
 class Wav2Vec2BertSelfAttention(nn.Module):
@@ -1183,6 +1182,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
             param.requires_grad = False
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -1265,6 +1265,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
             param.requires_grad = False
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -1415,6 +1416,7 @@ class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
         return input_lengths
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

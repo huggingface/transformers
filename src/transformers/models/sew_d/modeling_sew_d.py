@@ -23,6 +23,7 @@ from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
@@ -687,7 +688,7 @@ class DisentangledSelfAttention(nn.Module):
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Call the module
@@ -755,7 +756,7 @@ class DisentangledSelfAttention(nn.Module):
         )
         new_context_layer_shape = context_layer.size()[:-2] + (-1,)
         context_layer = context_layer.view(new_context_layer_shape)
-        return (context_layer, attention_probs)
+        return context_layer, attention_probs
 
     def disentangled_attention_bias(self, query_layer, key_layer, relative_pos, rel_embeddings, scale_factor):
         if relative_pos is None:
@@ -850,7 +851,7 @@ class SEWDAttention(nn.Module):
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         self_output, _ = self.self(
             hidden_states,
@@ -912,7 +913,7 @@ class SEWDLayer(GradientCheckpointingLayer):
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         attention_output = self.attention(
             hidden_states,
@@ -1026,7 +1027,7 @@ class SEWDTransformerEncoder(nn.Module):
         attention_mask,
         query_states=None,
         relative_pos=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         if attention_mask.dim() <= 2:
             input_mask = attention_mask
@@ -1482,6 +1483,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
             param.requires_grad = False
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

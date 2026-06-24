@@ -24,7 +24,8 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...audio_utils import conv1d_output_length
 from ...modeling_utils import PreTrainedAudioTokenizerBase
-from ...utils import ModelOutput, auto_docstring
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ..auto import AutoModel
 from .configuration_xcodec import XcodecConfig
 
@@ -567,7 +568,7 @@ class XcodecModel(XcodecPreTrainedModel):
         audio_codes: torch.Tensor | None = None,
         bandwidth: float | None = None,
         return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor] | XcodecOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):

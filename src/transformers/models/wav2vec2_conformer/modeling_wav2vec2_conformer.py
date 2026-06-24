@@ -16,6 +16,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_layers import GradientCheckpointingLayer
@@ -458,7 +459,7 @@ def _apply_relative_position_encoding(module, query, key, attention_mask, relati
     # 1. project positional embeddings
     proj_relative_position_embeddings = module.linear_pos(relative_position_embeddings)
     proj_relative_position_embeddings = proj_relative_position_embeddings.view(
-        relative_position_embeddings.size(0), -1, module.num_heads, module.head_size
+        *relative_position_embeddings.shape[:2], -1, module.head_size
     )
     proj_relative_position_embeddings = proj_relative_position_embeddings.permute(0, 2, 3, 1)
 
@@ -1542,6 +1543,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
             param.requires_grad = False
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -1637,6 +1639,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
             param.requires_grad = False
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -1800,6 +1803,7 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
         return input_lengths
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
