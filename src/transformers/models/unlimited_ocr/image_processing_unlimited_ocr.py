@@ -241,19 +241,24 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         )
 
         image_spatial_crop = []
+        num_local_patches = []
         for image in images:
             height, width = image.shape[-2:]
             if crop_to_patches and max(height, width) > tile_size:
                 num_columns, num_rows = get_optimal_tiled_canvas(
                     (height, width), (tile_size, tile_size), min_patches, max_patches
                 )
+                num_local_patches.append(num_columns * num_rows)
             else:
                 num_columns, num_rows = 1, 1
+                num_local_patches.append(0)
             image_spatial_crop.append([num_columns, num_rows])
-        batch_feature["image_spatial_crop"] = torch.tensor(image_spatial_crop, dtype=torch.long)
-        batch_feature["num_local_patches"] = (
-            batch_feature["image_spatial_crop"][:, 0] * batch_feature["image_spatial_crop"][:, 1]
+
+        # TODO: rename
+        batch_feature["image_spatial_crop"] = torch.tensor(
+            image_spatial_crop, dtype=torch.long, device=images[0].device
         )
+        batch_feature["num_local_patches"] = torch.tensor(num_local_patches, dtype=torch.long, device=images[0].device)
         return batch_feature
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
