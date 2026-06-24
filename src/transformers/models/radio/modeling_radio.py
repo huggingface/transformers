@@ -174,6 +174,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Radio
 class RadioSelfAttention(nn.Module):
     def __init__(self, config: RadioConfig):
         super().__init__()
@@ -195,7 +196,11 @@ class RadioSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -216,6 +221,7 @@ class RadioSelfAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -224,6 +230,7 @@ class RadioSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Radio
 class RadioSelfOutput(nn.Module):
     """
     The residual connection is defined in RadioLayer instead of here (as is the case with other models), due to the
@@ -241,45 +248,21 @@ class RadioSelfOutput(nn.Module):
         return hidden_states
 
 
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Radio
 class RadioAttention(nn.Module):
     def __init__(self, config: RadioConfig):
         super().__init__()
         self.attention = RadioSelfAttention(config)
         self.output = RadioSelfOutput(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
         output = self.output(self_attn_output, hidden_states)
         return output
-
-
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class RadioDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
 
 
 class RadioSwiGLUFFN(nn.Module):
@@ -297,6 +280,30 @@ class RadioSwiGLUFFN(nn.Module):
         x1, x2 = hidden_state.chunk(2, dim=-1)
         hidden = nn.functional.silu(x1) * x2
         return self.weights_out(hidden)
+
+
+class RadioDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
 
 
 class RadioLayer(GradientCheckpointingLayer):
@@ -352,12 +359,13 @@ class RadioEncoder(nn.Module):
 
 
 @auto_docstring
-class RADIOPreTrainedModel(PreTrainedModel):
+class RadioPreTrainedModel(PreTrainedModel):
     config_class = RadioConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["RadioLayer"]
+    _keys_to_ignore_on_load_missing = [r"layer_scale\d+\.lambda1"]
     _supports_sdpa = True
     _supports_flash_attn = True
 
@@ -381,7 +389,7 @@ class RADIOPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class RADIOModel(RADIOPreTrainedModel):
+class RADIOModel(RadioPreTrainedModel):
     def __init__(self, config: RadioConfig):
         super().__init__(config)
         self.config = config
@@ -415,4 +423,4 @@ class RADIOModel(RADIOPreTrainedModel):
         return RadioModelOutput(summary=summary, features=features, last_hidden_state=hidden_states)
 
 
-__all__ = ["RADIOModel", "RADIOPreTrainedModel"]
+__all__ = ["RADIOModel", "RadioPreTrainedModel"]

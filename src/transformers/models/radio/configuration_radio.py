@@ -13,6 +13,8 @@
 # limitations under the License.
 """RADIO vision encoder configuration."""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PretrainedConfig
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
@@ -20,6 +22,7 @@ from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 __all__ = ["RADIOConfig"]
 
 
+@strict
 class RADIOConfig(PretrainedConfig):
     """Configuration for the RADIO vision encoder (native transformers port).
 

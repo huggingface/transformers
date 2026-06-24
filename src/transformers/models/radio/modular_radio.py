@@ -28,7 +28,7 @@ from .configuration_radio import RADIOConfig as RadioConfig
 
 logger = logging.get_logger(__name__)
 
-__all__ = ["RADIOModel", "RADIOPreTrainedModel"]
+__all__ = ["RADIOModel", "RadioPreTrainedModel"]
 
 
 @dataclass
@@ -142,12 +142,13 @@ class RadioEncoder(nn.Module):
 
 
 @auto_docstring
-class RADIOPreTrainedModel(PreTrainedModel):
+class RadioPreTrainedModel(PreTrainedModel):
     config_class = RadioConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["RadioLayer"]
+    _keys_to_ignore_on_load_missing = [r"layer_scale\d+\.lambda1"]
     _supports_sdpa = True
     _supports_flash_attn = True
 
@@ -171,7 +172,7 @@ class RADIOPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class RADIOModel(RADIOPreTrainedModel):
+class RADIOModel(RadioPreTrainedModel):
     def __init__(self, config: RadioConfig):
         super().__init__(config)
         self.config = config
