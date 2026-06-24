@@ -246,7 +246,7 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
         sampling_rate: int | None = None,
         is_streaming: bool = False,
         is_first_audio_chunk: bool | None = True,
-        language: "str | list[str] | None" = None,
+        language: str | list[str] | None = None,
         **kwargs: Unpack[Nemotron3_5AsrProcessorKwargs],
     ):
         r"""
