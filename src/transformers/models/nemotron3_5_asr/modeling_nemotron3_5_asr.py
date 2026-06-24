@@ -211,7 +211,6 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
         self.decoder = Nemotron3_5AsrRNNTDecoder(config)
         self.joint = Nemotron3_5AsrRNNTJointNetwork(config)
         self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
-        # Language-ID prompt fusion: [encoder_output ; one_hot(language)] -> MLP -> encoder hidden size.
         self.prompt_projector = Nemotron3_5AsrPromptProjector(config)
 
         self.post_init()

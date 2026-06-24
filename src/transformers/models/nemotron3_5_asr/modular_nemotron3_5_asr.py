@@ -380,7 +380,6 @@ class Nemotron3_5AsrPromptProjector(nn.Module):
 class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGenerationMixin):
     def __init__(self, config: Nemotron3_5AsrConfig):
         super().__init__(config)
-        # Language-ID prompt fusion: [encoder_output ; one_hot(language)] -> MLP -> encoder hidden size.
         self.prompt_projector = Nemotron3_5AsrPromptProjector(config)
         self.post_init()
 
