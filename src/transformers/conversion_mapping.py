@@ -1380,8 +1380,7 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(r"decode_head\.conv_matting\.", r"decode_head.predictor."),
         ],
-        # TODO: unlimited-ocr instead of unlimited_ocr because hub config has model_type="unlimited-ocr"
-        "unlimited-ocr": [
+        "unlimited_ocr": [
             WeightRenaming(r"(^|model\.)sam_model", r"\1vision_tower.sam_encoder"),
             WeightRenaming(r"(^|model\.)vision_model", r"\1vision_tower.vision_encoder"),
             WeightRenaming(r"(^|model\.)view_seperator", r"\1view_separator"),
