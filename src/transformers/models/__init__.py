@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .audioflamingo3 import *
     from .auto import *
     from .autoformer import *
+    from .AXK1 import *
     from .aya_vision import *
     from .bamba import *
     from .bark import *
@@ -367,6 +368,7 @@ if TYPE_CHECKING:
     from .sam2 import *
     from .sam2_video import *
     from .sam3 import *
+    from .sam3_lite_text import *
     from .sam3_tracker import *
     from .sam3_tracker_video import *
     from .sam3_video import *
