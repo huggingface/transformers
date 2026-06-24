@@ -23,8 +23,6 @@ from PIL import Image
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
-from transformers.conversion_mapping import register_checkpoint_conversion_mapping
-from transformers.core_model_loading import Chunk, Concatenate, WeightConverter
 from transformers.generation import GenerationMixin
 from transformers.masking_utils import (
     create_causal_mask,
@@ -37,10 +35,11 @@ from transformers.processing_utils import Unpack
 from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, no_inherit_decorator, torch_int
 from transformers.utils.generic import merge_with_config_defaults
 from transformers.utils.output_capturing import capture_outputs
+from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
+
 
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
 from ..siglip.modeling_siglip import SiglipVisionEmbeddings
-from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
 from ..mimi.modeling_mimi import MimiLayerScale
 from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention, MiniMaxM3VLDecoderLayer, MiniMaxM3VLRotaryEmbedding, MiniMaxM3VLDenseMLP, MiniMaxM3VLRMSNorm, MiniMaxM3VLSparseMoeBlock, MiniMaxM3VLTopKRouter, MiniMaxM3VLVisionMLP, MiniMaxM3VLVisionAttention, MiniMaxM3VLVisionEncoderLayer, rotate_half, apply_rotary_pos_emb, repeat_kv, eager_attention_forward
 
@@ -305,27 +304,6 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_static_cache = True
     _supports_attention_backend = True
-
-    # Scoped to vision_model so the reverse (save-path) converter does not incorrectly
-    # concatenate language-model GQA q/k/v weights (which are unequal in size).
-    _vision_attn_converters = []
-    _w = WeightConverter(
-        source_patterns=["self_attn.in_proj_weight"],
-        target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
-        operations=[Chunk(dim=0)],
-    )
-    _w.scope_prefix = "vision_model"
-    _w.base_model_prefix = "model"
-    _vision_attn_converters.append(_w)
-    _w = WeightConverter(
-        source_patterns=["self_attn.in_proj_bias"],
-        target_patterns=["self_attn.q_proj.bias", "self_attn.k_proj.bias", "self_attn.v_proj.bias"],
-        operations=[Chunk(dim=0)],
-    )
-    _w.scope_prefix = "vision_model"
-    _w.base_model_prefix = "model"
-    _vision_attn_converters.append(_w)
-    del _w
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -730,54 +708,9 @@ class Step3p7Model(Step3p7PreTrainedModel):
 
 
 class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
-    # Extend parent's vision-attn converters with MoE weight fusing:
-    # original checkpoints store routed-expert gate and up as separate 3-D tensors;
-    # Step3p7Experts (like DeepseekV4Experts) expects them fused as gate_up_proj.
-    _vision_attn_converters = Step3p7PreTrainedModel._vision_attn_converters + [
-        WeightConverter(
-            source_patterns=["moe.gate_proj.weight", "moe.up_proj.weight"],
-            target_patterns=["mlp.experts.gate_up_proj"],
-            operations=[Concatenate(dim=1)],
-        ),
-    ]
-    #TODO: will clean this up when i push a clean checkpoint
-    _checkpoint_conversion_mapping = {
-        "^vision_model": "model.vision_model",
-        r"^model(?!\.(language_model|vision_model))": "model.language_model",
-        "^vit_large_projector": "model.multi_modal_projector",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        ".conv1.weight": ".embeddings.patch_embedding.weight",
-        ".positional_embedding": ".embeddings.position_embedding.weight",
-        ".transformer.resblocks.": ".encoder.layers.",
-        ".transformer.": ".encoder.",
-        ".ln_pre.": ".pre_layernorm.",
-        ".ls_1.gamma": ".ls_1.scale",
-        ".ls_2.gamma": ".ls_2.scale",
-        ".mlp.c_fc.": ".mlp.fc1.",
-        ".mlp.c_proj.": ".mlp.fc2.",
-        r"\.attn\.": ".self_attn.",
-        r"\.ln_1\.": ".layer_norm1.",
-        r"\.ln_2\.": ".layer_norm2.",
-        # MoE block restructure: moe.* + share_expert.* → mlp.{gate,experts,shared_experts}
-        ".moe.gate.weight": ".mlp.gate.weight",
-        ".moe.router_bias": ".mlp.gate.e_score_correction_bias",
-        ".moe.down_proj.weight": ".mlp.experts.down_proj",
-        ".share_expert.": ".mlp.shared_experts.",
-        ".vit_downsampler1.": ".downsampler.0.",
-        ".vit_downsampler2.": ".downsampler.1.",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     base_model_prefix = "model"
     config: Step3p7Config
-
-    @classmethod
-    #TODO: will clean this up when i push a clean checkpoint
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        register_checkpoint_conversion_mapping(cls.__name__, cls._vision_attn_converters, overwrite=True)
-        key_mapping = getattr(cls, "_checkpoint_conversion_mapping", None)
-        if key_mapping is not None and kwargs.get("key_mapping") is None:
-            kwargs["key_mapping"] = copy.deepcopy(key_mapping)
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     def __init__(self, config: Step3p7Config):
         Step3p7PreTrainedModel.__init__(self, config)
