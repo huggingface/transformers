@@ -257,7 +257,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         flat_local_list = [patch for item in ordered_local if item is not None for patch in item]
 
         # --- Global view (batched by shape group) ---
-        global_target_size = size.height if crop_to_patches else tile_size
+        global_target_size = size.height
 
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_global_grouped = {}
