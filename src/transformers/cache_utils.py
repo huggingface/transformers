@@ -378,7 +378,7 @@ class StaticLayer(CacheLayerMixin):
         super().__init__()
         self.max_cache_len = max_cache_len
         # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
-        self.cumulative_length = torch.tensor([0], dtype=int)
+        self.cumulative_length = torch.tensor(0, dtype=int)
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
@@ -610,7 +610,7 @@ class StaticIndexedLayer(StaticLayer):
         self.is_indexer_initialized: bool = False
         # The indexer update runs independently of (and after) the main K/V `update` in the attention
         # forward, so it tracks its own cumulative length rather than reusing `self.cumulative_length`.
-        self.indexer_cumulative_length = torch.tensor([0], dtype=int)
+        self.indexer_cumulative_length = torch.tensor(0, dtype=int)
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
         self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
@@ -1006,6 +1006,14 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         if len(args) == 0 and len(kwargs) == 1:
             LinearAttentionLayer.lazy_initialization(self, **kwargs)
 
+    def offload(self):
+        DynamicLayer.offload(self)
+        LinearAttentionLayer.offload(self)
+
+    def prefetch(self):
+        DynamicLayer.prefetch(self)
+        LinearAttentionLayer.prefetch(self)
+
     def reset(self) -> None:
         LinearAttentionLayer.reset(self)
         DynamicLayer.reset(self)
@@ -1088,19 +1096,22 @@ class Cache:
 
     def prefetch(self, layer_idx: int, only_non_sliding: bool = True):
         """
-        Prefetch a given layer on its device. If `only_non_sliding` is True, it will try to prefetch only the layers
-        which are non-sliding. If the `layer_idx` is outside the range, this will circle back to the first layers.
-        Note that we use a non-default stream for this, to avoid blocking.
+        Prefetch the next offloaded layer on its device, starting at `layer_idx` and circling back to the beginning
+        if needed. Linear-attention layers are never offloaded and are skipped, as are sliding layers when
+        `only_non_sliding`. Note that we use a non-default stream for this, to avoid blocking.
         """
-        if only_non_sliding:
-            # Try to find next non-sliding, starting at `layer_idx`
-            try:
-                layer_idx = layer_idx + self.is_sliding[layer_idx:].index(False)
-            # In this case, we need to circle back to the beginning
-            except ValueError:
-                layer_idx = self.is_sliding.index(False)
-        else:
-            layer_idx = layer_idx if layer_idx < len(self.layers) else 0
+        # Whether each layer is offloaded, hence worth prefetching: linear-attention layers never go through the
+        # offloading `update` path, and sliding layers are skipped when `only_non_sliding` (kept resident).
+        is_offloaded = [
+            not is_linear and not (only_non_sliding and is_sliding)
+            for is_linear, is_sliding in zip(self.is_linear, self.is_sliding)
+        ]
+        try:
+            # Try to find the next offloaded layer, starting at `layer_idx`
+            layer_idx = layer_idx + is_offloaded[layer_idx:].index(True)
+        # In this case, we need to circle back to the beginning
+        except ValueError:
+            layer_idx = is_offloaded.index(True)
 
         # Prefetch
         with self.prefetch_stream if _is_torch_greater_or_equal_than_2_7 else torch.cuda.stream(self.prefetch_stream):
@@ -1393,6 +1404,16 @@ class Cache:
     def is_sliding(self) -> list[bool]:
         """Return whether the layers of the cache are sliding window"""
         return [getattr(layer, "is_sliding", False) for layer in self.layers]
+
+    @property
+    def is_linear(self) -> list[bool]:
+        """Return whether the layers of the cache are linear attention (Mamba/SSM) layers. Note that layers containing
+        both linear and full attention states will return False by this function"""
+        return [
+            isinstance(layer, LinearAttentionCacheLayerMixin)
+            and not isinstance(layer, LinearAttentionAndFullAttentionLayer)
+            for layer in self.layers
+        ]
 
     def __len__(self):
         """

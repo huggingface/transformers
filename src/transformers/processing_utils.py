@@ -925,6 +925,9 @@ class ProcessorMixin(PushToHubMixin):
         """
         mm_token_type_ids = []
         for tokenizer_input in input_ids:
+            # Convert tensor rows to a list so `np.array` avoids NumPy 2.0's `__array__` copy-keyword deprecation.
+            if not isinstance(tokenizer_input, list):
+                tokenizer_input = tokenizer_input.tolist()
             tokenizer_input = np.array(tokenizer_input)
             mm_token_types = np.zeros_like(tokenizer_input)
             mm_token_types[np.isin(tokenizer_input, self.image_token_ids)] = 1

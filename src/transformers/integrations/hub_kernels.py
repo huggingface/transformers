@@ -326,7 +326,7 @@ if is_kernels_available():
                 ),
                 "rocm": {
                     Mode.INFERENCE: FuncRepository(
-                        repo_id="kernels-community/aiter-rope", func_name="apply_rotary_transformers", version=1
+                        repo_id="kernels-community/aiter-rope", func_name="apply_rotary_transformers", version=2
                     )
                 },
             },
