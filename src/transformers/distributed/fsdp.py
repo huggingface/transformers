@@ -176,7 +176,7 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
         logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
 
 
-def apply_fully_shard_data_parallel(model, fsdp_mesh):
+def apply_fully_sharded_data_parallel(model, fsdp_mesh):
     """
     Apply FSDP2 (fully_shard) to a model.
     """
