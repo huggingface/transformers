@@ -60,7 +60,6 @@ class Nemotron3_5AsrForRNNTModelTester:
         subsampling_conv_channels=32,
         vocab_size=128,
         decoder_hidden_size=32,
-        joint_hidden_size=32,
         num_decoder_layers=1,
         hidden_act="relu",
         max_symbols_per_step=5,
@@ -82,7 +81,6 @@ class Nemotron3_5AsrForRNNTModelTester:
         self.subsampling_conv_channels = subsampling_conv_channels
         self.vocab_size = vocab_size
         self.decoder_hidden_size = decoder_hidden_size
-        self.joint_hidden_size = joint_hidden_size
         self.num_decoder_layers = num_decoder_layers
         self.hidden_act = hidden_act
         self.max_symbols_per_step = max_symbols_per_step
@@ -116,7 +114,6 @@ class Nemotron3_5AsrForRNNTModelTester:
         return Nemotron3_5AsrConfig(
             vocab_size=self.vocab_size,
             decoder_hidden_size=self.decoder_hidden_size,
-            joint_hidden_size=self.joint_hidden_size,
             num_decoder_layers=self.num_decoder_layers,
             hidden_act=self.hidden_act,
             max_symbols_per_step=self.max_symbols_per_step,

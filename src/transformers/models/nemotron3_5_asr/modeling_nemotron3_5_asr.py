@@ -243,10 +243,9 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
 
         if prompt_ids is None:
             logger.warning_once(
-                "`prompt_ids` was not provided for language-ID prompt conditioning; defaulting to "
-                f"`config.default_prompt_id={self.config.default_prompt_id}` (the `auto` language-detection "
-                "slot). Pass `language` to the processor (which produces `prompt_ids`), or pass `prompt_ids` "
-                "directly to the model / `generate`, to condition on a specific language."
+                "`prompt_ids` not provided; defaulting to "
+                f"`config.default_prompt_id={self.config.default_prompt_id}` (auto language detection). "
+                "Pass `language` to the processor or `prompt_ids` to condition on a specific language."
             )
             prompt_ids = torch.full(
                 (hidden_states.shape[0],),

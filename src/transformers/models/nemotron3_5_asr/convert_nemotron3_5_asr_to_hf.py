@@ -386,7 +386,6 @@ def convert_rnnt_config(nemo_config, encoder_config, prompt_intermediate_size):
     decoder_hidden_size = prednet.get("pred_hidden", 640)
     num_decoder_layers = prednet.get("pred_rnn_layers", 2)
     jointnet = joint_config.get("jointnet", {})
-    joint_hidden_size = jointnet.get("joint_hidden", decoder_hidden_size)
     activation = jointnet.get("activation", "relu")
     max_symbols_per_step = nemo_config.get("decoding", {}).get("greedy", {}).get("max_symbols", 10)
 
@@ -397,7 +396,7 @@ def convert_rnnt_config(nemo_config, encoder_config, prompt_intermediate_size):
 
     print(
         f"RNN-T config: vocab_size={vocab_size} (including blank token), "
-        f"decoder_hidden={decoder_hidden_size}, joint_hidden={joint_hidden_size}, "
+        f"decoder_hidden={decoder_hidden_size}, "
         f"decoder_layers={num_decoder_layers}, max_symbols_per_step={max_symbols_per_step}, "
         f"num_prompts={num_prompts}, prompt_intermediate_size={prompt_intermediate_size}, "
         f"default_prompt_id={default_prompt_id}"
@@ -406,7 +405,6 @@ def convert_rnnt_config(nemo_config, encoder_config, prompt_intermediate_size):
     return Nemotron3_5AsrConfig(
         vocab_size=vocab_size,
         decoder_hidden_size=decoder_hidden_size,
-        joint_hidden_size=joint_hidden_size,
         num_decoder_layers=num_decoder_layers,
         hidden_act=activation,
         max_symbols_per_step=max_symbols_per_step,
