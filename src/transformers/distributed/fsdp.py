@@ -95,17 +95,19 @@ def _get_input_output_embeddings(model: nn.Module) -> tuple[nn.Module | None, nn
     return input_embed, output_head
 
 
-def is_norm_and_head_pair(modules: list[tuple[str, nn.Module]], model: nn.Module) -> bool:
+def is_norm_and_head_pair(no_reshard_targets: list[tuple[str, nn.Module]], model: nn.Module) -> bool:
     if len(modules) != 2:
         return False
     input_embed, output_head = _get_input_output_embeddings(model)
     head_modules = {module for module in (input_embed, output_head) if module is not None}
 
-    module_names = [name for name, _ in modules]
-    module_objects = [module for _, module in modules]
+    names, modules = [], []
+    for name, module in no_reshard_targets:
+        names.append(name)
+        modules.append(module)
 
-    has_final_norm = any(name == "norm" or name.endswith(".norm") for name in module_names)
-    has_output_head = any(module in head_modules for module in module_objects)
+    has_final_norm = any(name == "norm" or name.endswith(".norm") for name in names)
+    has_output_head = any(module in head_modules for module in modules)
     return has_final_norm and has_output_head
 
 
@@ -232,12 +234,14 @@ def apply_fully_sharded_data_parallel(
     # Optimization: when the keep buffer is exactly the (final_norm, lm_head/embed)
     # tail pair, bundle them into one fully_shard so that we dont need to do all-gather during backward pass.
     if is_norm_and_head_pair(no_reshard_targets, model):
-        module_names = [name for name, _ in no_reshard_targets]
-        modules = [module for _, module in no_reshard_targets]
+        names, modules = [], []
+        for name, module in no_reshard_targets:
+            names.append(name)
+            modules.append(module)
         fully_shard(modules, mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
-        logger.debug(f"Grouped tail {module_names} (reshard=False)")
+        logger.debug(f"Grouped tail {names} (reshard=False)")
     else:
-        for module_name, module in no_reshard_targets:
+        for name, module in no_reshard_targets:
             fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
             logger.debug(f"Applied fully_shard to {module_name} (reshard=False)")
 
