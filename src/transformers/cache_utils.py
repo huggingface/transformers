@@ -397,17 +397,17 @@ class StaticLayer(CacheLayerMixin):
         prefill itself ends up in a compiled region (with chunked prefill for instance).
         """
         self.dtype, self.device = key_states.dtype, key_states.device
-        self.max_batch_size, self.num_heads = key_states.shape[:2]
+        self.batch_size, self.num_heads = key_states.shape[:2]
         self.v_head_dim = value_states.shape[-1]
         self.k_head_dim = key_states.shape[-1]
 
         self.keys = torch.zeros(
-            (self.max_batch_size, self.num_heads, self.max_cache_len, self.k_head_dim),
+            (self.batch_size, self.num_heads, self.max_cache_len, self.k_head_dim),
             dtype=self.dtype,
             device=self.device,
         )
         self.values = torch.zeros(
-            (self.max_batch_size, self.num_heads, self.max_cache_len, self.v_head_dim),
+            (self.batch_size, self.num_heads, self.max_cache_len, self.v_head_dim),
             dtype=self.dtype,
             device=self.device,
         )
@@ -620,9 +620,9 @@ class StaticIndexedLayer(StaticLayer):
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
         self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
-        max_batch_size, _, index_head_dim = indexer_key_states.shape
+        batch_size, _, index_head_dim = indexer_key_states.shape
         self.indexer_keys = torch.zeros(
-            (max_batch_size, self.max_cache_len, index_head_dim),
+            (batch_size, self.max_cache_len, index_head_dim),
             dtype=self.indexer_dtype,
             device=self.indexer_device,
         )
@@ -934,7 +934,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         if conv_states is not None:
             self.dtype, self.device = conv_states.dtype, conv_states.device
             # Even if prefill is larfer/shorter than the conv_size, the tensor is always either padded or truncated
-            self.max_batch_size, self.conv_kernel_size = conv_states.shape[0], conv_states.shape[-1]
+            self.batch_size, self.conv_kernel_size = conv_states.shape[0], conv_states.shape[-1]
             # The shape is always static, so we init as such
             self.conv_states = torch.zeros_like(conv_states, dtype=self.dtype, device=self.device)
             # Mark as static address to be able to use cudagraphs
@@ -1398,11 +1398,11 @@ class Cache:
             self.layers[layer_idx].batch_select_indices(indices)
 
     @property
-    def max_batch_size(self) -> int:
-        """Return the maximum batch size of the cache"""
-        values = [layer.max_batch_size for layer in self.layers]
+    def batch_size(self) -> int:
+        """Return the batch size of the cache"""
+        values = [layer.batch_size for layer in self.layers]
         if len(set(values)) > 1:
-            raise ValueError(f"Max batch size is not consistent across layers: {values}")
+            raise ValueError(f"The batch size is not consistent across layers: {values}")
         return values[0]
 
     @property
@@ -1446,6 +1446,13 @@ class Cache:
             "`max_cache_len` is deprecated, and will be removed in version 5.16. Please use `get_max_length()` instead"
         )
         return self.get_max_length()
+
+    @property
+    def max_batch_size(self) -> int:
+        logger.warning_once(
+            "`max_batch_size` is deprecated, and will be removed in version 5.16. Please use the simpler `batch_size` instead"
+        )
+        return self.batch_size
 
 
 class DynamicCache(Cache):

@@ -836,7 +836,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         need_new_cache = (
             not hasattr(self, "_encoder_cache")
             or cache_to_check.offloading != offload_cache
-            or cache_to_check.max_batch_size != batch_size
+            or cache_to_check.batch_size != batch_size
             or cache_to_check.get_max_length() < max_cache_len
         )
 
