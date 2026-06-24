@@ -1,6 +1,6 @@
 #!/bin/bash
 # SFT with LoRA on AWS Trainium using TRL's SFTTrainer.
-# Compare against run_lora_finetune_hf.sh (custom training loop).
+# Compare against sft_lora_finetune_custom.sh (custom training loop).
 
 set -euo pipefail
 
@@ -69,7 +69,7 @@ echo "  Output dir:      $OUTPUT_DIR"
 echo "=========================================="
 
 torchrun --nproc_per_node="${NUM_PROC}" \
-    sft_neuron.py \
+    sft_lora_finetune_hf.py \
     --model_name_or_path "$MODEL_NAME" \
     --dataset_name "$DATASET_NAME" \
     --learning_rate $LEARNING_RATE \
