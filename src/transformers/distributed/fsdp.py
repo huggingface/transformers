@@ -95,17 +95,19 @@ def _get_input_output_embeddings(model: nn.Module) -> tuple[nn.Module | None, nn
     return input_embed, output_head
 
 
-def is_norm_and_head_pair(modules: list[tuple[str, nn.Module]], model: nn.Module) -> bool:
-    if len(modules) != 2:
+def is_norm_and_head_pair(no_reshard_targets: list[tuple[str, nn.Module]], model: nn.Module) -> bool:
+    if len(no_reshard_targets) != 2:
         return False
     input_embed, output_head = _get_input_output_embeddings(model)
     head_modules = {module for module in (input_embed, output_head) if module is not None}
 
-    module_names = [name for name, _ in modules]
-    module_objects = [module for _, module in modules]
+    names, modules = [], []
+    for name, module in no_reshard_targets:
+        names.append(name)
+        modules.append(module)
 
-    has_final_norm = any(name == "norm" or name.endswith(".norm") for name in module_names)
-    has_output_head = any(module in head_modules for module in module_objects)
+    has_final_norm = any(name == "norm" or name.endswith(".norm") for name in names)
+    has_output_head = any(module in head_modules for module in modules)
     return has_final_norm and has_output_head
 
 
@@ -158,19 +160,20 @@ def expand_fsdp_plan(
 
     for plan_key, sharding_strategy in fsdp_plan.items():
         if plan_key in module_lookup:
-            target = (plan_key, module_lookup[plan_key])
-            if sharding_strategy == "keep_full_weight":
-                no_reshard_targets.append(target)
-            else:
-                reshard_targets.append(target)
-            continue
+            # model.norm, lm_head etc.
+            targets = [(plan_key, module_lookup[plan_key])]
+        else:
+            # model.layers.*
+            targets = [
+                (module_name, module)
+                for module_name, module in module_lookup.items()
+                if replace_layer_number_by_wildcard(module_name) == plan_key
+            ]
 
-        for module_name, module in module_lookup.items():
-            if replace_layer_number_by_wildcard(module_name) == plan_key:
-                if sharding_strategy == "keep_full_weight":
-                    no_reshard_targets.append((module_name, module))
-                else:
-                    reshard_targets.append((module_name, module))
+        if sharding_strategy == "keep_full_weight":
+            no_reshard_targets.extend(targets)
+        else:
+            reshard_targets.extend(targets)
 
     return reshard_targets, no_reshard_targets
 
@@ -189,8 +192,7 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
     for key, strategy in fsdp_plan.items():
         if strategy not in {"free_full_weight", "keep_full_weight"}:
             invalid_strategies[key] = strategy
-            continue
-        if key not in name_lookup and not any(replace_layer_number_by_wildcard(name) == key for name in name_lookup):
+        elif key not in name_lookup and not any(replace_layer_number_by_wildcard(name) == key for name in name_lookup):
             unused_rules[key] = strategy
 
     if invalid_strategies:
@@ -232,14 +234,16 @@ def apply_fully_sharded_data_parallel(
     # Optimization: when the keep buffer is exactly the (final_norm, lm_head/embed)
     # tail pair, bundle them into one fully_shard so that we dont need to do all-gather during backward pass.
     if is_norm_and_head_pair(no_reshard_targets, model):
-        module_names = [name for name, _ in no_reshard_targets]
-        modules = [module for _, module in no_reshard_targets]
+        names, modules = [], []
+        for name, module in no_reshard_targets:
+            names.append(name)
+            modules.append(module)
         fully_shard(modules, mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
-        logger.debug(f"Grouped tail {module_names} (reshard=False)")
+        logger.debug(f"Grouped tail {names} (reshard=False)")
     else:
-        for module_name, module in no_reshard_targets:
+        for name, module in no_reshard_targets:
             fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
-            logger.debug(f"Applied fully_shard to {module_name} (reshard=False)")
+            logger.debug(f"Applied fully_shard to {name} (reshard=False)")
 
     # Apply FSDP2 to the root module
     fully_shard(model, mesh=fsdp_mesh, **fsdp_policy_kwargs)
