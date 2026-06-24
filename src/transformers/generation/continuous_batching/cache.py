@@ -138,6 +138,10 @@ class PagedAttentionCache:
             tp_plan: Tensor parallelism plan
             dtype: Data type of the cache
         """
+        # Resolve the text config so composite/multimodal configs (which nest the attention head
+        # counts, hidden size, vocab size, layer types, etc. under a `text_config`) expose the
+        # dimensions read below. For plain text models `get_text_config()` returns the config itself.
+        config = config.get_text_config()
         self.config = config
         self.dtype = dtype
         self.device = device
