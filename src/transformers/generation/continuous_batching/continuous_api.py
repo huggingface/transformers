@@ -575,7 +575,7 @@ class ContinuousBatchingManager:
         self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
 
         # Model-related attributes
-        self._original_attn_impl = None  # needs to be set before the model is switched to paged attention
+        self._original_attn_impl: str | dict[str, str] | None = None  # needs to be set before the model is switched to paged attention
         self.switch_to_paged_attn(model)
         self.model = model.eval()
 
@@ -612,10 +612,28 @@ class ContinuousBatchingManager:
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
     def switch_to_paged_attn(self, model: ProtoPretrainedModel) -> None:
-        """Switch to the paged version of the attention implementation. If the attn is already paged, does nothing."""
-        if "paged|" not in model.config._attn_implementation:
-            self._original_attn_impl = model.config._attn_implementation
-            model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
+        """Switch the decoder's attention to its paged version (if not already paged). Encoders such as a vision tower
+        or audio encoder keep their own attention, as they do not use the paged KV cache."""
+        # Early exit if the decoder is already paged
+        decoder_config = model.config.get_text_config(decoder=True)
+        if "paged|" in decoder_config._attn_implementation:
+            return None
+        # Save the orignal attn and perform the swap
+        self._original_attn_impl = model.config._attn_implementation
+        self._swap_decoder_attn(model, f"paged|{model.config._attn_implementation}")
+
+    def _swap_decoder_attn(self, model: ProtoPretrainedModel, new_attn_impl: str) -> None:
+        decoder_config = model.config.get_text_config(decoder=True)
+        # Save the attention implementation of all non-decoder models
+        encoder_attn = {}
+        for key in model.config.sub_configs:
+            subconfig = getattr(model.config, key, None)
+            if subconfig is not None and subconfig is not decoder_config:
+                encoder_attn[key] = subconfig._attn_implementation
+        # Page the whole model with a string and then restore the encoders (if any) so only the decoder is paged
+        model.set_attn_implementation(new_attn_impl)
+        if encoder_attn:
+            model.set_attn_implementation(encoder_attn)
 
     def warmup(self) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
@@ -683,7 +701,7 @@ class ContinuousBatchingManager:
 
         # Restore the original attention implementation
         if self._original_attn_impl is not None:
-            self.model.set_attn_implementation(self._original_attn_impl)
+            self._swap_decoder_attn(self.model, self._original_attn_impl)
             self._original_attn_impl = None
 
         # In all cases, a little cleanup is good
