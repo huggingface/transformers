@@ -97,10 +97,6 @@ def main() -> None:
     with torch.no_grad():
         ref_text = _orig_run(input_ids_ref)
         ref_pv   = _orig_run(ids_with_image_ref, pixel_values=pixel_values_ref, num_patches=[0])
-        # For ie_logits: use the vision-encoder output of the original model as image_embeds.
-        # The original code's image_embeds path is broken (2D reshape bug), so instead
-        # we verify the new model's invariant: ie(vision_encoder(pv)) == pv_logits.
-        ref_vis_out = orig_model.model.vision_model(pixel_values_ref)  # (B, P, C)
     torch.save(
         {"text_logits": ref_text, "pv_logits": ref_pv},
         debug_path / "logits_baseline.pt",
@@ -120,7 +116,8 @@ def main() -> None:
     with torch.no_grad():
         new_text = model.forward(input_ids=input_ids_ref, use_cache=False).logits
         new_pv   = model.forward(input_ids=ids_with_image_ref, pixel_values=pixel_values_ref, num_patches=[0], use_cache=False).logits
-        # ie path: pass raw vision-encoder output as image_embeds — must equal pv_logits
+        # ie path: verify the invariant ie(vision_encoder(pv)) == pv_logits
+        ref_vis_out = model.model.vision_model(pixel_values_ref)
         new_ie   = model.forward(input_ids=ids_with_image_ref, image_embeds=ref_vis_out, use_cache=False).logits
 
     torch.save(
