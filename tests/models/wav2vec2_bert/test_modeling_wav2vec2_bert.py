@@ -65,7 +65,7 @@ class Wav2Vec2BertModelTester:
         seq_length=200,  # speech is longer
         is_training=False,
         hidden_size=120,
-        feature_projection_input_dim=2,
+        feature_projection_input_dim=10,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
         num_hidden_layers=4,
@@ -77,7 +77,7 @@ class Wav2Vec2BertModelTester:
         initializer_range=0.02,
         mask_time_prob=0.0,
         mask_time_length=2,
-        vocab_size=6,
+        vocab_size=16,
         do_stable_layer_norm=False,
         num_adapter_layers=2,
         adapter_stride=2,
