@@ -160,19 +160,20 @@ def expand_fsdp_plan(
 
     for plan_key, sharding_strategy in fsdp_plan.items():
         if plan_key in module_lookup:
-            target = (plan_key, module_lookup[plan_key])
-            if sharding_strategy == "keep_full_weight":
-                no_reshard_targets.append(target)
-            else:
-                reshard_targets.append(target)
-            continue
+            # model.norm, lm_head etc.
+            targets = [(plan_key, module_lookup[plan_key])]
+        else:
+            # model.layers.*
+            targets = [
+                (module_name, module)
+                for module_name, module in module_lookup.items()
+                if replace_layer_number_by_wildcard(module_name) == plan_key
+            ]
 
-        for module_name, module in module_lookup.items():
-            if replace_layer_number_by_wildcard(module_name) == plan_key:
-                if sharding_strategy == "keep_full_weight":
-                    no_reshard_targets.append((module_name, module))
-                else:
-                    reshard_targets.append((module_name, module))
+        if sharding_strategy == "keep_full_weight":
+            no_reshard_targets.extend(targets)
+        else:
+            reshard_targets.extend(targets)
 
     return reshard_targets, no_reshard_targets
 
