@@ -1661,8 +1661,6 @@ class ContinuousBatchingConfig:
         kv_padding_interval_size (`int`, *optional*, defaults to 0):
             KV padding granularity in tokens for CUDA graphs. Uses a preset from `continuous_api.py` when
             set to 0.
-        max_cached_graphs (`int`, *optional*, defaults to 0):
-            Maximum number of cached CUDA graphs. Uses a preset from `continuous_api.py` when set to 0.
         varlen_compile_config (`CompileConfig`, *optional*):
             CompileConfig for varlen (prefill) path. Default is None (uses generation_config fallback)
             The varlen path handles batches with varying query and KV lengths, often benefiting from dynamic=True.
@@ -1700,6 +1698,8 @@ class ContinuousBatchingConfig:
             for no timeout. Default is 300 seconds.
         use_default_compile_configs (`bool | None`, *optional*):
             Deprecated in 5.11: please use default_compile_level instead.
+        max_cached_graphs (`int`, *optional*):
+            Deprecated in 5.13: maximum number of graph is no longer an issue.
     """
 
     # Size of each KV cache block. Must be at least 4 (and for an efficient cache, it should be well above that).
@@ -1740,7 +1740,6 @@ class ContinuousBatchingConfig:
     # top of the continuous_batching/continuous_api.py file.
     q_padding_interval_size: int = 0
     kv_padding_interval_size: int = 0
-    max_cached_graphs: int = 0
 
     # Compile configs for the two execution paths. If None, uses the compile_config from generation_config as fallback.
     varlen_compile_config: CompileConfig | None = None
@@ -1796,6 +1795,7 @@ class ContinuousBatchingConfig:
 
     # Deprecated arguments
     use_default_compile_configs: bool | None = None
+    max_cached_graphs: int | None = None
 
     def __post_init__(self):
         # Only turn off graph mixing support if TP is on
@@ -1817,6 +1817,10 @@ class ContinuousBatchingConfig:
             logger.warning(
                 "use_default_compile_configs is deprecated: please use default_compile_level instead. For backwards "
                 f"compatibility, {level_msg}"
+            )
+        if self.max_cached_graphs is not None:  # Deprecated in 5.13
+            logger.warning(
+                "max_cached_graphs is deprecated: maximum number of graph is no longer an issue. Deprecated in 5.13."
             )
 
     @property
