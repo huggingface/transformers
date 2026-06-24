@@ -53,9 +53,6 @@ class Nemotron3_5AsrProcessorKwargs(ProcessingKwargs, total=False):
 DEFAULT_NUM_LOOKAHEAD_TOKENS = [13, 6, 1, 0]
 
 
-# Locale (and bare language code) -> prompt index, taken verbatim from the NeMo checkpoint's
-# `model_defaults.prompt_dictionary`. The one-hot is over `num_prompts` (128) slots; `auto` (101)
-# selects automatic language detection, in which case the model emits an `<xx-XX>` tag in the output.
 DEFAULT_PROMPT_DICTIONARY = {
     "en-US": 0,
     "en": 0,
@@ -214,9 +211,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
             Number of language-prompt slots (size of the one-hot prompt vector), mirroring
             `Nemotron3_5AsrConfig.num_prompts`.
         """
-        self.prompt_dictionary = (
-            dict(prompt_dictionary) if prompt_dictionary is not None else dict(DEFAULT_PROMPT_DICTIONARY)
-        )
+        self.prompt_dictionary = prompt_dictionary if prompt_dictionary is not None else DEFAULT_PROMPT_DICTIONARY
         self.num_prompts = num_prompts
         self.supported_num_lookahead_tokens = (
             supported_num_lookahead_tokens
@@ -297,14 +292,12 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-        # The right attention context (akin to Voxtral Realtime's `num_delay_tokens`), selected via
-        # `set_num_lookahead_tokens`; pass it to the model/encoder forward or `generate`.
         inputs["num_lookahead_tokens"] = self.default_num_lookahead_tokens
-        # The language-prompt indices used for language-ID prompt conditioning.
         inputs["prompt_ids"] = self._resolve_prompt_ids(language, len(audio))
 
         if text is None:
             return inputs
+
         inputs["labels"] = encodings["input_ids"]
         # Prepend the blank token to labels to form decoder_input_ids: the RNN-T decoder expects
         # [blank, label_0, ..., label_{U-1}] as input.
