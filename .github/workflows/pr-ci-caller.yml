@@ -2,9 +2,11 @@ name: PR CI
 
 on:
   pull_request:
+  merge_group:
   push:
     branches:
       - main
+      - ci-*
 
 concurrency:
   # Group by PR number, commit SHA (main) to avoid cross-branch cancellation, or branch ref for cancellation within each branch
@@ -15,29 +17,7 @@ permissions:
   contents: read
 
 jobs:
-  debug-conditions:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Print if-condition values
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
-          PR_USER_LOGIN: ${{ github.event.pull_request.user.login }}
-          IS_PUSH: ${{ github.event_name == 'push' }}
-          IS_MEMBER: ${{ contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.pull_request.author_association) }}
-          IS_YDSHIEH2: ${{ github.event.pull_request.user.login == 'ydshieh2' }}
-        run: |
-          echo "event_name:             $EVENT_NAME"
-          echo "author_association:     $AUTHOR_ASSOCIATION"
-          echo "pr_user_login:          $PR_USER_LOGIN"
-          echo "--- condition result ---"
-          echo "is push:                $IS_PUSH"
-          echo "is member/owner/collab: $IS_MEMBER"
-          echo "is ydshieh2:            $IS_YDSHIEH2"
-
   pr-ci:
-    # Allow `ydshieh2` for testing during development
-    if: github.event_name == 'push' || contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.pull_request.author_association) || github.event.pull_request.user.login == 'ydshieh2'
     # DON'T use commit sha here before the CI migration is finished
     uses: huggingface/transformers-test-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@main # main
 
