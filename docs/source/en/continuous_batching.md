@@ -231,6 +231,14 @@ outputs = model.generate_batch(
 )
 ```
 
+### KV cache block size
+
+`block_size` sets how many tokens each KV cache block holds. It must be at least 4, and `generate_batch` raises a `ValueError` for any smaller value. The cache reserves two extra blocks for padding and sentinel bookkeeping, so very small blocks spend a large fraction of memory on this fixed overhead. Larger blocks cut bookkeeping but waste space when a sequence doesn't fill its last block. The default of 256 matches the `flash_attn_with_kvcache` decode kernel and works well in most cases. Keep `block_size` well above the minimum for an efficient cache.
+
+```py
+cb_config = ContinuousBatchingConfig(block_size=128)
+```
+
 ### Batch and scheduling limits
 
 `max_requests_per_batch` caps how many requests run in a single forward pass. The model produces a logits tensor sized by the number of batch tokens and the vocabulary size, and it's cast to `fp32` for sampling, which doubles the footprint. Each request only needs one next-token prediction, so a smaller cap keeps this tensor smaller and avoids out-of-memory errors on prefill-heavy batches with large vocabularies. By default it's set to the number of prompts submitted, with a fallback of 1024, then capped to fit `max_batch_tokens` and `num_blocks`.

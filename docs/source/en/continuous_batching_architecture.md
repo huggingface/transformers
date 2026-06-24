@@ -98,6 +98,8 @@ Paged KV cache (num_blocks × block_size tokens per block)
 
 A page holds the key/value state for one token in one layer. A block is a span of `block_size` pages (default 256) and is the unit of allocation. Blocks are allocated per layer group. Layers within a group share a block ID, which keeps bookkeeping uniform for mixed-attention models.
 
+The cache reserves two extra blocks on top of `num_blocks` for padding tokens to read from and write to, plus a sentinel index for sliding window groups. This reservation requires `block_size` to be at least 4, so the manager rejects smaller values.
+
 ### Cache sizing
 
 The manager infers the number of blocks at startup from free GPU memory. The manager solves an equation that accounts for KV tensors, attention masks, activations, and bookkeeping indices, then sizes the pool to fit inside `max_memory_percent` (default 0.9) of the available memory.
