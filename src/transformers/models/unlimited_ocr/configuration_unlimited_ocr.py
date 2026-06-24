@@ -40,7 +40,7 @@ class UnlimitedOcrSamVisionConfig(PreTrainedConfig):
         The indexes of the global attention layers.
     mlp_dim (`int`, *optional*, defaults to 3072):
         The dimensionality of the MLP layer in the Transformer encoder.
-    downsample_channels (`list[int]`, *optional*, defaults to `(512, 896)`):
+    downsample_channels (`list[int]`, *optional*, defaults to `(512, 1024)`):
         The channel dimensions for the multi-scale downsampling neck layers.
     """
 
@@ -69,7 +69,7 @@ class UnlimitedOcrSamVisionConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.downsample_channels is None:
-            self.downsample_channels = [512, 896]
+            self.downsample_channels = [512, 1024]
         return PretrainedConfig.__post_init__(self, **kwargs)
 
 
@@ -88,15 +88,14 @@ class UnlimitedOcrVisionEncoderConfig(PreTrainedConfig):
 
     model_type = "unlimited_ocr_vision_encoder"
     base_config_key = "encoder_config"
-
-    hidden_size: int = 768
-    intermediate_size: int = 3072
+    hidden_size: int = 1024
+    intermediate_size: int = 4096
     projection_dim: int = 512
-    num_hidden_layers = 24
-    num_attention_heads: int = 12
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
     num_channels: int = 3
     image_size: int | list[int] | tuple[int, int] | None = 224
-    patch_size: int | list[int] | tuple[int, int] | None = 32
+    patch_size: int | list[int] | tuple[int, int] | None = 14
     hidden_act: str = "quick_gelu"
     layer_norm_eps: float = 1e-5
     attention_dropout: int | float | None = 0.0
@@ -133,6 +132,15 @@ class UnlimitedOcrVisionConfig(PreTrainedConfig):
     encoder_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
+        if self.sam_config is None:
+            self.sam_config = self.sub_configs["sam_config"]()
+        elif isinstance(self.sam_config, dict):
+            self.sam_config = self.sub_configs["sam_config"](**self.sam_config)
+
+        if self.encoder_config is None:
+            self.encoder_config = self.sub_configs["encoder_config"]()
+        elif isinstance(self.encoder_config, dict):
+            self.encoder_config = self.sub_configs["encoder_config"](**self.encoder_config)
         if self.sam_config is None:
             self.sam_config = UnlimitedOcrSamVisionConfig()
         elif isinstance(self.sam_config, dict):
@@ -190,21 +198,20 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    vocab_size: int = 32000
-    hidden_size: int = 4096
-    intermediate_size: int = 11008
+    vocab_size: int = 129280
+    hidden_size: int = 1280
+    intermediate_size: int = 6848
     num_hidden_layers: int = 12
-    num_attention_heads: int = 32
-    num_key_value_heads: int | None = None
+    num_attention_heads: int = 10
+    num_key_value_heads: int | None = 10
     hidden_act: str = "silu"
-    max_position_embeddings: int = 2048
+    max_position_embeddings: int = 32768
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-6
     use_cache: bool = True
     pad_token_id: int | None = None
-    bos_token_id: int | None = 1
-    eos_token_id: int | list[int] | None = 2
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
     pretraining_tp: int | None = 1
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
@@ -212,14 +219,14 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
     attention_dropout: float | None = 0.0
     mlp_bias: bool = False
     head_dim: int | None = None
-    n_group: int | None = None
+    n_group: int | None = 1
     n_routed_experts: int = 64
     n_shared_experts: int = 2
     routed_scaling_factor: float = 1.0
-    topk_group: int | None = None
+    topk_group: int | None = 1
     topk_method: str | None = "greedy"
-    num_experts_per_tok: int | None = None
-    moe_intermediate_size: int = 1407
+    num_experts_per_tok: int | None = 6
+    moe_intermediate_size: int = 896
     base_config_key = "text_config"
     mlp_layer_types: list[str] | None = None
     layer_types: list[str] | None = None
@@ -231,8 +238,11 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
             # mask over generated tokens, while the image/prompt prefill is always retained.
             self.layer_types = ["full_attention"] * self.num_hidden_layers
         if self.mlp_layer_types is None:
+            # Some configs may use `first_k_dense_replace` instead of `layer_types`/`mlp_layer_types`
+            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
             self.mlp_layer_types = [
-                "sparse" if layer_idx >= 1 else "dense" for layer_idx in range(self.num_hidden_layers)
+                "sparse" if layer_idx >= first_k_dense_replace else "dense"
+                for layer_idx in range(self.num_hidden_layers)
             ]
         self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
@@ -268,6 +278,15 @@ class UnlimitedOcrConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
+        if self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+
+        if self.text_config is None:
+            self.text_config = self.sub_configs["text_config"]()
+        elif isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
         if self.vision_config is None:
             self.vision_config = UnlimitedOcrVisionConfig()
         elif isinstance(self.vision_config, dict):

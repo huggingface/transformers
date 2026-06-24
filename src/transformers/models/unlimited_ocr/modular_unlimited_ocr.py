@@ -221,7 +221,7 @@ class UnlimitedOcrSamVisionConfig(GotOcr2VisionConfig):
         The indexes of the global attention layers.
     mlp_dim (`int`, *optional*, defaults to 3072):
         The dimensionality of the MLP layer in the Transformer encoder.
-    downsample_channels (`list[int]`, *optional*, defaults to `(512, 896)`):
+    downsample_channels (`list[int]`, *optional*, defaults to `(512, 1024)`):
         The channel dimensions for the multi-scale downsampling neck layers.
     """
 
@@ -232,7 +232,7 @@ class UnlimitedOcrSamVisionConfig(GotOcr2VisionConfig):
 
     def __post_init__(self, **kwargs):
         if self.downsample_channels is None:
-            self.downsample_channels = [512, 896]
+            self.downsample_channels = [512, 1024]
         return PretrainedConfig.__post_init__(self, **kwargs)
 
 
@@ -251,7 +251,11 @@ class UnlimitedOcrVisionEncoderConfig(CLIPVisionConfig):
 
     model_type = "unlimited_ocr_vision_encoder"
     base_config_key = "encoder_config"
-    num_hidden_layers = 24
+    hidden_size: int = 1024
+    intermediate_size: int = 4096
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+    patch_size: int | list[int] | tuple[int, int] | None = 14
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
@@ -263,6 +267,19 @@ class UnlimitedOcrVisionConfig(DeepseekOcr2VisionConfig):
         "sam_config": UnlimitedOcrSamVisionConfig,
         "encoder_config": UnlimitedOcrVisionEncoderConfig,
     }
+
+    def __post_init__(self, **kwargs):
+        if self.sam_config is None:
+            self.sam_config = self.sub_configs["sam_config"]()
+        elif isinstance(self.sam_config, dict):
+            self.sam_config = self.sub_configs["sam_config"](**self.sam_config)
+
+        if self.encoder_config is None:
+            self.encoder_config = self.sub_configs["encoder_config"]()
+        elif isinstance(self.encoder_config, dict):
+            self.encoder_config = self.sub_configs["encoder_config"](**self.encoder_config)
+
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
@@ -287,8 +304,20 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
 
     model_type = "unlimited_ocr_text"
     base_config_key = "text_config"
-    layer_types: list[str] | None = None
+    vocab_size: int = 129280
+    hidden_size: int = 1280
+    intermediate_size: int = 6848
     num_hidden_layers: int = 12
+    num_attention_heads: int = 10
+    num_key_value_heads: int | None = 10
+    max_position_embeddings: int = 32768
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
+    moe_intermediate_size: int = 896
+    n_group: int | None = 1
+    topk_group: int | None = 1
+    num_experts_per_tok: int | None = 6
+    layer_types: list[str] | None = None
     sliding_window: int | None = 128
 
     def __post_init__(self, **kwargs):
@@ -297,8 +326,11 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
             # mask over generated tokens, while the image/prompt prefill is always retained.
             self.layer_types = ["full_attention"] * self.num_hidden_layers
         if self.mlp_layer_types is None:
+            # Some configs may use `first_k_dense_replace` instead of `layer_types`/`mlp_layer_types`
+            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
             self.mlp_layer_types = [
-                "sparse" if layer_idx >= 1 else "dense" for layer_idx in range(self.num_hidden_layers)
+                "sparse" if layer_idx >= first_k_dense_replace else "dense"
+                for layer_idx in range(self.num_hidden_layers)
             ]
         super().__post_init__(**kwargs)
 
@@ -311,6 +343,19 @@ class UnlimitedOcrConfig(DeepseekOcr2Config):
         "vision_config": UnlimitedOcrVisionConfig,
         "text_config": UnlimitedOcrTextConfig,
     }
+
+    def __post_init__(self, **kwargs):
+        if self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+
+        if self.text_config is None:
+            self.text_config = self.sub_configs["text_config"]()
+        elif isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+
+        super().__post_init__(**kwargs)
 
 
 class UnlimitedOcrModelOutputWithPooling(DeepseekOcr2ModelOutputWithPooling):
