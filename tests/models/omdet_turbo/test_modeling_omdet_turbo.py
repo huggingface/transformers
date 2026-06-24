@@ -190,6 +190,32 @@ class OmDetTurboModelTester:
             result.decoder_class_logits.shape, (self.batch_size, self.num_queries, self.num_classes)
         )
 
+    def create_and_check_object_detection_loss(self, config, inputs_dict):
+        model = OmDetTurboForObjectDetection(config=config)
+        model.to(torch_device)
+        model.train()
+
+        # Build detection labels: a few boxes per image, classes index into the candidate classes.
+        labels = [
+            {
+                "class_labels": torch.randint(0, self.num_classes, (3,), device=torch_device),
+                "boxes": torch.rand(3, 4, device=torch_device),
+            }
+            for _ in range(self.batch_size)
+        ]
+
+        result = model(**inputs_dict, labels=labels)
+
+        self.parent.assertIsNotNone(result.loss)
+        self.parent.assertEqual(result.loss.shape, torch.Size([]))
+        self.parent.assertIsNotNone(result.loss_dict)
+        for key in ["loss_ce", "loss_bbox", "loss_giou"]:
+            self.parent.assertIn(key, result.loss_dict)
+        # auxiliary losses are computed for the intermediate decoder layers
+        self.parent.assertIn("loss_ce_0", result.loss_dict)
+        # Make sure gradients flow back to the model parameters.
+        result.loss.backward()
+
 
 @require_torch
 class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -223,6 +249,10 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_object_detection_head_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_object_detection_head_model(config, inputs_dict)
+
+    def test_object_detection_loss(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_object_detection_loss(config, inputs_dict)
 
     @unittest.skip(
         reason="Unsupported as classes_input_ids are classes input are flattened by the processor: https://github.com/huggingface/transformers/issues/33669"

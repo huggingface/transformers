@@ -518,6 +518,36 @@ class OwlViTForObjectDetectionTester:
         self.parent.assertEqual(result.logits.shape, pred_logits_size)
         self.parent.assertEqual(result.class_embeds.shape, pred_class_embeds_size)
 
+    def create_and_check_model_with_labels(self, config, pixel_values, input_ids, attention_mask):
+        model = OwlViTForObjectDetection(config).to(torch_device)
+        model.train()
+
+        # Build detection labels: a couple of boxes per image, classes index into the text queries (class 0 is always
+        # valid since there is at least one query).
+        batch_size = pixel_values.shape[0]
+        labels = [
+            {
+                "class_labels": torch.zeros(2, dtype=torch.long, device=torch_device),
+                "boxes": torch.rand(2, 4, device=torch_device),
+            }
+            for _ in range(batch_size)
+        ]
+
+        result = model(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=labels,
+        )
+
+        self.parent.assertIsNotNone(result.loss)
+        self.parent.assertEqual(result.loss.shape, torch.Size([]))
+        self.parent.assertIsNotNone(result.loss_dict)
+        for key in ["loss_ce", "loss_bbox", "loss_giou"]:
+            self.parent.assertIn(key, result.loss_dict)
+        # Make sure gradients flow back to the model parameters.
+        result.loss.backward()
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, input_ids, attention_mask = config_and_inputs
@@ -544,6 +574,10 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_object_detection_loss(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_labels(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
