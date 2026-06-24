@@ -378,10 +378,13 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_beam_sample_generate(self):
         pass
 
-    @unittest.skip("This model doesn't support beam search with cache, as the cache cannot be reordered")
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
     def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
+        # Skip beam search
+        if num_beams == 2:
+            self.skipTest("This model doesn't support beam search with cache, as the cache cannot be reordered")
+        else:
+            super().test_generate_from_inputs_embeds("greedy", 1)
 
 
 @slow
