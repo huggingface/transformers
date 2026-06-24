@@ -112,7 +112,8 @@ class ContinuousBatchingIOs:
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
         self.graphs: CudaGraphBuffer = CudaGraphBuffer(continuous_batching_config.max_cached_graphs)
-        self._trash_index = cache.trash_index
+        self._read_trash_index = cache.read_trash_index
+        self._write_trash_index = cache.write_trash_index
         # Setup static tensors and compute stream
         self._setup_static_tensors(logit_processor=logit_processor)
         self._reset_static_tensors(full_reset=True)
@@ -273,15 +274,15 @@ class ContinuousBatchingIOs:
         # If this is a full reset, we reset every tensors
         if full_reset:
             self.block_table[:, :b_size].fill_(-1)
-            self.write_index_storage[:, :q_len].fill_(self._trash_index)
-            self.read_index_storage[:, : q_len + kv_len].fill_(self._trash_index)
+            self.write_index_storage[:, :q_len].fill_(self._write_trash_index)
+            self.read_index_storage[:, : q_len + kv_len].fill_(self._read_trash_index)
         # If this is not a full reset, and we are going to use the block table, we only reset it
         elif self.use_block_table:
             self.block_table[:, :b_size].fill_(-1)
         # Otherwise, the read and write indices are the ones used, so we reset them
         else:
-            self.write_index_storage[:, :q_len].fill_(self._trash_index)
-            self.read_index_storage[:, : q_len + kv_len].fill_(self._trash_index)
+            self.write_index_storage[:, :q_len].fill_(self._write_trash_index)
+            self.read_index_storage[:, : q_len + kv_len].fill_(self._read_trash_index)
 
     def reset(self) -> None:
         """Reset all relevant states for a new generation loop."""
