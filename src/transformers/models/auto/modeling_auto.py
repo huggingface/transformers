@@ -171,6 +171,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNetModel"),
         ("focalnet", "FocalNetModel"),
         ("fsmt", "FSMTModel"),
+        ("fun_asr_nano", "FunAsrNanoModel"),
         ("fun_asr_nano_encoder", "FunAsrNanoEncoder"),
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
         ("fuyu", "FuyuModel"),

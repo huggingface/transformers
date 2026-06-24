@@ -1,4 +1,4 @@
-# Copyright 2025 Alibaba DAMO Academy and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 Alibaba DAMO Academy and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,17 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Fun-ASR-Nano model.
-
-Fun-ASR-Nano couples a SenseVoice SAN-M audio encoder with a small Transformer adaptor and a Qwen3 language model.
-The architecture mirrors other audio-LM ASR models (e.g. AudioFlamingo3 / Voxtral): an audio encoder produces
-acoustic features, an adaptor projects them into the LLM embedding space, and the projected features replace audio
-placeholder tokens in the text stream before being decoded by the language model.
-
-The SAN-M encoder (self attention + FSMN memory) and the convolutional-free adaptor are specific to Fun-ASR-Nano and
-are therefore defined here; the surrounding boilerplate (feed-forward block, placeholder-mask handling,
-generation plumbing) reuses transformers reference implementations through the modular mechanism.
-"""
+"""PyTorch Fun-ASR-Nano model."""
 
 import math
 from dataclasses import dataclass
@@ -32,10 +22,10 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, logging
-from ..auto import AutoModelForCausalLM
+from ..auto import AutoModel
 from .configuration_fun_asr_nano import (
     FunAsrNanoConfig,
     FunAsrNanoEncoderConfig,
@@ -43,6 +33,21 @@ from .configuration_fun_asr_nano import (
 
 
 logger = logging.get_logger(__name__)
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for Fun-ASR-Nano outputs, with hidden states and attentions.
+    """
+)
+@dataclass
+class FunAsrNanoModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio embeddings produced by the audio encoder and adaptor.
+    """
+
+    audio_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -63,8 +68,8 @@ class FunAsrNanoCausalLMOutput(ModelOutput):
         Hidden states of the language model at the output of each layer.
     attentions (`tuple[torch.FloatTensor]`, *optional*):
         Attention weights of the language model.
-    encoder_last_hidden_state (`torch.FloatTensor`, *optional*):
-        Last hidden state of the audio encoder.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio embeddings produced by the audio encoder and adaptor.
     """
 
     loss: torch.FloatTensor | None = None
@@ -72,14 +77,7 @@ class FunAsrNanoCausalLMOutput(ModelOutput):
     past_key_values: tuple | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
-    encoder_last_hidden_state: torch.FloatTensor | None = None
-
-
-# ============================================================================
-# Audio Encoder Components (SANM - Self-Attention with FSMN Memory)
-# Key names match original checkpoint: self_attn.linear_q_k_v, self_attn.linear_out,
-# self_attn.fsmn_block, feed_forward.w_1, feed_forward.w_2, norm1, norm2
-# ============================================================================
+    audio_hidden_states: torch.FloatTensor | None = None
 
 
 class FunAsrNanoSinusoidalPositionEncoder(nn.Module):
@@ -374,13 +372,6 @@ class FunAsrNanoEncoder(PreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
-# ============================================================================
-# Audio Adaptor
-# Keys: linear1, linear2, blocks.N.self_attn.linear_{q,k,v,out},
-#        blocks.N.feed_forward.w_{1,2}, blocks.N.norm{1,2}
-# ============================================================================
-
-
 class FunAsrNanoAdaptorAttention(nn.Module):
     """Adaptor attention with separate Q/K/V projections matching checkpoint keys."""
 
@@ -498,11 +489,6 @@ class FunAsrNanoAdaptor(nn.Module):
         return x, output_lens
 
 
-# ============================================================================
-# Main Model
-# ============================================================================
-
-
 @auto_docstring
 class FunAsrNanoPreTrainedModel(PreTrainedModel):
     config: FunAsrNanoConfig
@@ -533,17 +519,17 @@ class FunAsrNanoPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Fun-ASR-Nano model for speech recognition: a SenseVoice SAN-M audio encoder, a Transformer adaptor and a
-    Qwen3 language model with a language modeling head.
+    The Fun-ASR-Nano model (SenseVoice SAN-M audio encoder, a Transformer adaptor and a Qwen3 language model),
+    without a language modeling head.
     """
 )
-class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMixin):
+class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
     def __init__(self, config: FunAsrNanoConfig):
         super().__init__(config)
 
         self.audio_encoder = FunAsrNanoEncoder(config.audio_encoder_config)
         self.audio_adaptor = FunAsrNanoAdaptor(config)
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
 
         self.audio_token_index = config.audio_token_index
 
@@ -555,12 +541,6 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
     @can_return_tuple
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features, meaning inferring the audio encoder and the adaptor."
@@ -570,7 +550,6 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
         input_features: torch.FloatTensor,
         feature_lengths: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
-        output_attentions: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -622,6 +601,118 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
         ).last_hidden_state
         return self.audio_adaptor(encoder_out, feature_lengths)
 
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        feature_lengths: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: tuple | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        **kwargs,
+    ) -> FunAsrNanoModelOutputWithPast | tuple:
+        r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, time, feature_dim)`, *optional*):
+            Audio features after LFR stacking.
+        feature_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Length of each audio feature sequence.
+        """
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
+        audio_embeds = None
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+            special_audio_mask = input_ids == self.audio_token_index
+            if (
+                input_features is not None
+                and input_ids is not None
+                and input_ids.shape[1] != 1
+                and special_audio_mask.any()
+            ):
+                audio_embeds, audio_embed_lens = self._get_audio_embeds(input_features, feature_lengths)
+
+                # Mask and scatter audio embeddings into token positions
+                special_audio_mask_expanded = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
+
+                max_audio_len = audio_embeds.shape[1]
+                audio_len_mask = (
+                    torch.arange(max_audio_len, device=audio_embeds.device)[None, :] < audio_embed_lens[:, None]
+                )
+                flat_audio = audio_embeds[audio_len_mask]
+                if special_audio_mask.sum() != flat_audio.shape[0]:
+                    raise ValueError(
+                        f"Number of audio tokens ({special_audio_mask.sum().item()}) does not match "
+                        f"number of audio features ({flat_audio.shape[0]})."
+                    )
+
+                inputs_embeds = inputs_embeds.masked_scatter(
+                    special_audio_mask_expanded.to(inputs_embeds.device),
+                    flat_audio.to(inputs_embeds.device, inputs_embeds.dtype),
+                )
+
+        outputs: BaseModelOutputWithPast = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
+
+        return FunAsrNanoModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            audio_hidden_states=audio_embeds,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The Fun-ASR-Nano model for speech recognition: a SenseVoice SAN-M audio encoder, a Transformer adaptor and a
+    Qwen3 language model with a language modeling head.
+    """
+)
+class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
+    def __init__(self, config: FunAsrNanoConfig):
+        super().__init__(config)
+
+        self.model = FunAsrNanoModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def get_audio_features(self, *args, **kwargs):
+        return self.model.get_audio_features(*args, **kwargs)
+
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -636,7 +727,7 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
         use_cache: bool | None = None,
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
-        return_dict: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> FunAsrNanoCausalLMOutput | tuple:
         r"""
@@ -654,43 +745,10 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-            special_audio_mask = input_ids == self.audio_token_index
-            if (
-                input_features is not None
-                and input_ids is not None
-                and input_ids.shape[1] != 1
-                and special_audio_mask.any()
-            ):
-                audio_embeds, audio_embed_lens = self._get_audio_embeds(input_features, feature_lengths)
-
-                # Mask and scatter audio embeddings into token positions
-                special_audio_mask_expanded = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
-
-                num_audios, max_audio_len, embed_dim = audio_embeds.shape
-                audio_len_mask = (
-                    torch.arange(max_audio_len, device=audio_embeds.device)[None, :] < audio_embed_lens[:, None]
-                )
-                flat_audio = audio_embeds[audio_len_mask]
-                if special_audio_mask.sum() != flat_audio.shape[0]:
-                    raise ValueError(
-                        f"Number of audio tokens ({special_audio_mask.sum().item()}) does not match "
-                        f"number of audio features ({flat_audio.shape[0]})."
-                    )
-
-                inputs_embeds = inputs_embeds.masked_scatter(
-                    special_audio_mask_expanded, flat_audio.to(inputs_embeds.dtype)
-                )
-
-        outputs = self.language_model(
+        outputs = self.model(
+            input_ids=input_ids,
+            input_features=input_features,
+            feature_lengths=feature_lengths,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -698,24 +756,18 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
             use_cache=use_cache,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_dict=True,
             **kwargs,
         )
 
-        logits = outputs.logits
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
         loss = None
         if labels is not None:
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1).to(shift_logits.device),
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return FunAsrNanoCausalLMOutput(
             loss=loss,
@@ -723,6 +775,7 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            audio_hidden_states=outputs.audio_hidden_states,
         )
 
     def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
@@ -741,5 +794,6 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
 __all__ = [
     "FunAsrNanoPreTrainedModel",
     "FunAsrNanoEncoder",
+    "FunAsrNanoModel",
     "FunAsrNanoForConditionalGeneration",
 ]
