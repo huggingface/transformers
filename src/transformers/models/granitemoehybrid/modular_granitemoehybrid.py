@@ -51,7 +51,7 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
-    def forward(  # FIME: @ARTHUR this forward is also classic: attention nope
+    def forward(  # FIXME: @ARTHUR this forward is also classic: attention nope
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,

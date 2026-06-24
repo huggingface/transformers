@@ -567,7 +567,7 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
         Returns:
             `list[list[dict]]`: Outer list is over images, inner list is over persons.
             Each dict contains:
-            - `keypoints` (`torch.FloatTensor` of shape `(num_keypoints, 2)`): absolut x/y coordinates in
+            - `keypoints` (`torch.FloatTensor` of shape `(num_keypoints, 2)`): absolute x/y coordinates in
               the source image space, or in target space if `target_sizes` is provided.
             - `scores` (`torch.FloatTensor` of shape `(num_keypoints,)`): per-keypoint confidence.
             - `labels` (`torch.LongTensor` of shape `(num_keypoints,)`): keypoint indices.

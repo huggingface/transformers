@@ -47,7 +47,7 @@ logger = logging.get_logger(__name__)
 class MimiOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-        Discret code embeddings computed using `model.encode`.
+        Discrete code embeddings computed using `model.encode`.
     audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
         Decoded audio values, obtained using the decoder part of Mimi.
     encoder_past_key_values (`Cache`, *optional*):
@@ -173,7 +173,7 @@ class MimiConv1dPaddingCache:
 class MimiEncoderOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-        Discret code embeddings computed using `model.encode`.
+        Discrete code embeddings computed using `model.encode`.
     encoder_past_key_values (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
         This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
@@ -1645,7 +1645,7 @@ class MimiModel(MimiPreTrainedModel):
 
         Args:
             audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-                Discret code embeddings computed using `model.encode`.
+                Discrete code embeddings computed using `model.encode`.
             padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
                 Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
                 for *masked*.
@@ -1699,7 +1699,7 @@ class MimiModel(MimiPreTrainedModel):
         num_quantizers (`int`, *optional*):
             Number of quantizers (i.e codebooks) to use. By default, all quantizers are used.
         audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
+            Discrete code embeddings computed using `model.encode`.
         encoder_past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
             This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.

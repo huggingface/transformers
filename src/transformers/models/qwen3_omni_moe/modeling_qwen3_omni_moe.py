@@ -3918,7 +3918,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                 raise NotImplementedError(f"Speaker {speaker} not implemented")
             if input_ids.shape[0] != 1:
                 raise NotImplementedError("Qwen3-Omni currently does not support batched inference with audio output")
-            talker_supppressed_tokens = [
+            talker_suppressed_tokens = [
                 i
                 for i in range(
                     self.config.talker_config.text_config.vocab_size - 1024,
@@ -3934,7 +3934,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                 "temperature": talker_temperature,
                 "eos_token_id": self.config.talker_config.codec_eos_token_id,
                 "repetition_penalty": talker_repetition_penalty,
-                "suppress_tokens": talker_supppressed_tokens,
+                "suppress_tokens": talker_suppressed_tokens,
                 "output_hidden_states": True,
                 "return_dict_in_generate": True,
             }
@@ -4053,7 +4053,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             inputs_embeds=talker_input_embed,
             trailing_text_hidden=trailing_text_hidden,
             tts_pad_embed=tts_pad_embed,
-            talker_input_ids=talker_input_id,  # Not use input_ids to prevent repetation penalty out of bound
+            talker_input_ids=talker_input_id,  # Not use input_ids to prevent repetition penalty out of bound
             **talker_kwargs,
         )
         talker_codes = (
