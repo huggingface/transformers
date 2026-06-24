@@ -144,7 +144,7 @@ class PPFormulaNetImageProcessor(NougatImageProcessor):
 
 # Don't copy default values from Nougat!
 class PPFormulaNetProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+    _defaults = {}
 
 
 class PPFormulaNetProcessor(NougatProcessor):

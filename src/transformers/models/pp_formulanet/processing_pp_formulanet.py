@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 # Don't copy default values from Nougat!
 class PPFormulaNetProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+    _defaults = {}
 
 
 @auto_docstring
