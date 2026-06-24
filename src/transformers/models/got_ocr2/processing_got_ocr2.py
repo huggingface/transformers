@@ -16,14 +16,11 @@
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, get_image_size
+from ...image_utils import ImageInput, get_image_size, is_valid_image
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_vision_available, logging
+from ...utils import auto_docstring, logging
 
-
-if is_vision_available():
-    pass
 
 logger = logging.get_logger(__name__)
 
@@ -242,14 +239,15 @@ class GotOcr2Processor(ProcessorMixin):
         image_replacements = []
         # Important to not flatten the images here!
         for idx in range(len(images)):
-            replacement_text = self.replace_image_token(
-                processed_images,
-                image_idx=idx,
-                num_pages_per_batch=num_pages_per_batch,
-                patch_indices=patch_indices,
-                num_image_tokens=num_image_tokens,
-            )
-            image_replacements.append(replacement_text)
+            if is_valid_image(images[idx]) or (isinstance(images, (list, tuple)) and len(images[idx]) > 0):
+                replacement_text = self.replace_image_token(
+                    processed_images,
+                    image_idx=idx,
+                    num_pages_per_batch=num_pages_per_batch,
+                    patch_indices=patch_indices,
+                    num_image_tokens=num_image_tokens,
+                )
+                image_replacements.append(replacement_text)
         return processed_images, image_replacements
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
