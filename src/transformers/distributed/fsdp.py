@@ -124,14 +124,11 @@ def _resolve_tied_embed_lm_head_plan(
     if embed_module_key is None:
         return fsdp_plan
 
-    adapted_plan = {}
-    for key, sharding_strategy in fsdp_plan.items():
-        if key == embed_module_key:
-            continue
-        if key == "lm_head" and sharding_strategy == "keep_full_weight":
-            adapted_plan[embed_module_key] = sharding_strategy
-        else:
-            adapted_plan[key] = sharding_strategy
+    adapted_plan = fsdp_plan.copy()
+    adapted_plan.pop(embed_module_key, None)
+    if fsdp_plan.get("lm_head") == "keep_full_weight":
+        adapted_plan.pop("lm_head", None)
+        adapted_plan[embed_module_key] = "keep_full_weight"
     return adapted_plan
 
 
