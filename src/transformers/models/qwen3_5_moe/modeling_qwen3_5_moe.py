@@ -265,6 +265,9 @@ def torch_chunk_gated_delta_rule(
     When FLA is installed, ``chunk_gated_delta_rule`` is the optimized kernel instead.
     """
     del chunk_size, kwargs  # unused in the exact recurrent fallback
+    # Reference l2norm so modular conversion still copies it for consumers (e.g. olmo_hybrid)
+    # that inline torch_recurrent_gated_delta_rule, which calls l2norm.
+    _ = l2norm
     return torch_recurrent_gated_delta_rule(
         query,
         key,
