@@ -21,7 +21,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -164,17 +171,17 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
+    @require_torch_accelerator
     def test_small_model_integration_test_document_parsing(self):
-        model = UnlimitedOcrForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16, device_map=torch_device
-        )
+        model = UnlimitedOcrForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device).eval()
         image = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
             )
         )
         inputs = self.processor(images=image, text="<image>\ndocument parsing.", return_tensors="pt").to(model.device)
-        generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
+            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         EXPECTED_DECODED_TEXT = Expectations(
             {
@@ -184,10 +191,9 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
 
     @slow
+    @require_torch_accelerator
     def test_small_model_integration_test_document_parsing_grounding(self):
-        model = UnlimitedOcrForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16, device_map=torch_device
-        )
+        model = UnlimitedOcrForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device).eval()
         image = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -198,7 +204,8 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
             text="<image>\ndocument parsing.",
             return_tensors="pt",
         ).to(model.device)
-        generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
+            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False)
         EXPECTED_DECODED_TEXT = Expectations(
             {
@@ -208,10 +215,9 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
 
     @slow
+    @require_torch_accelerator
     def test_small_model_integration_test_batched(self):
-        model = UnlimitedOcrForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16, device_map=torch_device
-        )
+        model = UnlimitedOcrForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device).eval()
         image1 = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -227,8 +233,9 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
             text=["<image>\ndocument parsing.", "<image>\ndocument parsing."],
             return_tensors="pt",
             padding=True,
-        ).to(model.device)
-        generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        ).to(model.device, dtype=torch.bfloat16)
+        with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
+            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         decoded = self.processor.batch_decode(
             generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
