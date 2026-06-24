@@ -21,7 +21,10 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V3.2-Exp")
@@ -84,8 +87,9 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
 
-    # Only kept for BC
+    # BC: `num_local_experts` was used previously but we opt for `num_experts` (fp8 compatibility)
     attribute_map = {
+        "num_experts": "n_routed_experts",
         "num_local_experts": "n_routed_experts",
     }
 
@@ -125,7 +129,6 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     index_head_dim: int = 128
     index_n_heads: int = 64
     mlp_bias: bool = False
-    num_experts: int = 256
     head_dim: int = 64
     first_k_dense_replace: int = 3
     layer_types: list[str] | None = None
@@ -142,6 +145,13 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+
+        if (num_experts := kwargs.get("num_experts")) is not None:
+            logger.warning_once(
+                "Detected `num_experts` being passed to the config. Please use `n_routed_experts` instead. "
+                "Setting it to `n_routed_experts` instead."
+            )
+            self.n_routed_experts = num_experts
         # Default to MoE from the second layer and on
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)

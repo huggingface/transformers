@@ -99,8 +99,9 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
         "layers.*.mlp.down_proj": "rowwise",
     }
 
-    # Only kept for BC
+    # BC: `num_local_experts` was used previously but we opt for `num_experts` (fp8 compatibility)
     attribute_map = {
+        "num_experts": "n_routed_experts",
         "num_local_experts": "n_routed_experts",
     }
 
@@ -140,7 +141,6 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
     index_head_dim: int = 128
     index_n_heads: int = 64
     mlp_bias: bool = False
-    num_experts: int = 256
     head_dim: int = 64
     first_k_dense_replace: int = 3
     pretraining_tp = AttributeError()
@@ -159,6 +159,14 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+
+        if (num_experts := kwargs.get("num_experts")) is not None:
+            logger.warning_once(
+                "Detected `num_experts` being passed to the config. Please use `n_routed_experts` instead. "
+                "Setting it to `n_routed_experts` instead."
+            )
+            self.n_routed_experts = num_experts
+
         super().__post_init__(**kwargs)
 
 
