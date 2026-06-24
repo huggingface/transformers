@@ -22,22 +22,26 @@ from ..nemotron_asr_streaming.configuration_nemotron_asr_streaming import Nemotr
 @strict
 class Nemotron3_5AsrConfig(PreTrainedConfig):
     r"""
+    vocab_size (`int`, *optional*, defaults to 13088):
+        Vocabulary size of the joint network output (including the blank token).
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`).
-    joint_hidden_size (`int`, *optional*, defaults to 640):
-        Hidden size of the joint network's encoder/decoder projections (NeMo's `joint_hidden`).
     num_decoder_layers (`int`, *optional*, defaults to 2):
         Number of LSTM layers in the prediction network.
     hidden_act (`str`, *optional*, defaults to `"relu"`):
         Activation in the joint network.
     max_symbols_per_step (`int`, *optional*, defaults to 10):
         Maximum number of non-blank symbols emitted per encoder time step during greedy decoding.
-    durations (`list[int]`, *optional*, defaults to `()`):
-        Pinned to the empty tuple for RNN-T: no token durations are predicted, so the joint head outputs
-        only `vocab_size` logits.
     encoder_config (`Union[dict, NemotronAsrStreamingEncoderConfig]`, *optional*):
         The config object or dictionary of the encoder. Reuses [`NemotronAsrStreamingEncoderConfig`] directly,
         since the encoder is identical to [`NemotronAsrStreaming`]'s.
+    blank_token_id (`int`, *optional*, defaults to 13087):
+        Blank token id for RNN-T decoding.
+    joint_hidden_size (`int`, *optional*, defaults to 640):
+        Hidden size of the joint network's encoder/decoder projections (NeMo's `joint_hidden`).
+    durations (`list[int]`, *optional*, defaults to `()`):
+        Pinned to the empty tuple for RNN-T: no token durations are predicted, so the joint head outputs
+        only `vocab_size` logits.
     num_prompts (`int`, *optional*, defaults to 128):
         Number of language-prompt slots. The target language is encoded as a one-hot vector of this
         size, broadcast across the encoder time axis and concatenated with the encoder output before
@@ -45,10 +49,6 @@ class Nemotron3_5AsrConfig(PreTrainedConfig):
     prompt_intermediate_size (`int`, *optional*, defaults to 2048):
         Hidden size of the `prompt_kernel` fusion MLP (`Linear(hidden + num_prompts -> intermediate)
         -> ReLU -> Linear(intermediate -> hidden)`).
-    vocab_size (`int`, *optional*, defaults to 13088):
-        Vocabulary size of the joint network output (including the blank token).
-    blank_token_id (`int`, *optional*, defaults to 13087):
-        Blank token id for RNN-T decoding.
 
     Example:
     ```python

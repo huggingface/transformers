@@ -15,12 +15,10 @@
 from dataclasses import dataclass
 
 import torch
-from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -340,7 +338,7 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
-    decoder_cache: "NemotronAsrStreamingEncoderCausalConvPaddingCache | None" = None
+    decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
 
     encoder_past_key_values: Cache | None = None
     padding_cache: Cache | None = None

@@ -52,7 +52,7 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
-    decoder_cache: "NemotronAsrStreamingEncoderCausalConvPaddingCache | None" = None
+    decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
 
     encoder_past_key_values: Cache | None = None
     padding_cache: Cache | None = None
