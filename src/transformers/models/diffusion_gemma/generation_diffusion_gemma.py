@@ -1147,7 +1147,7 @@ class DiffusionGemmaGenerationMixin:
             cache_to_check is None
             or cache_to_check.offloading != offload_cache
             or cache_to_check.max_batch_size != batch_size
-            or cache_to_check.max_cache_len < max_length
+            or cache_to_check.get_max_length() < max_length
         )
 
         if need_new_cache:
