@@ -469,7 +469,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoderModel(MimiModel):
 
 
 @auto_docstring
-class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrainedModel):
+class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrainedModel, PreTrainedAudioTokenizerBase):
     config_class = Qwen3TTSTokenizerMultiCodebookConfig
     main_input_name = "input_values"
 
@@ -562,4 +562,9 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         return Qwen3TTSTokenizerMultiCodebookOutput(audio_values)
 
 
-__all__ = ["Qwen3TTSTokenizerMultiCodebookModel", "Qwen3TTSTokenizerMultiCodebookPreTrainedModel"]
+__all__ = [
+    "Qwen3TTSTokenizerMultiCodebookConfig",
+    "Qwen3TTSTokenizerMultiCodebookCode2WavConfig",
+    "Qwen3TTSTokenizerMultiCodebookModel",
+    "Qwen3TTSTokenizerMultiCodebookPreTrainedModel",
+]
