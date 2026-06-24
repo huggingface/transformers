@@ -196,7 +196,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                 "You are using PaliGemma without a text prefix. It will perform as a picture-captioning model."
             )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.image_seq_length
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):

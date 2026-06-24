@@ -282,7 +282,7 @@ class Florence2Processor(ProcessorMixin):
         if isinstance(images, list) and len(images) != len(text):
             raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.num_image_tokens
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):

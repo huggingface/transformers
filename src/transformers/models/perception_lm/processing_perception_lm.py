@@ -56,7 +56,7 @@ class PerceptionLMProcessor(ProcessorMixin):
         self.video_token_id = tokenizer.video_token_id
         super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         media = image_inputs["pixel_values"][image_idx]
         height, width = get_image_size(to_numpy_array(media))
         num_tiles = media.shape[0]
@@ -67,7 +67,7 @@ class PerceptionLMProcessor(ProcessorMixin):
         )
         return self.image_token * num_tokens
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         media = video_inputs["pixel_values_videos"][video_idx]
         height, width = get_image_size(to_numpy_array(media))
         num_tiles = media.shape[0]

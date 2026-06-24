@@ -171,7 +171,7 @@ class SmolVLMProcessor(ProcessorMixin):
                         f"The number of videos in the text {n_videos_per_sample} and videos {n_videos_in_videos} should be the same."
                     )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         rows = [row for row_list in image_inputs["rows"] for row in row_list]
         cols = [col for col_list in image_inputs["cols"] for col in col_list]
         return get_image_prompt_string(
@@ -183,7 +183,7 @@ class SmolVLMProcessor(ProcessorMixin):
             global_image_token=self.global_image_token,
         )
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         num_frames = video_inputs["pixel_values"].shape[1]
         metadata = video_inputs["video_metadata"][video_idx]
         if metadata.fps is None:

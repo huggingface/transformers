@@ -152,6 +152,8 @@ class ColPaliProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
 
+
+def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         return self.image_token * self.image_seq_length
 

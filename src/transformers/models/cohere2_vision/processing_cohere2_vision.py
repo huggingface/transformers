@@ -64,7 +64,7 @@ class Cohere2VisionProcessor(ProcessorMixin):
             raise ValueError("You have to specify text.")
         super().validate_inputs(images=images, text=text, **kwargs)
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         num_patches = image_inputs["num_patches"][image_idx]
         img_patches_per_tile = int(self.patch_size**2)
         tile = self.image_token * img_patches_per_tile + self.img_line_break_token

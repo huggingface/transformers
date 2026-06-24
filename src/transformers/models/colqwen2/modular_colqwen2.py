@@ -115,7 +115,7 @@ class ColQwen2Processor(ColPaliProcessor):
             text = [self.visual_prompt_prefix] * len(images)
         return images, text, None, None
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
         return self.image_token * (int(image_inputs["image_grid_thw"][image_idx].prod()) // merge_length)
 

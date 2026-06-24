@@ -94,7 +94,7 @@ class PixtralProcessor(ProcessorMixin):
         images_kwargs["patch_size"] = self.patch_size * self.spatial_merge_size
         return super()._process_images(images, **images_kwargs)
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         patch_size = self.patch_size * self.spatial_merge_size
         height, width = image_inputs["image_sizes"][image_idx]
         num_height_tokens = height // patch_size

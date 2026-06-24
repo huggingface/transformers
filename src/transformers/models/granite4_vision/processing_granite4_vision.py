@@ -80,7 +80,7 @@ class Granite4VisionProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
         self.downsample_rate = downsample_rate
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_size = image_inputs["image_sizes"][image_idx]
         if not isinstance(image_size, (list, tuple)):
             image_size = image_size.tolist()

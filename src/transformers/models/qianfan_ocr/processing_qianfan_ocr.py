@@ -153,7 +153,7 @@ class QianfanOCRProcessor(ProcessorMixin):
         if videos is not None:
             raise ValueError("QianfanOCR does not support video input.")
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_num_patches = image_inputs["num_patches"]
         return f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_idx]}{self.end_image_token}"
 

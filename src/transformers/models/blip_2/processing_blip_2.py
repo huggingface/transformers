@@ -124,7 +124,7 @@ class Blip2Processor(ProcessorMixin):
             text = [self.image_token + sample for sample in text]
         return images, text, None, None
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         replacement = self.image_token * self.num_query_tokens
         if self.added_bos_token:
             replacement = f"{self.added_bos_token}{replacement}"

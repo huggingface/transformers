@@ -137,7 +137,7 @@ class Llama4Processor(ProcessorMixin):
                     f"but have {len(images)} flattened images."
                 )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_height, image_width = image_inputs["pixel_values"][0].shape[-2:]
         num_patches_per_chunk = int(
             (image_height // self.patch_size) * (image_width // self.patch_size) // self.downsample_ratio

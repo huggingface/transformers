@@ -123,7 +123,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
             ]
         return images, text, None, None
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.image_seq_length
 
     @auto_docstring(

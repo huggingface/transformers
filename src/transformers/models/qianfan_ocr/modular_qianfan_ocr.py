@@ -336,7 +336,7 @@ class QianfanOCRProcessor(InternVLProcessor):
         if videos is not None:
             raise ValueError("QianfanOCR does not support video input.")
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         raise NotImplementedError("QianfanOCR does not support video input")
 
 

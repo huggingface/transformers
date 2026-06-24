@@ -141,11 +141,11 @@ class InternVLProcessor(ProcessorMixin):
         if text is None:
             raise ValueError("You have to specify text.")
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_num_patches = image_inputs["num_patches"]
         return f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_idx]}{self.end_image_token}"
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         num_frames = video_inputs["pixel_values_videos"][video_idx].shape[0]
         return "\n".join(
             f"Frame{i + 1}: {self.start_image_token}{self.image_token * self.image_seq_length}{self.end_image_token}"

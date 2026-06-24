@@ -140,7 +140,7 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
 
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
         return self.audio_bos_token + self.audio_token * num_audio_tokens + self.audio_eos_token
 

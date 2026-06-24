@@ -54,7 +54,7 @@ class Ovis2Processor(ProcessorMixin):
         )
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         grid = image_inputs["grids"][image_idx].tolist()
         num_rows, num_cols = grid[0], grid[1]
         placeholder = f"<IMG_START>{'<IMG_ATOM>' * self.image_seq_length}<IMG_GRID>"

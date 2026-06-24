@@ -82,7 +82,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self.vision_aspect_ratio = vision_aspect_ratio
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         batch_num_images = image_inputs["batch_num_images"]
         cumulative = 0
         is_multi_image = False
@@ -106,7 +106,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             num_image_tokens -= 1
         return self.image_token * num_image_tokens
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         processed_video = video_inputs["pixel_values_videos"][video_idx]
         num_frames = len(processed_video) if isinstance(processed_video, (list, tuple)) else processed_video.shape[0]
         patches_height_width = int(math.sqrt(self.num_image_tokens))

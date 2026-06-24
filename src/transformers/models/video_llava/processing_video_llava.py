@@ -73,7 +73,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image = image_inputs["pixel_values_images"][image_idx]
         height, width = get_image_size(to_numpy_array(image))
         num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
@@ -82,7 +82,7 @@ class VideoLlavaProcessor(ProcessorMixin):
             num_image_tokens -= 1
         return self.image_token * num_image_tokens
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         one_video = video_inputs["pixel_values_videos"][video_idx]
         if isinstance(one_video, (list, tuple)):
             one_video = np.array(one_video)

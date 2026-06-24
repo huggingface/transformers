@@ -129,7 +129,7 @@ class LightOnOcrProcessor(ProcessorMixin):
     def image_token_ids(self) -> list[int]:
         return [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_height, image_width = image_inputs["image_sizes"][image_idx]
         num_height_tokens = image_height // self.effective_patch_size
         num_width_tokens = image_width // self.effective_patch_size

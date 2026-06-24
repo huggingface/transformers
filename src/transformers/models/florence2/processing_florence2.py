@@ -165,15 +165,15 @@ class Florence2Processor(ProcessorMixin):
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+            Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
-        Args:
-            image_sizes (`list[list[int]]`, *optional*):
-                The input sizes formatted as (height, width) per each image.
+        def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+                image_sizes (`list[list[int]]`, *optional*):
+                    The input sizes formatted as (height, width) per each image.
 
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
+            Returns:
+                `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+                input modalities, along with other useful data.
         """
 
         vision_data = {}

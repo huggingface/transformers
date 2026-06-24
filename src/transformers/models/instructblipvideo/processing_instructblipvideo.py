@@ -145,7 +145,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             text = [self.video_token + sample for sample in text]
         return None, text, videos, None
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         replacement = self.video_token * self.num_query_tokens * 4
         if self.added_bos_token:
             replacement = f"{self.added_bos_token}{replacement}"

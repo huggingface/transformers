@@ -112,7 +112,7 @@ class Emu3Processor(ProcessorMixin):
             text = [f"{self.bos_token}{sample}" for sample in text]
         return images, text, None, None
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         height, width = image_inputs["image_sizes"][image_idx]
         height = height // self.downsample_ratio
         width = width // self.downsample_ratio
