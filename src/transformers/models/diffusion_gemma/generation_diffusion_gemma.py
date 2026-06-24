@@ -136,6 +136,7 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
         # Parameters that control the cache
         self.cache_implementation: str | None = kwargs.pop("cache_implementation", None)
         self.cache_config: dict[str, Any] | None = kwargs.pop("cache_config", None)
+        self.disable_compile: str | None = kwargs.pop("disable_compile", None)
 
         # Special tokens that can be used at generation time
         self.bos_token_id: int | None = kwargs.pop("bos_token_id", None)
@@ -217,7 +218,7 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
     def _get_default_generation_params() -> dict[str, Any]:
         """
         Defaults to be applied when unset by the model OR by the user, such that `model.generate()` works with minimal
-        paremeterization.
+        parameterization.
 
         Pretrained checkpoints should set these as appropriate in their `generation_config.json`, to establish
         a better default baseline. Be mindful that tests may use use these values.
@@ -252,7 +253,7 @@ class DiffusionGemmaGenerationOutput(ModelOutput):
             The generated sequences, including the prompt if `input_ids` was provided to the `generate` method.
         tokens_per_forward (`torch.LongTensor` of shape (`batch_size`)):
             The number of tokens per forward in this `generate` call, for each member in the batch. This is often
-            used as a secundary evaluation metric for text diffusion models.
+            used as a secondary evaluation metric for text diffusion models.
         past_key_values (`Cache`):
             The cache used for generation. It can be passed to subsequent calls to `generate` to speed up generation,
             in multi-turn sessions.
@@ -702,7 +703,9 @@ class DiffusionGemmaGenerationMixin:
             streamer.put(input_ids.cpu())
 
         # 0.f performance tuning
-        is_compiling = past_key_values is not None and past_key_values.is_compileable
+        is_compiling = (
+            past_key_values is not None and past_key_values.is_compileable and not generation_config.disable_compile
+        )
         if is_compiling:
             encoder_forward_after_prefill, decoder_forward, sampler, diffusion_stopping_criteria = (
                 self._compile_functions(sampler, diffusion_stopping_criteria)
