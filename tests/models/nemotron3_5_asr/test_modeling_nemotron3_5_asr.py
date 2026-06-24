@@ -297,47 +297,79 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
-    def test_rnnt_model_integration(self):
-        # NeMo `nvidia/nemotron-3.5-asr-streaming-0.6b` reference; HF matches it.
+    def test_model_integration(self):
         # reproducer: https://gist.github.com/eustlb/7e28529787b376b909008109be313ed7#file-reproducer_single_rnnt-py
         RESULTS_PATH = FIXTURES_DIR / "expected_results_single.json"
         with open(RESULTS_PATH) as f:
             expected = json.load(f)
 
-        samples = self._load_datasamples(len(expected["transcriptions"]))
-        model = Nemotron3_5AsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto").eval()
+        samples = self._load_datasamples(1)
+        model = Nemotron3_5AsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
-        inputs = self.processor(
-            samples, sampling_rate=self.processor.feature_extractor.sampling_rate, language=expected["language"]
-        )
-        num_lookahead_tokens = inputs.pop("num_lookahead_tokens")
-        inputs.to(model.device, dtype=model.dtype)
-        output = model.generate(**inputs, num_lookahead_tokens=num_lookahead_tokens, return_dict_in_generate=True)
-        predicted = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
-        self.assertListEqual(predicted, expected["transcriptions"])
+        # `expected["results"]` maps each prompting mode -> {"transcriptions", "token_ids"}: `"en-US"` forces
+        # the language via the prompt, `"auto"` lets the model detect it (it emits the `<en-US>` tag itself).
+        for language, reference in expected["results"].items():
+            inputs = self.processor(
+                samples, sampling_rate=self.processor.feature_extractor.sampling_rate, language=language
+            )
+            num_lookahead_tokens = inputs.pop("num_lookahead_tokens")
+            inputs.to(model.device, dtype=model.dtype)
+            output = model.generate(**inputs, num_lookahead_tokens=num_lookahead_tokens, return_dict_in_generate=True)
+
+            # 1. Transcript: stripping the special tokens (blanks + `<lang>` tag) yields the clean text.
+            predicted = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+            self.assertListEqual(predicted, reference["transcriptions"], msg=f"transcript mismatch ({language})")
+
+            # 2. Predicted tokens: `reference["token_ids"]` is NeMo's per-frame greedy alignment (the emitted
+            # tokens *including blanks*). HF prepends `decoder_start_token_id`, then emits the same alignment,
+            # so `sequences[0] == [decoder_start] + token_ids[0]` (no trailing padding for a single sample;
+            # `decoder_start == blank == 13087` for this RNN-T checkpoint).
+            token_ids = reference["token_ids"][0]
+            self.assertListEqual(
+                output.sequences[0].tolist(),
+                [model.config.decoder_start_token_id] + token_ids,
+                msg=f"token mismatch ({language})",
+            )
 
     @slow
-    def test_rnnt_model_integration_batched(self):
-        # NeMo reference; all five HF transcripts match it.
+    def test_model_integration_batched(self):
         # reproducer: https://gist.github.com/eustlb/7e28529787b376b909008109be313ed7#file-reproducer_batch_rnnt-py
         RESULTS_PATH = FIXTURES_DIR / "expected_results_batch.json"
         with open(RESULTS_PATH) as f:
             expected = json.load(f)
 
-        samples = self._load_datasamples(len(expected["transcriptions"]))
-        model = Nemotron3_5AsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto").eval()
+        samples = self._load_datasamples(5)
+        model = Nemotron3_5AsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
-        inputs = self.processor(
-            samples, sampling_rate=self.processor.feature_extractor.sampling_rate, language=expected["language"]
-        )
-        num_lookahead_tokens = inputs.pop("num_lookahead_tokens")
-        inputs.to(model.device, dtype=model.dtype)
-        output = model.generate(**inputs, num_lookahead_tokens=num_lookahead_tokens, return_dict_in_generate=True)
-        predicted = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
-        self.assertListEqual(predicted, expected["transcriptions"])
+        # `expected["results"]` maps each prompting mode -> {"transcriptions", "token_ids"}: `"en-US"` forces
+        # the language via the prompt, `"auto"` lets the model detect it (it emits the `<en-US>` tag itself).
+        for language, reference in expected["results"].items():
+            inputs = self.processor(
+                samples, sampling_rate=self.processor.feature_extractor.sampling_rate, language=language
+            )
+            num_lookahead_tokens = inputs.pop("num_lookahead_tokens")
+            inputs.to(model.device, dtype=model.dtype)
+            output = model.generate(**inputs, num_lookahead_tokens=num_lookahead_tokens, return_dict_in_generate=True)
+
+            # 1. Transcript: stripping the special tokens (blanks + `<lang>` tag) yields the clean text.
+            predicted = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+            self.assertListEqual(predicted, reference["transcriptions"], msg=f"transcript mismatch ({language})")
+
+            # 2. Predicted tokens: `reference["token_ids"][i]` is NeMo's per-frame greedy alignment for sample
+            # `i` (the emitted tokens *including blanks*). HF prepends `decoder_start_token_id`, emits the same
+            # alignment, then right-fills the batch to the longest row with blanks (`decoder_start == blank ==
+            # 13087` here), so each row is `[decoder_start] + token_ids[i] + [blank] * padding`.
+            for i, token_ids in enumerate(reference["token_ids"]):
+                row = output.sequences[i].tolist()
+                blank_padding = [model.config.blank_token_id] * (len(row) - 1 - len(token_ids))
+                self.assertListEqual(
+                    row,
+                    [model.config.decoder_start_token_id] + token_ids + blank_padding,
+                    msg=f"token mismatch (sample {i}, {language})",
+                )
 
     @slow
-    def test_rnnt_model_integration_streaming(self):
+    def test_model_integration_streaming(self):
         """Cache-aware streaming generation from a generator of per-chunk mel features.
 
         Mirrors the streaming snippet of the multilingual usage: raw audio is fed to the processor chunk by
@@ -419,19 +451,3 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
         thread.join()
 
         self.assertEqual(streamed_text, expected["transcription"])
-
-    @slow
-    def test_transcription_auto_language_tag(self):
-        # In `auto` mode the model emits the detected language tag (a special token): `skip_special_tokens`
-        # controls whether it is kept (language labeling) or stripped (clean transcript).
-        model = Nemotron3_5AsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto").eval()
-        inputs = self.processor(
-            self._load_datasamples(1), sampling_rate=self.processor.feature_extractor.sampling_rate, language="auto"
-        )
-        num_lookahead_tokens = inputs.pop("num_lookahead_tokens")
-        inputs.to(model.device, dtype=model.dtype)
-        output = model.generate(**inputs, num_lookahead_tokens=num_lookahead_tokens)
-        kept = self.processor.batch_decode(output.sequences, skip_special_tokens=False)[0]
-        stripped = self.processor.batch_decode(output.sequences, skip_special_tokens=True)[0]
-        self.assertIn("<en-US>", kept)
-        self.assertNotIn("<en-US>", stripped)
