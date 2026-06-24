@@ -279,7 +279,7 @@ class UnlimitedOcrVisionConfig(DeepseekOcr2VisionConfig):
         elif isinstance(self.encoder_config, dict):
             self.encoder_config = self.sub_configs["encoder_config"](**self.encoder_config)
 
-        super().__post_init__(**kwargs)
+        PretrainedConfig.__post_init__(self, **kwargs)
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
@@ -354,11 +354,11 @@ class UnlimitedOcrConfig(DeepseekOcr2Config):
             text_cls = self.sub_configs["text_config"]
             text_keys = text_cls().to_dict().keys()
             text_kwargs = {key: kwargs.pop(key) for key in text_keys if key in kwargs}
+            text_kwargs = {}
             self.text_config = text_cls(**text_kwargs)
         elif isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
-
-        super().__post_init__(**kwargs)
+        PretrainedConfig.__post_init__(self, **kwargs)
 
 
 class UnlimitedOcrModelOutputWithPooling(DeepseekOcr2ModelOutputWithPooling):
