@@ -4915,6 +4915,27 @@ class GenerationIntegrationTests(unittest.TestCase):
         output = tokenizer.decode(output[0], skip_special_tokens=True)
         self.assertEqual(output, EXPECTED_TEXT)
 
+    @pytest.mark.generate
+    @require_torch
+    def test_generate_static_cache_multiple_calls_with_compile(self):
+        """
+        Tests that calling generate() multiple times with static cache and torch.compile
+        does not crash. Regression test for get_seq_length() returning a device tensor
+        that breaks slice arithmetic in _prefill.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        model.generation_config.cache_implementation = "static"
+        model.forward = torch.compile(model.forward, backend="inductor")
+
+        input_ids = tokenizer("Hello world", return_tensors="pt").input_ids.to(torch_device)
+
+        # Multiple generate() calls should not crash
+        for _ in range(3):
+            output = model.generate(input_ids, max_new_tokens=5, do_sample=False)
+            self.assertEqual(output.shape[1], input_ids.shape[1] + 5)
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):

@@ -3868,6 +3868,11 @@ class GenerationMixin(ContinuousMixin):
             use_inputs_embeds = True
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
+            # StaticCache.get_seq_length() returns self.cumulative_length which is a
+            # device tensor (intentionally, for torch.compile). Convert to int here
+            # for correct slice arithmetic in prepare_inputs_for_generation.
+            if isinstance(past_length, torch.Tensor):
+                past_length = int(past_length.item())
             # It will be sliced as inputs_embeds = inputs_embeds[:, -next_sequence_length:, :] in `prepare_inputs_for_generation`
             if use_inputs_embeds:
                 next_sequence_length = model_kwargs["inputs_embeds"].shape[1] - past_length
