@@ -20,6 +20,7 @@
 
 import math
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import torch
 from torch import nn
@@ -34,6 +35,12 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ..auto import AutoModel
 from .configuration_nemotron3_5_asr import Nemotron3_5AsrConfig
 from .generation_nemotron3_5_asr import Nemotron3_5AsrGenerationMixin, Nemotron3_5AsrRNNTDecoderCache
+
+
+if TYPE_CHECKING:
+    from ..nemotron_asr_streaming.modeling_nemotron_asr_streaming import (
+        NemotronAsrStreamingEncoderCausalConvPaddingCache,
+    )
 
 
 logger = logging.get_logger(__name__)
@@ -55,7 +62,7 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
     decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
 
     encoder_past_key_values: Cache | None = None
-    padding_cache: Cache | None = None
+    padding_cache: "NemotronAsrStreamingEncoderCausalConvPaddingCache | None" = None
 
 
 @auto_docstring
