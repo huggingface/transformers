@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 from safetensors import safe_open
 from safetensors.torch import save_file
 
+from ..distributed.fsdp import is_fsdp_enabled
 from ..utils import (
     is_accelerate_available,
     is_torch_available,
@@ -34,7 +35,6 @@ from ..utils import (
 )
 from ..utils.quantization_config import QuantizationMethod
 from .deepspeed import is_deepspeed_zero3_enabled
-from .fsdp import is_fsdp_enabled
 
 
 if is_torch_available():
@@ -486,6 +486,13 @@ def accelerate_disk_offload(
             # Need to check if it's in the mapping in case of unexpected keys that would result in KeyError (we skip them)
             if target_name in param_device_map and param_device_map[target_name] == "disk"
         }
+
+        # Tie weights which are both disk offloaded
+        all_tied_weights_keys = getattr(model, "all_tied_weights_keys", {})
+        for target_param_name, source_param_name in all_tied_weights_keys.items():
+            if source_param_name in disk_offload_index and target_param_name not in disk_offload_index:
+                disk_offload_index[target_param_name] = disk_offload_index[source_param_name]
+
     # In this case we will resave every offloaded weight
     else:
         disk_offload_index = {}
