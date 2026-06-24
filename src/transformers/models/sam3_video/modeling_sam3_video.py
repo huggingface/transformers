@@ -1133,7 +1133,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
         return pred_masks
 
-    def _suppress_shrinked_masks(self, pred_masks, new_pred_masks, shrink_threshold=0.3):
+    def _suppress_shrunk_masks(self, pred_masks, new_pred_masks, shrink_threshold=0.3):
         area_before = (pred_masks > 0).sum(dim=(-1, -2))
         area_after = (new_pred_masks > 0).sum(dim=(-1, -2))
         area_before = torch.clamp(area_before, min=1.0)
@@ -1172,7 +1172,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             return pred_masks
 
         pixel_level_non_overlapping_masks = self._apply_non_overlapping_constraints(pred_masks)
-        pred_masks = self._suppress_shrinked_masks(pred_masks, pixel_level_non_overlapping_masks)
+        pred_masks = self._suppress_shrunk_masks(pred_masks, pixel_level_non_overlapping_masks)
         return pred_masks
 
     def _tracker_update_memories(
