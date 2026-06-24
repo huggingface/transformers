@@ -33,6 +33,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralModel,
     MixtralPreTrainedModel,
     MixtralRotaryEmbedding,
+    MixtralTopKRouter,
 )
 from .configuration_phimoe import PhimoeConfig
 
@@ -275,20 +276,18 @@ class PhimoeExperts(MixtralExperts):
     pass
 
 
-class PhimoeTopKRouter(nn.Linear):
+class PhimoeTopKRouter(MixtralTopKRouter):
     def __init__(self, config: PhimoeConfig):
-        super().__init__(config.hidden_size, config.num_local_experts, bias=False)
+        super().__init__(config)
         self.router_jitter_noise = config.router_jitter_noise
         self.input_jitter_noise = config.input_jitter_noise
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.training and self.input_jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
             )
-        router_logits = super().forward(hidden_states)
+        router_logits = nn.functional.linear(hidden_states, self.weight)
         routing_weights, selected_experts = sparsemixer(
             router_logits, jitter_eps=self.router_jitter_noise, training=self.training, top_k=self.top_k
         )
