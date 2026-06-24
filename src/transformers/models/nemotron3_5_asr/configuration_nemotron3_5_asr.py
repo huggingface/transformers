@@ -80,9 +80,6 @@ class Nemotron3_5AsrConfig(PreTrainedConfig):
     default_prompt_id: int = 101
 
     def __post_init__(self, **kwargs):
-        # The decoder starts on the blank token at frame 0 (NeMo's blank_as_pad convention).
-        kwargs.setdefault("decoder_start_token_id", self.blank_token_id)
-
         if isinstance(self.encoder_config, dict):
             self.encoder_config["model_type"] = self.encoder_config.get("model_type", "nemotron_asr_streaming_encoder")
             self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
