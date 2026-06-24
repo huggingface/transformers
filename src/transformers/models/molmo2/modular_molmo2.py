@@ -448,11 +448,12 @@ class Molmo2ImageProcessor(TorchvisionBackend):
                 all_pooled.append(pooled_idx)
                 all_num_crops.append(crops.shape[0])
 
+        device = all_crops[0].device
         data = {
             "pixel_values": torch.cat(all_crops, dim=0),
             "image_token_pooling": torch.cat(all_pooled, dim=0),
             "image_grids": torch.cat(all_grids, dim=0),
-            "image_num_crops": torch.tensor(all_num_crops, dtype=torch.int64),
+            "image_num_crops": torch.tensor(all_num_crops, dtype=torch.int64, device=device),
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
 
