@@ -141,22 +141,20 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-        # The right attention context (akin to Voxtral Realtime's `num_delay_tokens`), selected via
-        # `set_num_lookahead_tokens`; pass it to the model/encoder forward or `generate`.
         inputs["num_lookahead_tokens"] = self.default_num_lookahead_tokens
 
         if text is None:
             return inputs
-        else:
-            inputs["labels"] = encodings["input_ids"]
-            # Prepend blank token to labels to form decoder_input_ids.
-            # The RNN-T decoder expects [blank, label_0, ..., label_{U-1}] as input,
-            if isinstance(text, str):
-                text = [text]
-            decoder_text = [self.blank_token + t for t in text]
-            decoder_encodings = self.tokenizer(decoder_text, **output_kwargs["text_kwargs"])
-            inputs["decoder_input_ids"] = decoder_encodings["input_ids"]
-            return inputs
+
+        inputs["labels"] = encodings["input_ids"]
+        # Prepend blank token to labels to form decoder_input_ids.
+        # The RNN-T decoder expects [blank, label_0, ..., label_{U-1}] as input,
+        if isinstance(text, str):
+            text = [text]
+        decoder_text = [self.blank_token + t for t in text]
+        decoder_encodings = self.tokenizer(decoder_text, **output_kwargs["text_kwargs"])
+        inputs["decoder_input_ids"] = decoder_encodings["input_ids"]
+        return inputs
 
     @property
     def model_input_names(self):
