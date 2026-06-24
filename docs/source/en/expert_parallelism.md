@@ -19,10 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## DistributedConfig
 
-> [!WARNING]
-> The [`DistributedConfig`] API is experimental and its usage may change in the future.
-
-Enable expert parallelism with the [`DistributedConfig`] class and the `enable_expert_parallel` argument.
+Enable expert parallelism with the [`DistributedConfig`] class and the `enable_expert_parallel` argument. See [DistributedConfig](./distributed_config) for the full set of sharding fields.
 
 ```py
 import torch

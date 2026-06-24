@@ -29,6 +29,7 @@ The fields below control how the model is sharded.
 | `fsdp_size` | Number of devices for FSDP2. Defaults to 1 when only `tp_size` is set. |
 | `fsdp_cpu_offload` | Offload parameters and gradients to CPU to save GPU memory. Defaults to `False`. |
 | `fsdp_mixed_precision` | Compute in `bfloat16` and reduce gradients in `float32`. Defaults to `False`. |
+| `enable_sequence_parallel` | Select the model's sequence parallel plan in place of its default tensor parallel plan. Defaults to `False`. |
 | `enable_expert_parallel` | Shard mixture-of-experts layers across devices. See [Expert parallelism](./expert_parallelism). |
 
 The product of `tp_size` and `fsdp_size` must equal the number of devices you launch with.
@@ -67,6 +68,12 @@ The plan maps modules to a sharding strategy. `free_full_weight` reshards a modu
     "layers.*": "free_full_weight",
     "norm": "keep_full_weight",
 }
+```
+
+After loading, read the resolved plan from the model with [`~PreTrainedModel.fsdp_plan`]. The model property reflects the plan applied to the instantiated model, while `config.base_model_fsdp_plan` holds the plan declared on the base model config.
+
+```py
+print(model.fsdp_plan)
 ```
 
 Set `fsdp_mixed_precision=True` to compute in `bfloat16` while reducing gradients in `float32`, and set `fsdp_cpu_offload=True` to move parameters and gradients to CPU when they aren't in use.
