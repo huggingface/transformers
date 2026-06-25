@@ -27,7 +27,8 @@ class Step3p7VisionConfig(PretrainedConfig):
         use_ln_post=False,
         use_abs_posemb=True,
         use_rope2d=True,
-        ls_init_value=0.1,
+        layer_scale_init_value=0.1,
+        ls_init_value=None,  # backward compat alias
         **kwargs,
     ):
         if width is not None:
@@ -36,6 +37,8 @@ class Step3p7VisionConfig(PretrainedConfig):
             num_hidden_layers = layers
         if heads is not None:
             num_attention_heads = heads
+        if ls_init_value is not None:
+            layer_scale_init_value = ls_init_value
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -52,7 +55,7 @@ class Step3p7VisionConfig(PretrainedConfig):
         self.ues_cls_token = use_cls_token
         self.use_cls_token = use_cls_token
         self.use_ln_pre = use_ln_pre
-        self.ls_init_value = ls_init_value
+        self.layer_scale_init_value = layer_scale_init_value
         self.use_ln_post = use_ln_post
         self.use_abs_posemb = use_abs_posemb
         self.use_rope2d = use_rope2d

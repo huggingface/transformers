@@ -20,6 +20,8 @@
 # limitations under the License.
 import copy
 from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -29,7 +31,7 @@ from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.generation import GenerationMixin
 from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from transformers.modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
@@ -38,7 +40,7 @@ from transformers.utils.generic import merge_with_config_defaults
 from transformers.utils.output_capturing import capture_outputs
 
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...utils import ModelOutput
 from ...utils.generic import maybe_autocast
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
 
@@ -214,28 +216,29 @@ class Step3p7VisionAttention(nn.Module):
         return self.out_proj(attn_output), None
 
 
-class Step3p7VisionBlock(GradientCheckpointingLayer):
+class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = Step3p7VisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = Step3p7VisionMLP(config)
+        self.self_attn = Step3p7VisionAttention(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.ls_1 = Step3p7VisionLayerScale(config.hidden_size, config.ls_init_value)
-        self.ls_2 = Step3p7VisionLayerScale(config.hidden_size, config.ls_init_value)
+        self.mlp = Step3p7VisionMLP(config)
+        self.layer_scale1 = Step3p7VisionLayerScale(config.hidden_size, config.layer_scale_init_value)
+        self.layer_scale2 = Step3p7VisionLayerScale(config.hidden_size, config.layer_scale_init_value)
 
+    @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None, **kwargs
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, _ = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask, **kwargs)
-        hidden_states = residual + self.ls_1(hidden_states)
+        hidden_states = residual + self.layer_scale1(hidden_states)
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + self.ls_2(hidden_states)
+        hidden_states = residual + self.layer_scale2(hidden_states)
         return hidden_states
 
 
@@ -244,7 +247,7 @@ class Step3p7VisionEncoder(nn.Module):
 
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
-        self.layers = nn.ModuleList([Step3p7VisionBlock(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([Step3p7VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         head_dim = config.hidden_size // config.num_attention_heads
         grid = config.image_size // config.patch_size
         self.rotary_emb = Step3p7VisionRope2D(
@@ -355,11 +358,6 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     config_class = Step3p7Config
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
-    _keys_to_ignore_on_load_unexpected = [
-        r"model\.layers\.45\.*",
-        r"model\.layers\.46\.*",
-        r"model\.layers\.47\.*",
-    ]
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -381,7 +379,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
 class Step3p7RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Step3p7TextConfig, device=None):
+    def __init__(self, config: Step3p7Config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -399,8 +397,8 @@ class Step3p7RotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: "Step3p7TextConfig | None" = None,
-        device=None,
+        config: Step3p7Config | None = None,
+        device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
@@ -420,7 +418,10 @@ class Step3p7RotaryEmbedding(nn.Module):
         partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
-        attention_factor = 1.0
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
@@ -487,32 +488,9 @@ class Step3p7MLP(nn.Module):
 
 class Step3p7SharedExpert(Step3p7MLP):
     def __init__(self, config, swiglu_limit=None):
+        config = copy.copy(config)
+        config.intermediate_size = config.share_expert_dim
         super().__init__(config, swiglu_limit=swiglu_limit)
-        self.intermediate_size = config.share_expert_dim
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-
-
-class Step3p7TopKRouter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.n_routed_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts, dtype=torch.float32))
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
-        # Sigmoid scoring (not softmax), as in M2.
-        routing_weights = F.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + self.e_score_correction_bias
-        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        return router_logits, top_k_weights, top_k_index
 
 
 class Step3p7Experts(nn.Module):
@@ -554,6 +532,27 @@ class Step3p7Experts(nn.Module):
         gate = self.act_fn(gate).clamp(max=self.limit)
         up = up.clamp(min=-self.limit, max=self.limit)
         return gate * up
+
+
+class Step3p7TopKRouter(nn.Module):
+    def __init__(self, config: Step3p7TextConfig):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
+        # Sigmoid scoring (not softmax), as in M2.
+        routing_weights = F.sigmoid(router_logits.float())
+        scores_for_choice = routing_weights + self.e_score_correction_bias
+        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
+        top_k_weights = routing_weights.gather(1, top_k_index)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        return router_logits, top_k_weights, top_k_index
 
 
 class Step3p7SparseMoeBlock(nn.Module):
@@ -790,16 +789,15 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Step3p7TextModel(Step3p7PreTrainedModel):
-    config: Step3p7TextConfig
     _no_split_modules = ["Step3p7DecoderLayer"]
     config_class = Step3p7TextConfig
+    config: Step3p7TextConfig
     _can_record_outputs = {"hidden_states": Step3p7DecoderLayer}
 
     def __init__(self, config: Step3p7TextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([Step3p7DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.norm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -836,7 +834,9 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
+        # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
@@ -844,11 +844,13 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
+            # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
+        # embed positions
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -870,8 +872,34 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Base class for Llava outputs, with hidden states and attentions.
+    """
+)
+@dataclass
+class Step3p7ModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    image_hidden_states: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
+    """
+)
 class Step3p7Model(Step3p7PreTrainedModel):
+    base_model_prefix = "model"
     config: Step3p7Config
 
     def __init__(self, config: Step3p7Config):
@@ -890,29 +918,36 @@ class Step3p7Model(Step3p7PreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
-        patch_pixel_values: torch.Tensor | None = None,
-        num_patches: list[int] | None = None,
-    ) -> list[torch.Tensor]:
+        pixel_values_local: torch.Tensor | None = None,
+        num_local_patches: list[int] | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_local (`torch.FloatTensor` of shape `(total_patches, 3, height, width)`, *optional*):
+            All local patches flattened across the batch, or `None` if no local views.
+        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
+            Number of local patches per image, e.g. `[6, 0, 4]`.
+        """
         if pixel_values.dim() >= 3:
             pixel_values = pixel_values.view(-1, *pixel_values.shape[-3:])
-        if patch_pixel_values is not None:
-            patch_pixel_values = patch_pixel_values.view(-1, *patch_pixel_values.shape[-3:])
-            if patch_pixel_values.shape[0] == 0:
-                patch_pixel_values = None
+        if pixel_values_local is not None:
+            pixel_values_local = pixel_values_local.view(-1, *pixel_values_local.shape[-3:])
+            if pixel_values_local.shape[0] == 0:
+                pixel_values_local = None
 
         image_features = self.multi_modal_projector(self.vision_model(pixel_values.to(self.dtype).to(self.device)))
         patch_image_features = (
-            self.multi_modal_projector(self.vision_model(patch_pixel_values.to(self.dtype).to(self.device)))
-            if patch_pixel_values is not None
+            self.multi_modal_projector(self.vision_model(pixel_values_local.to(self.dtype).to(self.device)))
+            if pixel_values_local is not None
             else None
         )
 
-        if num_patches is None:
-            num_patches = [0] * image_features.shape[0]
+        if num_local_patches is None:
+            num_local_patches = [0] * image_features.shape[0]
 
         merged = []
         cur_patch_idx = 0
-        for i, num_patch in enumerate(num_patches):
+        for i, num_patch in enumerate(num_local_patches):
             cur_feature = []
             if num_patch > 0:
                 patch_slice = patch_image_features[cur_patch_idx : cur_patch_idx + num_patch]
@@ -920,7 +955,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
             cur_feature.append(image_features[i].view(-1, image_features.shape[-1]))
             cur_patch_idx += num_patch
             merged.append(torch.cat(cur_feature) if len(cur_feature) > 1 else cur_feature[0])
-        return merged
+        return BaseModelOutputWithPooling(pooler_output=torch.cat(merged, dim=0))
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -938,81 +973,100 @@ class Step3p7Model(Step3p7PreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        n_image_features = image_features.shape[0] * image_features.shape[1]
         special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
             n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
-            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
         )
         return special_image_mask
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_local: torch.FloatTensor | None = None,
+        num_local_patches: list[int] | torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        patch_pixel_values: torch.Tensor | None = None,
-        num_patches=None,
-        image_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
+    ) -> tuple | Step3p7ModelOutputWithPast:
+        r"""
+        pixel_values_local (`torch.FloatTensor`, *optional*):
+            Local patch pixel values of shape `(total_patches, 3, H, W)`.
+        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
+            Number of local patches per image in the batch.
+        """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-            if pixel_values is not None:
-                image_features = torch.cat(
-                    self.get_image_features(pixel_values, patch_pixel_values, num_patches), dim=0
-                ).to(inputs_embeds)
-                image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
-                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
-            elif image_embeds is not None:
-                image_features = self.multi_modal_projector(image_embeds.to(self.dtype).to(self.device))
-                image_features = image_features.view(-1, image_features.shape[-1]).to(inputs_embeds)
-                image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
-                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
-            input_ids = None
+
+        image_features = None
+        if pixel_values is not None:
+            image_features = self.get_image_features(
+                pixel_values, pixel_values_local, num_local_patches, return_dict=True
+            ).pooler_output
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
             input_ids=None,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
-        return BaseModelOutputWithPast(
+        return Step3p7ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=image_features,
         )
 
 
-@auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
+@auto_docstring(
+    custom_intro="""
+    Base class for Step3p7 causal language model (or autoregressive) outputs.
+    """
+)
+@dataclass
+class Step3p7CausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size (batch_size * num_patches, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
+
+
+@auto_docstring
 class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     config: Step3p7Config
-    base_model_prefix = "model"
 
     def __init__(self, config: Step3p7Config):
         super().__init__(config)
@@ -1023,84 +1077,90 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values, patch_pixel_values=None, num_patches=None
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        """
-        return self.model.get_image_features(pixel_values, patch_pixel_values, num_patches)
+    def pack_image_features(self):
+        raise NotImplementedError("Step3p7 does not use pack_image_features")
 
     @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_values_local: torch.FloatTensor | None = None,
+        num_local_patches: list[int] | torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+            The tensors corresponding to the global view input images.
+        pixel_values_local (`torch.FloatTensor` of shape `(total_patches, 3, height, width)`, *optional*):
+            All local patches flattened across the batch, or `None` if no local views.
+        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
+            Number of local patches per image, e.g. `[6, 0, 4]`.
+        """
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            pixel_values_local=pixel_values_local,
+            num_local_patches=num_local_patches,
+            **kwargs,
+        )
+
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.Tensor | None = None,
-        patch_pixel_values=None,
-        num_patches=None,
-        image_embeds: torch.FloatTensor | None = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_local: torch.FloatTensor | None = None,
+        num_local_patches: list[int] | torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | Step3p7CausalLMOutputWithPast:
         r"""
-        image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of each image's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
-        video_grid_thw (`torch.Tensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of each video's feature grid, used to build the vision 3D RoPE
-            and to merge patch features.
+        pixel_values_local (`torch.FloatTensor`, *optional*):
+            Local patch pixel values of shape `(total_patches, 3, H, W)`.
+        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
+            Number of local patches per image in the batch.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            patch_pixel_values=patch_pixel_values,
-            num_patches=num_patches,
-            image_embeds=image_embeds,
-            position_ids=position_ids,
+            pixel_values_local=pixel_values_local,
+            num_local_patches=num_local_patches,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
-        hidden_states = outputs.last_hidden_state
-        if isinstance(logits_to_keep, int) and logits_to_keep > 0:
-            hidden_states = hidden_states[:, -logits_to_keep:]
+        hidden_states = outputs[0]
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        hidden_states = hidden_states[:, slice_indices, :]
         logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                **kwargs,
+            )
 
-        return CausalLMOutputWithPast(
+        return Step3p7CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
         )
 
     def prepare_inputs_for_generation(
@@ -1109,11 +1169,9 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
-        patch_pixel_values=None,
-        num_patches=None,
-        image_embeds=None,
+        pixel_values_local=None,
+        num_local_patches=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -1123,16 +1181,15 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
-            model_inputs["patch_pixel_values"] = patch_pixel_values
-            model_inputs["num_patches"] = num_patches
-            model_inputs["image_embeds"] = image_embeds
+            model_inputs["pixel_values_local"] = pixel_values_local
+            model_inputs["num_local_patches"] = num_local_patches
 
         return model_inputs
 
@@ -1140,4 +1197,4 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         self.lm_head = new_embeddings
 
 
-__all__ = ["Step3p7Model"]
+__all__ = ["Step3p7ForConditionalGeneration", "Step3p7Model"]

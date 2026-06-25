@@ -43,6 +43,7 @@ def _convert_hub_checkpoint(hub_dir: Path, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     raw_cfg = convert_cfg(hub_dir / "config.json")
     (out_dir / "config.json").write_text(json.dumps(raw_cfg, indent=2) + "\n")
+    num_hidden_layers = (raw_cfg.get("text_config") or raw_cfg).get("num_hidden_layers")
 
     for weight_file in ("pytorch_model.bin", "model.safetensors"):
         src = hub_dir / weight_file
@@ -56,7 +57,7 @@ def _convert_hub_checkpoint(hub_dir: Path, out_dir: Path) -> Path:
     else:
         raise FileNotFoundError(f"No weight file found in {hub_dir}")
 
-    new_sd = convert_state_dict(hub_sd)
+    new_sd = convert_state_dict(hub_sd, num_hidden_layers=num_hidden_layers)
     for stale in ("model.safetensors", "pytorch_model.bin"):
         (out_dir / stale).unlink(missing_ok=True)
     torch.save(new_sd, out_dir / "pytorch_model.bin")
@@ -92,7 +93,7 @@ def _run_original_forward(
         out = orig_model.model(
             input_ids=ids_with_image,
             pixel_values=pixel_values,
-            num_patches=[0],
+            num_local_patches=[0],
             use_cache=False,
         )
         orig_pv = orig_model.lm_head(out.last_hidden_state)
@@ -160,11 +161,9 @@ def main() -> None:
 
     with torch.no_grad():
         new_text = model(input_ids=input_ids, use_cache=False).logits
-        new_pv   = model(input_ids=ids_with_image, pixel_values=pixel_values, num_patches=[0], use_cache=False).logits
-        vis_out  = model.model.vision_model(pixel_values)
-        new_ie   = model(input_ids=ids_with_image, image_embeds=vis_out, use_cache=False).logits
+        new_pv   = model(input_ids=ids_with_image, pixel_values=pixel_values, num_local_patches=[0], use_cache=False).logits
 
-    current = {"text_logits": new_text, "pv_logits": new_pv, "ie_logits": new_ie}
+    current = {"text_logits": new_text, "pv_logits": new_pv}
     torch.save(current, debug_path / "logits.pt")
     print(f"Logits saved → {debug_path}/logits.pt")
 
