@@ -595,6 +595,16 @@ def _get_resolved_checkpoint_files(
             if transformers_explicit_filename is not None:
                 # If the filename is explicitly defined, load this by default.
                 archive_file = os.path.join(pretrained_model_name_or_path, subfolder, transformers_explicit_filename)
+                base_dir = os.path.abspath(os.path.join(pretrained_model_name_or_path, subfolder))
+                try:
+                    contained = os.path.commonpath([base_dir, os.path.abspath(archive_file)]) == base_dir
+                except ValueError:
+                    contained = False
+                if not contained:
+                    raise ValueError(
+                        "`transformers_weights` must reference a file inside the model directory; got "
+                        f"{transformers_explicit_filename!r}"
+                    )
                 is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
             elif use_safetensors is not False and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant))
