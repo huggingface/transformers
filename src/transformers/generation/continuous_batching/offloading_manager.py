@@ -16,7 +16,7 @@
 Handles two offloading strategies when the GPU KV cache is full:
   1. CPU offloading: copy the KV cache to a pre-allocated pinned CPU buffer, preserving exact request state.
   2. Soft reset: discard the KV cache and re-prefill from scratch when the request is re-scheduled. This incurs no data
-    transfer overhead, but we need to re-run prefill over all intial + generated tokens (so more compute overhead).
+    transfer overhead, but we need to re-run prefill over all initial + generated tokens (so more compute overhead).
 
 The CPU swap pool is a static set of pinned tensors allocated once at init (like vLLM/SGLang). Blocks are tracked
 with a simple free set — no dynamic allocation or deallocation of tensors ever happens at runtime.

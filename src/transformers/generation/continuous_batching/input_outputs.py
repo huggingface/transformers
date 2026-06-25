@@ -112,7 +112,8 @@ class ContinuousBatchingIOs:
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
         self.graphs: CudaGraphBuffer = CudaGraphBuffer(continuous_batching_config.max_cached_graphs)
-        self._trash_index = cache.trash_index
+        self._read_trash_index = cache.read_trash_index
+        self._write_trash_index = cache.write_trash_index
         # Setup static tensors and compute stream
         self._setup_static_tensors(logit_processor=logit_processor)
         self._reset_static_tensors(full_reset=True)
@@ -136,7 +137,7 @@ class ContinuousBatchingIOs:
         # Pin memory on CPU only when an accelerator is available, to speed up H2D transfers
         pin_memory = self.device.type == "cpu" and len(get_available_devices()) > 1
 
-        # Small inputs are allocated as slices in a larget tensor aligned to 128 bytes (32 * 4b). This reduces the
+        # Small inputs are allocated as slices in a larger tensor aligned to 128 bytes (32 * 4b). This reduces the
         # reduces fragmentation, so it lowers the number of D2H transfers and speeds up transfers.
         bulk_lines = self.static_inputs + logit_processor.tensors_required
         bulk_columns = aligned_divide(max_batch_tokens + 1, 1, 32)
@@ -273,15 +274,15 @@ class ContinuousBatchingIOs:
         # If this is a full reset, we reset every tensors
         if full_reset:
             self.block_table[:, :b_size].fill_(-1)
-            self.write_index_storage[:, :q_len].fill_(self._trash_index)
-            self.read_index_storage[:, : q_len + kv_len].fill_(self._trash_index)
+            self.write_index_storage[:, :q_len].fill_(self._write_trash_index)
+            self.read_index_storage[:, : q_len + kv_len].fill_(self._read_trash_index)
         # If this is not a full reset, and we are going to use the block table, we only reset it
         elif self.use_block_table:
             self.block_table[:, :b_size].fill_(-1)
         # Otherwise, the read and write indices are the ones used, so we reset them
         else:
-            self.write_index_storage[:, :q_len].fill_(self._trash_index)
-            self.read_index_storage[:, : q_len + kv_len].fill_(self._trash_index)
+            self.write_index_storage[:, :q_len].fill_(self._write_trash_index)
+            self.read_index_storage[:, : q_len + kv_len].fill_(self._read_trash_index)
 
     def reset(self) -> None:
         """Reset all relevant states for a new generation loop."""
@@ -613,16 +614,16 @@ class ContinuousBatchingAsyncIOs:
     between the two batches, which means twice as more VRAM is used for static input tensors and CUDA graph. If your GPU
     is large enough or you want to generate long sequences, this is a good trade-off to make.
 
-    Asynchronous batching works by creating two pairs of host - device inputs and ouputs:
+    Asynchronous batching works by creating two pairs of host - device inputs and outputs:
 
                                     inputs
                       ┌──────────┐ ────────► ┌────────────┐
-    IO pair object:   │ Host IOs │           │ Device IOs │       (for a CUDA sytem, Host = CPU and Device = GPU)
+    IO pair object:   │ Host IOs │           │ Device IOs │       (for a CUDA system, Host = CPU and Device = GPU)
                       └──────────┘ ◄──────── └────────────┘
                                     outputs
 
     Each pair is separate from the other. This means that each pairs has its own CUDA graphs set, because CUDA graphs
-    need to have static adresses for input tensors. To have a unique set of CUDA graph, we would need to copy the input
+    need to have static addresses for input tensors. To have a unique set of CUDA graph, we would need to copy the input
     tensors to a third device-side buffer. This could limit the memory cost of CUDA graphs but would slow down the
     forward pass.
     But the CUDA streams orchestrating the transfer from host to device (H2D) and device to host (D2H) are the same for

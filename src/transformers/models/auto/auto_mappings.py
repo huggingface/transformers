@@ -358,6 +358,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("metaclip_2_vision_model", "MetaClip2VisionConfig"),
         ("mgp-str", "MgpstrConfig"),
         ("mimi", "MimiConfig"),
+        ("minicpm3", "MiniCPM3Config"),
         ("minicpmv4_6", "MiniCPMV4_6Config"),
         ("minicpmv4_6_vision", "MiniCPMV4_6VisionConfig"),
         ("minimax", "MiniMaxConfig"),
@@ -669,6 +670,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xclip_text_model", "XCLIPTextConfig"),
         ("xclip_vision_model", "XCLIPVisionConfig"),
         ("xcodec", "XcodecConfig"),
+        ("xcodec2", "Xcodec2Config"),
         ("xglm", "XGLMConfig"),
         ("xlm", "XLMConfig"),
         ("xlm-roberta", "XLMRobertaConfig"),
@@ -973,6 +975,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
+        ("xcodec2", "Xcodec2FeatureExtractor"),
     ]
 )
 
