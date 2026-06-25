@@ -19,11 +19,12 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, BitsAndBytesConfig, Zamba2Config, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, DynamicCache, Zamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
     require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -262,30 +263,39 @@ class Zamba2ModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_zamba2_chunked_prefill(self, config, *args):
-        # A seq_len > 1 forward with a non-empty cache (chunked prefill / speculative decode
-        # verification) must match plain token-by-token decoding.
-        model = Zamba2Model(config=config).to(torch_device).eval()
-        L = 8
-        inputs_embeds = torch.randn(1, L, config.hidden_size, device=torch_device)
+    def create_and_check_zamba2_chunked_prefill(self, config, input_ids, *args, device="cpu"):
+        """
+        Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
+        to check whether multi-token cached input is properly handled.
 
-        outputs_tbt = []
-        past = None
-        for t in range(L):
-            out = model(inputs_embeds=inputs_embeds[:, t : t + 1, :], past_key_values=past, use_cache=True)
-            past = out.past_key_values
-            outputs_tbt.append(out.last_hidden_state)
-        result_tbt = torch.cat(outputs_tbt, dim=1)
+        Can either be run on GPU (fast path) or CPU (slow path), see `test_zamba2_chunked_prefill_*`
+        """
+        model = Zamba2Model(config=config)
+        model.to(device)
+        model.eval()
 
-        out_first = model(inputs_embeds=inputs_embeds[:, :1, :], use_cache=True)
-        out_rest = model(
-            inputs_embeds=inputs_embeds[:, 1:, :], past_key_values=out_first.past_key_values, use_cache=True
-        )
-        result_chunk = torch.cat([out_first.last_hidden_state, out_rest.last_hidden_state], dim=1)
+        input_ids = input_ids[:1].to(device)
+        prefill_len = input_ids.shape[1] // 2 + 1
+        prompt = input_ids[:, :prefill_len]
+        next_token = input_ids[:, prefill_len : prefill_len + 1]
+        distractors = input_ids[:, prefill_len + 1 :]
+        multi_input = torch.cat([next_token, distractors], dim=1)
+
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
-            torch.allclose(result_tbt, result_chunk, atol=1e-4, rtol=1e-4),
-            msg=f"Max diff: {(result_tbt - result_chunk).abs().max().item():.6f}",
+            torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
+            msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -390,9 +400,15 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    def test_zamba2_chunked_prefill(self):
+    def test_zamba2_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs)
+        self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_zamba2_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()

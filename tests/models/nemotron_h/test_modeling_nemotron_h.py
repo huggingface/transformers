@@ -318,6 +318,41 @@ class NemotronHModelTester:
 
         self.parent.assertTrue(torch.allclose(outputs_fast_cached, outputs_slow_cached, atol=1e-3, rtol=1e-3))
 
+    def create_and_check_nemotron_h_chunked_prefill(self, config, input_ids, *args, device="cpu"):
+        """
+        Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
+        to check whether multi-token cached input is properly handled.
+
+        Runs on an accelerator only: NemotronH's MoE layers use grouped_mm, which has no CPU kernel.
+        """
+        model = NemotronHModel(config=config)
+        model.to(device)
+        model.eval()
+
+        input_ids = input_ids[:1].to(device)
+        prefill_len = input_ids.shape[1] // 2 + 1
+        prompt = input_ids[:, :prefill_len]
+        next_token = input_ids[:, prefill_len : prefill_len + 1]
+        distractors = input_ids[:, prefill_len + 1 :]
+        multi_input = torch.cat([next_token, distractors], dim=1)
+
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        self.parent.assertTrue(
+            torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
+            msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -420,6 +455,11 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         torch.use_deterministic_algorithms(self._original_deterministic)
         torch.backends.cudnn.deterministic = self._original_cudnn_deterministic
         torch.backends.cudnn.benchmark = self._original_cudnn_benchmark
+
+    @require_torch_accelerator
+    def test_nemotron_h_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_nemotron_h_chunked_prefill(*config_and_inputs, device=torch_device)
 
     @unittest.skip(reason="NemotronH needs at least 3 layers to test (mamba, moe, attention)")
     def test_num_layers_is_small(self):
