@@ -24,11 +24,21 @@ from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...masking_utils import create_causal_mask
+from ...masking_utils import (
+    create_causal_mask,
+    create_reference_sliding_window_causal_mask,
+)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_int
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_flex_attn_available,
+    torch_int,
+)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.configuration_clip import CLIPVisionConfig
@@ -73,6 +83,10 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
 )
 from ..deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor, DeepseekOcr2ProcessorKwargs
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
+
+
+if is_torch_flex_attn_available():
+    pass
 
 
 class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
@@ -652,26 +666,20 @@ class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
 
 
 class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
-    """Sliding-window cache layer that keeps all prefill tokens and windows only the generated ones.
+    """Reference sliding-window attention (R-SWA) cache layer that keeps all prefill tokens and windows
+    only the generated ones.
 
     The stock `DynamicSlidingWindowLayer` evicts the oldest tokens once the window fills, which would
     discard the image/prompt prefill. Here the prefill (every token cached before the first single-token
     decode step) is kept intact and never evicted. Generated tokens are appended right after the prefill
     until ``sliding_window`` of them have accumulated; from then on the newest generated token overwrites
-    the oldest one in place (a ring buffer). This mirrors the reference model's attention: each generated
-    token attends to all prefill tokens plus the last ``sliding_window`` generated tokens.
+    the oldest one.
 
     While the window is filling, the cached length grows by one each step (exactly like the stock sliding
     layer), so within the first ``sliding_window`` generated tokens the layer is indistinguishable from
     full attention. Once the ring is full the cached tensors stay at a constant length
     (``prefill + sliding_window``), which lets the cuDNN SDPA backend reuse a single kernel plan across the
     (typically long) steady-state decode instead of re-planning on every distinct sequence length.
-
-    `get_seq_length()` (inherited) returns the *logical* cumulative token count so positions are computed
-    correctly; the physically stored length is bounded at ``prefill + sliding_window``. Because keys/values
-    are overwritten in place the layer cannot roll back, so cache-rollback generation modes (assisted,
-    contrastive) use a plain full `DynamicCache` instead (see
-    `UnlimitedOcrForConditionalGeneration._prepare_cache_for_generation`).
     """
 
     layer_type = "reference_sliding_attention"
@@ -684,25 +692,26 @@ class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Lazy initialization
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
-        seq_len = key_states.shape[-2]
-        self.cumulative_length += seq_len
+        sequence_length = key_states.shape[-2]
+        self.cumulative_length += sequence_length
 
-        # Prefill: the first update carries the image/prompt context (more than one token). Keep it intact.
-        if self.prefill_length is None and seq_len > 1:
+        # Prefill with prompt context
+        if self.prefill_length is None and sequence_length > 1:
             self.keys = torch.cat([self.keys, key_states], dim=-2)
             self.values = torch.cat([self.values, value_states], dim=-2)
             return self.keys, self.values
 
-        # First decode step: freeze the prefill boundary. `self.keys` still holds the (possibly empty)
-        # prefill here; an empty buffer means generation started without any prompt (BOS only).
+        # First decode step
+        # Handle generation with empty prompt
         if self.prefill_length is None:
             self.prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
 
         # TODO: can we remove the for loop?
-        for token_idx in range(seq_len):
+        for token_idx in range(sequence_length):
             key = key_states[..., token_idx : token_idx + 1, :]
             value = value_states[..., token_idx : token_idx + 1, :]
             generated_length = self.keys.shape[-2] - self.prefill_length if self.keys.dim() > 1 else 0
@@ -778,35 +787,6 @@ class UnlimitedOcrTextPreTrainedModel(DeepseekOcr2TextPreTrainedModel):
 
 
 class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
-    def _create_attention_mask(self, inputs_embeds, attention_mask, past_key_values, position_ids):
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        if self.config.sliding_window is None:
-            return create_causal_mask(**mask_kwargs)
-
-        # Ring-buffer decode (single query token): the cache holds [prefill tokens] + [the generated
-        # tokens currently in the ring], i.e. all prefill plus the last `sliding_window` generated tokens.
-        # Attention is order-agnostic over keys (RoPE is baked into the cached keys), so the query attends
-        # to every cached key — a plain causal/sliding mask would wrongly hide the prefill. We therefore
-        # build an all-visible mask sized to the cache's physical length.
-        kv_length = None
-        if past_key_values is not None and past_key_values.layers:
-            first_layer = past_key_values.layers[0]
-            if isinstance(first_layer, DynamicReferenceSlidingWindowLayer):
-                kv_length = first_layer.decode_kv_length(inputs_embeds.shape[1])
-        if inputs_embeds.shape[1] == 1 and kv_length is not None:
-            return torch.zeros(
-                inputs_embeds.shape[0], 1, 1, kv_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
-            )
-
-        # Prefill: standard full causal mask so image tokens can attend to each other correctly.
-        return create_causal_mask(**mask_kwargs)
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -829,20 +809,32 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
+        # It may already have been prepared by, e.g., `generate`
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = self._create_attention_mask(inputs_embeds, attention_mask, past_key_values, position_ids)
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "reference_sliding_attention": create_reference_sliding_window_causal_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[layer_idx]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
