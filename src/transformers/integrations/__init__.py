@@ -135,6 +135,11 @@ _import_structure = {
         "grouped_mm_experts_forward",
         "use_experts_implementation",
     ],
+    "mup": [
+        "MuReadout",
+        "build_mup_param_groups",
+        "coord_check",
+    ],
     "mxfp4": [
         "Mxfp4GptOssExperts",
         "convert_moe_packed_tensors",
@@ -296,6 +301,7 @@ if TYPE_CHECKING:
         grouped_mm_experts_forward,
         use_experts_implementation,
     )
+    from .mup import MuReadout, build_mup_param_groups, coord_check
     from .mxfp4 import (
         Mxfp4GptOssExperts,
         dequantize,
