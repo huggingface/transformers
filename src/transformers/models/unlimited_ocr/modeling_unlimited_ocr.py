@@ -1251,14 +1251,14 @@ class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         if self.prefill_length is None:
             self.prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
 
-        # Append while window still grows
+        # Append while window grows
         generated_length = self.keys.shape[-2] - self.prefill_length if self.keys.dim() > 1 else 0
         append_length = min(sequence_length, max(0, self.sliding_window - generated_length))
         if append_length > 0:
             self.keys = torch.cat([self.keys, key_states[..., :append_length, :]], dim=-2)
             self.values = torch.cat([self.values, value_states[..., :append_length, :]], dim=-2)
 
-        # Overwrite once window size is reached
+        # Overwrite if window size is reached
         overwrite_length = sequence_length - append_length
         if overwrite_length > 0:
             # Only the most recent `sliding_window` overwrites survive
