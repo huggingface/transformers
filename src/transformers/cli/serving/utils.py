@@ -286,7 +286,7 @@ def get_reasoning_config(processor, model: "PreTrainedModel", input_ids=None) ->
         schema = _DEFAULT_THINKING_TOKENS["schema"]
     config: dict = {"start_ids": start_ids, "end_id": end_id, "schema": schema}
     if input_ids is not None:
-        config["start_in_thinking"] = _starts_in_thinking(input_ids, start_ids)
+        config["start_in_thinking"] = _starts_in_thinking(input_ids, start_ids, end_id)
     return config
 
 
@@ -310,7 +310,7 @@ def parse_reasoning(processor, generated_ids, content: str, reasoning_config: di
     return content, None
 
 
-def _starts_in_thinking(input_ids, start_ids: list[int]) -> bool:
+def _starts_in_thinking(input_ids, start_ids: list[int], end_id: int) -> bool:
     """True if the rendered prompt ends with an unclosed thinking block.
 
     Some reasoning-model chat templates prefill the thinking opener as the final
@@ -328,6 +328,10 @@ def _starts_in_thinking(input_ids, start_ids: list[int]) -> bool:
         if len(input_ids) != 1:
             return False
         input_ids = input_ids[0]
+    # Some templates prefill an empty thinking block and immediately close it
+    # (e.g. Gemma 4 renders ``<|channel>thought\n<channel|>`` when thinking is disabled).
+    if input_ids and input_ids[-1] == end_id:
+        return False
     n = len(start_ids)
     # Match start_ids at the tail, allowing up to one trailing token (e.g. "\n").
     for trailing in (0, 1):

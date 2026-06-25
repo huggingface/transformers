@@ -37,6 +37,7 @@ from transformers.cli.serving.utils import (
     BaseHandler,
     GenerationState,
     Modality,
+    _starts_in_thinking,
     get_tool_call_config,
     parse_tool_calls,
 )
@@ -318,6 +319,18 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
                 self.assertEqual(len(result[0]["content"]), 2)
                 video_item = result[0]["content"][0]
                 self.assertEqual(video_item, {"type": "video", "url": video_src})
+
+
+class TestReasoningUtils(unittest.TestCase):
+    def test_starts_in_thinking_rejects_already_closed_block(self):
+        start_ids = [100, 45518, 107]
+        end_id = 101
+
+        self.assertTrue(_starts_in_thinking([1, *start_ids], start_ids, end_id))
+        self.assertTrue(_starts_in_thinking([1, *start_ids, 198], start_ids, end_id))
+
+        # Gemma 4 can render an empty, already closed thinking block when thinking is disabled.
+        self.assertFalse(_starts_in_thinking([1, *start_ids, end_id], start_ids, end_id))
 
 
 class TestGenerativeModelList(unittest.TestCase):
