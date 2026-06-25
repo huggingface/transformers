@@ -38,6 +38,9 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 64):
         Number of heads for the indexer projections (DSA).
+    indexer_rope_interleave (`bool`, *optional*, defaults to `False`):
+        Whether the DSA indexer applies interleaved RoPE (GLM-style) instead of the non-interleaved
+        RoPE used by DeepSeek-V3.2.
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
 
@@ -115,6 +118,7 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 64
+    indexer_rope_interleave: bool = False
     mlp_bias: bool = False
     num_experts: int = 256
     head_dim: int = 64

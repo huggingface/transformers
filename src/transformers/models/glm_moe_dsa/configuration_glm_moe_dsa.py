@@ -39,6 +39,8 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
+    indexer_rope_interleave (`bool`, *optional*, defaults to `True`):
+        Whether the indexer applies interleaved RoPE.
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
     indexer_types (`list[str]`, *optional*):
@@ -122,6 +124,7 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 32
+    indexer_rope_interleave: bool = True
     mlp_bias: bool = False
     num_experts: int = 256
     head_dim: int = 64

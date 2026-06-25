@@ -67,6 +67,9 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 64):
         Number of heads for the indexer projections (DSA).
+    indexer_rope_interleave (`bool`, *optional*, defaults to `False`):
+        Whether the DSA indexer applies interleaved RoPE (GLM-style) instead of the non-interleaved
+        RoPE used by DeepSeek-V3.2.
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
 
@@ -136,6 +139,7 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 64
+    indexer_rope_interleave: bool = False
     mlp_bias: bool = False
     num_experts: int = 256
     head_dim: int = 64
@@ -239,8 +243,8 @@ class DeepseekV32Indexer(nn.Module):
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention
-        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        rope_fn = apply_rotary_pos_emb_interleave if self.config.indexer_rope_interleave else apply_rotary_pos_emb
+        q_rot, k_rot = rope_fn(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
