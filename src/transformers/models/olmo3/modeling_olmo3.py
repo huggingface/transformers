@@ -24,10 +24,11 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -98,7 +99,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+# @use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -132,7 +133,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
+# @use_kernelized_func(apply_rotary_pos_emb)
 class Olmo3Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -342,7 +343,7 @@ class Olmo3RotaryEmbedding(nn.Module):
             cos = emb.cos() * attention_scaling
             sin = emb.sin() * attention_scaling
 
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        return cos, sin
 
 
 @auto_docstring
@@ -362,6 +363,18 @@ class Olmo3PreTrainedModel(PreTrainedModel):
         "hidden_states": Olmo3DecoderLayer,
         "attentions": Olmo3Attention,
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Olmo3RotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
 
 @auto_docstring

@@ -204,7 +204,11 @@ class Olmo3IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
     def test_model_7b_greedy_generation(self):
-        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2) the speed of light is the same for all observers. The first part of the theory is called the principle of relativity, and the second part is called the principle of the constancy of the speed of light. The theory of rel"""
+        expectations = Expectations(
+            {
+                ("cuda", None): """Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2) the speed of light is the same for all observers. The first part of the theory is called the principle of relativity, and the second part is called the principle of the constancy of the speed of light. The theory of rel""",
+            }
+        )  # fmt: skip
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("allenai/dolma2-tokenizer", device_map="auto")
         model = Olmo3ForCausalLM.from_pretrained("shanearora/2025-sep-a-base-model", device_map="auto")
@@ -213,44 +217,48 @@ class Olmo3IntegrationTest(unittest.TestCase):
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        self.assertEqual(expectations.get_expectation(), text)
 
     def test_real_model_7b_greedy_generation(self):
-        expected_texts = Expectations(
+        expectations = Expectations(
             {
-                ("cuda", None): 'Simply put, the theory of relativity states that 2 things moving objects have different frames of reference are relative and there is all equally valid and it depends on the observer and there is and no preferred frame of motion and the speed of reference and everything is relative and everything is the same to what you cannot be judged by comparison ,there is the observer ,there is relative .',
+                ("cuda", None): 'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nWho would win in a fight - a dinosaur or a cow named Moo Moo?\nassistant\nThis is a fun and imaginative question! Let’s break it down:\n\n### 1. **A Dinosaur (General Case)**\nDinosaurs were a huge and diverse group, spanning from tiny feathered raptors to massive sauropods like *Brachiosaurus* or *Tyrannosaurus rex',
             }
         )  # fmt: skip
 
-        prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("allenai/Olmo-3-7B-Instruct")
         model = Olmo3ForCausalLM.from_pretrained("allenai/Olmo-3-7B-Instruct", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
+        message = [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}]
+        inputs = tokenizer.apply_chat_template(
+            message, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(model.device)
 
-        # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        generated_ids = model.generate(**inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(expected_texts.get_expectation(), text)
+        self.assertEqual(expectations.get_expectation(), text)
 
     def test_real_model_7b_greedy_generation_batched(self):
-        expected_texts = Expectations(
+        expectations = Expectations(
             {
                 ("cuda", None): [
-                    'Simply put, the theory of relativity states that 2 things moving objects have different frames of reference are relative and there is all equally valid and it depends on the observer and there is and no preferred frame of motion and the speed of reference and everything is relative and everything is the same to what you cannot be judged by comparison ,there is the observer ,there is relative .',
-                    'If we talk about gravity, the Newton law and Einstein’s law in the weak and his relativity. Heiseness uncertainty what happen. Time. How’s theory in the space and quantum, what happen. If we know the mass and quantum, the gravitation. We don’t we can we can we can we can we can we can we'
+                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nWho would win in a fight - a dinosaur or a cow named Moo Moo?\nassistant\nThis is a fun and imaginative question! Let’s break it down:\n\n### 1. **A Dinosaur (General Case)**\nDinosaurs were a huge and diverse group, spanning from tiny feathered raptors to massive sauropods like *Brachiosaurus* or *Tyrannosaurus rex',
+                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nSimply put, the theory of relativity\nassistant\nSure! In simple terms, **the theory of relativity** is Einstein’s explanation of how space, time, and gravity work. It has two main parts:\n\n1. **Special Relativity (1905):**  \n   This says that the laws of physics are the same for everyone moving at constant speed (not'
                 ],
             }
         )  # fmt: skip
-        prompts = ["Simply put, the theory of relativity states that ", "If we talk about gravity,"]
         tokenizer = AutoTokenizer.from_pretrained("allenai/Olmo-3-7B-Instruct", padding_side="left")
         model = Olmo3ForCausalLM.from_pretrained("allenai/Olmo-3-7B-Instruct", device_map="auto")
-        inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(model.device)
+        message = [
+            [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}],
+            [{"role": "user", "content": "Simply put, the theory of relativity"}],
+        ]
+        inputs = tokenizer.apply_chat_template(
+            message, add_generation_prompt=True, padding=True, return_tensors="pt", return_dict=True
+        ).to(model.device)
 
-        # greedy generation outputs
         generated_ids = model.generate(**inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
         texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        print(texts)
-        self.assertListEqual(expected_texts.get_expectation(), texts)
+        self.assertListEqual(expectations.get_expectation(), texts)
 
     @pytest.mark.torch_export_test
     def test_export_static_cache(self):
