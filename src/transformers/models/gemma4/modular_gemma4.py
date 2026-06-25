@@ -319,7 +319,7 @@ class Gemma4AudioAttention(nn.Module):
         attn_output = attn_weights @ value_states.permute(0, 3, 1, 2, 4)
         attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, num_blocks * self.chunk_size, -1)
         attn_output = attn_output[:, :seq_length].contiguous()
-        attn_output = self.post(attn_output.to(dtype=self.post.linear.weight.dtype))
+        attn_output = self.post(attn_output.to(hidden_states.dtype))
 
         return attn_output, attn_weights
 
@@ -399,7 +399,7 @@ class Gemma4AudioFeedForward(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # This is needed to avoid any underflow/overflow issues when clipping
-        gradient_clipping = min(self.gradient_clipping, torch.finfo(self.ffw_layer_1.linear.weight.dtype).max)
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(hidden_states.dtype).max)
 
         residual = hidden_states
         hidden_states = torch.clamp(hidden_states, -gradient_clipping, gradient_clipping)
@@ -482,7 +482,7 @@ class Gemma4AudioLightConv1d(nn.Module):
         hidden_states = self.depthwise_conv1d(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         # This is needed to avoid any underflow/overflow issues when clipping
-        gradient_clipping = min(self.gradient_clipping, torch.finfo(self.linear_start.linear.weight.dtype).max)
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(hidden_states.dtype).max)
         hidden_states = torch.clamp(hidden_states, -gradient_clipping, gradient_clipping)
         hidden_states = self.conv_norm(hidden_states)
 
@@ -1113,7 +1113,8 @@ class Gemma4TextRouter(nn.Module):
         hidden_states = hidden_states * self.scale * self.scalar_root_size
 
         expert_scores = self.proj(hidden_states)  # [B*S, E]
-        router_probabilities = nn.functional.softmax(expert_scores, dim=-1)
+        # fp32 for numerical stability
+        router_probabilities = nn.functional.softmax(expert_scores, dim=-1, dtype=torch.float32)
 
         # topk returns both values (probabilities) and indices directly
         top_k_weights, top_k_index = torch.topk(

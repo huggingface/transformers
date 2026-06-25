@@ -54,7 +54,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     TransformersKwargs,
@@ -76,6 +76,9 @@ from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerConfig,
     Qwen3OmniMoeVisionEncoderConfig,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -1123,12 +1126,12 @@ class Qwen3OmniMoeVisionPatchEmbed(nn.Module):
 class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeVisionEncoderConfig
     input_modalities = ("image", "video")
-    _no_split_modules = ["Qwen3OmniMoeVisionBlock"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(Qwen3OmniMoeTextTopKRouter, layer_name="mlp.gate", index=0),
         "hidden_states": Qwen3OmniMoeVisionBlock,
         "attentions": Qwen3OmniMoeVisionAttention,
     }
+    _no_split_modules = ["Qwen3OmniMoeVisionBlock"]
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1666,7 +1669,6 @@ class Qwen3OmniMoeTextRMSNorm(nn.Module):
 class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeTextConfig
     input_modalities = ("text",)
-    _no_split_modules = ["Qwen3OmniMoeThinkerTextDecoderLayer"]
     config_class = Qwen3OmniMoeTextConfig
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
@@ -2017,22 +2019,22 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             special_audio_mask = input_ids == self.config.audio_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
 
-        special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_audio_mask = special_audio_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask, special_video_mask, special_audio_mask
 
     @can_return_tuple
@@ -2888,9 +2890,9 @@ class Qwen3OmniMoeTalkerDecoderLayer(GradientCheckpointingLayer):
 class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeTextConfig
     input_modalities = ("audio",)
-    _no_split_modules = ["Qwen3OmniMoeTalkerDecoderLayer"]
     config_class = Qwen3OmniMoeTalkerTextConfig
     base_model_prefix = "talker.model"
+    _no_split_modules = ["Qwen3OmniMoeTalkerDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeTalkerDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
@@ -3631,7 +3633,7 @@ class Qwen3OmniMoeCode2WavTransformerModel(Qwen3OmniMoePreTrainedModel):
         )
 
 
-class SnakeBeta(nn.Module):
+class Qwen3OmniMoeSnakeBeta(nn.Module):
     """
     A modified Snake function which uses separate parameters for the magnitude of the periodic components
     Shape:
@@ -3672,13 +3674,22 @@ class SnakeBeta(nn.Module):
         return hidden_states
 
 
+# Alias for BC
+class SnakeBeta(Qwen3OmniMoeSnakeBeta):
+    """Deprecated alias for `Qwen3OmniMoeSnakeBeta`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`SnakeBeta` is deprecated; please use `Qwen3OmniMoeSnakeBeta` instead.")
+        super().__init__(*args, **kwargs)
+
+
 class Qwen3OmniMoeCode2WavDecoderResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
 
-        self.act1 = SnakeBeta(dim)
+        self.act1 = Qwen3OmniMoeSnakeBeta(dim)
         self.conv1 = Qwen3OmniMoeCausalConvNet(dim, dim, kernel_size=7, dilation=dilation)
-        self.act2 = SnakeBeta(dim)
+        self.act2 = Qwen3OmniMoeSnakeBeta(dim)
         self.conv2 = Qwen3OmniMoeCausalConvNet(dim, dim, kernel_size=1)
 
     def forward(self, hidden_state):
@@ -3699,7 +3710,7 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
         upsample_rate = config.upsample_rates[layer_idx]
 
         block = [
-            SnakeBeta(in_dim),
+            Qwen3OmniMoeSnakeBeta(in_dim),
             Qwen3OmniMoeCausalTransConvNet(in_dim, out_dim, 2 * upsample_rate, upsample_rate),
         ]
 
@@ -3745,7 +3756,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
             decoder.append(Qwen3OmniMoeCode2WavDecoderBlock(config, i))
         output_dim = config.decoder_dim // 2 ** len(config.upsample_rates)
         decoder += [
-            SnakeBeta(output_dim),
+            Qwen3OmniMoeSnakeBeta(output_dim),
             Qwen3OmniMoeCausalConvNet(output_dim, 1, 7),
         ]
         self.decoder = nn.ModuleList(decoder)
@@ -3919,7 +3930,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                 raise NotImplementedError(f"Speaker {speaker} not implemented")
             if input_ids.shape[0] != 1:
                 raise NotImplementedError("Qwen3-Omni currently does not support batched inference with audio output")
-            talker_supppressed_tokens = [
+            talker_suppressed_tokens = [
                 i
                 for i in range(
                     self.config.talker_config.text_config.vocab_size - 1024,
@@ -3935,7 +3946,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                 "temperature": talker_temperature,
                 "eos_token_id": self.config.talker_config.codec_eos_token_id,
                 "repetition_penalty": talker_repetition_penalty,
-                "suppress_tokens": talker_supppressed_tokens,
+                "suppress_tokens": talker_suppressed_tokens,
                 "output_hidden_states": True,
                 "return_dict_in_generate": True,
             }
@@ -4054,7 +4065,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             inputs_embeds=talker_input_embed,
             trailing_text_hidden=trailing_text_hidden,
             tts_pad_embed=tts_pad_embed,
-            talker_input_ids=talker_input_id,  # Not use input_ids to prevent repetation penalty out of bound
+            talker_input_ids=talker_input_id,  # Not use input_ids to prevent repetition penalty out of bound
             **talker_kwargs,
         )
         talker_codes = (

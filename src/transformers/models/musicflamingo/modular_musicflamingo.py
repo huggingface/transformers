@@ -78,7 +78,6 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
     audio_eos_token_id: int = 151671
     audio_frame_step: float = 0.01
     rope_parameters: dict | None = None
-    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if self.rope_parameters is None:

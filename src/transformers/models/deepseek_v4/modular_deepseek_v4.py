@@ -449,7 +449,9 @@ class DeepseekV4Indexer(nn.Module):
         layer_idx: int,
     ) -> torch.LongTensor:
         batch, seq_len, _ = hidden_states.shape
-        cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
+        cache_layer: DeepseekV4CSACache | None = (
+            past_key_values.layers[layer_idx] if past_key_values is not None else None
+        )
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
 
@@ -507,7 +509,7 @@ class DeepseekV4Indexer(nn.Module):
         # to compressed key at position 4, because it compressed info for states at position
         # 12 to 16. Thus we need to make sure that top_k does not land in that range.
         # Picks that still point past `causal_threshold` (early queries with too few ready
-        # blocks) are replaced with a `-1` sentinel that the compresser treats as invalid.
+        # blocks) are replaced with a `-1` sentinel that the compressor treats as invalid.
         if compressed_len > 0:
             causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
             entry_indices = torch.arange(compressed_len, device=index_scores.device)
@@ -563,7 +565,9 @@ class DeepseekV4CSACompressor(nn.Module):
         layer_idx: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch, seq_len, _ = hidden_states.shape
-        cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
+        cache_layer: DeepseekV4CSACache | None = (
+            past_key_values.layers[layer_idx] if past_key_values is not None else None
+        )
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
 

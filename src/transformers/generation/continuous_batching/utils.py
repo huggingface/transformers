@@ -66,6 +66,7 @@ class WorkloadHints:
 
     max_prompt_length: int = 0
     max_generated_length: int = 0
+    num_requests: int = 0
 
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:

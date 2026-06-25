@@ -132,10 +132,12 @@ class DistributedHelper:
             payload_size, stop_status = self._cpu_int_acc.tolist()
         return payload_size, stop_status
 
-    def tp_all_reduce_min(self, value: torch.Tensor) -> torch.Tensor:
-        """Inside each TP group, all-reduces a tensor with the MIN op. No-op when TP is off."""
+    def tp_all_reduce_min(self, value: torch.Tensor, on_cpu: bool = False) -> torch.Tensor:
+        """Inside each TP group, all-reduces a tensor with the MIN op. No-op when TP is off. If the tensor is on CPU,
+        it is all-reduced on the CPU comm group."""
         if self.tp_size > 1:
-            dist.all_reduce(value, op=dist.ReduceOp.MIN, group=self.tp_group)
+            group = self.cpu_comm_group if on_cpu else self.tp_group
+            dist.all_reduce(value, op=dist.ReduceOp.MIN, group=group)
         return value
 
     def tp_broadcast_object_from_rank_0(self, obj: T) -> T:

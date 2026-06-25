@@ -183,18 +183,31 @@ class Sapiens2ModelTester:
             (self.batch_size, config.num_labels, expected_h, expected_h),
         )
 
-    def create_and_check_for_pose_estimation(self, config, pixel_values, labels):
+    def create_and_check_for_pose_estimation(self, config, pixel_values, labels, label_weights):
         model = Sapiens2ForPoseEstimation(config)
         model.to(torch_device)
         model.eval()
+
         with torch.no_grad():
             result = model(pixel_values)
+
         patch_height = self.image_size // self.patch_size
         expected_h = patch_height * (2 ** len(config.head_config.upsample_out_channels))
+
         self.parent.assertEqual(
             result.heatmaps.shape,
             (self.batch_size, config.num_labels, expected_h, expected_h),
         )
+
+        # Test standard loss backward pass
+        result_with_loss = model(pixel_values, labels=labels)
+        self.parent.assertIsNotNone(result_with_loss.loss)
+        result_with_loss.loss.backward()
+
+        # Test weighted loss backward pass
+        result_with_weights = model(pixel_values, labels=labels, label_weights=label_weights)
+        self.parent.assertIsNotNone(result_with_weights.loss)
+        result_with_weights.loss.backward()
 
     def create_and_check_for_normal_estimation(self, config, pixel_values, labels):
         model = Sapiens2ForNormalEstimation(config)
@@ -278,6 +291,18 @@ class Sapiens2ModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_pose_estimation(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs[0], config_and_inputs[1]
+
+        patch_height = self.image_size // self.patch_size
+        expected_h = patch_height * (2 ** len(config.head_config.upsample_out_channels))
+
+        labels = floats_tensor([self.batch_size, config.num_labels, expected_h, expected_h])
+        label_weights = floats_tensor([self.batch_size, config.num_labels, expected_h, expected_h])
+
+        return config, pixel_values, labels, label_weights
+
 
 @require_torch
 class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -351,7 +376,7 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
 
     def test_for_pose_estimation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_semantic_segmentation()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pose_estimation()
         self.model_tester.create_and_check_for_pose_estimation(*config_and_inputs)
 
     def test_for_pointmap_estimation(self):
@@ -424,17 +449,32 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         last_layer_cls_token = outputs.pooler_output
-        EXPECTED_CLS_SLICE = Expectations({("cuda", None): [-0.09233, -0.00107, -0.12215, 0.07374, -0.03773]})
+        EXPECTED_CLS_SLICE = Expectations(
+            {
+                ("cuda", None): [-0.09233, -0.00107, -0.12215, 0.07374, -0.03773],
+                ("xpu", 5): [-0.09233, -0.00107, -0.12215, 0.07374, -0.03773],
+            }
+        )
         expected_cls_slice = torch.tensor(EXPECTED_CLS_SLICE.get_expectation(), device=torch_device)
         torch.testing.assert_close(last_layer_cls_token[0, :5], expected_cls_slice, rtol=1e-3, atol=1e-3)
 
         last_layer_register_tokens = outputs.last_hidden_state[:, 1 : model.config.num_register_tokens + 1]
-        EXPECTED_REGISTER_SLICE = Expectations({("cuda", None): [0.08412, 0.04387, 0.05709, -0.04962, 0.03715]})
+        EXPECTED_REGISTER_SLICE = Expectations(
+            {
+                ("cuda", None): [0.08412, 0.04387, 0.05709, -0.04962, 0.03715],
+                ("xpu", 5): [0.08412, 0.04387, 0.05709, -0.04962, 0.03715],
+            }
+        )
         expected_register_slice = torch.tensor(EXPECTED_REGISTER_SLICE.get_expectation(), device=torch_device)
         torch.testing.assert_close(last_layer_register_tokens[0, 0, :5], expected_register_slice, rtol=1e-3, atol=1e-3)
 
         last_layer_patch_tokens = outputs.last_hidden_state[:, model.config.num_register_tokens + 1 :]
-        EXPECTED_PATCH_SLICE = Expectations({("cuda", None): [0.14232, -0.11947, -0.05910, -0.09457, -0.11410]})
+        EXPECTED_PATCH_SLICE = Expectations(
+            {
+                ("cuda", None): [0.14232, -0.11947, -0.05910, -0.09457, -0.11410],
+                ("xpu", 5): [0.14232, -0.11947, -0.05910, -0.09457, -0.11410],
+            }
+        )
         expected_patch_slice = torch.tensor(EXPECTED_PATCH_SLICE.get_expectation(), device=torch_device)
         torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_patch_slice, rtol=1e-3, atol=1e-3)
 
@@ -455,10 +495,22 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         _, _, height, width = inputs["pixel_values"].shape
         expected_shape = torch.Size((1, model.config.num_labels, height, width))
         self.assertEqual(logits.shape, expected_shape)
-
+        # fmt: off
         EXPECTED_LOGITS_SLICE = Expectations(
-            {("cuda", None): [[3.45260, 5.55483, 6.57901], [5.71913, 7.21420, 8.11209], [6.82645, 7.98208, 8.31385]]}
+            {
+                ("cuda", None): [
+                    [3.45260, 5.55483, 6.57901],
+                    [5.71913, 7.21420, 8.11209],
+                    [6.82645, 7.98208, 8.31385],
+                ],
+                ("xpu", 5): [
+                    [3.45260, 5.55483, 6.57901],
+                    [5.71913, 7.21420, 8.11209],
+                    [6.82645, 7.98208, 8.31385],
+                ],
+            }
         )
+        # fmt: on
         expected_logits_slice = torch.tensor(EXPECTED_LOGITS_SLICE.get_expectation(), device=torch_device)
         torch.testing.assert_close(logits[0, 0, :3, :3], expected_logits_slice, rtol=1e-3, atol=1e-3)
 
@@ -473,7 +525,12 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(len(segmentation), 1)
         self.assertEqual(segmentation[0].shape, torch.Size(target_size))
 
-        EXPECTED_CLASS_IDS = Expectations({("cuda", None): [[4, 3, 3], [3, 3, 3], [3, 3, 3]]})
+        EXPECTED_CLASS_IDS = Expectations(
+            {
+                ("cuda", None): [[4, 3, 3], [3, 3, 3], [3, 3, 3]],
+                ("xpu", 5): [[4, 3, 3], [3, 3, 3], [3, 3, 3]],
+            }
+        )
         expected_class_ids = torch.tensor(EXPECTED_CLASS_IDS.get_expectation(), device=torch_device)
         torch.testing.assert_close(segmentation[0][50:53, 50:53], expected_class_ids)
 
@@ -496,9 +553,22 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         heatmaps = outputs.heatmaps
         self.assertEqual(heatmaps.shape, torch.Size([1, model.config.num_labels, 256, 192]))
+        # fmt: off
         EXPECTED_HEATMAPS = Expectations(
-            {("cuda", None): [[0.26140, 0.24656, 0.21673], [0.33708, 0.31597, 0.28028], [0.41624, 0.39270, 0.35014]]}
+            {
+                ("cuda", None): [
+                    [0.26140, 0.24656, 0.21673],
+                    [0.33708, 0.31597, 0.28028],
+                    [0.41624, 0.39270, 0.35014],
+                ],
+                ("xpu", 5): [
+                    [0.26140, 0.24656, 0.21673],
+                    [0.33708, 0.31597, 0.28028],
+                    [0.41624, 0.39270, 0.35014],
+                ],
+            }
         )
+        # fmt: on
         expected_heatmaps = torch.tensor(EXPECTED_HEATMAPS.get_expectation(), device=torch_device)
         torch.testing.assert_close(heatmaps[0, 0, 70:73, 70:73], expected_heatmaps, rtol=1e-2, atol=1e-2)
 
@@ -508,14 +578,32 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         person = results[0][0]
 
         keypoints = person["keypoints"]
+        # fmt: off
         EXPECTED_KEYPOINTS = Expectations(
-            {("cuda", None): [[364.33920111, 97.92528764], [373.25104943, 80.97749201], [353.21072316, 83.38954486]]}
+            {
+                ("cuda", None): [
+                    [364.33920111, 97.92528764],
+                    [373.25104943, 80.97749201],
+                    [353.21072316, 83.38954486],
+                ],
+                ("xpu", 5): [
+                    [364.33920111, 97.92528764],
+                    [373.25104943, 80.97749201],
+                    [353.21072316, 83.38954486],
+                ],
+            }
         )
+        # fmt: on
         expected_keypoints = torch.tensor(EXPECTED_KEYPOINTS.get_expectation(), device=torch_device)
         torch.testing.assert_close(keypoints[:3], expected_keypoints, rtol=1e-2, atol=1e-2)
 
         scores = person["scores"]
-        EXPECTED_SCORES = Expectations({("cuda", None): [1.0007433, 0.9987416, 1.0015154]})
+        EXPECTED_SCORES = Expectations(
+            {
+                ("cuda", None): [1.0007433, 0.9987416, 1.0015154],
+                ("xpu", 5): [1.0007433, 0.9987416, 1.0015154],
+            }
+        )
         expected_scores = torch.tensor(EXPECTED_SCORES.get_expectation(), device=torch_device)
         torch.testing.assert_close(scores[:3], expected_scores, rtol=1e-2, atol=1e-2)
 
@@ -555,9 +643,22 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
             flipped_outputs = model(**flipped_inputs, flip_pairs=flip_pairs)
 
         flipped_heatmaps = flipped_outputs.heatmaps
+        # fmt: off
         EXPECTED_FLIPPED_HEATMAPS = Expectations(
-            {("cuda", None): [[0.27348, 0.25426, 0.22496], [0.34877, 0.32563, 0.28418], [0.43967, 0.40607, 0.35721]]}
+            {
+                ("cuda", None): [
+                    [0.27348, 0.25426, 0.22496],
+                    [0.34877, 0.32563, 0.28418],
+                    [0.43967, 0.40607, 0.35721],
+                ],
+                ("xpu", 5): [
+                    [0.27348, 0.25426, 0.22496],
+                    [0.34877, 0.32563, 0.28418],
+                    [0.43967, 0.40607, 0.35721],
+                ],
+            }
         )
+        # fmt: on
         expected_flipped_heatmaps = torch.tensor(EXPECTED_FLIPPED_HEATMAPS.get_expectation(), device=torch_device)
         torch.testing.assert_close(
             flipped_heatmaps[0, 0, 70:73, 70:73], expected_flipped_heatmaps, rtol=1e-2, atol=1e-2
@@ -572,13 +673,21 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         final_person = final_results[0][0]
         final_keypoints = final_person["keypoints"]
         EXPECTED_FINAL_KEYPOINTS = Expectations(
-            {("cuda", None): [[364.14644305, 97.99268751], [373.66756367, 81.19966519], [353.4574526, 83.647911]]}
+            {
+                ("cuda", None): [[364.14644305, 97.99268751], [373.66756367, 81.19966519], [353.4574526, 83.647911]],
+                ("xpu", 5): [[364.14644305, 97.99268751], [373.66756367, 81.19966519], [353.4574526, 83.647911]],
+            }
         )
         expected_final_keypoints = torch.tensor(EXPECTED_FINAL_KEYPOINTS.get_expectation(), device=torch_device)
         torch.testing.assert_close(final_keypoints[:3], expected_final_keypoints, rtol=1e-2, atol=1e-2)
 
         final_scores = final_person["scores"]
-        EXPECTED_FINAL_SCORES = Expectations({("cuda", None): [1.0064079, 0.98746514, 0.99821794]})
+        EXPECTED_FINAL_SCORES = Expectations(
+            {
+                ("cuda", None): [1.0064079, 0.98746514, 0.99821794],
+                ("xpu", 5): [1.0064079, 0.98746514, 0.99821794],
+            }
+        )
         expected_final_scores = torch.tensor(EXPECTED_FINAL_SCORES.get_expectation(), device=torch_device)
         torch.testing.assert_close(final_scores[:3], expected_final_scores, rtol=1e-2, atol=1e-2)
 
@@ -602,7 +711,10 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         # We can get closer to expected values by using cv2 resize instead of torchvision.
         EXPECTED_NORMALS = Expectations(
-            {("cuda", None): [[0.9577, 1.8808, 0.9826], [1.6904, 1.7351, 1.9120], [2.4828, 1.9887, 2.5168]]}
+            {
+                ("cuda", None): [[0.9577, 1.8808, 0.9826], [1.6904, 1.7351, 1.9120], [2.4828, 1.9887, 2.5168]],
+                ("xpu", 5): [[0.9577, 1.8808, 0.9826], [1.6904, 1.7351, 1.9120], [2.4828, 1.9887, 2.5168]],
+            }
         )
         expected_normals = torch.tensor(EXPECTED_NORMALS.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.normals[0, 0, :3, :3], expected_normals, rtol=1e-2, atol=1e-2)
@@ -611,9 +723,22 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["normals"].shape, torch.Size([3, 432, 640]))
 
+        # fmt: off
         EXPECTED_POSTPROCESSED_NORMALS = Expectations(
-            {("cuda", None): [[-0.8266, -0.7899, -0.7512], [-0.8227, -0.7843, -0.7440], [-0.8098, -0.7721, -0.7318]]}
+            {
+                ("cuda", None): [
+                    [-0.8266, -0.7899, -0.7512],
+                    [-0.8227, -0.7843, -0.7440],
+                    [-0.8098, -0.7721, -0.7318],
+                ],
+                ("xpu", 5): [
+                    [-0.8266, -0.7899, -0.7512],
+                    [-0.8227, -0.7843, -0.7440],
+                    [-0.8098, -0.7721, -0.7318],
+                ],
+            }
         )
+        # fmt: on
         expected_postprocessed_normals = torch.tensor(
             EXPECTED_POSTPROCESSED_NORMALS.get_expectation(), device=torch_device
         )
@@ -640,13 +765,31 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pointmaps.shape, torch.Size([1, 3, height, width]))
         self.assertEqual(outputs.scales.shape, torch.Size([1, 1]))
 
-        EXPECTED_SCALE = Expectations({("cuda", None): [[0.9931]]})
+        EXPECTED_SCALE = Expectations(
+            {
+                ("cuda", None): [[0.9931]],
+                ("xpu", 5): [[0.9931]],
+            }
+        )
         expected_scale = torch.tensor(EXPECTED_SCALE.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.scales, expected_scale, rtol=1e-3, atol=1e-3)
 
+        # fmt: off
         EXPECTED_POINTMAP = Expectations(
-            {("cuda", None): [[-0.0096, -0.0567, -0.0460], [-0.0657, -0.0583, -0.0688], [-0.1035, -0.0363, -0.0659]]}
+            {
+                ("cuda", None): [
+                    [-0.0096, -0.0567, -0.0460],
+                    [-0.0657, -0.0583, -0.0688],
+                    [-0.1035, -0.0363, -0.0659],
+                ],
+                ("xpu", 5): [
+                    [-0.0096, -0.0567, -0.0460],
+                    [-0.0657, -0.0583, -0.0688],
+                    [-0.1035, -0.0363, -0.0659],
+                ],
+            }
         )
+        # fmt: on
         expected_pointmap = torch.tensor(EXPECTED_POINTMAP.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.pointmaps[0, 0, :3, :3], expected_pointmap, rtol=1e-2, atol=1e-2)
 
@@ -657,7 +800,10 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
         # Head and post-processing are exactly identical to original code but differences from backbone
         # get amplified after scaling and resizing so we need to relax the tolerance here.
         EXPECTED_POSTPROCESSED_POINTMAP = Expectations(
-            {("cuda", None): [[0.0771, 0.1335, 0.3025], [-0.1179, 0.2904, 0.7140], [0.0337, 0.3037, 0.4390]]}
+            {
+                ("cuda", None): [[0.0771, 0.1335, 0.3025], [-0.1179, 0.2904, 0.7140], [0.0337, 0.3037, 0.4390]],
+                ("xpu", 5): [[0.0771, 0.1335, 0.3025], [-0.1179, 0.2904, 0.7140], [0.0337, 0.3037, 0.4390]],
+            }
         )
         expected_postprocessed_pointmap = torch.tensor(
             EXPECTED_POSTPROCESSED_POINTMAP.get_expectation(), device=torch_device
@@ -685,7 +831,10 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
         # Difference due to cv2 vs torchvision pre-processing. Model outputs are equal on same tensor input.
         EXPECTED_FOREGROUNDS = Expectations(
-            {("cuda", None): [[0.1432, 0.2051, 0.3043], [0.1889, 0.2681, 0.3509], [0.2511, 0.3076, 0.4047]]}
+            {
+                ("cuda", None): [[0.1432, 0.2051, 0.3043], [0.1889, 0.2681, 0.3509], [0.2511, 0.3076, 0.4047]],
+                ("xpu", 5): [[0.1438, 0.2060, 0.3056], [0.1898, 0.2694, 0.3520], [0.2521, 0.3088, 0.4057]],
+            }
         )
         expected_foregrounds = torch.tensor(EXPECTED_FOREGROUNDS.get_expectation(), device=torch_device)
         torch.testing.assert_close(
@@ -711,7 +860,12 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
                     [0.99995, 0.9999123, 0.9997628],
                     [0.99991906, 0.9997431, 0.99754137],
                     [0.9997362, 0.99711365, 0.9444071],
-                ]
+                ],
+                ("xpu", 5): [
+                    [1.0000, 0.9999, 0.9998],
+                    [0.9999, 0.9997, 0.9975],
+                    [0.9997, 0.9971, 0.9441],
+                ],
             }
         )
         expected_alpha = torch.tensor(EXPECTED_ALPHA.get_expectation(), device=torch_device)
@@ -723,13 +877,23 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
                     [0.7175647, 0.6906685, 0.65860075],
                     [0.7162684, 0.6867891, 0.64463294],
                     [0.6924842, 0.67141336, 0.5356377],
-                ]
+                ],
+                ("xpu", 5): [
+                    [0.7178, 0.6911, 0.6590],
+                    [0.7165, 0.6870, 0.6448],
+                    [0.6926, 0.6710, 0.5332],
+                ],
             }
         )
         expected_foreground = torch.tensor(EXPECTED_FOREGROUND.get_expectation(), device=torch_device)
         torch.testing.assert_close(foreground[0, 300:303, 300:303], expected_foreground, rtol=1e-2, atol=1e-2)
 
-        EXPECTED_COMPOSITE = Expectations({("cuda", None): [[182, 176, 167], [182, 175, 164], [176, 171, 136]]})
+        EXPECTED_COMPOSITE = Expectations(
+            {
+                ("cuda", None): [[182, 176, 167], [182, 175, 164], [176, 171, 136]],
+                ("xpu", 5): [[182, 176, 167], [182, 175, 164], [176, 171, 136]],
+            }
+        )
         expected_composite = torch.tensor(EXPECTED_COMPOSITE.get_expectation(), dtype=torch.uint8, device=torch_device)
         torch.testing.assert_close(composite[0, 300:303, 300:303], expected_composite, rtol=0, atol=1)
 

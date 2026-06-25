@@ -263,10 +263,10 @@ def is_mlx_array(x) -> bool:
 
 
 def is_flash_attention_requested(
-    config=None, requested_attention_implementation: str | None = None, version: int | None = None
+    config=None, requested_attention_implementation: str | None = None, version: int | list[int] | None = None
 ) -> bool:
     """
-    Checks whether some flavor of flash attention is requested or not. Optionally, checks for a specific version of
+    Checks whether some flavor of flash attention is requested or not. Optionally, checks for specific versions of
     flash attention.
 
     This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
@@ -293,7 +293,10 @@ def is_flash_attention_requested(
 
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
-        return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
+        if isinstance(version, int):
+            version = [version]
+        return any(re.match(r".*flash.*" + str(v), checked_attention_implementation) is not None for v in version)
+
     # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
 
