@@ -324,9 +324,21 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     def test_tied_weights_keys(self):
         pass
 
-    @unittest.skip(reason="Molmo2 uses a custom Molmo2Embedding class instead of nn.Embedding")
     def test_model_get_set_embeddings(self):
-        pass
+        # Molmo2's input embedding is a custom `Molmo2Embedding` (concatenated base + extra-vocab
+        # tables), not an `nn.Embedding`, so the type check is relaxed to `nn.Module` -- but the
+        # get/set round-trip is still verified (the behavior the base test really checks).
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            self.assertIsInstance(model.get_input_embeddings(), torch.nn.Module)
+
+            new_input_embedding_layer = torch.nn.Embedding(10, 10)
+            model.set_input_embeddings(new_input_embedding_layer)
+            self.assertEqual(model.get_input_embeddings(), new_input_embedding_layer)
+
+            output_embeds = model.get_output_embeddings()
+            self.assertTrue(output_embeds is None or isinstance(output_embeds, torch.nn.Linear))
 
     @unittest.skip(reason="Molmo2 uses a custom Molmo2Embedding class that does not support standard resize")
     def test_resize_tokens_embeddings(self):
