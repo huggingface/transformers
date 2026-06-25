@@ -308,7 +308,11 @@ class WhisperAttention(nn.Module):
         # and enforce no scaling (1.0) in the attention call below.
         query_states = (self.q_proj(hidden_states) * self.scaling).view(hidden_shape).transpose(1, 2).contiguous()
 
-        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`.
+        # `is_updated` defaults to False so the cross-attention path below cannot raise
+        # `UnboundLocalError` when `past_key_values` is None or not an `EncoderDecoderCache`
+        # (e.g. when an assistant/speculative-decoding wrapper hands us a `DynamicCache`).
+        is_updated = False
         if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
             is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
@@ -614,6 +618,13 @@ class WhisperEncoder(WhisperPreTrainedModel):
             raise ValueError(
                 f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
             )
+
+        # The feature extractor always emits float32, but the model may be loaded in fp16/bf16.
+        # Match the conv1 weight dtype so we don't hit
+        # `RuntimeError: Input type (float) and bias type (c10::Half) should be the same`
+        # on the conv1 call (seen on every Whisper fp16 integration test).
+        if input_features.dtype != self.conv1.weight.dtype:
+            input_features = input_features.to(self.conv1.weight.dtype)
 
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))

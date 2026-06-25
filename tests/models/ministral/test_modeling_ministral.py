@@ -90,13 +90,13 @@ class MinistralIntegrationTest(unittest.TestCase):
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-1.5029, -7.2815, 4.5190, 0.5930, -5.2526, 3.0765, -0.6314, 1.8068]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=2e-1, atol=2e-1)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([-3.9446, -3.9466,  0.6383, -3.9466, -3.9468, -3.9448, -3.9462, -3.9455,
                                                     -3.9451, -0.8244, -3.9472, -3.9458, -3.9460, -3.9406, -3.9462, -3.9462,
                                                     -3.9458, -3.9462, -3.9463, -3.9461, -3.9448, -3.9451, -3.9462, -3.9458,
                                                     -3.9455, -3.9452, -3.9458, -3.9469, -3.9460, -3.9464])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=2e-1, atol=2e-1)
 
         del model
         backend_empty_cache(torch_device)

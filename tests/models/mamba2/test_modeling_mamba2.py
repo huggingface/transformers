@@ -21,6 +21,7 @@ from transformers.testing_utils import (
     require_kernels,
     require_torch,
     require_torch_accelerator,
+    require_torch_large_accelerator,
     slow,
     torch_device,
 )
@@ -399,6 +400,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
 
 @require_torch
+@require_torch_large_accelerator(memory=24)  # Mamba-Codestral-7B in bf16 + cache needs >20 GB
 @slow
 class Mamba2IntegrationTest(unittest.TestCase):
     def setUp(self):

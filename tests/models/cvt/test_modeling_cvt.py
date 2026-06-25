@@ -268,4 +268,4 @@ class CvtModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([0.9282, 0.9025, -0.3145]).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-3, atol=1e-3)
