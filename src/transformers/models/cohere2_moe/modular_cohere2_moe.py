@@ -95,7 +95,6 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_shared_experts = config.num_shared_experts
-        self.shared_expert_combination_strategy = config.shared_expert_combination_strategy
 
         self.gate = Cohere2MoeTopKRouter(config)
         self.experts = Cohere2MoeExperts(config)
@@ -113,12 +112,7 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
 
         if self.num_shared_experts > 0:
             shared_expert_output = self.shared_experts(hidden_states_flat)
-            if self.shared_expert_combination_strategy == "sum":
-                final_hidden_states = final_hidden_states + shared_expert_output
-            elif self.shared_expert_combination_strategy == "average":
-                final_hidden_states = (final_hidden_states + shared_expert_output) / 2
-            else:
-                raise ValueError("`shared_expert_combination_strategy` can only be `sum` or `average`")
+            final_hidden_states = (final_hidden_states + shared_expert_output) / 2
 
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
