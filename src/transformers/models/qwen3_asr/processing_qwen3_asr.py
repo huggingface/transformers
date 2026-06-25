@@ -157,11 +157,9 @@ def _clean_tokens(raw_tokens) -> list[str]:
 
 def _parse_single_output(text: str) -> dict:
     """Parse a single decoded ASR string into language + transcription like the original implementation."""
-    if text is None:
+    if text is None or not str(text).strip():
         return {"language": None, "transcription": ""}
     text = str(text).strip()
-    if not text:
-        return {"language": None, "transcription": ""}
 
     if "assistant\n" in text:
         text = text.split("assistant\n", 1)[-1]
@@ -179,8 +177,7 @@ def _parse_single_output(text: str) -> dict:
 
     # Empty-audio heuristic: "language None<asr_text>"
     if prefix.lower() == "language none":
-        t = transcription.strip()
-        return {"language": None, "transcription": t}
+        return {"language": None, "transcription": transcription.strip()}
 
     language = None
     for line in prefix.splitlines():
@@ -214,7 +211,7 @@ def _fix_timestamps(raw: np.ndarray) -> list[int]:
     data = raw.tolist()
     num_values = len(data)
 
-    # --- Step 1: find the longest increasing subsequence (LIS) via O(n\u00b2) DP ---
+    # --- Step 1: find the longest increasing subsequence (LIS) via O(n^2) DP ---
     # dp[idx]     = length of the LIS ending at index idx
     # parent[idx] = previous index in that LIS (-1 = start of chain)
     dp = [1] * num_values

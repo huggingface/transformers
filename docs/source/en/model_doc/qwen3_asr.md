@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2026-01-29 and contributed to Hugging Face Transformers on 2026-06-22.*
+*This model was published in HF papers on 2026-01-29 and contributed to Hugging Face Transformers on 2026-06-25.*
 
 # Qwen3 ASR
 
@@ -362,7 +362,7 @@ Both the ASR and forced aligner models support `torch.compile` for faster infere
 
 #### Forced aligner
 
-On an A100, we observed a speed-up of ~2.5 for a batch size of 4 ([script](https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-benchmark_compile_forced_alignment-py)).
+On an A100, we observed a speed-up of ~1.2 for a batch size of 4 ([script](https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-benchmark_compile_forced_alignment-py)).
 
 ```python
 import torch
@@ -387,7 +387,7 @@ aligner_inputs, word_lists = processor.prepare_forced_aligner_inputs(
 aligner_inputs = aligner_inputs.to("cuda", torch.bfloat16)
 
 # Warm-up and apply model
-model.forward = torch.compile(model.forward)
+model = torch.compile(model)
 with torch.no_grad():
     for _ in range(num_warmup):
         _ = model(**aligner_inputs)
@@ -397,13 +397,13 @@ with torch.no_grad():
 
 #### ASR model (generate)
 
-For autoregressive transcription, `torch.compile` accelerates the per-token forward passes inside `generate`.
+For autoregressive transcription, `torch.compile` accelerates the per-token forward passes inside `generate` setting providing a `CompileConfig` object.
 
-On an A100, we observed a speed-up of 2.37 for a batch size of 4 ([script](https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-benchmark_compile_generate-py)).
+On an A100, we observed a speed-up of ~3.8 for a batch size of 4 ([script](https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-benchmark_compile_generate-py)).
 
 ```python
 import torch
-from transformers import AutoProcessor, AutoModelForMultimodalLM
+from transformers import AutoProcessor, AutoModelForMultimodalLM, CompileConfig
 
 model_id = "bezzam/Qwen3-ASR-1.7B-hf"
 num_warmup = 3
@@ -417,16 +417,23 @@ inputs = processor.apply_transcription_request(
     audio=[audio_url] * 4,  # batch of 4
 ).to("cuda", torch.bfloat16)
 
-# Compile and warmup
-model.forward = torch.compile(model.forward)
+compile_config = CompileConfig()
+
+# Warmup
 with torch.inference_mode():
     for _ in range(num_warmup):
-        _ = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+        _ = model.generate(
+            **inputs, max_new_tokens=max_new_tokens, do_sample=False,
+            cache_implementation="static", compile_config=compile_config,
+        )
 torch.cuda.synchronize()
 
 # Apply model
 with torch.inference_mode():
-    output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+    output_ids = model.generate(
+        **inputs, max_new_tokens=max_new_tokens, do_sample=False,
+        cache_implementation="static", compile_config=compile_config,
+    )
 generated_ids = output_ids[:, inputs["input_ids"].shape[1] :]
 text_compiled = processor.decode(generated_ids, return_format="transcription_only")[0]
 print(f"Output:  {text_compiled}")

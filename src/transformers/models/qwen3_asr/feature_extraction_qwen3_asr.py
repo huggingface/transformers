@@ -222,8 +222,8 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         multiple = n_window * 2
         if multiple and multiple > 1:
             remainder = padded_inputs["input_features"].shape[-1] % multiple
-            if remainder:
-                pad = multiple - remainder
+            pad = (multiple - remainder) if remainder else 0
+            if pad:
                 padded_inputs["input_features"] = np.pad(padded_inputs["input_features"], [(0, 0), (0, 0), (0, pad)])
                 padded_inputs["attention_mask"] = np.pad(padded_inputs["attention_mask"], [(0, 0), (0, pad)])
 

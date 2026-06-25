@@ -19,7 +19,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GenericForTokenClassification
 from ...modeling_outputs import BaseModelOutputWithPooling
@@ -44,8 +43,6 @@ from ..voxtral.modeling_voxtral import VoxtralMultiModalProjector
 @strict
 class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     r"""
-    max_source_positions (`int`, *optional*, defaults to 13):
-        The maximum sequence length that this model might ever be used with.
     n_window (`int`, *optional*, defaults to 50):
         Half the number of mel frames in one encoder chunk. Each chunk processed by the conv stack has
         ``2 * n_window`` mel frames (1 second of audio at 16 kHz with a 10 ms hop).
@@ -63,8 +60,9 @@ class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     encoder_attention_heads: int = 16
     encoder_ffn_dim: int = 4096
     d_model: int = 1024
-    max_source_positions: int = 13
+    max_position_embeddings: int = 13
     conv_chunksize = AttributeError()
+    max_source_positions = AttributeError()
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B-hf")
@@ -106,10 +104,6 @@ class Qwen3ASRConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
     token_classification_bias: bool = False
-
-    @property
-    def hidden_size(self):
-        return self.text_config.hidden_size
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
@@ -164,10 +158,14 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
 
     def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__(config)
+        embed_dim = config.d_model
+        self.positional_embedding = SinusoidsPositionEmbedding(config.max_position_embeddings, embed_dim)
         del self.conv_chunksize
         del self.proj1
         del self.act
         del self.proj2
+        del self.max_source_positions
+        del self.num_mel_bins
 
     @staticmethod
     def _post_cnn_length(lengths: torch.Tensor) -> torch.Tensor:
@@ -220,7 +218,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         conv_out = self.conv_out(
             conv_out.permute(0, 3, 1, 2).contiguous().view(total_chunks, time_steps, conv_channels * freq_bins)
         )
-        conv_out += self.positional_embedding.positional_embedding.to(conv_out.dtype)
+        conv_out += self.positional_embedding.positional_embedding[:time_steps].to(conv_out.dtype)
 
         # Select only valid (non-padding) post-CNN positions into a flat packed sequence
         chunk_post_cnn_lens = self._post_cnn_length(
@@ -279,20 +277,7 @@ class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _keep_in_fp32_modules_strict = AttributeError()
 
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
-        input_features_mask: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
+    def forward(self, **super_kwargs):
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.
@@ -304,23 +289,11 @@ class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         ```python
         >>> from transformers import Qwen3ASRForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "bezzam/Qwen3-ASR-1.7B"
+        >>> model_id = "bezzam/Qwen3-ASR-1.7B-hf"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         ```"""
-        return super().forward(
-            input_ids=input_ids,
-            input_features=input_features,
-            input_features_mask=input_features_mask,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            labels=labels,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
+        return super().forward(**super_kwargs)
 
 
 @auto_docstring(

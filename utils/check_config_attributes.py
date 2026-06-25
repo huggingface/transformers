@@ -203,7 +203,6 @@ SPECIAL_CASES_TO_ALLOW = {
     # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
-    "Qwen3ASRConfig": ["token_classification_bias"],
     "GlmgaConfig": ["vision_config"],
     "Sapiens2Config": [
         "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
@@ -266,6 +265,8 @@ ATTRIBUTES_TO_ALLOW = (
     "vision_feature_layer",
     "vision_feature_select_strategy",
     "vision_aspect_ratio",
+    # used by GenericForTokenClassification in modeling_layers.py via getattr
+    "token_classification_bias",
 )
 
 

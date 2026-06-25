@@ -334,13 +334,10 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
     def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
-
         embed_dim = config.d_model
-        self.num_mel_bins = config.num_mel_bins
-        self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
         self.n_window = config.n_window
-        self.positional_embedding = SinusoidsPositionEmbedding(self.max_source_positions, embed_dim)
+        self.positional_embedding = SinusoidsPositionEmbedding(config.max_position_embeddings, embed_dim)
         self.layers = nn.ModuleList([Qwen3ASRAudioEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.ln_post = nn.LayerNorm(config.d_model)
         self.gradient_checkpointing = False
@@ -411,7 +408,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         conv_out = self.conv_out(
             conv_out.permute(0, 3, 1, 2).contiguous().view(total_chunks, time_steps, conv_channels * freq_bins)
         )
-        conv_out += self.positional_embedding.positional_embedding.to(conv_out.dtype)
+        conv_out += self.positional_embedding.positional_embedding[:time_steps].to(conv_out.dtype)
 
         # Select only valid (non-padding) post-CNN positions into a flat packed sequence
         chunk_post_cnn_lens = self._post_cnn_length(
@@ -643,7 +640,7 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
         ```python
         >>> from transformers import Qwen3ASRForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "bezzam/Qwen3-ASR-1.7B"
+        >>> model_id = "bezzam/Qwen3-ASR-1.7B-hf"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         ```"""

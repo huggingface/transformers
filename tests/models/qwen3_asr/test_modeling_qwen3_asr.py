@@ -60,6 +60,7 @@ class Qwen3ASRModelTester(ALMModelTester):
         kwargs.setdefault("downsample_hidden_size", 4)
         kwargs.setdefault("head_dim", 8)
         kwargs.setdefault("n_window", 50)
+        kwargs.setdefault("max_position_embeddings", 13)
         super().__init__(parent, **kwargs)
 
     def create_audio_mask(self):
@@ -100,14 +101,6 @@ class Qwen3ASRForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase)
     def _audio_features_get_expected_num_hidden_states(self, model_tester=None):
         return self.model_tester.encoder_layers + 1
 
-    test_cpu_offload = False
-    test_disk_offload_safetensors = False
-    test_disk_offload_bin = False
-
-    # Getting: 'Qwen3ASRForConditionalGeneration' object has no attribute 'hf_device_map'
-    test_model_parallelism = False
-    test_model_parallel_beam_search = False
-
     @unittest.skip(
         reason="Like other audio LMs (Audio Flamingo, Voxtral) inputs_embeds corresponding to audio tokens are replaced when input features are provided."
     )
@@ -122,6 +115,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
         cls.checkpoint = "bezzam/Qwen3-ASR-0.6B-hf"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
+        cls.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -131,7 +125,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-reproducer-py
         """
-        path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr/expected_results_single.json"
+        path = self.fixtures_path / "expected_results_single.json"
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
         exp_ids = torch.tensor(raw["token_ids"])
@@ -169,7 +163,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-reproducer-py
         """
-        path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr/expected_results_batched.json"
+        path = self.fixtures_path / "expected_results_batched.json"
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
         exp_ids = torch.tensor(raw["token_ids"])
@@ -233,6 +227,7 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
         cls.aligner_checkpoint = "bezzam/Qwen3-ForcedAligner-0.6B-hf"
         cls.aligner_processor = AutoProcessor.from_pretrained(cls.aligner_checkpoint)
+        cls.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -265,7 +260,7 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
 
     @slow
     def test_fixture_timestamps_single(self):
-        path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr/expected_timestamps_single.json"
+        path = self.fixtures_path / "expected_timestamps_single.json"
         with open(path, "r", encoding="utf-8") as f:
             expected = json.load(f)
 
@@ -286,7 +281,7 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
 
     @slow
     def test_fixture_timestamps_batched(self):
-        path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr/expected_timestamps_batched.json"
+        path = self.fixtures_path / "expected_timestamps_batched.json"
         with open(path, "r", encoding="utf-8") as f:
             expected_batch = json.load(f)
 

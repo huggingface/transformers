@@ -13,25 +13,14 @@
 # limitations under the License.
 
 import itertools
-import random
 import unittest
 
 import numpy as np
 
 from transformers import Qwen3ASRFeatureExtractor
 
+from ...test_processing_common import floats_list
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
-
-
-global_rng = random.Random()
-
-
-def floats_list(shape, scale=1.0, rng=None):
-    rng = rng or global_rng
-    values = []
-    for _ in range(shape[0]):
-        values.append([rng.random() * scale for _ in range(shape[1])])
-    return values
 
 
 class Qwen3ASRFeatureExtractionTester:

@@ -29,8 +29,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class Qwen3ASREncoderConfig(PreTrainedConfig):
     r"""
-    max_source_positions (`int`, *optional*, defaults to 13):
-        The maximum sequence length that this model might ever be used with.
     n_window (`int`, *optional*, defaults to 50):
         Half the number of mel frames in one encoder chunk. Each chunk processed by the conv stack has
         ``2 * n_window`` mel frames (1 second of audio at 16 kHz with a 10 ms hop).
@@ -62,12 +60,12 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
     activation_dropout: float | int = 0.0
     scale_embedding: bool = False
     initializer_range: float = 0.02
-    max_source_positions: int = 13
 
     n_window: int = 50
     output_dim: int = 3584
     n_window_infer: int = 800
     downsample_hidden_size: int = 480
+    max_position_embeddings: int = 13
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B-hf")
@@ -109,10 +107,6 @@ class Qwen3ASRConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
     token_classification_bias: bool = False
-
-    @property
-    def hidden_size(self):
-        return self.text_config.hidden_size
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
