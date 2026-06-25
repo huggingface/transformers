@@ -22,8 +22,6 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...generation import GenerationMixin
-from ...generation.utils import GenerationMode
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
@@ -1092,8 +1090,7 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
             **kwargs,
         )
 
-        # Image inputs are only needed during prefill (or when the cache is disabled); once the image tokens
-        # have been embedded they must be dropped so later decode steps don't reprocess the pixel values.
+        # Image inputs are only needed during prefill or when the cache is disabled
         if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
             model_inputs["pixel_values_local"] = pixel_values_local
@@ -1101,29 +1098,6 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
             model_inputs["image_spatial_crop"] = image_spatial_crop
 
         return model_inputs
-
-    def _prepare_cache_for_generation(
-        self, generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
-    ):
-        # The default path builds a `DynamicCache(config)`, which dispatches `DynamicReferenceSlidingWindowLayer`
-        # per `config.layer_types` (ring buffer: all prefill kept, generated tokens bounded to `sliding_window`).
-        # The ring layer returns a fixed-size KV buffer and cannot support the cache rollback / multi-token
-        # verification that assisted and contrastive generation need, so for those modes we force a plain
-        # full-attention `DynamicCache` (rollback-capable, full causal attention) instead.
-        if (
-            model_kwargs.get("past_key_values") is None
-            and generation_config.use_cache
-            and generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH)
-            and self._supports_default_dynamic_cache()
-        ):
-            model_kwargs["past_key_values"] = DynamicCache()
-            return
-        # Every other case (default dynamic ring cache, static/quantized/offloaded, encoder-decoder, no cache,
-        # ...) defers to the base implementation. Called on `GenerationMixin` directly rather than via `super()`
-        # so the modular converter doesn't try to inline a method that isn't in the modeling lineage.
-        return GenerationMixin._prepare_cache_for_generation(
-            self, generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
-        )
 
 
 __all__ = [
