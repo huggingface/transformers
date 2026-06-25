@@ -22,12 +22,11 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from ...masking_utils import create_bidirectional_mask, packed_sequence_mask_function
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
     SequenceClassifierOutput,
-    TokenClassifierOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -38,8 +37,9 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import is_flash_attention_requested
+from ...utils.output_capturing import capture_outputs
 from ..esm.modeling_esm import EsmClassificationHead, eager_attention_forward
-from ..llama.modeling_llama import LlamaMLP, LlamaRotaryEmbedding, apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaAttention, LlamaMLP, LlamaRotaryEmbedding, apply_rotary_pos_emb
 from .configuration_esmc import ESMCConfig
 
 
@@ -59,21 +59,19 @@ class ESMCMLP(LlamaMLP):
     pass
 
 
-class ESMCAttention(nn.Module):
-    def __init__(self, config: ESMCConfig):
-        super().__init__()
-        self.config = config
-        self.head_dim = config.hidden_size // config.num_attention_heads
-        self.num_attention_heads = config.num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = 0.0
+class ESMCAttention(LlamaAttention):
+    """Multi-head self-attention with QK-LayerNorm and RoPE.
+
+    Inherits Llama's projection setup -- ``q/k/v/o_proj`` are bias-free
+    (``config.attention_bias=False``) and there is no GQA
+    (``num_key_value_heads == num_attention_heads``). On top of Llama it applies
+    QK-LayerNorm to the projected query/key (before the head reshape) and runs
+    bidirectionally (``is_causal=False``).
+    """
+
+    def __init__(self, config: ESMCConfig, layer_idx: int | None = None):
+        super().__init__(config, layer_idx)
         self.is_causal = False
-
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-
         self.q_ln = nn.LayerNorm(config.hidden_size, bias=False) if config.qk_layernorm else nn.Identity()
         self.k_ln = nn.LayerNorm(config.hidden_size, bias=False) if config.qk_layernorm else nn.Identity()
 
@@ -82,15 +80,13 @@ class ESMCAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        output_attentions: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Return ``(context, attn_weights)``.
 
-        Attention is computed by the backend selected through
-        ``config._attn_implementation``. ``attn_weights`` is ``None`` unless the backend
-        exposes the probabilities -- ``output_attentions=True`` forces the ``eager``
-        interface so they are observable.
+        Attention is computed by the backend selected through ``config._attn_implementation``.
+        ``attn_weights`` is captured by the output recorder when requested and is only populated
+        by backends that expose the probabilities (e.g. ``eager``).
         """
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -107,11 +103,9 @@ class ESMCAttention(nn.Module):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if not output_attentions:
-            attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-                self.config._attn_implementation, eager_attention_forward
-            )
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -143,22 +137,20 @@ class ESMCLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        output_attentions: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> torch.Tensor:
         residual = hidden_states
-        attn_output, attn_weights = self.self_attn(
+        attn_output, _ = self.self_attn(
             self.input_layernorm(hidden_states),
             attention_mask,
             position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
             **kwargs,
         )
         # ESM3 residue scaling on each residual branch.
         hidden_states = residual + attn_output / self.scaling_factor
         residual = hidden_states
         hidden_states = residual + self.mlp(self.post_attention_layernorm(hidden_states)) / self.scaling_factor
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 @auto_docstring
@@ -170,6 +162,10 @@ class ESMCPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_attention_backend = True
     _no_split_modules = ["ESMCLayer"]
+    _can_record_outputs = {
+        "hidden_states": ESMCLayer,
+        "attentions": ESMCAttention,
+    }
     # ``inv_freq`` / ``original_inv_freq`` are non-persistent rotary buffers; ``_extra_state``
     # keys come from the published checkpoint's fused TransformerEngine layout.
     _keys_to_ignore_on_load_unexpected = [r"\._extra_state$", r"\.inv_freq$", r"\.original_inv_freq$"]
@@ -179,30 +175,21 @@ class ESMCPreTrainedModel(PreTrainedModel):
 class ESMCModel(ESMCPreTrainedModel):
     def __init__(self, config: ESMCConfig):
         super().__init__(config)
-        self.embed = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.rotary_emb = ESMCRotaryEmbedding(config)
         self.layers = nn.ModuleList([ESMCLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Embedding:
-        return self.embed
-
-    def set_input_embeddings(self, value: nn.Embedding):
-        self.embed = value
-
-    @can_return_tuple
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         sequence_id: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        output_attentions: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, ...] | BaseModelOutput:
+    ) -> BaseModelOutput:
         r"""
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Integer chain-ID tensor for chain-aware attention masking. Tokens with the same
@@ -213,12 +200,6 @@ class ESMCModel(ESMCPreTrainedModel):
             mask, which requires ``torch>=2.6``. Multi-chain inputs additionally require a
             non-flash ``attn_implementation`` (``'sdpa'`` / ``'eager'`` / ``'flex_attention'``);
             flash attention only supports the single-chain case.
-        output_attentions (`bool`, *optional*):
-            Whether to return the per-block attention weights of shape
-            ``(batch_size, num_heads, sequence_length, sequence_length)``.
-            Forces a manual-SDPA path inside :class:`ESMCAttention` so the
-            attention probabilities are observable; raises on the
-            ``flash_attention_2`` path.
 
         Examples:
 
@@ -233,13 +214,7 @@ class ESMCModel(ESMCPreTrainedModel):
         torch.Size([1, 12, 960])
         ```
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        hidden_states = self.embed(input_ids)
+        hidden_states = self.embed_tokens(input_ids)
         position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -268,31 +243,17 @@ class ESMCModel(ESMCPreTrainedModel):
                 attention_mask=attention_mask,
             )
 
-        all_hidden_states: tuple[torch.Tensor, ...] = () if output_hidden_states else None
-        all_attentions: tuple[torch.Tensor, ...] = () if output_attentions else None
-
         for layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-            hidden_states, attn_weights = layer(
+            hidden_states = layer(
                 hidden_states,
                 attn_bias,
                 position_embeddings=position_embeddings,
-                output_attentions=output_attentions,
                 **kwargs,
             )
-            if output_attentions and attn_weights is not None:
-                all_attentions += (attn_weights,)
 
-        last_hidden_state = self.norm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states += (last_hidden_state,)
+        output = self.norm(hidden_states)
 
-        return BaseModelOutput(
-            last_hidden_state=last_hidden_state,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=output)
 
 
 class ESMCMaskedLMHead(nn.Module):
@@ -331,8 +292,6 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         sequence_id: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        output_attentions: bool | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...] | MaskedLMOutput:
@@ -340,9 +299,6 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Integer chain-ID tensor forwarded to the encoder for chain-aware
             attention masking. See :meth:`ESMCModel.forward` for the encoding.
-        output_attentions (`bool`, *optional*):
-            Whether to return per-block attention weights. Forwarded to the
-            backbone; raises on the ``flash_attention_2`` path.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for masked language modelling loss.  Positions with label ``-100``
             are ignored.  Other positions must be in ``[0, config.vocab_size)``.
@@ -365,9 +321,8 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             sequence_id=sequence_id,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
             return_dict=True,
+            **kwargs,
         )
 
         logits = self.lm_head(encoder_outputs.last_hidden_state)
@@ -407,15 +362,10 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        output_attentions: bool | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...] | SequenceClassifierOutput:
         r"""
-        output_attentions (`bool`, *optional*):
-            Whether to return per-block attention weights. Forwarded to the
-            backbone; raises on the ``flash_attention_2`` path.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for sequence classification loss.  Indices must be in
             ``[0, config.num_labels - 1]``.  For regression pass a float
@@ -424,9 +374,8 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         encoder_outputs = self.esmc(
             input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
             return_dict=True,
+            **kwargs,
         )
         logits = self.classifier(encoder_outputs.last_hidden_state)
 
@@ -461,58 +410,10 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         )
 
 
-@auto_docstring
-class ESMCForTokenClassification(ESMCPreTrainedModel):
-    def __init__(self, config: ESMCConfig):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.esmc = ESMCModel(config)
-        self.dropout = nn.Dropout(config.classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        output_attentions: bool | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, ...] | TokenClassifierOutput:
-        r"""
-        output_attentions (`bool`, *optional*):
-            Whether to return per-block attention weights. Forwarded to the
-            backbone; raises on the ``flash_attention_2`` path.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Per-token labels.  Indices must be in ``[0, config.num_labels - 1]``.
-            Positions with index ``-100`` are ignored in the loss.
-        """
-        encoder_outputs = self.esmc(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
-            return_dict=True,
-        )
-
-        sequence_output = self.dropout(encoder_outputs.last_hidden_state)
-        logits = self.classifier(sequence_output)
-
-        loss: torch.Tensor | None = None
-        if labels is not None:
-            loss = CrossEntropyLoss(ignore_index=-100)(
-                logits.view(-1, self.num_labels), labels.to(logits.device).view(-1)
-            )
-
-        return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+class ESMCForTokenClassification(GenericForTokenClassification, ESMCPreTrainedModel):
+    # ``dropout`` (from ``config.classifier_dropout``) + a ``score`` linear over the
+    # per-token hidden states, identical to the ESM token-classification head.
+    pass
 
 
 __all__ = [

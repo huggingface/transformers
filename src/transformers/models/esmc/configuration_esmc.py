@@ -28,6 +28,9 @@ class ESMCConfig(PreTrainedConfig):
         Dimensionality of the encoder layers and the pooler layer.
     num_attention_heads (`int`, *optional*, defaults to 40):
         Number of attention heads for each attention layer in the Transformer encoder.
+    num_key_value_heads (`int`, *optional*):
+        Number of key/value heads. ESMC uses standard multi-head attention (no GQA), so this
+        defaults to `num_attention_heads`.
     num_hidden_layers (`int`, *optional*, defaults to 80):
         Number of hidden layers in the Transformer encoder.
     mask_token_id (`int`, *optional*, defaults to 32):
@@ -50,6 +53,10 @@ class ESMCConfig(PreTrainedConfig):
         derived from `expansion_ratio` (see above).
     hidden_act (`str`, *optional*, defaults to `"silu"`):
         The non-linear activation function in the feed-forward network.
+    attention_bias (`bool`, *optional*, defaults to `False`):
+        Whether the attention query/key/value/output projections use a bias (ESMC is bias-free).
+    attention_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout ratio on the attention probabilities.
     qk_layernorm (`bool`, *optional*, defaults to `True`):
         Whether to apply LayerNorm to queries and keys before computing attention.
     scale_residue (`bool`, *optional*, defaults to `True`):
@@ -83,6 +90,7 @@ class ESMCConfig(PreTrainedConfig):
     vocab_size: int | None = 64
     hidden_size: int | None = 2560
     num_attention_heads: int | None = 40
+    num_key_value_heads: int | None = None
     num_hidden_layers: int | None = 80
     pad_token_id: int | None = 1
     mask_token_id: int | None = 32
@@ -94,12 +102,16 @@ class ESMCConfig(PreTrainedConfig):
     intermediate_size: int | None = None
     hidden_act: str | None = "silu"
     mlp_bias: bool | None = False
+    attention_bias: bool | None = False
+    attention_dropout: float | None = 0.0
     qk_layernorm: bool | None = True
     scale_residue: bool | None = True
     tie_word_embeddings: bool | None = False
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
         if self.intermediate_size is None:
             self.intermediate_size = int(((self.expansion_ratio * self.hidden_size) + 255) // 256 * 256)
 
