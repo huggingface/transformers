@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .configuration_utils import HeterogeneousConfigMixin
+from .configuration_utils import AmbiguousGlobalPerLayerAttributeError, HeterogeneousConfigMixin
 
 
 __all__ = [
+    "AmbiguousGlobalPerLayerAttributeError",
     "HeterogeneousConfigMixin",
 ]

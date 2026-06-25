@@ -20,6 +20,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import LlamaConfig
+from transformers.integrations.heterogeneity import AmbiguousGlobalPerLayerAttributeError
 from transformers.utils import logging as transformers_logging
 
 
@@ -170,9 +171,18 @@ class TestHeterogeneousConfig(unittest.TestCase):
     def test_accessing_per_layer_attr_raises(self):
         config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
         with self.assertRaisesRegex(
-            AttributeError, "allow_global_per_layer_attribute_access.*global value incorrectly"
+            AmbiguousGlobalPerLayerAttributeError, "allow_global_per_layer_attribute_access.*global value incorrectly"
         ):
             _ = config.num_key_value_heads
+
+    def test_ambiguous_global_attr_access_is_not_treated_as_missing(self):
+        config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
+
+        self.assertIn("num_key_value_heads", config.__dict__)
+        with self.assertRaises(AmbiguousGlobalPerLayerAttributeError):
+            getattr(config, "num_key_value_heads", "default")
+        with self.assertRaises(AmbiguousGlobalPerLayerAttributeError):
+            hasattr(config, "num_key_value_heads")
 
     def test_allow_global_per_layer_attribute_access(self):
         config = _tiny_llama_config(

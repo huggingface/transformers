@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Iterable, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -33,6 +35,13 @@ _HETEROGENEOUS_CONFIG_ATTRIBUTE_DEFAULTS = {
     "allow_global_per_layer_attribute_access": False,
     "serialize_explicit_per_layer_config": False,
 }
+_DISABLED_HETEROGENEOUS_ATTRIBUTE_ACCESS_VALIDATION_CONFIGS: ContextVar[frozenset[int]] = ContextVar(
+    "disabled_heterogeneous_attribute_access_validation_configs", default=frozenset()
+)
+
+
+class AmbiguousGlobalPerLayerAttributeError(RuntimeError):
+    """Raised when a per-layer attribute is read from a heterogeneous global config."""
 
 
 @dataclass
@@ -51,8 +60,12 @@ class HeterogeneousConfigMixin:
     key iteration, and serialization.
     """
 
+    def __getattribute__(self, key: str) -> Any:
+        _validate_heterogeneous_attribute_access(self, key)
+        return super().__getattribute__(key)
+
     @staticmethod
-    def _pop_heterogeneous_config_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    def _pop_heterogeneous_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
         heterogeneous_kwargs = {}
         if "per_layer_config" in kwargs:
             heterogeneous_kwargs["per_layer_config"] = kwargs.pop("per_layer_config")
@@ -62,38 +75,21 @@ class HeterogeneousConfigMixin:
     def _update_config_dict_with_heterogeneous_kwargs(
         cls, config_dict: dict[str, Any], kwargs: dict[str, Any]
     ) -> None:
-        config_dict.update(cls._pop_heterogeneous_config_kwargs(kwargs))
+        config_dict.update(cls._pop_heterogeneous_kwargs(kwargs))
 
-    def _apply_heterogeneous_config_kwargs(self, kwargs: dict[str, Any]) -> None:
+    def _apply_heterogeneous_kwargs(self, kwargs: dict[str, Any]) -> None:
         per_layer_config = kwargs.get("per_layer_config")
         if per_layer_config is not None:
             self.per_layer_config = per_layer_config
 
-    def _validate_heterogeneous_config_attribute_access(self, key: str) -> None:
-        # In heterogeneous configs, per-layer attributes are ambiguous on the global config.
-        # Callers must read them from a concrete layer unless they explicitly opt into the global value.
+    @contextmanager
+    def _disable_heterogeneous_attribute_access_validation(self):
+        disabled_configs = _DISABLED_HETEROGENEOUS_ATTRIBUTE_ACCESS_VALIDATION_CONFIGS.get()
+        token = _DISABLED_HETEROGENEOUS_ATTRIBUTE_ACCESS_VALIDATION_CONFIGS.set(disabled_configs | {id(self)})
         try:
-            heterogeneity_spec = object.__getattribute__(self, "_heterogeneity_spec")
-        except AttributeError:
-            return
-
-        if key not in heterogeneity_spec.per_layer_attributes:
-            return
-
-        if not _get_attribute_or_default(self, "allow_global_per_layer_attribute_access"):
-            raise AttributeError(
-                f"'{key}' is a per-layer attribute and may vary across layers. Access it via the individual layer "
-                f"configs instead (e.g. config.per_layer_config[i].{key}). To read the global config value from "
-                f"config.{key} anyway, set `allow_global_per_layer_attribute_access` to `True` on the config. "
-                f"Warning: only do this if the caller can safely handle heterogeneous configs; code that assumes "
-                f"a homogeneous model may use the global value incorrectly."
-            )
-
-        logger.warning_once(
-            f"Reading global config value for per-layer attribute `{key}` on a heterogeneous config. "
-            "Only do this if the caller can safely handle heterogeneous configs; code that assumes a homogeneous "
-            "model may use the global value incorrectly."
-        )
+            yield
+        finally:
+            _DISABLED_HETEROGENEOUS_ATTRIBUTE_ACCESS_VALIDATION_CONFIGS.reset(token)
 
     def _iter_config_keys_with_heterogeneous_adjustment(self, keys: Iterable[str]) -> Iterable[str]:
         # Per-layer attributes intentionally raise on direct access and should not be exposed by iteration,
@@ -158,6 +154,36 @@ def _get_attribute_or_default(config: PreTrainedConfig, key: str) -> Any:
         return _HETEROGENEOUS_CONFIG_ATTRIBUTE_DEFAULTS[key]
 
 
+def _validate_heterogeneous_attribute_access(config: PreTrainedConfig, key: str) -> None:
+    # In heterogeneous configs, per-layer attributes are ambiguous on the global config.
+    # Callers must read them from a concrete layer unless they explicitly opt into the global value.
+    if id(config) in _DISABLED_HETEROGENEOUS_ATTRIBUTE_ACCESS_VALIDATION_CONFIGS.get():
+        return
+
+    try:
+        heterogeneity_spec = object.__getattribute__(config, "_heterogeneity_spec")
+    except AttributeError:
+        return
+
+    if key not in heterogeneity_spec.per_layer_attributes:
+        return
+
+    if not _get_attribute_or_default(config, "allow_global_per_layer_attribute_access"):
+        raise AmbiguousGlobalPerLayerAttributeError(
+            f"'{key}' is a per-layer attribute and may vary across layers. Access it via the individual layer "
+            f"configs instead (e.g. config.per_layer_config[i].{key}). To read the global config value from "
+            f"config.{key} anyway, set `allow_global_per_layer_attribute_access` to `True` on the config. "
+            f"Warning: only do this if the caller can safely handle heterogeneous configs; code that assumes "
+            f"a homogeneous model may use the global value incorrectly."
+        )
+
+    logger.warning_once(
+        f"Reading global config value for per-layer attribute `{key}` on a heterogeneous config. "
+        "Only do this if the caller can safely handle heterogeneous configs; code that assumes a homogeneous "
+        "model may use the global value incorrectly."
+    )
+
+
 def _remove_heterogeneity_spec(config: PreTrainedConfig) -> None:
     config.__dict__.pop("_heterogeneity_spec", None)
 
@@ -184,17 +210,15 @@ def _apply_heterogeneous_config(
             config need to be included.
     """
 
-    config_without_heterogeneity = copy.copy(config)
-    _remove_heterogeneity_spec(config_without_heterogeneity)
+    with config._disable_heterogeneous_attribute_access_validation():
+        normalized_per_layer_overrides = _normalize_per_layer_overrides(per_layer_config)
 
-    normalized_per_layer_overrides = _normalize_per_layer_overrides(per_layer_config)
+        _validate_layer_indices(config, normalized_per_layer_overrides)
+        _validate_sliding_window_and_attention_chunk_size(config, normalized_per_layer_overrides)
 
-    _validate_layer_indices(config_without_heterogeneity, normalized_per_layer_overrides)
-    _validate_sliding_window_and_attention_chunk_size(config_without_heterogeneity, normalized_per_layer_overrides)
-
-    config._heterogeneity_spec = _modify_config_and_create_heterogeneity_spec(
-        config_without_heterogeneity, normalized_per_layer_overrides
-    )
+        config._heterogeneity_spec = _modify_config_and_create_heterogeneity_spec(
+            config, normalized_per_layer_overrides
+        )
 
 
 def _get_per_layer_config(config: PreTrainedConfig) -> Sequence[PreTrainedConfig]:

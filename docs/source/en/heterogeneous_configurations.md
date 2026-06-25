@@ -123,8 +123,9 @@ This matters because consumers that read such an attribute globally would silent
 overridden layers. Code that allocates a key-value cache from a global `num_key_value_heads`, for instance,
 would be incorrect for the layers that override it.
 
-By default, an `AttributeError` will be raised for this access pattern, directing callers to use
-`config.per_layer_config[layer_idx]` instead.
+By default, an `AmbiguousGlobalPerLayerAttributeError` will be raised for this access pattern, directing callers to use
+`config.per_layer_config[layer_idx]` instead. This is not an `AttributeError`, because the global attribute exists;
+it is just more error-prone to read without a layer-specific context.
 
 Set `allow_global_per_layer_attribute_access=True` only when the caller intentionally needs the global fallback value
 and can safely handle heterogeneous configurations. In that case, global access is allowed, but a
