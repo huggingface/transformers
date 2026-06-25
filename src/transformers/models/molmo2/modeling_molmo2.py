@@ -856,7 +856,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
 
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for layer_idx, decoder_block in enumerate(self.blocks[: self.config.num_hidden_layers]):
+        for layer_idx, decoder_block in enumerate(self.blocks):
             hidden_states = decoder_block(
                 hidden_states,
                 attention_mask=causal_mask_mapping,
