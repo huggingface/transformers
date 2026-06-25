@@ -708,7 +708,7 @@ class GenerationMixin(ContinuousMixin):
             return torch.ones(
                 (batch_size, 0),
                 dtype=torch.long,
-                # Use the device of the existing tensor to avoid any potential `meta` device isssue, which is likely
+                # Use the device of the existing tensor to avoid any potential `meta` device issue, which is likely
                 # linked to the offloading behavior (keeping it on meta device). See PR #44848. Previously, it used
                 # `self.device`.
                 device=self.device if self.device.type != "meta" else model_kwargs["inputs_embeds"].device,
@@ -2310,7 +2310,8 @@ class GenerationMixin(ContinuousMixin):
                 - `str` (Hugging Face Hub repository name): runs the custom `generate` function defined at
                   `custom_generate/generate.py` in that repository instead of the standard `generate` method. The
                   repository fully replaces the generation logic, and the return type may differ.
-                - `str` (local repository path): same as above but from a local path, `trust_remote_code` not required.
+                - `str` (local repository path): same as above but from a local path. Local directories also
+                  require `trust_remote_code=True` because the local `custom_generate/generate.py` is executed.
                 - `Callable`: `generate` will perform the usual input preparation steps, then call the provided callable to
                   run the decoding loop.
                 For more information, see [the docs](../../generation_strategies#custom-generation-methods).
