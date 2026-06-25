@@ -708,7 +708,7 @@ class GenerationMixin(ContinuousMixin):
             return torch.ones(
                 (batch_size, 0),
                 dtype=torch.long,
-                # Use the device of the existing tensor to avoid any potential `meta` device isssue, which is likely
+                # Use the device of the existing tensor to avoid any potential `meta` device issue, which is likely
                 # linked to the offloading behavior (keeping it on meta device). See PR #44848. Previously, it used
                 # `self.device`.
                 device=self.device if self.device.type != "meta" else model_kwargs["inputs_embeds"].device,
@@ -2310,7 +2310,8 @@ class GenerationMixin(ContinuousMixin):
                 - `str` (Hugging Face Hub repository name): runs the custom `generate` function defined at
                   `custom_generate/generate.py` in that repository instead of the standard `generate` method. The
                   repository fully replaces the generation logic, and the return type may differ.
-                - `str` (local repository path): same as above but from a local path, `trust_remote_code` not required.
+                - `str` (local repository path): same as above but from a local path. Local directories also
+                  require `trust_remote_code=True` because the local `custom_generate/generate.py` is executed.
                 - `Callable`: `generate` will perform the usual input preparation steps, then call the provided callable to
                   run the decoding loop.
                 For more information, see [the docs](../../generation_strategies#custom-generation-methods).
@@ -3447,12 +3448,17 @@ class GenerationMixin(ContinuousMixin):
 
             # pluck the cache from the beam indices that will be used in the next iteration
             # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
-            if model_kwargs.get("past_key_values") is not None:
+            if any(cache_key in model_kwargs for cache_key in ALL_CACHE_NAMES):
+                cache_key = next(cache_key for cache_key in ALL_CACHE_NAMES if cache_key in model_kwargs)
                 beam_idx = self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len])
                 if hasattr(self, "_reorder_cache"):
-                    model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                    model_kwargs[cache_key] = self._reorder_cache(model_kwargs[cache_key], beam_idx)
+                elif hasattr(model_kwargs[cache_key], "reorder_cache"):
+                    model_kwargs[cache_key].reorder_cache(beam_idx)
                 else:
-                    model_kwargs["past_key_values"].reorder_cache(beam_idx)
+                    raise ValueError(
+                        f"{self.__class__.__name__} cannot use beam search with a cache currently, as the cache cannot be reordered"
+                    )
 
             cur_len = cur_len + 1
             is_early_stop_heuristic_unsatisfied = self._check_early_stop_heuristic(
