@@ -29,7 +29,7 @@ Install the kernels package. We recommend the latest version which provides the 
 pip install -U kernels
 ```
 
-Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to load a matching kernel variant for your platform and environment. This replaces supported PyTorch operations with the kernel implementation.
+Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to load the most performant kernels available on the Hub for your device. This replaces supported PyTorch operations with the kernel implementation. The default kernels differ by device type, and they're updated as faster kernels become available.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -41,23 +41,10 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-## AMD GPUs
+> [!NOTE]
+> AMD GPUs report their device type as `cuda` in PyTorch. Transformers detects ROCm at runtime and routes supported operations to kernels built for AMD hardware, such as [AITER](https://github.com/ROCm/aiter) Triton kernels. You don't need to set the device type yourself.
 
-AMD GPUs report their device type as `cuda` in PyTorch. Transformers detects ROCm at runtime and routes supported operations to [AITER](https://github.com/ROCm/aiter) Triton kernels built for AMD hardware. You don't need to set the device type yourself.
-
-Set `use_kernels=True` and AITER kernels load automatically on a ROCm machine.
-
-```py
-from transformers import AutoModelForCausalLM
-
-model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen3-0.6B",
-    use_kernels=True,
-    device_map="cuda"
-)
-```
-
-Browse available AITER builds for ROCm in the [kernels-community](https://huggingface.co/kernels-community/kernels) collection.
+Browse available kernels in the [kernels-community](https://huggingface.co/kernels-community) organization.
 
 ## Attention kernels
 
