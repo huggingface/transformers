@@ -818,7 +818,8 @@ class NemotronAsrStreamingPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["NemotronAsrStreamingEncoderBlock"]
     _supports_flat_attention_mask = True
     _supports_sdpa = True
-    _supports_flex_attn = True
+    # flex attention is incompatible as this model uses a float attention mask (relative position bias) across the board
+    _supports_flex_attn = False
 
     # TODO: @eustlb, add support when flash attention supports custom attention bias
     _supports_flash_attn = False

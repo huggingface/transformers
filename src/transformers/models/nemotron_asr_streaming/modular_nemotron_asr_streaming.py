@@ -998,6 +998,8 @@ class NemotronAsrStreamingEncoderBlock(ParakeetEncoderBlock):
 @auto_docstring
 class NemotronAsrStreamingPreTrainedModel(ParakeetPreTrainedModel):
     config: NemotronAsrStreamingConfig
+    # flex attention is incompatible as this model uses a float attention mask (relative position bias) across the board
+    _supports_flex_attn = False
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = getattr(self.config, "encoder_config", self.config)
