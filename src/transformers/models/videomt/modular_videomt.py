@@ -105,7 +105,6 @@ class VideomtLayerScale(EomtLayerScale):
     pass
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`VideomtForUniversalSegmentationOutput`].
@@ -116,6 +115,7 @@ class VideomtLayerScale(EomtLayerScale):
     [`~VideomtVideoProcessor`] for details regarding usage.
     """
 )
+@dataclass
 class VideomtForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):

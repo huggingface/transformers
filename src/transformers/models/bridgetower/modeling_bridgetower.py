@@ -47,12 +47,12 @@ logger = logging.get_logger(__name__)
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`BridgeTowerModel`].
     """
 )
+@dataclass
 class BridgeTowerModelOutput(ModelOutput):
     r"""
     text_features (`torch.FloatTensor` of shape `(batch_size, text_sequence_length, hidden_size)`):
@@ -71,12 +71,12 @@ class BridgeTowerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of ['BridgeTowerForContrastiveLearning']
     """
 )
+@dataclass
 class BridgeTowerContrastiveOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -820,7 +820,7 @@ class BridgeTowerTextEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
-                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
+                buffered_token_type_ids = self.token_type_ids.to(position_ids.device).expand(position_ids.shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
                 token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
             else:
@@ -880,7 +880,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {
         "hidden_states": BridgeTowerTextLayer,
         "attentions": BridgeTowerSelfAttention,
@@ -1218,8 +1218,11 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, dtype=torch.long, device=input_ids.device)
-        extend_text_masks = self.text_model.get_extended_attention_mask(attention_mask, input_shape).to(
-            input_ids.device
+
+        extend_text_masks = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=text_embeds[:, 0:1, :],  # weird case where the mask always wants q_len == 1
+            attention_mask=attention_mask,
         )
 
         # The split_index determines how many layers of the uni-modal encoder are applied before the cross-modal encoder
@@ -1269,8 +1272,10 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             dtype=torch.long,
             device=input_ids.device,
         )
-        extend_image_masks = self.text_model.get_extended_attention_mask(pixel_mask, pixel_mask.size()).to(
-            input_ids.device
+        extend_image_masks = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=cross_modal_image,
+            attention_mask=pixel_mask,
         )
 
         layer_outputs_text = self.cross_modal_text_layers[0](

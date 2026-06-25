@@ -39,6 +39,9 @@ HUB_MODELS = {
     "vith16plus_lvd1689m": "facebook/dinov3-vith16plus-pretrain-lvd1689m",
     "vit7b16_lvd1689m": "facebook/dinov3-vit7b16-pretrain-lvd1689m",
     "vit7b16_sat493m": "facebook/dinov3-vit7b16-pretrain-sat493m",
+    "eupe_vitt16": "facebook/EUPE-ViT-T",
+    "eupe_vits16": "facebook/EUPE-ViT-S",
+    "eupe_vitb16": "facebook/EUPE-ViT-B",
 }
 
 HUB_CHECKPOINTS = {
@@ -50,6 +53,9 @@ HUB_CHECKPOINTS = {
     "vith16plus_lvd1689m": "dinov3_vith16plus_pretrain_lvd1689m-7c1da9a5.pth",
     "vit7b16_lvd1689m": "dinov3_vit7b16_pretrain_lvd1689m-a955f4ea.pth",
     "vit7b16_sat493m": "dinov3_vit7b16_pretrain_sat493m-a6675841.pth",
+    "eupe_vitt16": "EUPE-ViT-T.pt",
+    "eupe_vits16": "EUPE-ViT-S.pt",
+    "eupe_vitb16": "EUPE-ViT-B.pt",
 }
 
 # fmt: off
@@ -175,6 +181,23 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             use_gated_mlp=True,
             hidden_act="silu",
         )
+    elif model_name in ("eupe_vitt16", "eupe_vits16", "eupe_vitb16"):
+        hidden_size, num_attention_heads = {
+            "eupe_vitt16": (192, 3),
+            "eupe_vits16": (384, 6),
+            "eupe_vitb16": (768, 12),
+        }[model_name]
+        return DINOv3ViTConfig(
+            patch_size=16,
+            hidden_size=hidden_size,
+            intermediate_size=hidden_size * 4,
+            num_hidden_layers=12,
+            num_attention_heads=num_attention_heads,
+            num_register_tokens=4,
+            use_gated_mlp=False,
+            hidden_act="gelu",
+            layerscale_value=1e-5,
+        )
     else:
         raise ValueError("Model not supported")
 
@@ -223,6 +246,12 @@ def convert_and_test_dinov3_checkpoint(args):
         "vitl16_sat493m_patch": [0.18488, 0.30309, -0.20689, 0.12848, 0.06207],
         "vit7b16_sat493m_cls": [-0.19779, 0.11819, -0.00581, -0.21055, -0.03971],
         "vit7b16_sat493m_patch": [-0.12423, 0.07879, -0.10057, 0.02835, -0.11727],
+        "eupe_vitt16_cls": [0.355413, 0.298635, 0.394325, 0.505015, 1.562275],
+        "eupe_vitt16_patch": [0.36946, 0.43873, -0.344027, 0.991241, 0.732024],
+        "eupe_vits16_cls": [0.280715, 0.35844, 0.390659, -0.049203, -0.663395],
+        "eupe_vits16_patch": [0.372801, 0.128655, 1.046281, 0.1564, 1.069897],
+        "eupe_vitb16_cls": [-0.066237, 0.027697, -0.050193, 0.054482, -0.259635],
+        "eupe_vitb16_patch": [-0.056169, -0.238062, -0.343129, -0.250448, -0.088778],
     }
 
     model_name = args.model_name
@@ -243,18 +272,23 @@ def convert_and_test_dinov3_checkpoint(args):
 
         if "bias_mask" in key or "attn.k_proj.bias" in key or "local_cls_norm" in key:
             continue
+        if key.startswith("projectors."):
+            continue
         if "embeddings.mask_token" in new_key:
             weight_tensor = weight_tensor.unsqueeze(1)
         if "inv_freq" in new_key:
             continue
+        if new_key.startswith("layer."):
+            new_key = f"model.{new_key}"
 
         converted_state_dict[new_key] = weight_tensor
 
     model.load_state_dict(converted_state_dict, strict=True)
     model = model.eval()
 
-    transform = get_transform()
-    image_processor = get_image_processor()
+    resize_size = 256 if model_name.startswith("eupe_") else 224
+    transform = get_transform(resize_size)
+    image_processor = get_image_processor(resize_size)
     image = prepare_img()
 
     # check preprocessing
@@ -319,6 +353,9 @@ if __name__ == "__main__":
             "vith16plus_lvd1689m",
             "vit7b16_lvd1689m",
             "vit7b16_sat493m",
+            "eupe_vitt16",
+            "eupe_vits16",
+            "eupe_vitb16",
         ],
         help="Name of the model you'd like to convert.",
     )

@@ -14,12 +14,18 @@
 """Testing suite for the PyTorch Qwen3.5 model."""
 
 import copy
+import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, is_torch_available
+from parameterized import parameterized
+
+from transformers import AutoProcessor, AutoTokenizer, DataCollatorWithFlattening, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_causal_conv1d,
+    require_flash_linear_attention,
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -38,13 +44,17 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoModelForCausalLM,
+        AutoModelForImageTextToText,
         DynamicCache,
         Qwen3_5Config,
         Qwen3_5ForCausalLM,
         Qwen3_5ForConditionalGeneration,
         Qwen3_5ForSequenceClassification,
+        Qwen3_5ForTokenClassification,
         Qwen3_5Model,
         Qwen3_5TextConfig,
+        Qwen3_5TextForSequenceClassification,
         Qwen3_5TextModel,
     )
 
@@ -53,10 +63,11 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen3_5TextModel
         causal_lm_class = Qwen3_5ForCausalLM
-        sequence_classification_class = Qwen3_5ForSequenceClassification
+        sequence_classification_class = Qwen3_5TextForSequenceClassification
 
     def __init__(self, parent):
         super().__init__(parent=parent)
+        self.hidden_act = "silu"
         self.layer_types = ["full_attention", "linear_attention"]
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
@@ -142,6 +153,52 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Intentionally not reversable (no changes) as only load time within a VLM depends on this")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
+
+    @require_causal_conv1d
+    @require_flash_linear_attention
+    @require_torch_gpu
+    def test_padding_free_matches_padded_fast_path_regression(self):
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
+        model = Qwen3_5ForCausalLM(config).to(torch_device).eval()
+
+        data_collator = DataCollatorWithFlattening(
+            return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
+        )
+        test_cases = [
+            (
+                torch.tensor([[0, 0, 0, 1, 2, 3], [0, 0, 0, 0, 4, 5]], device=torch_device),
+                torch.tensor([[0, 0, 0, 1, 1, 1], [0, 0, 0, 0, 1, 1]], dtype=torch.long, device=torch_device),
+                [{"input_ids": [1, 2, 3]}, {"input_ids": [4, 5]}],
+            ),
+            (
+                torch.tensor([[0, 1, 2, 3, 4, 5], [0, 0, 0, 0, 0, 6]], device=torch_device),
+                torch.tensor([[0, 1, 1, 1, 1, 1], [0, 0, 0, 0, 0, 1]], dtype=torch.long, device=torch_device),
+                [{"input_ids": [1, 2, 3, 4, 5]}, {"input_ids": [6]}],
+            ),
+        ]
+
+        for padded_input_ids, attention_mask, features in test_cases:
+            position_ids = ((attention_mask == 1).long().cumsum(dim=1) - 1) * (attention_mask == 1).long()
+            padding_free_batch = data_collator(features)
+            padding_free_batch = {
+                key: value.to(torch_device) if torch.is_tensor(value) else value
+                for key, value in padding_free_batch.items()
+            }
+
+            with torch.no_grad():
+                res_padded = model(
+                    input_ids=padded_input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    use_cache=False,
+                )
+                res_padfree = model(**padding_free_batch, use_cache=False)
+
+            logits_padded = res_padded.logits[attention_mask.bool()]
+            logits_padfree = res_padfree.logits[0]
+
+            torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
 
     def test_linear_attention_multi_token_cached_forward_matches_single_token(self):
         """
@@ -332,6 +389,8 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         (
             Qwen3_5Model,
             Qwen3_5ForConditionalGeneration,
+            Qwen3_5ForSequenceClassification,
+            Qwen3_5ForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -345,10 +404,65 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @parameterized.expand([("from_pretrained",), ("from_config",)])
+    def test_automodelforcausallm(self, loader: str) -> None:
+        """`AutoModelForCausalLM` must unwrap the text sub-config for composite-to-text-only mappings."""
+        config = self.model_tester.get_config()
+        self.assertIsInstance(config, Qwen3_5Config, msg="Test setup expects the composite Qwen3_5Config.")
+
+        if loader == "from_config":
+            with torch.device("meta"):
+                model = AutoModelForCausalLM.from_config(config)
+        else:
+            full_model = Qwen3_5ForConditionalGeneration(config)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                full_model.save_pretrained(tmp_dir)
+                model = AutoModelForCausalLM.from_pretrained(tmp_dir)
+
+        self.assertIsInstance(model, Qwen3_5ForCausalLM)
+        self.assertIsInstance(model.config, Qwen3_5TextConfig)
+
+    def test_automodelforcausallm_dtype(self) -> None:
+        """`AutoModelForCausalLM` must honor a concrete `dtype`, overriding the saved composite dtype (#46459)."""
+        config = self.model_tester.get_config()
+        # The saved dtype (bf16) must differ from the requested one (fp32) to exercise the bug.
+        full_model = Qwen3_5ForConditionalGeneration(config).to(torch.bfloat16)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            full_model.save_pretrained(tmp_dir)
+
+            # #46459 regression: a concrete `dtype` must win over the saved bf16 composite dtype.
+            model = AutoModelForCausalLM.from_pretrained(tmp_dir, dtype=torch.float32)
+            self.assertIsInstance(model, Qwen3_5ForCausalLM)
+            self.assertEqual(next(model.parameters()).dtype, torch.float32)
+
+            # Default behavior is unchanged: `auto` and no dtype still load in the checkpoint's saved bf16.
+            model_auto = AutoModelForCausalLM.from_pretrained(tmp_dir, dtype="auto")
+            self.assertEqual(next(model_auto.parameters()).dtype, torch.bfloat16)
+            model_default = AutoModelForCausalLM.from_pretrained(tmp_dir)
+            self.assertEqual(next(model_default.parameters()).dtype, torch.bfloat16)
+
+            # The legacy `torch_dtype` alias is honored the same way.
+            model_legacy = AutoModelForCausalLM.from_pretrained(tmp_dir, torch_dtype=torch.float32)
+            self.assertEqual(next(model_legacy.parameters()).dtype, torch.float32)
+
+            # Non-regression guard: loading the whole VLM already honored `dtype` (this path does not
+            # hit the text-config swap), and must keep doing so before and after the fix.
+            vlm = AutoModelForImageTextToText.from_pretrained(tmp_dir, dtype=torch.float32)
+            self.assertEqual(vlm.config.dtype, torch.float32)
+            self.assertEqual(vlm.config.text_config.dtype, torch.float32)
+            self.assertEqual(vlm.config.vision_config.dtype, torch.float32)
+            # Check the actual weights load in fp32, not just the config metadata.
+            self.assertTrue(all(param.dtype == torch.float32 for param in vlm.parameters()))
+
     @unittest.skip(
         "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
     )
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
+    @unittest.skip("Qwen3.5 hybrid linear-attention cache is not compatible with quantized cache yet.")
+    def test_generate_with_quant_cache(self):
         pass
 
     def _get_conv_state_shape(self, batch_size: int, config):
@@ -497,7 +611,7 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 channels * temporal_patch * (patch_size**2),
             ]
         )
-        image_grid_thw = torch.tensor([[1, 1, 1]] * (bsz * num_images))
+        image_grid_thw = torch.tensor([[1, 1, 1]] * (bsz * num_images), device=torch_device)
         self.assertEqual(pixel_values.shape[0], image_grid_thw.prod(dim=1).sum().item())
 
         insertion_point = 0
@@ -550,7 +664,7 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             ]
         )
 
-        video_grid_thw = torch.tensor([[patch_t, patch_h, patch_w]] * (bsz * num_video))
+        video_grid_thw = torch.tensor([[patch_t, patch_h, patch_w]] * (bsz * num_video), device=torch_device)
         self.assertEqual(pixel_values_videos.shape[0], video_grid_thw.prod(dim=1).sum().item())
 
         input_ids[:, -1] = self.model_tester.pad_token_id

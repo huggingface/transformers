@@ -40,8 +40,8 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_clipseg import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class CLIPSegOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -74,8 +74,8 @@ class CLIPSegOutput(ModelOutput):
         return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class CLIPSegDecoderOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
@@ -93,8 +93,8 @@ class CLIPSegDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class CLIPSegImageSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

@@ -64,8 +64,8 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class MusicgenUnconditionalInput(ModelOutput):
     r"""
     encoder_outputs (`tuple[torch.FloatTensor]` of length 1, with tensor shape `(batch_size, sequence_length, hidden_size)`):

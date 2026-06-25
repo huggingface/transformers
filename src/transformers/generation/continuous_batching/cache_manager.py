@@ -11,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import hashlib
 from abc import ABC, abstractmethod
+from array import array
 from collections import deque
 from collections.abc import Iterator
 from math import ceil
@@ -73,10 +75,11 @@ class BlockManager:
     it is in use.
     """
 
-    def __init__(self, num_blocks: int, block_size: int) -> None:
+    def __init__(self, num_blocks: int, block_size: int, tp_on: bool) -> None:
         """Initializes the block manager with a given number of blocks (num_blocks) of size (block_size)."""
         self.num_blocks = num_blocks
         self.block_size = block_size
+        self.tp_on = tp_on
         self._uninit_block_ids = deque(range(num_blocks))
         self._init_block_ids: dict[int, None] = {}  # effectively act as an ordered set
         self._hash_to_id: dict[int, int] = {}
@@ -109,7 +112,7 @@ class BlockManager:
     def get_free_blocks(
         self, n_blocks: int, last_block_id: int | None, shareable: bool, group_id: int
     ) -> list[int] | None:
-        """Returns a list of (n_blocks) free block and mark them as no longuer free in the internal data structures.
+        """Returns a list of (n_blocks) free block and mark them as no longer free in the internal data structures.
         If the (shareable) flag is set to True, a Block object is created to keep track of the block, with the
         (last_block_id) to indicate the last block id in the sequence, also named the parent block. If the manager
         cannot find enough free blocks, it returns None."""
@@ -276,7 +279,19 @@ class BlockManager:
     def compute_hash(self, parent_hash: int | None, tokens: list[int], group_id: int) -> int:
         """Computes the hash of a block identified by the (tokens) it contains, its (parent_hash) and the layer
         (group_id) it belong to. If the block has no parent, the parent hash is None."""
-        return hash((parent_hash, tuple(tokens), group_id))
+        # If TP is on, we cannot use python `hash` because it depends on the process (it's per-process salted)
+        # TODO: figure out if this is really a problem. Even if hashes diverge per-process, does that break anything?
+        if self.tp_on:
+            h = hashlib.blake2b(digest_size=8)
+            if parent_hash is not None:
+                h.update(parent_hash.to_bytes(8, "little", signed=False))
+            h.update(array("i", tokens).tobytes())
+            h.update(group_id.to_bytes(4, "little", signed=False))
+            hash_ = int.from_bytes(h.digest(), "little", signed=False)
+        # Otherwise, use `hash`
+        else:
+            hash_ = hash((parent_hash, tuple(tokens), group_id))
+        return hash_
 
 
 class CacheAllocator(ABC):
@@ -442,18 +457,18 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
     """Cache manager for sliding window attention layers."""
 
     def __init__(
-        self, index: int, block_size: int, sliding_window: int, sentinel_index: int, trash_index: int
+        self, index: int, block_size: int, sliding_window: int, sentinel_index: int, write_trash_index: int
     ) -> None:
-        """Initializes the cache manager for a group of sliding window attention layers. ``sentinel_index`` and
-        ``trash_index`` are valid cache positions in the padding zone, used instead of -1 in read and write indices
-        respectively so that index_select/index_copy_ never receive negative values.
+        """Initializes the cache manager for a group of sliding window attention layers, with two special indices:
+        - ``sentinel_index`` marks the spot of a new token in the read indices
+        - ``write_trash_index`` is used by padding tokens to write their KV cache
         """
         self._index = index
         self.uses_block_sharing = False
         self.block_size = block_size
         self.sliding_window = sliding_window
         self.sentinel_index = sentinel_index
-        self.trash_index = trash_index
+        self.write_trash_index = write_trash_index
         self._max_blocks_per_request = ceil(self.sliding_window / self.block_size)
         self.block_table = {}
 
@@ -523,7 +538,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
             physical_index = block_table[block_idx] * self.block_size + block_offset
             physical_indices.append(physical_index)
         if padding_length > 0:
-            physical_indices = [self.trash_index] * padding_length + physical_indices
+            physical_indices = [self.write_trash_index] * padding_length + physical_indices
         return physical_indices
 
     # TODO: implement this

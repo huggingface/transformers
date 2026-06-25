@@ -28,13 +28,13 @@ if is_timm_available():
     import timm
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output class for models TimmWrapperModel, containing the last hidden states, an optional pooled output,
     and optional hidden states.
     """
 )
+@dataclass
 class TimmWrapperModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor`):

@@ -30,7 +30,6 @@ from ..auto import AutoConfig
 from ..d_fine.configuration_d_fine import DFineConfig
 from ..d_fine.modeling_d_fine import (
     DFineAIFILayer,
-    DFineConvEncoder,
     DFineConvNormLayer,
     DFineDecoder,
     DFineDecoderLayer,
@@ -49,6 +48,7 @@ from ..d_fine.modeling_d_fine import (
     DFineRepVggBlock,
     DFineSCDown,
     get_contrastive_denoising_training_group,
+    replace_batch_norm,
 )
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 
@@ -200,13 +200,13 @@ class Deimv2ModelOutput(DFineModelOutput):
     pass
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type for DEIMv2 encoder modules (HybridEncoder and LiteEncoder).
     Attentions are only available for HybridEncoder variants with AIFI layers.
     """
 )
+@dataclass
 class Deimv2EncoderOutput(ModelOutput):
     r"""
     feature_maps (`list[torch.FloatTensor]`):
@@ -352,67 +352,6 @@ def fuse_feature_maps(feature_map_1: torch.Tensor, feature_map_2: torch.Tensor, 
     return torch.cat([feature_map_1, feature_map_2], dim=1)
 
 
-class Deimv2ConvEncoder(DFineConvEncoder):
-    def __init__(self, config):
-        super().__init__(config)
-        self.encoder_input_proj = nn.ModuleList(
-            [
-                Deimv2ConvNormLayer(config, in_channel, config.encoder_hidden_dim, 1, 1)
-                if config.encoder_type != "lite"
-                else nn.Identity()
-                for in_channel in self.intermediate_channel_sizes
-            ]
-        )
-
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
-        features = self.model(pixel_values, **kwargs).feature_maps
-        return [proj(feat) for proj, feat in zip(self.encoder_input_proj, features)]
-
-
-class Deimv2DINOv3ConvEncoder(nn.Module):
-    def __init__(self, config: Deimv2Config):
-        super().__init__()
-        self.backbone = load_backbone(config)
-
-        self.spatial_tuning_adapter = Deimv2SpatialTuningAdapter(config)
-
-        embed_dim = config.backbone_config.hidden_size
-        hidden_dim = config.encoder_hidden_dim
-        spatial_tuning_adapter_channels = config.spatial_tuning_adapter_inplanes
-        self.fusion_proj = nn.ModuleList(
-            [
-                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 2, hidden_dim, 1, 1),
-                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
-                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
-            ]
-        )
-
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
-        backbone_output = self.backbone(pixel_values, **kwargs)
-        feature_maps = backbone_output.feature_maps
-
-        patch_size = self.backbone.config.patch_size
-        height_patches = pixel_values.shape[2] // patch_size
-        width_patches = pixel_values.shape[3] // patch_size
-
-        semantic_features = []
-        num_scales = len(feature_maps)
-        for i, feat in enumerate(feature_maps):
-            resize_height = int(height_patches * 2 ** (num_scales - 2 - i))
-            resize_width = int(width_patches * 2 ** (num_scales - 2 - i))
-            spatial = F.interpolate(feat, size=[resize_height, resize_width], mode="bilinear", align_corners=False)
-            semantic_features.append(spatial)
-
-        detail_features = self.spatial_tuning_adapter(pixel_values)
-
-        outputs = []
-        for i, (semantic_feature, detail_feature) in enumerate(zip(semantic_features, detail_features)):
-            fused = torch.cat([semantic_feature, detail_feature], dim=1)
-            outputs.append(self.fusion_proj[i](fused))
-
-        return outputs
-
-
 class Deimv2Integral(DFineIntegral):
     pass
 
@@ -499,6 +438,81 @@ class Deimv2PreTrainedModel(DFinePreTrainedModel):
             init.constant_(module.up_proj.bias, 0)
             init.xavier_uniform_(module.down_proj.weight)
             init.constant_(module.down_proj.bias, 0)
+
+
+# This follows DFineConvEncoder, with optional projections added after the backbone features.
+class Deimv2ConvEncoder(Deimv2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        backbone = load_backbone(config)
+
+        if config.freeze_backbone_batch_norms:
+            # replace batch norm by frozen batch norm
+            with torch.no_grad():
+                replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = self.model.channels
+        self.encoder_input_proj = nn.ModuleList(
+            [
+                Deimv2ConvNormLayer(config, in_channel, config.encoder_hidden_dim, 1, 1)
+                if config.encoder_type != "lite"
+                else nn.Identity()
+                for in_channel in self.intermediate_channel_sizes
+            ]
+        )
+
+        self.post_init()
+
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
+        features = self.model(pixel_values, **kwargs).feature_maps
+        return [proj(feat) for proj, feat in zip(self.encoder_input_proj, features)]
+
+
+class Deimv2DINOv3ConvEncoder(Deimv2PreTrainedModel):
+    def __init__(self, config: Deimv2Config):
+        super().__init__(config)
+        self.backbone = load_backbone(config)
+
+        self.spatial_tuning_adapter = Deimv2SpatialTuningAdapter(config)
+
+        embed_dim = config.backbone_config.hidden_size
+        hidden_dim = config.encoder_hidden_dim
+        spatial_tuning_adapter_channels = config.spatial_tuning_adapter_inplanes
+        self.fusion_proj = nn.ModuleList(
+            [
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 2, hidden_dim, 1, 1),
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
+            ]
+        )
+
+        self.post_init()
+
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
+        backbone_output = self.backbone(pixel_values, **kwargs)
+        feature_maps = backbone_output.feature_maps
+
+        patch_size = self.backbone.config.patch_size
+        height_patches = pixel_values.shape[2] // patch_size
+        width_patches = pixel_values.shape[3] // patch_size
+
+        semantic_features = []
+        num_scales = len(feature_maps)
+        for i, feat in enumerate(feature_maps):
+            resize_height = int(height_patches * 2 ** (num_scales - 2 - i))
+            resize_width = int(width_patches * 2 ** (num_scales - 2 - i))
+            spatial = F.interpolate(feat, size=[resize_height, resize_width], mode="bilinear", align_corners=False)
+            semantic_features.append(spatial)
+
+        detail_features = self.spatial_tuning_adapter(pixel_values)
+
+        outputs = []
+        for i, (semantic_feature, detail_feature) in enumerate(zip(semantic_features, detail_features)):
+            fused = torch.cat([semantic_feature.to(detail_feature.device), detail_feature], dim=1)
+            outputs.append(self.fusion_proj[i](fused))
+
+        return outputs
 
 
 class Deimv2LiteEncoder(Deimv2PreTrainedModel):
@@ -851,7 +865,7 @@ class Deimv2Model(DFineModel):
 
 
 class Deimv2ForObjectDetection(DFineForObjectDetection):
-    _no_split_modules = AttributeError()  # Don't have the same restriction as DFine
+    _no_split_modules = None  # Restrictions are collected from self.model during post_init.
 
     @property
     def _tied_weights_keys(self):

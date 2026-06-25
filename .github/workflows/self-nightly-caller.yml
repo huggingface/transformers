@@ -18,6 +18,9 @@ env:
     other_workflow_run_id: ""
 
 
+permissions:
+  contents: read
+
 jobs:
   build_nightly_torch_ci_images:
     name: Build CI Docker Images with nightly torch
@@ -31,13 +34,16 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Setup
+        env:
+          PREV_WORKFLOW_RUN_ID: ${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}
+          OTHER_WORKFLOW_RUN_ID: ${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}
         run: |
           mkdir "setup_values"
-          echo "${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}" > "setup_values/prev_workflow_run_id.txt"
-          echo "${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}" > "setup_values/other_workflow_run_id.txt"
+          echo "$PREV_WORKFLOW_RUN_ID" > "setup_values/prev_workflow_run_id.txt"
+          echo "$OTHER_WORKFLOW_RUN_ID" > "setup_values/other_workflow_run_id.txt"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: setup_values
           path: setup_values

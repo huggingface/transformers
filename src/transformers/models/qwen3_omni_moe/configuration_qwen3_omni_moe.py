@@ -35,7 +35,7 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     max_source_positions (`int`, *optional*, defaults to 1500):
         Maximum sequence length for the inputs
     n_window (`int`, *optional*, defaults to 100):
-        Number of windwos
+        Number of windows
     output_dim (`int`, *optional*, defaults to 3584):
         Dimensionality of the output
     n_window_infer (`int`, *optional*, defaults to `400`):
@@ -47,7 +47,12 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_omni_moe_audio_encoder"
-    attribute_map = {"num_hidden_layers": "encoder_layers"}
+    attribute_map = {
+        "num_hidden_layers": "encoder_layers",
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+        "intermediate_size": "encoder_ffn_dim",
+    }
 
     num_mel_bins: int = 128
     encoder_layers: int = 32

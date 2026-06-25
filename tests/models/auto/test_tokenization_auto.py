@@ -22,6 +22,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from parameterized import parameterized
 
 import transformers
 from transformers import (
@@ -44,6 +45,7 @@ from transformers import (
 )
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.auto.tokenization_auto import (
+    MODEL_IDS_TO_TOKENIZERS_BACKEND,
     REGISTERED_FAST_ALIASES,
     REGISTERED_TOKENIZER_CLASSES,
     TOKENIZER_MAPPING,
@@ -58,6 +60,7 @@ from transformers.testing_utils import (
     SMALL_MODEL_IDENTIFIER,
     CaptureLogger,
     RequestCounter,
+    require_mistral_common,
     require_sentencepiece,
     require_tokenizers,
     slow,
@@ -235,6 +238,43 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
         self.assertTrue(tokenizer.is_fast)
         self.assertGreater(len(tokenizer("Voxtral")["input_ids"]), 0)
+
+    @require_tokenizers
+    @require_mistral_common
+    def test_mistral_common_backend_skips_incorrect_hub_tokenizer_class(self):
+        """Some Mistral checkpoint have tokenizer_class=LlamaTokenizer in its hub tokenizer_config.json.
+        When tekken.json is available, the wrong hub class should be ignored and MistralCommonBackend should be loaded."""
+        from transformers.tokenization_mistral_common import MistralCommonBackend
+
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-8B-Instruct-2410")
+        self.assertIsInstance(tokenizer, MistralCommonBackend)
+        self.assertGreater(len(tokenizer("Ministral")["input_ids"]), 0)
+
+    @require_tokenizers
+    def test_mistral_common_backend_skips_incorrect_hub_tokenizer_class_without_mistral_common(self):
+        """Some Mistral checkpoint have tokenizer_class=LlamaTokenizer in its hub tokenizer_config.json.
+        When mistral-common is unavailable and tokenizer.json exists, TokenizersBackend should be loaded."""
+        repo_id = "mistralai/Ministral-8B-Instruct-2410"
+        with (
+            mock.patch(
+                "transformers.models.auto.tokenization_auto.is_mistral_common_available",
+                return_value=False,
+            ),
+            mock.patch.dict(TOKENIZER_MAPPING_NAMES, {"ministral": "TokenizersBackend"}),
+        ):
+            tokenizer = AutoTokenizer.from_pretrained(repo_id)
+
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertGreater(len(tokenizer("Ministral")["input_ids"]), 0)
+
+    @require_tokenizers
+    @require_mistral_common
+    def test_mistral_sentencepiece_models_use_tokenizers_backend(self):
+        """Regression: legacy Mistral models with only tokenizer.model (no tekken.json) should keep
+        using TokenizersBackend even when mistral-common is installed."""
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertGreater(len(tokenizer("zephyr")["input_ids"]), 0)
 
     @require_tokenizers
     def test_do_lower_case(self):
@@ -765,3 +805,75 @@ class NopConfig(PreTrainedConfig):
                 revision="f8d333a098d19b4fd9a8b18f94170487ad3f821d",
             )
             self.assertEqual(tokenizer.__class__.__name__, "NllbTokenizer")
+
+    @slow
+    @require_tokenizers
+    def test_deepseek_r1_distill_qwen_uses_qwen2_tokenizer(self):
+        """Regression: qwen2 model with wrong Hub tokenizer_class='LlamaTokenizerFast' must use Qwen2Tokenizer."""
+        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
+        self.assertIsInstance(tokenizer, Qwen2Tokenizer)
+
+    @require_tokenizers
+    @require_sentencepiece
+    def test_specialized_hub_tokenizer_class_overrides_mismatched_auto_mapping(self):
+        """Hub's tokenizer_class wins when the auto-mapping has a different real class (e.g. m2m_100 → NllbTokenizer)."""
+        from transformers import NllbTokenizer
+
+        fake_config = mock.MagicMock()
+        fake_config.model_type = "m2m_100"
+        mock_tokenizer = mock.MagicMock(spec=NllbTokenizer)
+
+        with (
+            mock.patch(
+                "transformers.models.auto.tokenization_auto.AutoConfig.from_pretrained",
+                return_value=fake_config,
+            ),
+            mock.patch(
+                "transformers.models.auto.tokenization_auto.get_tokenizer_config",
+                return_value={"tokenizer_class": "NllbTokenizer"},
+            ),
+            mock.patch.object(NllbTokenizer, "from_pretrained", return_value=mock_tokenizer) as mock_nllb,
+            mock.patch.object(TokenizersBackend, "from_pretrained") as mock_tb,
+        ):
+            result = AutoTokenizer.from_pretrained("fake/nllb-model")
+            mock_nllb.assert_called_once()
+            mock_tb.assert_not_called()
+            self.assertIs(result, mock_tokenizer)
+
+    @require_tokenizers
+    @parameterized.expand([p for p in MODEL_IDS_TO_TOKENIZERS_BACKEND if "*" not in p])
+    def test_roundtrip_models_without_tokenizer_class(self, repo_id):
+        text = "This is a test 😊 I was born in 92000, and this is falsé."
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                tokenizer_auto = AutoTokenizer.from_pretrained(repo_id, cache_dir=tmpdir)
+        self.assertEqual(tokenizer_auto.decode(tokenizer_auto.encode(text, add_special_tokens=False)), text)
+
+    TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS = [
+        "rhymes-ai/Aria",
+        "Salesforce/blip2-flan-t5-xl",
+        "google/bigbird-pegasus-large-pubmed",
+        "microsoft/kosmos-2-patch14-224",
+        "allenai/OLMo-2-0425-1B",
+        "stabilityai/tiny-random-stablelm-2",
+        "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    ]
+
+    @slow
+    @require_tokenizers
+    @parameterized.expand(TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS)
+    def test_tokenizers_auto_agreements_models_without_tokenizer_class(self, repo_id):
+        # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend
+        TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT = "foo_bar\n\n123 "
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                tokenizer_auto = AutoTokenizer.from_pretrained(repo_id, cache_dir=tmpdir)
+                tokenizer_tok = TokenizersBackend.from_pretrained(repo_id, cache_dir=tmpdir)
+        self.assertEqual(
+            tokenizer_tok(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
+            tokenizer_auto(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
+        )

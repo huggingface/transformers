@@ -27,13 +27,13 @@ from .configuration_univnet import UnivNetConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output class for the [`UnivNetModel`], which includes the generated audio waveforms and the original unpadded
     lengths of those waveforms (so that the padding can be removed by [`UnivNetModel.batch_decode`]).
     """
 )
+@dataclass
 class UnivNetModelOutput(ModelOutput):
     r"""
     waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):

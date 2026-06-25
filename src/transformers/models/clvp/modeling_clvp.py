@@ -147,13 +147,13 @@ def _pad_extra_bos_eos_tokens(
     return modified_input_ids, attention_mask
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for CLVP encoder's outputs that contains a pooling of the last hidden states as well as a projection
     output (a linear layer on top of the pooled output).
     """
 )
+@dataclass
 class ClvpEncoderOutput(ModelOutput):
     r"""
     embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when model is initialized with `with_projection=True`):
@@ -171,8 +171,8 @@ class ClvpEncoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class ClvpOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -762,7 +762,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
     config: ClvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {
         "hidden_states": (ClvpEncoderLayer, ClvpDecoderLayer),
         "attentions": ClvpSelfAttention,

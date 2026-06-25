@@ -277,6 +277,13 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Repeat key/value heads to match the number of query heads for grouped-query attention
+    # (the text decoder uses GQA). For the SaProt encoder there is no `num_key_value_groups`,
+    # so `n_rep` defaults to 1 and this is a no-op.
+    n_rep = getattr(module, "num_key_value_groups", 1)
+    key = repeat_kv(key, n_rep)
+    value = repeat_kv(value, n_rep)
+
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
@@ -743,9 +750,15 @@ class EvollaSequenceCompressorResampler(nn.Module):
         return self.norm(transformed_feature)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class EvollaProteinEncoderModelOutput(ModelOutput):
+    r"""
+    sequence_compressor_output (`torch.FloatTensor` of shape `(batch_size, compressed_seq_len, hidden_size)`, *optional*):
+        Compressed sequence representation produced by the sequence compressor module. The sequence length is
+        reduced from the original input length to `compressed_seq_len` via learned compression.
+    """
+
     sequence_compressor_output: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None

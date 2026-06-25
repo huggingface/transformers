@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -67,13 +67,11 @@ class LagunaRMSNorm(nn.Module):
 class LagunaRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: LagunaConfig, device=None, layer_type=None):
+    def __init__(self, config: LagunaConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-
         self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
@@ -85,7 +83,7 @@ class LagunaRotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -339,7 +337,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class LagunaAttention(nn.Module):
     """Afmoe-style SWA/GQA attention with Laguna-specific gating and per-layer head count."""
 
@@ -370,7 +367,9 @@ class LagunaAttention(nn.Module):
 
         self.q_norm = LagunaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = LagunaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        self.gate_per_head = config.gating is True or config.gating == "per-head"
+        g_proj_dim = self.num_heads if self.gate_per_head else self.num_heads * self.head_dim
+        self.g_proj = nn.Linear(config.hidden_size, g_proj_dim, bias=False)
 
     def forward(
         self,
@@ -415,7 +414,12 @@ class LagunaAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
 
         gate = F.softplus(self.g_proj(hidden_states).float()).to(attn_output.dtype)
-        attn_output = (attn_output.view(*input_shape, -1, self.head_dim) * gate.unsqueeze(-1)).view(*input_shape, -1)
+        if self.gate_per_head:
+            attn_output = (attn_output.view(*input_shape, -1, self.head_dim) * gate.unsqueeze(-1)).view(
+                *input_shape, -1
+            )
+        else:
+            attn_output = attn_output * gate
 
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights

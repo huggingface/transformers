@@ -1858,12 +1858,12 @@ class ReformerPreTrainedModel(PreTrainedModel):
             init.constant_(module.mask_value_float32, -1e9)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ReformerModel`].
     """
 )
+@dataclass
 class ReformerModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_predict, hidden_size)`):
@@ -1886,12 +1886,12 @@ class ReformerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ReformerModelWithLMHead`].
     """
 )
+@dataclass
 class ReformerModelWithLMHeadOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):

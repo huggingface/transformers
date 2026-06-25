@@ -38,7 +38,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
@@ -76,13 +75,13 @@ SEAMLESS_M4T_COMMON_CUSTOM_ARGS = r"""
 """
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the generated outputs from [`SeamlessM4TModel`], [`SeamlessM4TForTextToText`],
     [`SeamlessM4TForTextToSpeech`], [`SeamlessM4TForSpeechToSpeech`] and [`SeamlessM4TForTextToSpeech`].
     """
 )
+@dataclass
 class SeamlessM4TGenerationOutput(ModelOutput):
     r"""
     waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -2250,7 +2249,6 @@ class SeamlessM4THifiGan(nn.Module):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def forward(self, inputs_embeds: torch.FloatTensor) -> torch.FloatTensor:
         r"""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch

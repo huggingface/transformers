@@ -13,13 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-21 and added to Hugging Face Transformers on 2025-06-26.*
+*This model was contributed to Hugging Face Transformers on 2025-06-26.*
 
 # Dia
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -43,32 +42,30 @@ tokens and decodes them back into audio.
 
 ```python
 from transformers import AutoProcessor, DiaForConditionalGeneration
-from accelerate import Accelerator
 
-torch_device = Accelerator().device
+
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 text = ["[S1] Dia is an open weights text to dialogue model."]
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
+inputs = processor(text=text, padding=True, return_tensors="pt").to(model.device)
 
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
 
 # save audio to a file
 outputs = processor.batch_decode(outputs)
 processor.save_audio(outputs, "example.wav")
-
 ```
 
 ### Generation with Text and Audio (Voice Cloning)
 
 ```python
-from datasets import load_dataset, Audio
-from transformers import AutoProcessor, DiaForConditionalGeneration
-from accelerate import Accelerator
+from datasets import Audio, load_dataset
 
-torch_device = Accelerator().device
+from transformers import AutoProcessor, DiaForConditionalGeneration
+
+
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
@@ -78,10 +75,10 @@ audio = ds[-1]["audio"]["array"]
 text = ["[S1] I know. It's going to save me a lot of money, I hope. [S2] I sure hope so for you."]
 
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(torch_device)
+inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(model.device)
 prompt_len = processor.get_audio_prompt_len(inputs["decoder_attention_mask"])
 
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
 
 # retrieve actually generated audio and save to a file
@@ -92,11 +89,11 @@ processor.save_audio(outputs, "example_with_audio.wav")
 ### Training
 
 ```python
-from datasets import load_dataset, Audio
-from transformers import AutoProcessor, DiaForConditionalGeneration
-from accelerate import Accelerator
+from datasets import Audio, load_dataset
 
-torch_device = Accelerator().device
+from transformers import AutoProcessor, DiaForConditionalGeneration
+
+
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
@@ -113,9 +110,9 @@ inputs = processor(
     output_labels=True,
     padding=True,
     return_tensors="pt"
-).to(torch_device)
+).to(model.device)
 
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 out = model(**inputs)
 out.loss.backward()
 ```

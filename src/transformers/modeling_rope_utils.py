@@ -107,7 +107,7 @@ def dynamic_rope_update(rope_forward):
             )
             # TODO joao: may break with compilation
             self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_max_seq_len_cached", seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", seq_len)
 
         if seq_len < self.original_max_seq_len and max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
@@ -115,7 +115,7 @@ def dynamic_rope_update(rope_forward):
             original_inv_freq = original_inv_freq.to(device)
             self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
             setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
-            setattr(self, f"{layer_type}_max_seq_len_cached", self.original_max_seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", self.original_max_seq_len)
 
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):
@@ -353,7 +353,7 @@ def _compute_yarn_parameters(
                     (only) in the linear ramp function.
                 *   `factor` (`float`, *optional*): The scaling factor applied when interpolating the position IDs to
                     extend the possible context length. Additionally, if `attention_factor` is None, the log of this
-                    value is used to compute a value for `attention_factor`, possibly in conjunciton with `mscale` and
+                    value is used to compute a value for `attention_factor`, possibly in conjunction with `mscale` and
                     `mscale_all_dim`, if provided.
                 *   `mscale` (`float`, *optional*): If `attention_factor` is None and both `mscale` and
                     `mscale_all_dim` are provided, `mscale` acts scalar augmenting `log(factor)` when computing the
@@ -719,7 +719,9 @@ class RotaryEmbeddingConfigMixin:
         partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
         if partial_rotary_factor is not None:
             self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
-            self.ignore_keys_at_rope_validation = self.ignore_keys_at_rope_validation | {"partial_rotary_factor"}
+            self.ignore_keys_at_rope_validation = set(self.ignore_keys_at_rope_validation or []) | {
+                "partial_rotary_factor"
+            }
 
         self.standardize_rope_params()
         return kwargs
@@ -876,7 +878,7 @@ class RotaryEmbeddingConfigMixin:
         # Double-check: `factor` should be the ratio between the pre-yarn and post-yarn context lengths.
         # NOTE: we might get `implicit_factor == 1` if config's `original_max_position_embeddings` was
         # inferred from `max_position_embeddings` during standardization
-        original_max_position_embeddings = self.rope_parameters["original_max_position_embeddings"]
+        original_max_position_embeddings = rope_parameters["original_max_position_embeddings"]
         implicit_factor = self.max_position_embeddings / original_max_position_embeddings
         if implicit_factor != factor and implicit_factor != 1:
             logger.warning_once(
@@ -992,7 +994,7 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(
                 "`rope_parameters`'s partial_rotary_factor is None. This will default to 1.0 in the computation, "
                 "making this equivalent to the linear_scaling RoPE type. Provide a value in the range [0.0, 1.0) to "
-                "make use of the proportional RoPE funcitonality."
+                "make use of the proportional RoPE functionality."
             )
 
     @staticmethod

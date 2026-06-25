@@ -63,12 +63,12 @@ logger = logging.get_logger(__name__)
 _HIDDEN_STATES_START_POSITION = 2
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`Wav2Vec2ForPreTraining`], with potential hidden states and attentions.
     """
 )
+@dataclass
 class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):

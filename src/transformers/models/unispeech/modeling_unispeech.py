@@ -50,12 +50,12 @@ from .configuration_unispeech import UniSpeechConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`UniSpeechForPreTrainingOutput`], with potential hidden states and attentions.
     """
 )
+@dataclass
 class UniSpeechForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when model is in train mode, `torch.FloatTensor` of shape `(1,)`):

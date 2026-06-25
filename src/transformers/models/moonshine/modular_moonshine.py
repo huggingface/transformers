@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -135,13 +136,22 @@ class MoonshineConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extends [~modeling_outputs.BaseModelOutput] to include the output attention mask since sequence length is not preserved in the model's forward.
     """
 )
+@dataclass
 class MoonshineEncoderModelOutput(BaseModelOutput):
+    r"""
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
+        sequence length may differ from the input sequence length. Mask values selected in `[0, 1]`:
+
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    """
+
     attention_mask: torch.Tensor | None = None
 
 
@@ -763,7 +773,8 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.reshape(-1, self.config.vocab_size), labels.reshape(-1))
 
         return Seq2SeqLMOutput(
             loss=loss,

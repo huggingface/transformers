@@ -39,7 +39,6 @@ from ...utils import (
     is_torch_accelerator_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -392,7 +391,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         self.input_embeds_layer = new_embeddings
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @auto_docstring
     def forward(
         self,
@@ -990,7 +988,6 @@ class BarkFineModel(BarkPreTrainedModel):
 
         return model_embeds
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @auto_docstring
     def forward(
         self,
