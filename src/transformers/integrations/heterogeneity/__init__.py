@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .configuration_utils import HeterogeneousConfigMixin
+from .configuration_utils import AmbiguousGlobalPerLayerAttributeError, HeterogeneousConfigMixin
 from .heterogeneous_modeling_spec import HeterogeneousModelingSpec, SkipDescriptor, get_heterogeneous_modeling_spec
 from .modeling_utils import (
     apply_heterogeneous_modeling,
@@ -23,12 +23,13 @@ from .skip_utils import ReturnEntry, get_skip_replacement
 
 
 __all__ = [
+    "AmbiguousGlobalPerLayerAttributeError",
+    "HeterogeneousConfigMixin",
+    "HeterogeneousModelingSpec",
+    "ReturnEntry",
+    "SkipDescriptor",
     "apply_heterogeneous_modeling",
     "clean_up_post_heterogeneous_modeling",
     "get_heterogeneous_modeling_spec",
-    "HeterogeneousConfigMixin",
-    "HeterogeneousModelingSpec",
-    "SkipDescriptor",
     "get_skip_replacement",
-    "ReturnEntry",
 ]

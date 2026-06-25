@@ -20,6 +20,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import LlamaConfig
+from transformers.integrations.heterogeneity import AmbiguousGlobalPerLayerAttributeError
 from transformers.utils import logging as transformers_logging
 
 
@@ -94,6 +95,15 @@ class TestHeterogeneousConfig(unittest.TestCase):
         # Other attributes are unaffected
         self.assertEqual(config.per_layer_config[0].hidden_size, 64)
 
+    def test_per_layer_config_reassignment_uses_existing_global_fallback(self):
+        config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}})
+
+        config.per_layer_config = {1: {"num_key_value_heads": 1}}
+
+        self.assertEqual(config.to_dict()["per_layer_config"], {"1": {"num_key_value_heads": 1}})
+        self.assertEqual(config.per_layer_config[0].num_key_value_heads, 4)
+        self.assertEqual(config.per_layer_config[1].num_key_value_heads, 1)
+
     def test_per_layer_values_matching_global_are_removed_from_sparse_config(self):
         config = _tiny_llama_config(
             per_layer_config={
@@ -142,6 +152,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
         # PreTrainedModel.__init__ updates this after config construction.
         config._attn_implementation_internal = "sdpa"
         config.hidden_size = 96
+        config.intermediate_size = 192
 
         self.assertIs(type(config.per_layer_config[0]), type(config))
         self.assertFalse(config.per_layer_config[0].is_heterogeneous)
@@ -151,7 +162,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.per_layer_config[0].hidden_size, 96)
         self.assertEqual(config.per_layer_config[1].hidden_size, 96)
         self.assertEqual(config.per_layer_config[0].intermediate_size, 64)
-        self.assertEqual(config.per_layer_config[1].intermediate_size, 128)
+        self.assertEqual(config.per_layer_config[1].intermediate_size, 192)
 
         layer_dict = config.per_layer_config[0].to_dict()
         self.assertNotIn("per_layer_config", layer_dict)
@@ -161,9 +172,18 @@ class TestHeterogeneousConfig(unittest.TestCase):
     def test_accessing_per_layer_attr_raises(self):
         config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
         with self.assertRaisesRegex(
-            AttributeError, "allow_global_per_layer_attribute_access.*global value incorrectly"
+            AmbiguousGlobalPerLayerAttributeError, "allow_global_per_layer_attribute_access.*global value incorrectly"
         ):
             _ = config.num_key_value_heads
+
+    def test_ambiguous_global_attr_access_is_not_treated_as_missing(self):
+        config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
+
+        self.assertIn("num_key_value_heads", config.__dict__)
+        with self.assertRaises(AmbiguousGlobalPerLayerAttributeError):
+            getattr(config, "num_key_value_heads", "default")
+        with self.assertRaises(AmbiguousGlobalPerLayerAttributeError):
+            hasattr(config, "num_key_value_heads")
 
     def test_allow_global_per_layer_attribute_access(self):
         config = _tiny_llama_config(
@@ -194,7 +214,6 @@ class TestHeterogeneousConfig(unittest.TestCase):
 
         keys = list(config)
 
-        self.assertFalse(config.allow_global_per_layer_attribute_access)
         self.assertNotIn("num_key_value_heads", keys)
         self.assertIn("hidden_size", keys)
 
@@ -309,6 +328,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
             per_layer_config={0: {"num_key_value_heads": 1}},
             serialize_explicit_per_layer_config=True,
         )
+        explicit_config.num_key_value_heads = 8
         explicit_config_dict = explicit_config.to_dict()
 
         self.assertEqual(sparse_config.to_dict()["per_layer_config"], {"0": {"num_key_value_heads": 1}})
@@ -316,8 +336,8 @@ class TestHeterogeneousConfig(unittest.TestCase):
             explicit_config_dict["per_layer_config"],
             {
                 "0": {"num_key_value_heads": 1},
-                "1": {"num_key_value_heads": 4},
-                "2": {"num_key_value_heads": 4},
-                "3": {"num_key_value_heads": 4},
+                "1": {"num_key_value_heads": 8},
+                "2": {"num_key_value_heads": 8},
+                "3": {"num_key_value_heads": 8},
             },
         )

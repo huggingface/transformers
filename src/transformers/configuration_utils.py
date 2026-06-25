@@ -308,7 +308,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         # HeterogeneousConfigMixin: Heterogeneity kwargs have dedicated handling,
         # so exclude them from regular additional attributes.
-        heterogeneous_kwargs = self._pop_heterogeneous_config_kwargs(kwargs)
+        heterogeneous_kwargs = self._pop_heterogeneous_kwargs(kwargs)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -321,7 +321,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                     raise err
 
         # HeterogeneousConfigMixin: apply heterogeneity after all of the config attributes are initialized.
-        self._apply_heterogeneous_config_kwargs(heterogeneous_kwargs)
+        self._apply_heterogeneous_kwargs(heterogeneous_kwargs)
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
@@ -448,13 +448,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
 
-        # HeterogeneousConfigMixin: per-layer attributes are ambiguous on the global config,
-        # so delegate access handling to the mixin before falling back to regular attribute lookup.
-        handle_heterogeneous_attribute_access = super().__getattribute__("_handle_heterogeneous_attribute_access")
-        heterogeneous_attribute_access_result = handle_heterogeneous_attribute_access(key)
-        if heterogeneous_attribute_access_result.has_value:
-            return heterogeneous_attribute_access_result.value
-
+        # HeterogeneousConfigMixin participates in attribute access through the MRO.
         return super().__getattribute__(key)
 
     def validate_output_attentions(self):
@@ -995,13 +989,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # Only serialize values that differ from the default config,
         # except always keep the 'config' attribute.
         for key, value in config_dict.items():
+            # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
+            attr = self._getattr_without_heterogeneous_validation(key, None)
+
             if (
-                isinstance(getattr(self, key, None), PreTrainedConfig)
+                isinstance(attr, PreTrainedConfig)
                 and key in class_config_dict
                 and isinstance(class_config_dict[key], dict)
             ):
                 # For nested configs we need to clean the diff recursively
-                diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
+                diff = recursive_diff_dict(value, default_config_dict, config_obj=attr)
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
@@ -1370,7 +1367,10 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
     for key, value in dict_a.items():
-        obj_value = getattr(config_obj, str(key), None)
+        # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
+        obj_value = (
+            config_obj._getattr_without_heterogeneous_validation(str(key), None) if config_obj is not None else None
+        )
         if isinstance(obj_value, PreTrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
             diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
             diff[key] = diff_value
