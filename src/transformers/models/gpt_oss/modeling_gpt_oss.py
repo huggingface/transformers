@@ -30,7 +30,6 @@ from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
     use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
     use_kernelized_func,
 )
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -239,7 +238,7 @@ def _apply_rotary_emb(
     return torch.cat((first_, second_), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)

@@ -342,7 +342,7 @@ if is_kernels_available():
             "ForCausalLMLoss": {
                 "cuda": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels", layer_name="LigerForCausalLMLoss", version=2
+                        repo_id="kernels-community/liger-kernels", layer_name="LigerForCausalLMLossLayer", version=2
                     ),
                 },
             },

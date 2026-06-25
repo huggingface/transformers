@@ -38,7 +38,6 @@ from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
     use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
     use_kernelized_func,
 )
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -1444,7 +1443,7 @@ class Qwen3OmniMoeThinkerTextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
