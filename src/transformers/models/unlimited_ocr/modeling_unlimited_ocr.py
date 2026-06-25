@@ -38,7 +38,7 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
-from ...masking_utils import create_causal_mask, create_reference_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -1475,7 +1475,7 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "reference_sliding_attention": create_reference_sliding_window_causal_mask(**mask_kwargs),
+                "reference_sliding_attention": create_causal_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

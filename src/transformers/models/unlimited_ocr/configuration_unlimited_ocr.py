@@ -228,6 +228,12 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
             self.layer_types = [
                 "full_attention" if self.sliding_window is None else "reference_sliding_attention"
             ] * self.num_hidden_layers
+        elif len(set(self.layer_types)) > 1:
+            # This requires a custom create_causal_mask implementation for reference_sliding_attention
+            # that fetches the first layer with is_sliding=True.
+            raise ValueError(
+                f"Combining multiple layer types ({set(self.layer_types)}) is not supported for this model."
+            )
         if self.mlp_layer_types is None:
             # Some configs may use `first_k_dense_replace` instead of `layer_types`/`mlp_layer_types`
             first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
