@@ -19,7 +19,6 @@ import json
 import math
 import os
 from collections.abc import Sequence
-from contextlib import nullcontext
 from dataclasses import MISSING, dataclass, fields
 from functools import wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
@@ -989,31 +988,29 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         # Only serialize values that differ from the default config,
         # except always keep the 'config' attribute.
-        # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
-        with self._disable_heterogeneous_attribute_access_validation():
-            for key, value in config_dict.items():
-                attr = getattr(self, key, None)
+        for key, value in config_dict.items():
+            attr = self._getattr_without_heterogeneous_validation(key, None)
 
-                if (
-                    isinstance(attr, PreTrainedConfig)
-                    and key in class_config_dict
-                    and isinstance(class_config_dict[key], dict)
-                ):
-                    # For nested configs we need to clean the diff recursively
-                    diff = recursive_diff_dict(value, default_config_dict, config_obj=attr)
-                    if "model_type" in value:
-                        # Needs to be set even if it's not in the diff
-                        diff["model_type"] = value["model_type"]
+            if (
+                isinstance(attr, PreTrainedConfig)
+                and key in class_config_dict
+                and isinstance(class_config_dict[key], dict)
+            ):
+                # For nested configs we need to clean the diff recursively
+                diff = recursive_diff_dict(value, default_config_dict, config_obj=attr)
+                if "model_type" in value:
+                    # Needs to be set even if it's not in the diff
+                    diff["model_type"] = value["model_type"]
 
-                    serializable_config_dict[key] = diff
-                elif (
-                    key not in default_config_dict
-                    or key == "transformers_version"
-                    or key == "vocab_file"
-                    or value != default_config_dict[key]
-                    or (key in default_config_dict and value != class_config_dict.get(key, value))
-                ):
-                    serializable_config_dict[key] = value
+                serializable_config_dict[key] = diff
+            elif (
+                key not in default_config_dict
+                or key == "transformers_version"
+                or key == "vocab_file"
+                or value != default_config_dict[key]
+                or (key in default_config_dict and value != class_config_dict.get(key, value))
+            ):
+                serializable_config_dict[key] = value
 
         self._remove_keys_not_serialized(serializable_config_dict)
 
@@ -1368,15 +1365,15 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     """
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
-    # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
-    with config_obj._disable_heterogeneous_attribute_access_validation() if config_obj is not None else nullcontext():
-        for key, value in dict_a.items():
-            obj_value = getattr(config_obj, str(key), None)
-            if isinstance(obj_value, PreTrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
-                diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
-                diff[key] = diff_value
-            elif key not in dict_b or (value != default[key]):
-                diff[key] = value
+    for key, value in dict_a.items():
+        obj_value = (
+            config_obj._getattr_without_heterogeneous_validation(str(key), None) if config_obj is not None else None
+        )
+        if isinstance(obj_value, PreTrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
+            diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
+            diff[key] = diff_value
+        elif key not in dict_b or (value != default[key]):
+            diff[key] = value
     return diff
 
 
