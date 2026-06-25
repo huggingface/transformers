@@ -220,10 +220,10 @@ class EvalPrediction:
 
     def __init__(
         self,
-        predictions: np.ndarray | tuple[np.ndarray],
-        label_ids: np.ndarray | tuple[np.ndarray],
+        predictions: np.ndarray | torch.Tensor | tuple[np.ndarray] | tuple[torch.Tensor],
+        label_ids: np.ndarray | torch.Tensor | tuple[np.ndarray] | tuple[torch.Tensor],
         inputs: np.ndarray | tuple[np.ndarray] | None = None,
-        losses: np.ndarray | tuple[np.ndarray] | None = None,
+        losses: np.ndarray | torch.Tensor | tuple[np.ndarray] | tuple[torch.Tensor] | None = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
