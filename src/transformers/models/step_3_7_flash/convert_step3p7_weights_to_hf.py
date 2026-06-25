@@ -116,7 +116,7 @@ def remap_key(key: str) -> str:
     return key
 
 
-def convert_state_dict(original_state_dict: dict) -> dict:
+def convert_state_dict(original_state_dict: dict, num_hidden_layers: int | None = None) -> dict:
     """
     Produce the HF-format state dict from the original checkpoint.
 
@@ -125,12 +125,19 @@ def convert_state_dict(original_state_dict: dict) -> dict:
       2. Apply remap_key to all remaining keys.
       3. Split vision in_proj_weight/bias into q/k/v (chunk dim=0).
       4. Fuse MoE gate_proj + up_proj → gate_up_proj (cat dim=1).
+
+    If ``num_hidden_layers`` is given, MTP/speculative-decode layers
+    (model.layers.{N} for N >= num_hidden_layers) are dropped silently.
     """
     renamed: dict[str, torch.Tensor] = {}
     moe_gate: dict[str, torch.Tensor] = {}  # base_key → gate_proj tensor
     moe_up: dict[str, torch.Tensor] = {}    # base_key → up_proj tensor
 
     for old_key, tensor in original_state_dict.items():
+        if num_hidden_layers is not None:
+            m = re.match(r"^model\.layers\.(\d+)\.", old_key)
+            if m and int(m.group(1)) >= num_hidden_layers:
+                continue
         # ── intercept MoE gate/up before renaming ────────────────────────────
         if old_key.endswith(".moe.gate_proj.weight"):
             base = old_key[: -len(".moe.gate_proj.weight")]
@@ -291,7 +298,7 @@ def convert_checkpoint(
     print(f"  Loaded {len(original_state_dict)} tensors.")
 
     print("Applying key renames and tensor transformations ...")
-    new_state_dict = convert_state_dict(original_state_dict)
+    new_state_dict = convert_state_dict(original_state_dict, num_hidden_layers=config.text_config.num_hidden_layers)
     print(f"  Produced {len(new_state_dict)} tensors.")
     del original_state_dict
 
