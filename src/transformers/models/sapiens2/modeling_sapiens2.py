@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ... import initialization as init
@@ -1203,7 +1204,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(heatmaps, labels, weight=label_weights)
+            loss = F.mse_loss(heatmaps, labels, weight=label_weights)
 
         return Sapiens2PoseEstimatorOutput(
             loss=loss,

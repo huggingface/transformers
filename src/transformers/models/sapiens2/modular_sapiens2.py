@@ -1713,7 +1713,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(heatmaps, labels, weight=label_weights)
+            loss = F.mse_loss(heatmaps, labels, weight=label_weights)
 
         return Sapiens2PoseEstimatorOutput(
             loss=loss,

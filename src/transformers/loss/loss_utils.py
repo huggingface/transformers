@@ -198,5 +198,4 @@ LOSS_MAPPING = {
     "ParakeetForTDT": ParakeetForTDTLoss,
     "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
     "RfDetrForInstanceSegmentation": RfDetrForSegmentationLoss,
-    "Sapiens2ForPoseEstimation": torch.nn.functional.mse_loss,
 }
