@@ -288,9 +288,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", None): [
-                    "<PAGE>image [382, 87, 489, 174]\n",
-                ],
+                ("cuda", None): "<PAGE>image [382, 87, 489, 174]\n",
             }
         ).get_expectation()
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)

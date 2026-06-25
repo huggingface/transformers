@@ -237,6 +237,15 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
         image_spatial_crop: torch.Tensor,
         num_local_patches: list[int] | torch.Tensor,
     ) -> list[str]:
+        num_images = len(image_spatial_crop)
+        total_image_tokens = sum(t.count(self.image_token) for t in text)
+        if total_image_tokens != num_images:
+            raise ValueError(
+                f"Number of `{self.image_token}` tokens in the text ({total_image_tokens}) does not match the "
+                f"number of images passed ({num_images}). Use one `{self.image_token}` placeholder per image, "
+                f"e.g. `'<image>' * len(images) + '\\nMulti page parsing.'`"
+            )
+
         size = self.image_processor.size["height"]
         tile_size = self.image_processor.tile_size
 
