@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import os
 from collections.abc import Mapping
 from dataclasses import is_dataclass as _is_python_dataclass
@@ -31,6 +32,9 @@ from .doc import (
     PT_SAMPLE_DOCSTRINGS,
 )
 from .generic import ModelOutput
+
+
+logger = logging.getLogger(__name__)
 
 
 PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"
@@ -2953,8 +2957,9 @@ def _get_model_info(func, parent_class):
                 config_class = HARDCODED_CONFIG_FOR_MODELS[model_name_lowercase]
             else:
                 config_class = "ModelConfig"
-                print(
-                    f"[ERROR] Config not found for {model_name_lowercase}. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/auto_docstring.py"
+                logger.warning(
+                    "Config not found for %s. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/auto_docstring.py",
+                    model_name_lowercase,
                 )
     return model_name_lowercase, class_name, config_class
 
@@ -3666,8 +3671,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                             # nested_is_documented should always be True here since we filter for it above
                             # Check if type is missing
                             if nested_param_type_str == "":
-                                print(
-                                    f"🚨 {nested_param_name} for {type_name} in file {func.__code__.co_filename} has no type"
+                                logger.warning(
+                                    "%s for %s in file %s has no type",
+                                    nested_param_name, type_name, func.__code__.co_filename,
                                 )
                             nested_param_type_str = (
                                 nested_param_type_str if "`" in nested_param_type_str else f"`{nested_param_type_str}`"
@@ -3707,8 +3713,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                 if is_documented:
                     # Check if type is missing
                     if param_type == "":
-                        print(
-                            f"[ERROR] {param_name} for {kwarg_param.annotation.__args__[0].__qualname__} in file {func.__code__.co_filename} has no type"
+                        logger.warning(
+                            "%s for %s in file %s has no type",
+                            param_name, kwarg_param.annotation.__args__[0].__qualname__, func.__code__.co_filename,
                         )
                     param_type = param_type if "`" in param_type else f"`{param_type}`"
                     # Format the parameter docstring (KWARGS_INDICATOR distinguishes from regular args)
@@ -3849,7 +3856,7 @@ def _process_parameters_section(
 
     # Report undocumented parameters
     if len(undocumented_parameters) > 0:
-        print("\n".join(undocumented_parameters))
+        logger.warning("\n".join(undocumented_parameters))
 
     return docstring
 
@@ -4072,8 +4079,9 @@ def _process_example_section(
                 )
                 example_docstring = set_min_indent(example_annotation, indent_level + 4)
             else:
-                print(
-                    f"[ERROR] No checkpoint found for {class_name}.{func.__name__}. Please add a `checkpoint` arg to `auto_docstring` or add one in {config_class}'s docstring"
+                logger.warning(
+                    "No checkpoint found for %s.%s. Please add a `checkpoint` arg to `auto_docstring` or add one in %s's docstring",
+                    class_name, func.__name__, config_class,
                 )
         else:
             # Check if the model is in a pipeline to get an example
@@ -4348,8 +4356,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
                 if is_documented:
                     # Check if type is missing
                     if param_type == "":
-                        print(
-                            f"[ERROR] {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type"
+                        logger.warning(
+                            "%s for %s in file %s has no type",
+                            param_name, cls.__qualname__, cls.__code__.co_filename,
                         )
                     param_type = param_type if "`" in param_type else f"`{param_type}`"
                     # Format the parameter docstring
@@ -4366,8 +4375,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         # TODO (Yoni): Add support for Attributes section in docs
 
     else:
-        print(
-            f"You used `@auto_class_docstring` decorator on `{cls.__name__}` but this class is not part of the AutoMappings. Remove the decorator"
+        logger.warning(
+            "You used `@auto_class_docstring` decorator on `%s` but this class is not part of the AutoMappings. Remove the decorator",
+            cls.__name__,
         )
     # Assign the dynamically generated docstring to the wrapper class
     cls.__doc__ = docstring
