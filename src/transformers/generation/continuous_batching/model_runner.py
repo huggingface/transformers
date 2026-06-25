@@ -102,7 +102,6 @@ class ModelRunner:
             raise ValueError("Cannot run encoder because there is no embeddings cache.")
         with self.compute_stream_ctx():
             for encoder_kw in encoder_kwargs:
-                encoder_kw["return_dict"] = True
                 request_id = encoder_kw.pop(self.cache.embeddings_cache.REQUEST_ID_KEY)
 
                 if self.cache.embeddings_cache.modality == "image":
