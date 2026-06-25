@@ -55,6 +55,7 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
     DeepseekOcr2ModelOutputWithPast,
     DeepseekOcr2ModelOutputWithPooling,
     DeepseekOcr2PreTrainedModel,
+    DeepseekOcr2SamVisionEncoder,
     DeepseekOcr2TextModel,
     DeepseekOcr2TextPreTrainedModel,
     DeepseekOcr2VisionModel,
@@ -482,6 +483,10 @@ class UnlimitedOcrPreTrainedModel(DeepseekOcr2PreTrainedModel):
             init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
+
+
+class UnlimitedOcrSamVisionEncoder(DeepseekOcr2SamVisionEncoder):
+    pass
 
 
 class UnlimitedOcrAttention(CLIPAttention):
