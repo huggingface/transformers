@@ -232,7 +232,7 @@ def adapt_internal_ckpt(ov_sd):
     # Replace values instead of keys, and remove any isinstance checks
     sam2_sd = {k: v.replace("backbone.vision_backbone.trunk", "image_encoder.trunk") for k, v in ov_sd.items()}
     sam2_sd = {k: v.replace("backbone.vision_backbone.convs", "image_encoder.neck.convs") for k, v in sam2_sd.items()}
-    # rename components to be consitent with paper and public release
+    # rename components to be consistent with paper and public release
     sam2_sd = {k: v.replace("transformer.encoder", "memory_attention") for k, v in sam2_sd.items()}
     sam2_sd = {k: v.replace("maskmem_backbone", "memory_encoder") for k, v in sam2_sd.items()}
     sam2_sd = {
