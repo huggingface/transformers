@@ -26,11 +26,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from ... import initialization as init
-from ...integrations import (
-    use_experts_implementation,
-    use_kernel_forward_from_hub,
-    use_kernelized_func,
-)
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_sliding_window_mask
 from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
