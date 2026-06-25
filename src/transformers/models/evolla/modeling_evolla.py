@@ -277,6 +277,13 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Repeat key/value heads to match the number of query heads for grouped-query attention
+    # (the text decoder uses GQA). For the SaProt encoder there is no `num_key_value_groups`,
+    # so `n_rep` defaults to 1 and this is a no-op.
+    n_rep = getattr(module, "num_key_value_groups", 1)
+    key = repeat_kv(key, n_rep)
+    value = repeat_kv(value, n_rep)
+
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 

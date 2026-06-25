@@ -83,7 +83,7 @@ class CacheLayerMixin(ABC):
     def get_seq_length(self) -> int: ...
 
     @abstractmethod
-    def get_max_cache_shape(self) -> int: ...
+    def get_max_length(self) -> int: ...
 
     def offload(self):
         """Offload this layer's data to CPU device."""
@@ -115,6 +115,12 @@ class CacheLayerMixin(ABC):
         if self.get_seq_length() > 0:
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
+
+    def get_max_cache_shape(self) -> int:
+        logger.warning(
+            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
+        )
+        return self.get_max_length()
 
 
 class DynamicLayer(CacheLayerMixin):
@@ -167,7 +173,7 @@ class DynamicLayer(CacheLayerMixin):
             return 0
         return self.keys.shape[-2]
 
-    def get_max_cache_shape(self) -> int:
+    def get_max_length(self) -> int:
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
         return -1
 
@@ -267,7 +273,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         """Returns the sequence length of the cached states."""
         return self.cumulative_length
 
-    def get_max_cache_shape(self) -> int:
+    def get_max_length(self) -> int:
         """Return the maximum cache shape of the cache"""
         return self.sliding_window
 
@@ -378,7 +384,7 @@ class StaticLayer(CacheLayerMixin):
         super().__init__()
         self.max_cache_len = max_cache_len
         # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
-        self.cumulative_length = torch.tensor([0], dtype=int)
+        self.cumulative_length = torch.tensor(0, dtype=int)
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
@@ -391,17 +397,17 @@ class StaticLayer(CacheLayerMixin):
         prefill itself ends up in a compiled region (with chunked prefill for instance).
         """
         self.dtype, self.device = key_states.dtype, key_states.device
-        self.max_batch_size, self.num_heads = key_states.shape[:2]
+        self.batch_size, self.num_heads = key_states.shape[:2]
         self.v_head_dim = value_states.shape[-1]
         self.k_head_dim = key_states.shape[-1]
 
         self.keys = torch.zeros(
-            (self.max_batch_size, self.num_heads, self.max_cache_len, self.k_head_dim),
+            (self.batch_size, self.num_heads, self.max_cache_len, self.k_head_dim),
             dtype=self.dtype,
             device=self.device,
         )
         self.values = torch.zeros(
-            (self.max_batch_size, self.num_heads, self.max_cache_len, self.v_head_dim),
+            (self.batch_size, self.num_heads, self.max_cache_len, self.v_head_dim),
             dtype=self.dtype,
             device=self.device,
         )
@@ -462,7 +468,7 @@ class StaticLayer(CacheLayerMixin):
         """Returns the sequence length of the cached states."""
         return self.cumulative_length if self.is_initialized else 0
 
-    def get_max_cache_shape(self) -> int:
+    def get_max_length(self) -> int:
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
 
@@ -610,13 +616,13 @@ class StaticIndexedLayer(StaticLayer):
         self.is_indexer_initialized: bool = False
         # The indexer update runs independently of (and after) the main K/V `update` in the attention
         # forward, so it tracks its own cumulative length rather than reusing `self.cumulative_length`.
-        self.indexer_cumulative_length = torch.tensor([0], dtype=int)
+        self.indexer_cumulative_length = torch.tensor(0, dtype=int)
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
         self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
-        max_batch_size, _, index_head_dim = indexer_key_states.shape
+        batch_size, _, index_head_dim = indexer_key_states.shape
         self.indexer_keys = torch.zeros(
-            (max_batch_size, self.max_cache_len, index_head_dim),
+            (batch_size, self.max_cache_len, index_head_dim),
             dtype=self.indexer_dtype,
             device=self.indexer_device,
         )
@@ -912,6 +918,10 @@ class LinearAttentionCacheLayerMixin(ABC):
         # We don't crop the linear attention cache, so simply do nothing here
         pass
 
+    def get_max_length(self) -> int:
+        # LinearAttention layer have no sequence length dimension, so simply return -1 here
+        return -1
+
 
 class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
     def __init__(self, config: PreTrainedConfig | None = None):
@@ -924,7 +934,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         if conv_states is not None:
             self.dtype, self.device = conv_states.dtype, conv_states.device
             # Even if prefill is larfer/shorter than the conv_size, the tensor is always either padded or truncated
-            self.max_batch_size, self.conv_kernel_size = conv_states.shape[0], conv_states.shape[-1]
+            self.batch_size, self.conv_kernel_size = conv_states.shape[0], conv_states.shape[-1]
             # The shape is always static, so we init as such
             self.conv_states = torch.zeros_like(conv_states, dtype=self.dtype, device=self.device)
             # Mark as static address to be able to use cudagraphs
@@ -1093,6 +1103,14 @@ class Cache:
 
     def __repr__(self):
         return f"{self.__class__.__name__}(layers={self.layers})"
+
+    def __len__(self):
+        """
+        This value corresponds to the number of layers in the model.
+        """
+        # Note: for DynamicCache, layers are initialized lazily, so this will not be accurate before the first
+        # forward through all the layers
+        return len(self.layers)
 
     def prefetch(self, layer_idx: int, only_non_sliding: bool = True):
         """
@@ -1282,6 +1300,22 @@ class Cache:
 
         return self.layers[layer_idx].get_seq_length()
 
+    def get_max_length(self, layer_idx: int | None = None) -> int:
+        """
+        Returns the maximum length of the cache. If `layer_idx` is not provided (default), this returns the maximum
+        accross all layers. Otherwise, return the maximum supported value for the given layer.
+        A value of `-1` means no maximum, or undefined maximum, e.g. for dynamic attention layers that can grow indefinitely,
+        or linear attention layer that do not have a sequence length dimension.
+        """
+        # For DynamicCache, where the layers are created at runtime
+        if layer_idx is not None and layer_idx >= len(self.layers):
+            return -1
+
+        if layer_idx is None:
+            return max(layer.get_max_length() for layer in self.layers)
+        else:
+            return self.layers[layer_idx].get_max_length()
+
     def has_previous_state(self, layer_idx: int | None = None) -> bool:
         """Returns whether the LinearAttention layer at index `layer_idx` has previous state or not."""
         if layer_idx is not None and layer_idx >= len(self.layers):
@@ -1338,14 +1372,6 @@ class Cache:
 
         return self.layers[layer_idx].get_mask_sizes(query_length)
 
-    def get_max_cache_shape(self, layer_idx: int = 0) -> int:
-        """Returns maximum sequence length of the cache object. Dynamic caches do not have a maximum length."""
-        # For DynamicCache, where the layers are created at runtime -> if it was not yet created, return -1
-        # as DynamicLayer does
-        if layer_idx >= len(self.layers):
-            return -1
-        return self.layers[layer_idx].get_max_cache_shape()
-
     def reset(self):
         """Recursively reset all layers tensors"""
         for layer_idx in range(len(self.layers)):
@@ -1372,19 +1398,12 @@ class Cache:
             self.layers[layer_idx].batch_select_indices(indices)
 
     @property
-    def max_batch_size(self) -> int:
-        """Return the maximum batch size of the cache"""
-        values = [layer.max_batch_size for layer in self.layers]
+    def batch_size(self) -> int:
+        """Return the batch size of the cache"""
+        values = [layer.batch_size for layer in self.layers]
         if len(set(values)) > 1:
-            raise ValueError(f"Max batch size is not consistent across layers: {values}")
+            raise ValueError(f"The batch size is not consistent across layers: {values}")
         return values[0]
-
-    @property
-    def max_cache_len(self) -> int:
-        """Return the maximum cache length of the cache"""
-        # Linear attention layers have no `max_cache_len`; skip them so a hybrid cache reports its attention layers'.
-        values = [layer.max_cache_len for layer in self.layers if hasattr(layer, "max_cache_len")]
-        return max(values) if values else 0
 
     @property
     def is_compileable(self) -> bool:
@@ -1415,13 +1434,25 @@ class Cache:
             for layer in self.layers
         ]
 
-    def __len__(self):
-        """
-        This value corresponds to the number of layers in the model.
-        """
-        # Note: for DynamicCache, layers are initialized lazily, so this will not be accurate before the first
-        # forward through all the layers
-        return len(self.layers)
+    def get_max_cache_shape(self, layer_idx: int = 0) -> int:
+        logger.warning_once(
+            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
+        )
+        return self.get_max_length(layer_idx)
+
+    @property
+    def max_cache_len(self) -> int:
+        logger.warning_once(
+            "`max_cache_len` is deprecated, and will be removed in version 5.16. Please use `get_max_length()` instead"
+        )
+        return self.get_max_length()
+
+    @property
+    def max_batch_size(self) -> int:
+        logger.warning_once(
+            "`max_batch_size` is deprecated, and will be removed in version 5.16. Please use the simpler `batch_size` instead"
+        )
+        return self.batch_size
 
 
 class DynamicCache(Cache):
@@ -1797,6 +1828,10 @@ class EncoderDecoderCache(Cache):
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         return self.self_attention_cache.get_seq_length(layer_idx)
 
+    def get_max_length(self, layer_idx: int | None = None) -> int:
+        """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
+        return self.self_attention_cache.get_max_length(layer_idx)
+
     def reset(self):
         self.self_attention_cache.reset()
         self.cross_attention_cache.reset()
@@ -1839,10 +1874,6 @@ class EncoderDecoderCache(Cache):
         self.self_attention_cache.batch_select_indices(indices)
         self.cross_attention_cache.batch_select_indices(indices)
 
-    def get_max_cache_shape(self) -> int:
-        """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
-        return self.self_attention_cache.get_max_cache_shape()
-
     def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
         return self.self_attention_cache.get_mask_sizes(query_length, layer_idx)
 
@@ -1853,6 +1884,12 @@ class EncoderDecoderCache(Cache):
     @property
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
+
+    def get_max_cache_shape(self, layer_idx: int = 0) -> int:
+        logger.warning_once(
+            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
+        )
+        return self.get_max_length(layer_idx)
 
 
 # Deprecated alias: SlidingWindowCache was removed in transformers v5. StaticCache is the replacement.

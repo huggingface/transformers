@@ -2486,9 +2486,7 @@ class GenerationTesterMixin:
             else:
                 model_input_length = prompt_length + generated_length
             query_length = (
-                prompt_length + generated_length
-                if not has_static_cache
-                else decoder_past_key_values.get_max_cache_shape()
+                prompt_length + generated_length if not has_static_cache else decoder_past_key_values.get_max_length()
             )
 
             expected_shape = (
@@ -3833,6 +3831,24 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(model.generation_config.bos_token_id == gen_output[0, 0])
         self.assertTrue(test_bos_id == gen_output[0, 0])
         self.assertTrue(generation_config.bos_token_id is None)
+
+    def test_prompt_lookup_decoding_no_eos_token(self):
+        # Same setup as test_prompt_lookup_decoding_stops_at_eos, but with no EOS in effect
+        # (eos_token_id=None, e.g. open-ended generation). The EOS-cropping branch must be skipped
+        # rather than running torch.isin(chosen_ids, None), which raises a TypeError.
+
+        input_ids = torch.randint(1, 50, (1, 10), device=torch_device)  # generate inputs in range from 1-50
+        arbitrary_ngram = 51  # arbitrary OOV unigram, as in test_prompt_lookup_decoding_stops_at_eos
+        input_ids[:, 3] = arbitrary_ngram  # earlier occurrence; its continuation is what gets proposed
+        input_ids[:, -1] = arbitrary_ngram  # put arbitrary_ngram in the end for the necessary match to happen
+
+        candidate_generator = PromptLookupCandidateGenerator(
+            eos_token_id=None, num_output_tokens=4, max_matching_ngram_size=1
+        )
+        output_prompt_lookup = candidate_generator.get_candidates(input_ids)[0]
+
+        # With no EOS to stop at, PLD proposes all num_output_tokens continuation tokens (10 + 4)
+        self.assertTrue(output_prompt_lookup.shape[-1] == 14)
 
     def test_speculative_decoding_equals_regular_decoding(self):
         draft_name = "double7/vicuna-68m"

@@ -325,7 +325,7 @@ def convert_moe_packed_tensors(
     try:
         return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
     # In the case of OOM due to very tight device_map, we convert and return on cpu - it will then be put back on correct
-    # devide with the accelerate dispatch (doing it right away may still lead to OOM, but more memory is available later)
+    # device with the accelerate dispatch (doing it right away may still lead to OOM, but more memory is available later)
     except torch.OutOfMemoryError:
         blocks = blocks.to("cpu")
         scales = scales.to("cpu")
