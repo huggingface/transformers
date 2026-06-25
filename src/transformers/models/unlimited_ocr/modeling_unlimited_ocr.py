@@ -1251,21 +1251,24 @@ class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         if self.prefill_length is None:
             self.prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
 
-        # TODO: can we remove the for loop?
-        for token_idx in range(sequence_length):
-            key = key_states[..., token_idx : token_idx + 1, :]
-            value = value_states[..., token_idx : token_idx + 1, :]
-            generated_length = self.keys.shape[-2] - self.prefill_length if self.keys.dim() > 1 else 0
-            if generated_length < self.sliding_window:
-                # Window not full yet: append (the buffer grows by one, like the stock sliding layer).
-                self.keys = torch.cat([self.keys, key], dim=-2)
-                self.values = torch.cat([self.values, value], dim=-2)
-            else:
-                # Window full: overwrite the oldest generated slot in place (ring buffer, constant length).
-                slot = self.prefill_length + self.ring_position
-                self.keys[..., slot : slot + 1, :] = key
-                self.values[..., slot : slot + 1, :] = value
-                self.ring_position = (self.ring_position + 1) % self.sliding_window
+        # Append while window still grows
+        generated_length = self.keys.shape[-2] - self.prefill_length if self.keys.dim() > 1 else 0
+        append_length = min(sequence_length, max(0, self.sliding_window - generated_length))
+        if append_length > 0:
+            self.keys = torch.cat([self.keys, key_states[..., :append_length, :]], dim=-2)
+            self.values = torch.cat([self.values, value_states[..., :append_length, :]], dim=-2)
+
+        # Overwrite once window size is reached
+        overwrite_length = sequence_length - append_length
+        if overwrite_length > 0:
+            # Only the most recent `sliding_window` overwrites survive
+            write_length = min(overwrite_length, self.sliding_window)
+            start = self.ring_position + overwrite_length - write_length
+            offsets = torch.arange(write_length, device=key_states.device)
+            slots = self.prefill_length + (start + offsets) % self.sliding_window
+            self.keys[..., slots, :] = key_states[..., sequence_length - write_length :, :]
+            self.values[..., slots, :] = value_states[..., sequence_length - write_length :, :]
+            self.ring_position = (self.ring_position + overwrite_length) % self.sliding_window
 
         return self.keys, self.values
 
