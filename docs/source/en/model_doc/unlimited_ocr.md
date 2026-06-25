@@ -51,7 +51,7 @@ model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", devic
 processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
 
 image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
-inputs = processor(images=image, text="<image>\ndocument parsing.", return_tensors="pt").to(model.device)
+inputs = processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=4096)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
@@ -75,7 +75,7 @@ num_pages = 2
 
 inputs = processor(
     images=[page1, page2],
-    text="<image>" * num_pages + "\nMulti page parsing.",
+    text="<image>" * num_pages + "Multi page parsing.",
     return_tensors="pt",
 ).to(model.device)
 
