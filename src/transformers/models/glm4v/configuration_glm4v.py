@@ -173,6 +173,10 @@ class Glm4vConfig(PreTrainedConfig):
             self.vision_config = self.sub_configs["vision_config"](**kwargs)
 
         if isinstance(self.text_config, dict):
+            # BC: pre-v5 saves placed `tie_word_embeddings` inside text_config. Forward it to the
+            # outer config (where v5's tying logic looks) when the root value is the default.
+            if not self.tie_word_embeddings and self.text_config.get("tie_word_embeddings"):
+                self.tie_word_embeddings = self.text_config["tie_word_embeddings"]
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"](**kwargs)
