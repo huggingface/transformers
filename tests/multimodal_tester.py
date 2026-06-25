@@ -277,7 +277,7 @@ class MultiModalModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if int(head_dim * partial_rotary_factor) <= 2:
             partial_rotary_factor = math.ceil((3 / head_dim) / 0.05) * 0.05
         partial_rotary_factor = round(partial_rotary_factor, 10)
-        text_config.partial_rotary_factor = None # override if present, so it doesn't interfere with test values 
+        text_config.partial_rotary_factor = None  # override if present, so it doesn't interfere with test values
 
         short_input = ids_tensor([1, 10], text_config.vocab_size)
         long_input = ids_tensor([1, int(text_config.max_position_embeddings * 1.5)], text_config.vocab_size)
