@@ -205,3 +205,54 @@ class OfflineModeTests(unittest.TestCase):
                 side_effect=LocalEntryNotFoundError("no snapshot found"),
             ):
                 self.assertEqual(list_repo_templates(RANDOM_BERT, local_files_only=False), [])
+
+
+class GetCheckpointShardFilesSecurityTests(unittest.TestCase):
+    """Regression tests for path traversal via `model.safetensors.index.json` `weight_map` values.
+
+    A malicious Hub repo can ship an `index.json` whose `weight_map` values are absolute paths
+    or contain `..` components. Because the loader builds shard paths with `os.path.join(repo, subfolder, f)`,
+    an attacker-controlled malicious value used to escape the checkpoint directory and load an
+    arbitrary `.safetensors`/`.bin` file as model weights, bypassing `use_safetensors`,
+    `weights_only`, and `trust_remote_code`. The loader now rejects any non-basename shard filename.
+    """
+
+    def _write_index(self, dir_path: str, shard_filename: str) -> str:
+        index_path = os.path.join(dir_path, "model.safetensors.index.json")
+        with open(index_path, "w") as f:
+            json.dump(
+                {"metadata": {"total_size": 0}, "weight_map": {"a.weight": shard_filename}},
+                f,
+            )
+        return index_path
+
+    def _call(self, d: str, index_path: str):
+        from transformers.utils.hub import get_checkpoint_shard_files
+
+        return get_checkpoint_shard_files(
+            d, index_path,
+            local_files_only=True, cache_dir=None, force_download=False, proxies=None,
+            local_files_only_enabled=None, token=None, revision="main",
+            subfolder="", user_agent=None, _commit_hash=None, tqdm_class=None,
+        )
+
+    def test_rejects_absolute_path_in_weight_map(self):
+        with tempfile.TemporaryDirectory() as d:
+            index_path = self._write_index(d, os.path.abspath(os.path.join(d, "model.safetensors")))
+            with self.assertRaisesRegex(ValueError, "Invalid shard filename"):
+                self._call(d, index_path)
+
+    def test_rejects_parent_traversal_in_weight_map(self):
+        with tempfile.TemporaryDirectory() as d:
+            index_path = self._write_index(d, "../../etc/passwd")
+            with self.assertRaisesRegex(ValueError, "Invalid shard filename"):
+                self._call(d, index_path)
+
+    def test_accepts_benign_relative_basename(self):
+        """Sanity check: a normal relative `model-00001-of-00001.safetensors` value still loads."""
+        with tempfile.TemporaryDirectory() as d:
+            shard_name = "model-00001-of-00001.safetensors"
+            index_path = self._write_index(d, shard_name)
+            open(os.path.join(d, shard_name), "wb").close()
+            shards, _ = self._call(d, index_path)
+            self.assertEqual(shards, [os.path.join(d, shard_name)])
