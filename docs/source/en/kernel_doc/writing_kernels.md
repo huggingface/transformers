@@ -69,6 +69,16 @@ class layers:
 > [!NOTE]
 > The `layers` class is required by the `kernels` library to expose the kernel entry point.
 
+> [!NOTE]
+> `conversion_mapping` uses Transformers-specific classes (`WeightConverter`, `Concatenate`, `WeightRenaming` from `transformers.conversion_mapping`). Because a kernel repo does not depend on Transformers, these imports must be guarded so the kernel can still be loaded without Transformers installed:
+> ```python
+> try:
+>     from transformers import Concatenate, WeightConverter
+>     from transformers.conversion_mapping import WeightRenaming
+> except ImportError:
+>     Concatenate = WeightConverter = WeightRenaming = None
+> ```
+
 Load this kernel by passing the repo and class name to [`KernelConfig`]. The key is the original module class name from the model. The value points to the `KernelName` class (not the `Layout`) in the repo.
 
 ```python
