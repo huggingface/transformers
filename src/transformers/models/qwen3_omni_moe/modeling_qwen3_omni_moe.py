@@ -54,7 +54,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     TransformersKwargs,
@@ -76,6 +76,9 @@ from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerConfig,
     Qwen3OmniMoeVisionEncoderConfig,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -3630,7 +3633,7 @@ class Qwen3OmniMoeCode2WavTransformerModel(Qwen3OmniMoePreTrainedModel):
         )
 
 
-class SnakeBeta(nn.Module):
+class Qwen3OmniMoeSnakeBeta(nn.Module):
     """
     A modified Snake function which uses separate parameters for the magnitude of the periodic components
     Shape:
@@ -3671,13 +3674,22 @@ class SnakeBeta(nn.Module):
         return hidden_states
 
 
+# Alias for BC
+class SnakeBeta(Qwen3OmniMoeSnakeBeta):
+    """Deprecated alias for `Qwen3OmniMoeSnakeBeta`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`SnakeBeta` is deprecated; please use `Qwen3OmniMoeSnakeBeta` instead.")
+        super().__init__(*args, **kwargs)
+
+
 class Qwen3OmniMoeCode2WavDecoderResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
 
-        self.act1 = SnakeBeta(dim)
+        self.act1 = Qwen3OmniMoeSnakeBeta(dim)
         self.conv1 = Qwen3OmniMoeCausalConvNet(dim, dim, kernel_size=7, dilation=dilation)
-        self.act2 = SnakeBeta(dim)
+        self.act2 = Qwen3OmniMoeSnakeBeta(dim)
         self.conv2 = Qwen3OmniMoeCausalConvNet(dim, dim, kernel_size=1)
 
     def forward(self, hidden_state):
@@ -3698,7 +3710,7 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
         upsample_rate = config.upsample_rates[layer_idx]
 
         block = [
-            SnakeBeta(in_dim),
+            Qwen3OmniMoeSnakeBeta(in_dim),
             Qwen3OmniMoeCausalTransConvNet(in_dim, out_dim, 2 * upsample_rate, upsample_rate),
         ]
 
@@ -3744,7 +3756,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
             decoder.append(Qwen3OmniMoeCode2WavDecoderBlock(config, i))
         output_dim = config.decoder_dim // 2 ** len(config.upsample_rates)
         decoder += [
-            SnakeBeta(output_dim),
+            Qwen3OmniMoeSnakeBeta(output_dim),
             Qwen3OmniMoeCausalConvNet(output_dim, 1, 7),
         ]
         self.decoder = nn.ModuleList(decoder)

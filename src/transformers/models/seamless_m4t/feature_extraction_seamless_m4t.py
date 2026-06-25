@@ -114,8 +114,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         waveform: np.ndarray,
     ) -> np.ndarray:
         """
-        Get mel-filter bank features using TorchAudio. Note that TorchAudio requires 16-bit signed integers as inputs
-        and hence the waveform should not be normalized before feature extraction.
+        Get mel-filter bank features using Numpy method to mimic Kaldi.
         """
         # by default, it extracts the left channel if stereo
         if len(waveform.shape) == 2:
