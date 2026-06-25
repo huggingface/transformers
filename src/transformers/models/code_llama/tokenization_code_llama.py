@@ -160,10 +160,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
             replacement="▁", prepend_scheme=prepend_scheme, split=False
         )
 
-        self._tokenizer.decoder = decoders.Sequence(
-            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse(), decoders.Strip(content=" ", left=1)]
-        )
-
         super().__init__(
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
@@ -179,6 +175,14 @@ class CodeLlamaTokenizer(TokenizersBackend):
             add_bos_token=add_bos_token,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
+        )
+        # Set after super().__init__() because from_pretrained loads tokenizer.json
+        # into self._tokenizer (overwriting whatever was set before super()), so any
+        # decoder assignment before the super() call is silently discarded.
+        # Strip is intentionally omitted: conditional stripping is handled in
+        # _decode to avoid eating real user-provided leading spaces.
+        self._tokenizer.decoder = decoders.Sequence(
+            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
         )
         self._prefix_token = prefix_token
         self._middle_token = middle_token
@@ -225,6 +229,31 @@ class CodeLlamaTokenizer(TokenizersBackend):
     @property
     def eot_token(self):
         return self._eot_token
+
+    def _decode(self, token_ids, skip_special_tokens=False, **kwargs):
+        text = super()._decode(token_ids, skip_special_tokens=skip_special_tokens, **kwargs)
+
+        if not text.startswith(" "):
+            return text
+
+        # The Metaspace prepend gives a synthetic ▁ that merges INTO the first
+        # content token (▁hello = 22172), so its space is not distinguishable
+        # and must be stripped. Real leading spaces produce one or more pure-▁
+        # tokens (▁=29871, ▁▁=259, ▁▁▁=1678, …) ahead of the first content
+        # token. A pure-▁ token is one whose text is entirely ▁ characters.
+        # Skip any leading BOS/special tokens before inspecting the first real
+        # token.
+        # Note: we do not gate on self.add_prefix_space here because the
+        # tokenizer.json loaded by from_pretrained may have a different
+        # prepend_scheme than self.add_prefix_space reflects.
+        all_special_ids = set(self.all_special_ids)
+        first_real_id = next((t for t in token_ids if t not in all_special_ids), None)
+        if first_real_id is not None:
+            first_real_token = self.convert_ids_to_tokens(first_real_id) or ""
+            if all(c == SPIECE_UNDERLINE for c in first_real_token):
+                return text  # real leading space(s) — preserve them
+
+        return text[1:]  # synthetic prefix — strip it
 
     def set_infilling_processor(self, reset, suffix_first=False, add_special_tokens=True):
         """
