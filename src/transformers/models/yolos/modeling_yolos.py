@@ -434,7 +434,7 @@ class YolosEncoder(nn.Module):
 
             if self.config.use_mid_position_embeddings:
                 if i < (self.config.num_hidden_layers - 1):
-                    hidden_states = hidden_states + interpolated_mid_position_embeddings[i]
+                    hidden_states = hidden_states + interpolated_mid_position_embeddings[i].to(hidden_states.device)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
