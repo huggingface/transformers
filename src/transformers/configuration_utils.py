@@ -989,6 +989,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # Only serialize values that differ from the default config,
         # except always keep the 'config' attribute.
         for key, value in config_dict.items():
+            # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
             attr = self._getattr_without_heterogeneous_validation(key, None)
 
             if (
@@ -1366,6 +1367,7 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
     for key, value in dict_a.items():
+        # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
         obj_value = (
             config_obj._getattr_without_heterogeneous_validation(str(key), None) if config_obj is not None else None
         )
