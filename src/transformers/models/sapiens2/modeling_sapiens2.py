@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ... import initialization as init
@@ -1151,6 +1152,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         flip_pairs: torch.Tensor | None = None,
         labels: torch.FloatTensor | None = None,
+        label_weights: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sapiens2PoseEstimatorOutput:
         r"""
@@ -1161,6 +1163,8 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
             original orientation.
         labels (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
             Heatmap ground truth for computing the loss.
+        label_weights (`torch.FloatTensor` of shape `(batch_size, num_labels, 1, 1)` or `(batch_size, num_labels, height, width)`, *optional*):
+            Visibility weights for each keypoint. Must be broadcastable to the shape of `labels`.
 
         Example:
 
@@ -1200,7 +1204,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            raise NotImplementedError("Training is not yet supported")
+            loss = F.mse_loss(heatmaps, labels, weight=label_weights)
 
         return Sapiens2PoseEstimatorOutput(
             loss=loss,

@@ -183,18 +183,31 @@ class Sapiens2ModelTester:
             (self.batch_size, config.num_labels, expected_h, expected_h),
         )
 
-    def create_and_check_for_pose_estimation(self, config, pixel_values, labels):
+    def create_and_check_for_pose_estimation(self, config, pixel_values, labels, label_weights):
         model = Sapiens2ForPoseEstimation(config)
         model.to(torch_device)
         model.eval()
+
         with torch.no_grad():
             result = model(pixel_values)
+
         patch_height = self.image_size // self.patch_size
         expected_h = patch_height * (2 ** len(config.head_config.upsample_out_channels))
+
         self.parent.assertEqual(
             result.heatmaps.shape,
             (self.batch_size, config.num_labels, expected_h, expected_h),
         )
+
+        # Test standard loss backward pass
+        result_with_loss = model(pixel_values, labels=labels)
+        self.parent.assertIsNotNone(result_with_loss.loss)
+        result_with_loss.loss.backward()
+
+        # Test weighted loss backward pass
+        result_with_weights = model(pixel_values, labels=labels, label_weights=label_weights)
+        self.parent.assertIsNotNone(result_with_weights.loss)
+        result_with_weights.loss.backward()
 
     def create_and_check_for_normal_estimation(self, config, pixel_values, labels):
         model = Sapiens2ForNormalEstimation(config)
@@ -278,6 +291,18 @@ class Sapiens2ModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_pose_estimation(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs[0], config_and_inputs[1]
+
+        patch_height = self.image_size // self.patch_size
+        expected_h = patch_height * (2 ** len(config.head_config.upsample_out_channels))
+
+        labels = floats_tensor([self.batch_size, config.num_labels, expected_h, expected_h])
+        label_weights = floats_tensor([self.batch_size, config.num_labels, expected_h, expected_h])
+
+        return config, pixel_values, labels, label_weights
+
 
 @require_torch
 class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -351,7 +376,7 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
 
     def test_for_pose_estimation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_semantic_segmentation()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pose_estimation()
         self.model_tester.create_and_check_for_pose_estimation(*config_and_inputs)
 
     def test_for_pointmap_estimation(self):
