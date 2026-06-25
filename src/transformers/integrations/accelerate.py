@@ -437,7 +437,6 @@ def accelerate_disk_offload(
     checkpoint_files: list[str] | None,
     device_map: dict,
     sharded_metadata: dict | None,
-    dtype: torch.dtype | None,
     weight_mapping=None,
 ):
     """
@@ -460,7 +459,6 @@ def accelerate_disk_offload(
     if is_offloaded_safetensors:
         meta_state_dict = model.state_dict()
         param_device_map = expand_device_map(device_map, meta_state_dict.keys())
-        str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
         if sharded_metadata is None:
             weight_map = dict.fromkeys(safe_open(checkpoint_files[0], framework="pt").keys(), checkpoint_files[0])
         else:
@@ -480,12 +478,19 @@ def accelerate_disk_offload(
             target_name: {
                 "safetensors_file": weight_map[source_name],
                 "weight_name": source_name,
-                "dtype": str_dtype,
+                "dtype": str(meta_state_dict[target_name].dtype).removeprefix("torch."),
             }
             for target_name, source_name in weight_renaming_map.items()
             # Need to check if it's in the mapping in case of unexpected keys that would result in KeyError (we skip them)
             if target_name in param_device_map and param_device_map[target_name] == "disk"
         }
+
+        # Tie weights which are both disk offloaded
+        all_tied_weights_keys = getattr(model, "all_tied_weights_keys", {})
+        for target_param_name, source_param_name in all_tied_weights_keys.items():
+            if source_param_name in disk_offload_index and target_param_name not in disk_offload_index:
+                disk_offload_index[target_param_name] = disk_offload_index[source_param_name]
+
     # In this case we will resave every offloaded weight
     else:
         disk_offload_index = {}

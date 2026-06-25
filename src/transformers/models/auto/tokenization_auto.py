@@ -85,7 +85,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("blenderbot", "BlenderbotTokenizer" if is_tokenizers_available() else None),
         ("blenderbot-small", "BlenderbotSmallTokenizer"),
         ("blip", "BertTokenizer" if is_tokenizers_available() else None),
-        ("blip-2", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("blip-2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("bridgetower", "RobertaTokenizer"),
         ("bros", "BertTokenizer" if is_tokenizers_available() else None),
         ("byt5", "ByT5Tokenizer"),
@@ -162,8 +162,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("ibert", "RobertaTokenizer"),
         ("idefics", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("idefics2", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("instructblip", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("instructblipvideo", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("instructblip", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("instructblipvideo", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("internvl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("jina_embeddings_v3", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
@@ -380,6 +380,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "janus",
     "llava",
     "llava_next",
+    "minicpm3",
     "minicpmv",
     "minimax_m2",
     "modernbert",
@@ -416,6 +417,9 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
+    "salesforce/blip2-opt-*",
+    "salesforce/blip2-flan-t5-*",
+    "salesforce/instructblip-flan-t5-*",
 ]
 
 

@@ -148,10 +148,10 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
             inv_timescales = torch.exp(-log_timescale_increment * torch.arange(module.channels // 2).float())
             scaled_time = torch.arange(module.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
             init.copy_(module.positional_embedding, torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1))
-        elif isinstance(module, UpSample1d):
+        elif isinstance(module, Qwen2_5OmniUpSample1d):
             filter_tensor = kaiser_sinc_filter1d(0.5 / module.ratio, 0.6 / module.ratio, module.kernel_size)
             init.copy_(module.filter, filter_tensor)
-        elif isinstance(module, DownSample1d):
+        elif isinstance(module, Qwen2_5OmniDownSample1d):
             filter_tensor = kaiser_sinc_filter1d(module.cutoff, module.half_width, module.kernel_size)
             init.copy_(module.filter, filter_tensor)
         elif isinstance(module, Qwen2_5_VisionRotaryEmbedding):
@@ -1661,7 +1661,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
         # where each dim indicates visual spatial positions for temporal/height/width grids.
         # There are two scenarios when FA2-like packed masking might be activated.
         # 1. User specifically passed packed `position_ids` and no attention mask.
-        #    In this case we expect the useer to create correct position ids for all 3 grids
+        #    In this case we expect the user to create correct position ids for all 3 grids
         #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
         # 2. User runs forward with no attention mask and no position ids. In this case, position ids
         #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
@@ -2162,7 +2162,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
         # where each dim indicates visual spatial positions for temporal/height/width grids.
         # There are two scenarios when FA2-like packed masking might be activated.
         # 1. User specifically passed packed `position_ids` and no attention mask.
-        #    In this case we expect the useer to create correct position ids for all 3 grids
+        #    In this case we expect the user to create correct position ids for all 3 grids
         #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
         # 2. User runs forward with no attention mask and no position ids. In this case, position ids
         #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
@@ -3076,7 +3076,7 @@ class DiTDecoderLayer(nn.Module):
         return hidden_states
 
 
-class SnakeBeta(nn.Module):
+class Qwen2_5OmniSnakeBeta(nn.Module):
     """
     A modified Snake function which uses separate parameters for the magnitude of the periodic components
     Shape:
@@ -3117,7 +3117,7 @@ class SnakeBeta(nn.Module):
         return hidden_states
 
 
-class UpSample1d(nn.Module):
+class Qwen2_5OmniUpSample1d(nn.Module):
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
         self.ratio = ratio
@@ -3142,7 +3142,7 @@ class UpSample1d(nn.Module):
         return hidden_states
 
 
-class DownSample1d(nn.Module):
+class Qwen2_5OmniDownSample1d(nn.Module):
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
         cutoff = 0.5 / ratio
@@ -3170,7 +3170,7 @@ class DownSample1d(nn.Module):
         return out
 
 
-class TorchActivation1d(nn.Module):
+class Qwen2_5OmniAntiAliasedActivation1d(nn.Module):
     def __init__(
         self,
         activation,
@@ -3183,8 +3183,8 @@ class TorchActivation1d(nn.Module):
         if not callable(activation):
             raise TypeError("Activation function must be callable")
         self.act = activation
-        self.upsample = UpSample1d(up_ratio, up_kernel_size)
-        self.downsample = DownSample1d(down_ratio, down_kernel_size)
+        self.upsample = Qwen2_5OmniUpSample1d(up_ratio, up_kernel_size)
+        self.downsample = Qwen2_5OmniDownSample1d(down_ratio, down_kernel_size)
 
     def forward(self, hidden_states):
         hidden_states = self.upsample(hidden_states)
@@ -3194,7 +3194,7 @@ class TorchActivation1d(nn.Module):
         return hidden_states
 
 
-class AMPBlock(torch.nn.Module):
+class Qwen2_5OmniAMPBlock(torch.nn.Module):
     def __init__(
         self,
         channels,
@@ -3264,7 +3264,10 @@ class AMPBlock(torch.nn.Module):
         self.num_layers = len(self.convs1) + len(self.convs2)  # total number of conv layers
 
         self.activations = nn.ModuleList(
-            [TorchActivation1d(activation=SnakeBeta(channels)) for _ in range(self.num_layers)]
+            [
+                Qwen2_5OmniAntiAliasedActivation1d(activation=Qwen2_5OmniSnakeBeta(channels))
+                for _ in range(self.num_layers)
+            ]
         )
 
     def _get_padding(self, kernel_size, dilation=1):
@@ -3281,6 +3284,47 @@ class AMPBlock(torch.nn.Module):
             hidden_states = residual + hidden_states
 
         return hidden_states
+
+
+# Alias for BC
+class Activation1d(Qwen2_5OmniAntiAliasedActivation1d):
+    """Deprecated alias for `Qwen2_5OmniAntiAliasedActivation1d`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`Activation1d` is deprecated; please use `Qwen2_5OmniAntiAliasedActivation1d` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class UpSample1d(Qwen2_5OmniUpSample1d):
+    """Deprecated alias for `Qwen2_5OmniUpSample1d`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`UpSample1d` is deprecated; please use `Qwen2_5OmniUpSample1d` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class DownSample1d(Qwen2_5OmniDownSample1d):
+    """Deprecated alias for `Qwen2_5OmniDownSample1d`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`DownSample1d` is deprecated; please use `Qwen2_5OmniDownSample1d` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class SnakeBeta(Qwen2_5OmniSnakeBeta):
+    """Deprecated alias for `Qwen2_5OmniSnakeBeta`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`SnakeBeta` is deprecated; please use `Qwen2_5OmniSnakeBeta` instead.")
+        super().__init__(*args, **kwargs)
+
+
+class AMPBlock(Qwen2_5OmniAMPBlock):
+    """Deprecated alias for `Qwen2_5OmniAMPBlock`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`AMPBlock` is deprecated; please use `Qwen2_5OmniAMPBlock` instead.")
+        super().__init__(*args, **kwargs)
 
 
 @auto_docstring(
@@ -3318,14 +3362,14 @@ class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
 
         self.resblocks = nn.ModuleList(
             [
-                AMPBlock(config.upsample_initial_channel // (2 ** (layer_idx + 1)), kernel_size, dilation)
+                Qwen2_5OmniAMPBlock(config.upsample_initial_channel // (2 ** (layer_idx + 1)), kernel_size, dilation)
                 for layer_idx in range(self.num_upsample_layers)
                 for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)
             ]
         )
 
-        self.activation_post = TorchActivation1d(
-            activation=SnakeBeta(config.upsample_initial_channel // (2**self.num_upsample_layers))
+        self.activation_post = Qwen2_5OmniAntiAliasedActivation1d(
+            activation=Qwen2_5OmniSnakeBeta(config.upsample_initial_channel // (2**self.num_upsample_layers))
         )
         self.conv_post = nn.Conv1d(
             config.upsample_initial_channel // (2**self.num_upsample_layers), 1, 7, 1, padding=3, bias=False
