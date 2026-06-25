@@ -62,7 +62,7 @@ class UnlimitedOcrProcessor(ProcessorMixin):
     def _expand_image_tokens(
         self,
         text: list[TextInput],
-        local_patches_grid: torch.Tensor,
+        patches_grid: torch.Tensor,
         num_local_patches: list[int] | torch.Tensor,
     ) -> list[str]:
         """
@@ -78,13 +78,13 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         Returns:
             `list[str]`: Text with expanded image token placeholders.
         """
-        num_images = len(local_patches_grid)
+        num_images = len(patches_grid)
         total_image_tokens = sum(t.count(self.image_token) for t in text)
         if total_image_tokens != num_images:
             raise ValueError(
                 f"Number of `{self.image_token}` tokens in the text ({total_image_tokens}) does not match the "
                 f"number of images passed ({num_images}). Use one `{self.image_token}` placeholder per image, "
-                f"e.g. `'<image>' * len(images) + '\\nMulti page parsing.'`"
+                f"e.g. `'<image>' * len(images) + 'Multi page parsing.'`"
             )
 
         size = self.image_processor.size["height"]
@@ -96,8 +96,8 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         crop_index = 0
         for i in range(len(text)):
             while self.image_token in text[i]:
-                num_columns = int(local_patches_grid[crop_index][0])
-                num_rows = int(local_patches_grid[crop_index][1])
+                num_columns = int(patches_grid[crop_index][0])
+                num_rows = int(patches_grid[crop_index][1])
                 num_tokens = num_queries_global * (num_queries_global + 1) + 1
                 if int(num_local_patches[crop_index]) > 0:
                     num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
@@ -123,6 +123,8 @@ class UnlimitedOcrProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Global view pixel values. Returned when `images` is not `None`.
             - **pixel_values_local** -- Local patch pixel values. Returned when `images` is not `None`.
+            - **num_local_patches** -- Number of local patches per image. Returned when `images` is not `None`.
+            - **patches_grid** -- Number of patch columns and rows per image. Returned when `images` is not `None`.
         """
         if images is None:
             raise ValueError("`images` are expected as arguments to a `UnlimitedOcrProcessor` instance.")
@@ -143,7 +145,7 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         text = text.copy()  # below lines change text in-place
 
         image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        text = self._expand_image_tokens(text, image_inputs["local_patches_grid"], image_inputs["num_local_patches"])
+        text = self._expand_image_tokens(text, image_inputs["patches_grid"], image_inputs["num_local_patches"])
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])

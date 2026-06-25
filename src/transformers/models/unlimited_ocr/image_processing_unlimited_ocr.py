@@ -146,7 +146,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
     max_patches = 32
     tile_size = 640
     background_color = [127, 127, 127]
-    model_input_names = ["pixel_values", "num_local_patches", "local_patches_grid"]
+    model_input_names = ["pixel_values", "num_local_patches", "patches_grid"]
 
     def __init__(self, **kwargs: Unpack[UnlimitedOcrImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -279,7 +279,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
             data["pixel_values_local"] = flat_local_list
 
         # Compute per-image spatial crop grid and local-patch counts.
-        local_patches_grid = []
+        patches_grid = []
         num_local_patches = []
         for image in images:
             height, width = image.shape[-2:]
@@ -291,10 +291,10 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
             else:
                 num_columns, num_rows = 1, 1
                 num_local_patches.append(0)
-            local_patches_grid.append([num_columns, num_rows])
+            patches_grid.append([num_columns, num_rows])
 
         data["num_local_patches"] = num_local_patches
-        data["local_patches_grid"] = local_patches_grid
+        data["patches_grid"] = patches_grid
 
         return BatchFeature(
             data=data,
