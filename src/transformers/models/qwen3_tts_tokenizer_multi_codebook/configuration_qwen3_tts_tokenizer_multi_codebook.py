@@ -23,65 +23,34 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
-from ..mimi.configuration_mimi import MimiConfig
-from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeCode2WavConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
 @strict
-class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
+class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(PreTrainedConfig):
     r"""
-    Configuration class for the Qwen3-TTS V2 tokenizer decoder (Code2Wav).
+    Configuration class for the Qwen3-TTS V2 tokenizer decoder (Code2Wav). Only the fields specific to the
+    multi-codebook tokenizer are documented below; the remaining transformer and vocoder defaults are shared with
+    [`Qwen3OmniMoeCode2WavConfig`].
 
     Args:
         hidden_size (`int`, *optional*, defaults to 512):
             Dimension of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 8):
-            Number of hidden transformer layers.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads.
-        num_key_value_heads (`int`, *optional*, defaults to 16):
-            Number of key/value heads for GQA.
-        head_dim (`int`, *optional*, defaults to 64):
-            Attention head dimension.
         intermediate_size (`int`, *optional*, defaults to 1024):
             MLP intermediate dimension.
-        hidden_act (`str`, *optional*, defaults to `"silu"`):
-            Activation function.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            Epsilon for RMS norm.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in attention projections.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Attention dropout probability.
-        sliding_window (`int`, *optional*, defaults to 72):
-            Sliding window size for attention.
-        max_position_embeddings (`int`, *optional*, defaults to 8000):
-            Maximum sequence length.
-        rope_parameters (`RopeParameters`, *optional*):
-            RoPE configuration.
-        layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-            Initial scale for layer scale residual.
+        head_dim (`int`, *optional*, defaults to 64):
+            Attention head dimension.
         codebook_dim (`int`, *optional*, defaults to 512):
             Dimension of quantizer codebook vectors.
-        num_quantizers (`int`, *optional*, defaults to 16):
-            Number of residual vector quantizers.
         num_semantic_quantizers (`int`, *optional*, defaults to 1):
             Number of semantic quantizer layers.
-        codebook_size (`int`, *optional*, defaults to 2048):
-            Size of each codebook.
         semantic_codebook_size (`int`, *optional*, defaults to 4096):
             Size of the semantic codebook.
         latent_dim (`int`, *optional*, defaults to 1024):
             Latent dimension used between pre-conv and transformer.
-        decoder_dim (`int`, *optional*, defaults to 1536):
-            Initial dimension for the convolutional decoder stack.
-        upsample_rates (`list[int]`, *optional*, defaults to `[8, 5, 4, 3]`):
-            Upsampling rates for the BigVGAN-style decoder.
-        upsampling_ratios (`list[int]`, *optional*, defaults to `[2, 2]`):
-            Upsampling ratios for the pre-transformer upsample blocks.
         vector_quantization_hidden_dimension (`int`, *optional*, defaults to 512):
             Hidden dimension for the vector quantization projection.
         use_causal_conv (`bool`, *optional*, defaults to `True`):
@@ -90,67 +59,43 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
             Ratio for trimming the right side of transposed convolution output.
     """
 
-    model_type = "qwen3_tts_tokenizer_multi_codebook_code2wav"
+    codebook_size: int = 2048
 
-    def __init__(
-        self,
-        hidden_size: int | None = 512,
-        num_hidden_layers: int | None = 8,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 16,
-        head_dim: int | None = 64,
-        intermediate_size: int | None = 1024,
-        hidden_act: str | None = "silu",
-        rms_norm_eps: float | None = 1e-5,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        sliding_window: int | None = 72,
-        max_position_embeddings: int | None = 8000,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        layer_scale_initial_scale: float | None = 0.01,
-        codebook_dim: int | None = 512,
-        num_quantizers: int | None = 16,
-        num_semantic_quantizers: int | None = 1,
-        codebook_size: int | None = 2048,
-        semantic_codebook_size: int | None = 4096,
-        latent_dim: int | None = 1024,
-        decoder_dim: int | None = 1536,
-        upsample_rates: list[int] | None = None,
-        upsampling_ratios: list[int] | None = None,
-        vector_quantization_hidden_dimension: int | None = 512,
-        use_causal_conv: bool | None = True,
-        trim_right_ratio: float | None = 1.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
-        self.head_dim = head_dim
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.rms_norm_eps = rms_norm_eps
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.sliding_window = sliding_window
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_parameters = (
-            rope_parameters if rope_parameters is not None else {"rope_type": "default", "rope_theta": 10000.0}
-        )
-        self.layer_scale_initial_scale = layer_scale_initial_scale
-        self.codebook_dim = codebook_dim
-        self.num_quantizers = num_quantizers
-        self.num_semantic_quantizers = num_semantic_quantizers
-        self.codebook_size = codebook_size
-        self.semantic_codebook_size = semantic_codebook_size
-        self.latent_dim = latent_dim
-        self.decoder_dim = decoder_dim
-        self.upsample_rates = list(upsample_rates) if upsample_rates is not None else [8, 5, 4, 3]
-        self.upsampling_ratios = list(upsampling_ratios) if upsampling_ratios is not None else [2, 2]
-        self.vector_quantization_hidden_dimension = vector_quantization_hidden_dimension
-        self.use_causal_conv = use_causal_conv
-        self.trim_right_ratio = trim_right_ratio
+    hidden_size: int = 512
+    max_position_embeddings: int = 8000
+    rope_parameters: RopeParameters | dict | None = None
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    attention_bias: bool = False
+    sliding_window: int = 72
+    intermediate_size: int = 1024
+    hidden_act: str = "silu"
+    layer_scale_initial_scale: float = 0.01
+    rms_norm_eps: float = 1e-5
+    num_hidden_layers: int = 8
+    num_quantizers: int = 16
+    upsample_rates: list[int] | tuple[int, ...] = (8, 5, 4, 3)
+    upsampling_ratios: list[int] | tuple[int, ...] = (2, 2)
+    decoder_dim: int = 1536
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
+
+    model_type = "qwen3_tts_tokenizer_multi_codebook_code2wav"
+    head_dim: int = 64
+    codebook_dim: int = 512
+    num_semantic_quantizers: int = 1
+    semantic_codebook_size: int = 4096
+    latent_dim: int = 1024
+    vector_quantization_hidden_dimension: int = 512
+    use_causal_conv: bool = True
+    trim_right_ratio: float = 1.0
+
+    @property
+    def layer_types(self):
+        """
+        All layer in code2wav should be sliding attention
+        """
+        return ["sliding_attention"] * self.num_hidden_layers
 
 
 @strict
