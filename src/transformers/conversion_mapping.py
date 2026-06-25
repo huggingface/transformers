@@ -791,6 +791,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "esmc": [
+            WeightRenaming(r"embed\.", "embed_tokens."),
             WeightRenaming(r"transformer\.blocks", "layers"),
             # The negative lookbehinds anchor the *reverse* search to the final encoder
             # norm only (they are stripped from the forward replacement), so saving does
