@@ -22,7 +22,7 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .distributed import DistributedHelper
-from .encoder_cache import EncoderCache
+from .encoder_cache import EmbeddingsCache
 from .initialization import resolve_max_memory_percent
 from .requests import RequestState, RequestStatus, get_device_and_memory_breakdown, logger
 from .utils import find_head_dim, find_num_kv_heads
@@ -291,9 +291,9 @@ class PagedAttentionCache:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
 
-        # If there is one, initialize the encoder cache
+        # If there is one, initialize the embeddings cache
         if is_multimodal_model:
-            self.encoder_cache = EncoderCache(
+            self.embeddings_cache = EmbeddingsCache(
                 config=config,
                 modality=mm_modality,
                 max_batch_tokens=max_batch_tokens,
@@ -301,7 +301,7 @@ class PagedAttentionCache:
                 device=self.device,
             )
         else:
-            self.encoder_cache = None
+            self.embeddings_cache = None
 
         # We only use prefix sharing if the model is text-only, sharing available for all groups and allowed by user
         # TODO: support prefix sharing for multimodal models using content hashing
@@ -575,8 +575,8 @@ class PagedAttentionCache:
             all_request_ids.update(cm.block_table.keys())
         for request_id in all_request_ids:
             self.free_blocks(request_id)
-        if self.encoder_cache is not None:
-            self.encoder_cache.free_all_requests()
+        if self.embeddings_cache is not None:
+            self.embeddings_cache.free_all_requests()
 
 
 # TODO: rework computation with the groups and their sizes
@@ -744,7 +744,7 @@ class PagedAttentionMemoryHandler:
         """
         available = self.get_available_memory(max_memory_percent)
         logger.info(f"Cache memory: {available}")
-        # If the model is multimodal, we account for the encoder cache memory here
+        # If the model is multimodal, we account for the embeddings cache memory here
         if self.is_multimodal_model:
             available -= 16384 * self.hidden_size * self._activation_dtype.itemsize
         # Solve each peak independently, then take the element-wise min (tightest constraint wins)

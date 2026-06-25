@@ -394,7 +394,7 @@ class ContinuousBatchProcessor:
 
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        future_states, new_tokens, logprobs, encoder_cache_to_free = self.inputs_and_outputs.prepare_batch_update()
+        future_states, new_tokens, logprobs, embeddings_cache_to_free = self.inputs_and_outputs.prepare_batch_update()
         current_logits_index = 0
         pending_outputs = []
         for future_state in future_states:
@@ -433,9 +433,9 @@ class ContinuousBatchProcessor:
         if pending_outputs:
             self.output_router.deliver_batch(pending_outputs)
 
-        # If there are requests in the encoder cache with cache to free, we release them now
-        if self.cache.encoder_cache is not None:
-            self.cache.encoder_cache.release_cache_for_requests(encoder_cache_to_free)
+        # If there are requests in the embeddings cache with cache to free, we release them now
+        if self.cache.embeddings_cache is not None:
+            self.cache.embeddings_cache.release_cache_for_requests(embeddings_cache_to_free)
 
         # If some requests need to be forked, we do it now
         copy_source, copy_destination = [], []
@@ -981,9 +981,9 @@ class ContinuousBatchingManager:
             batch_processor.reset()
             return batch_processor
 
-        # Create the paged attention cache (for KV) and maybe an encoder cache (for multimodal embeddings)
+        # Create the paged attention cache (for KV) and maybe an embeddings cache (for multimodal embeddings)
         mm_modality = check_modality_support(self.model.input_modalities)
-        # The KV cache is dimensionned to take the encoder cache into account if there is one
+        # The KV cache is dimensionned to take the embeddings cache into account if there is one
         paged_attention_cache = PagedAttentionCache(
             config=self.model.config,
             continuous_batching_config=self.continuous_batching_config,

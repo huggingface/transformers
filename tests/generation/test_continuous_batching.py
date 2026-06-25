@@ -48,7 +48,7 @@ from transformers.generation.continuous_batching.cache import (
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
 from transformers.generation.continuous_batching.continuous_api import OutputRouter
 from transformers.generation.continuous_batching.distributed import DistributedHelper
-from transformers.generation.continuous_batching.encoder_cache import EncoderCache
+from transformers.generation.continuous_batching.encoder_cache import EmbeddingsCache
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
 from transformers.generation.continuous_batching.requests import GenerationOutput, RequestState, RequestStatus
@@ -445,6 +445,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             device=torch_device,
             tp_plan={},
             distributed_helper=DistributedHelper(device_mesh=None, cpu_group_timeout=300),
+            mm_modality=None,
         )
 
         # Overload cache parameters to match test scenario
@@ -643,8 +644,8 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 os.environ["WORLD_SIZE"] = original_ws
 
 
-class EncoderCacheTest(unittest.TestCase):
-    """Unit tests for the multimodal EncoderCache. All run on CPU and exercise the underlying methods directly,
+class EmbeddingsCacheTest(unittest.TestCase):
+    """Unit tests for the multimodal EmbeddingsCache. All run on CPU and exercise the underlying methods directly,
     without spinning up a model."""
 
     # Real models per modality: only their config is loaded (no weights), so size does not matter here
@@ -654,29 +655,29 @@ class EncoderCacheTest(unittest.TestCase):
     }
 
     def load_config(self, modality: str = "image") -> PretrainedConfig:
-        """Loads a real config for the given modality so the EncoderCache is exercised against actual model metadata
+        """Loads a real config for the given modality so the EmbeddingsCache is exercised against actual model metadata
         (its special-token id and text hidden size) rather than a hand-built dummy. A fresh object is returned on each
         call so tests can safely mutate it."""
         return AutoConfig.from_pretrained(self.MODEL_IDS[modality])
 
-    def get_config_and_encoder_cache(
+    def get_config_and_embeddings_cache(
         self,
         modality: str = "image",
         max_batch_tokens: int = 8,
         use_async_batching: bool = False,
         config: PretrainedConfig | None = None,
-    ) -> tuple[PretrainedConfig, EncoderCache]:
-        """Builds a CPU-resident EncoderCache (and returns the config it was built from) for unit testing the
+    ) -> tuple[PretrainedConfig, EmbeddingsCache]:
+        """Builds a CPU-resident EmbeddingsCache (and returns the config it was built from) for unit testing the
         underlying methods. A config can be passed in to override the default real one for the modality."""
         config = self.load_config(modality) if config is None else config
-        encoder_cache = EncoderCache(
+        embeddings_cache = EmbeddingsCache(
             config=config,
             modality=modality,
             max_batch_tokens=max_batch_tokens,
             model_dtype=torch.float32,
             device=torch.device("cpu"),
         )
-        return config, encoder_cache
+        return config, embeddings_cache
 
     @parameterized.expand(
         [
@@ -685,17 +686,17 @@ class EncoderCacheTest(unittest.TestCase):
         ]
     )
     def test_specialize_on_modality(self, modality: str, token_attr: str, expected_fn: str) -> None:
-        config, cache = self.get_config_and_encoder_cache(modality=modality)
+        config, cache = self.get_config_and_embeddings_cache(modality=modality)
         # Check that the modality resolves the right token and function
         self.assertEqual(cache.special_token_id, getattr(config, token_attr))
         self.assertEqual(cache.modality, modality)
         # Check that the cache detects an invalid modality
         wrong_modality = {"image": "audio", "audio": "image"}[modality]
         with self.assertRaises(ValueError):
-            self.get_config_and_encoder_cache(modality=wrong_modality, config=config)
+            self.get_config_and_embeddings_cache(modality=wrong_modality, config=config)
         # Check that the specialized token is present
         with self.assertRaises(ValueError):
-            self.get_config_and_encoder_cache(modality=wrong_modality, config=config)
+            self.get_config_and_embeddings_cache(modality=wrong_modality, config=config)
 
     @parameterized.expand([("zero", 0), ("negative", -1)])
     def test_specialize_on_modality_non_positive_token_id_raises(self, _name: str, token_id: int) -> None:
@@ -703,10 +704,10 @@ class EncoderCacheTest(unittest.TestCase):
         config = self.load_config()
         config.image_token_index = token_id  # image_token_id reads through this on the real config
         with self.assertRaises(ValueError):
-            self.get_config_and_encoder_cache(modality="image", config=config)
+            self.get_config_and_embeddings_cache(modality="image", config=config)
 
     def test_extract_mm_embeddings(self) -> None:
-        _, cache = self.get_config_and_encoder_cache()
+        _, cache = self.get_config_and_embeddings_cache()
         # from pooler_output
         feats = torch.randn(3, 8)
         torch.testing.assert_close(cache.extract_mm_embeddings(SimpleNamespace(pooler_output=feats)), feats)
@@ -722,7 +723,7 @@ class EncoderCacheTest(unittest.TestCase):
 
     def test_can_store_counts_and_caches_embeddings_length(self) -> None:
         """can_store_mm_embeddings counts the special tokens once and memoizes the length per request."""
-        config, cache = self.get_config_and_encoder_cache()
+        config, cache = self.get_config_and_embeddings_cache()
         img = config.image_token_id
         state = RequestState(request_id="r", initial_tokens=[1, img, 1, img, img])  # 3 image tokens
         self.assertTrue(cache.can_store_mm_embeddings(state))
@@ -733,7 +734,7 @@ class EncoderCacheTest(unittest.TestCase):
         self.assertEqual(cache.embeddings_lengths["r"], 3)
 
     def test_can_store_returns_false_when_not_enough_free_blocks(self) -> None:
-        config, cache = self.get_config_and_encoder_cache()
+        config, cache = self.get_config_and_embeddings_cache()
         img = config.image_token_id
         state = RequestState(request_id="r", initial_tokens=[img, img, img])  # 3 image tokens
         cache.free_blocks = deque([0, 1])  # fewer free blocks than demand
@@ -741,7 +742,7 @@ class EncoderCacheTest(unittest.TestCase):
 
     def test_allocate_blocks_builds_mask_and_consumes_free_blocks(self) -> None:
         """allocate_blocks maps each special-token position to a freshly popped block and -1 elsewhere."""
-        config, cache = self.get_config_and_encoder_cache()
+        config, cache = self.get_config_and_embeddings_cache()
         img = config.image_token_id
         state = RequestState(request_id="r", initial_tokens=[1, img, img, 1])  # image tokens at index 1, 2
         cache.can_store_mm_embeddings(state)  # populates embeddings_lengths
@@ -756,7 +757,7 @@ class EncoderCacheTest(unittest.TestCase):
 
     def test_extend_read_indices_documented_example(self) -> None:
         """Reproduces the example from the extend_read_indices docstring."""
-        _, cache = self.get_config_and_encoder_cache()
+        _, cache = self.get_config_and_embeddings_cache()
         cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
         read_indices: list[int] = []
         cache_read, to_free = cache.extend_read_indices("r", past_length=3, query_length=5, read_indices=read_indices)
@@ -765,7 +766,7 @@ class EncoderCacheTest(unittest.TestCase):
         self.assertTrue(to_free)  # 3 + 5 >= 7, all embeddings consumed
 
     def test_extend_read_indices_text_only_window_returns_false(self) -> None:
-        _, cache = self.get_config_and_encoder_cache()
+        _, cache = self.get_config_and_embeddings_cache()
         cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
         read_indices: list[int] = []
         cache_read, to_free = cache.extend_read_indices("r", past_length=0, query_length=3, read_indices=read_indices)
@@ -775,7 +776,7 @@ class EncoderCacheTest(unittest.TestCase):
 
     def test_extend_read_indices_no_allocated_blocks_pads_with_minus_one(self) -> None:
         """A request with no encoder blocks (text-only) extends the existing indices with -1 and reports no read."""
-        _, cache = self.get_config_and_encoder_cache()
+        _, cache = self.get_config_and_embeddings_cache()
         read_indices = [42]  # pre-existing content must be preserved (extend, not overwrite)
         cache_read, to_free = cache.extend_read_indices(
             "unknown", past_length=0, query_length=4, read_indices=read_indices
@@ -787,7 +788,7 @@ class EncoderCacheTest(unittest.TestCase):
     def test_extend_read_indices_marks_to_free_when_reading_past_end(self) -> None:
         """When the query window runs past the end of the block table, the missing positions are padded with -1 and
         the request is reported ready to free."""
-        _, cache = self.get_config_and_encoder_cache()
+        _, cache = self.get_config_and_embeddings_cache()
         cache.allocated_blocks_masks["r"] = torch.tensor([-1, -1, -1, 0, 1, 3, -1], dtype=torch.int32)
         read_indices: list[int] = []
         cache_read, to_free = cache.extend_read_indices("r", past_length=5, query_length=5, read_indices=read_indices)
@@ -796,7 +797,7 @@ class EncoderCacheTest(unittest.TestCase):
         self.assertTrue(to_free)
 
     def test_store_mm_embeddings_writes_at_allocated_blocks(self) -> None:
-        config, cache = self.get_config_and_encoder_cache()
+        config, cache = self.get_config_and_embeddings_cache()
         cache.allocated_blocks_masks["r"] = torch.tensor([-1, 0, 2, -1], dtype=torch.int32)
         feats = torch.randn(2, config.text_config.hidden_size)
         cache.store_mm_embeddings("r", feats)
@@ -804,12 +805,12 @@ class EncoderCacheTest(unittest.TestCase):
         torch.testing.assert_close(cache.cache[2], feats[1])
 
     def test_store_mm_embeddings_unknown_request_raises(self) -> None:
-        config, cache = self.get_config_and_encoder_cache()
+        config, cache = self.get_config_and_embeddings_cache()
         with self.assertRaises(ValueError):
             cache.store_mm_embeddings("ghost", torch.randn(1, config.text_config.hidden_size))
 
     def test_release_cache_for_requests_frees_blocks(self) -> None:
-        config, cache = self.get_config_and_encoder_cache()
+        config, cache = self.get_config_and_embeddings_cache()
         img = config.image_token_id
         state = RequestState(request_id="r", initial_tokens=[1, img, img, 1])  # 2 image tokens
         cache.can_store_mm_embeddings(state)
@@ -824,7 +825,7 @@ class EncoderCacheTest(unittest.TestCase):
     def test_release_cache_for_requests_unknown_id_is_noop(self) -> None:
         """Releasing an id with no allocated blocks (already released, or a text-only request) is a silent no-op: the
         request may have been freed on the other IO pair in async mode."""
-        _, cache = self.get_config_and_encoder_cache()
+        _, cache = self.get_config_and_embeddings_cache()
         free_before = len(cache.free_blocks)
         cache.release_cache_for_requests({"ghost"})  # must not raise
         self.assertEqual(len(cache.free_blocks), free_before)
@@ -832,7 +833,7 @@ class EncoderCacheTest(unittest.TestCase):
     def test_allocate_store_read_release_round_trip_conserves_blocks(self) -> None:
         """End-to-end of the cache lifecycle: every block allocated for a request is returned to the free pool once
         the request is released."""
-        config, cache = self.get_config_and_encoder_cache()
+        config, cache = self.get_config_and_embeddings_cache()
         img = config.image_token_id
         total_blocks = len(cache.free_blocks)
         state = RequestState(request_id="r", initial_tokens=[1, img, img, img, 1])  # 3 image tokens

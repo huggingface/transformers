@@ -97,23 +97,23 @@ class ModelRunner:
         return num_q_tokens, max_kv_read
 
     def run_encoder(self, model: nn.Module, encoder_kwargs: list[dict]) -> None:
-        """Runs the encoder on the given set of kwargs and stores the new embeddings in the encoder cache."""
-        if self.cache.encoder_cache is None:
-            raise ValueError("Cannot run encoder because there is no encoder cache.")
+        """Runs the encoder on the given set of kwargs and stores the new embeddings in the embeddings cache."""
+        if self.cache.embeddings_cache is None:
+            raise ValueError("Cannot run encoder because there is no embeddings cache.")
         with self.compute_stream_ctx():
             for encoder_kw in encoder_kwargs:
                 encoder_kw["return_dict"] = True
-                request_id = encoder_kw.pop(self.cache.encoder_cache.REQUEST_ID_KEY)
+                request_id = encoder_kw.pop(self.cache.embeddings_cache.REQUEST_ID_KEY)
 
-                if self.cache.encoder_cache.modality == "image":
+                if self.cache.embeddings_cache.modality == "image":
                     encoding_output = model.get_image_features(**encoder_kw)
-                elif self.cache.encoder_cache.modality == "audio":
+                elif self.cache.embeddings_cache.modality == "audio":
                     encoding_output = model.get_audio_features(**encoder_kw)
                 else:
-                    raise ValueError(f"Invalid modality: {self.cache.encoder_cache.modality}")
+                    raise ValueError(f"Invalid modality: {self.cache.embeddings_cache.modality}")
 
-                mm_embeddings = self.cache.encoder_cache.extract_mm_embeddings(encoding_output)
-                self.cache.encoder_cache.store_mm_embeddings(request_id, mm_embeddings)
+                mm_embeddings = self.cache.embeddings_cache.extract_mm_embeddings(encoding_output)
+                self.cache.embeddings_cache.store_mm_embeddings(request_id, mm_embeddings)
 
     def fill_inputs_embeds(self, model: nn.Module, input_ids: torch.Tensor, batch_data: PagedAttentionArgs) -> None:
         """Fill the inputs_embeds tensor inside the batch_data dictionary."""
@@ -122,11 +122,11 @@ class ModelRunner:
         embedding_module = model.get_input_embeddings()
         inputs_embeds.copy_(embedding_module(input_ids))
         # If there are no multimodal embeddings to incorporate, we can return early
-        mm_embeddings_read_index = batch_data.get("encoder_cache_read_index")  # shape [q_tokens] or None
+        mm_embeddings_read_index = batch_data.get("embeddings_cache_read_index")  # shape [q_tokens] or None
         if mm_embeddings_read_index is None:
             return None
         # Otherwise, retrieve the multimodal embeddings according to the index
-        mm_embeddings = self.cache.encoder_cache.cache[mm_embeddings_read_index]  # type: ignore
+        mm_embeddings = self.cache.embeddings_cache.cache[mm_embeddings_read_index]  # type: ignore
         mm_embeddings = mm_embeddings.unsqueeze(0)  # shape [1, q_tokens, hidden_size]
         mask = (mm_embeddings_read_index == -1).unsqueeze(-1)  # shape [1, q_tokens]
         inputs_embeds.copy_(torch.where(mask, inputs_embeds, mm_embeddings))

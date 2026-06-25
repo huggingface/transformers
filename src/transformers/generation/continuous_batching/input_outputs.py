@@ -52,7 +52,7 @@ class PagedAttentionArgs(TypedDict):
         max_seqlen_k: Maximum key/value sequence length. Can be an int or dictionary for hybrid models.
         write_index: List of tensors indicating where to write new KV states in the cache, one per attention group.
         read_index: List of tensors indicating which cache positions to read from, one per attention group.
-        encoder_cache_read_index: Tensor indicating which positions in the encoder cache to read from.
+        embeddings_cache_read_index: Tensor indicating which positions in the embeddings cache to read from.
         logits_indices: Tensor indicating which positions in the output should be used for next-token prediction.
         logits_to_keep: Same as logits_indices, but only used for models that support logits_to_keep.
         cache: The [`PagedAttentionCache`] instance managing the KV cache.
@@ -72,7 +72,7 @@ class PagedAttentionArgs(TypedDict):
     max_seqlen_k: int | dict[str, int]
     write_index: list[torch.Tensor]
     read_index: list[torch.Tensor]
-    encoder_cache_read_index: torch.Tensor | None
+    embeddings_cache_read_index: torch.Tensor | None
     logits_indices: torch.Tensor
     logits_to_keep: torch.Tensor | None
     cache: PagedAttentionCache
@@ -126,15 +126,15 @@ class ContinuousBatchingIOs:
         self.use_block_table = False  # True if all requests in batch have query_length == 1
         # Encoder-related accumulators
         self.encoder_kwargs = []  # list of kwargs for the encoder to produce multimodal embeddings
-        self.encoder_cache_read = False  # whether the encoder cache is read from in the current batch
+        self.embeddings_cache_read = False  # whether the embeddings cache is read from in the current batch
         # Setup other accumulators
         self.requests_in_batch: list[FutureRequestState] = []
-        self.encoder_cache_to_free: set[str] = set()
+        self.embeddings_cache_to_free: set[str] = set()
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
         self.graphs: CudaGraphBuffer = CudaGraphBuffer(continuous_batching_config.max_cached_graphs)
         self._trash_index = cache.trash_index
         # Setup static tensors and compute stream
-        _use_inputs_embeds = (cache.encoder_cache is not None) if _use_inputs_embeds is None else _use_inputs_embeds
+        _use_inputs_embeds = (cache.embeddings_cache is not None) if _use_inputs_embeds is None else _use_inputs_embeds
         self._setup_static_tensors(logit_processor=logit_processor, use_inputs_embeds=_use_inputs_embeds)
         self._reset_static_tensors(full_reset=True)
         self.compute_stream = torch.cuda.Stream(device=self.device) if device.type == "cuda" else None
@@ -181,7 +181,7 @@ class ContinuousBatchingIOs:
         full_attention_cumulative_seqlens_k = self._bulk_input_tensor[4, : max_requests_per_batch + 1]
         sliding_attention_cumulative_seqlens_k = self._bulk_input_tensor[5, : max_requests_per_batch + 1]
         self.carry_over_ids = self._bulk_input_tensor[6, :max_batch_tokens]  # only used for async API
-        self.encoder_cache_read_index = self._bulk_input_tensor[7, :max_batch_tokens]  # only used for multimodal model
+        self.embeddings_cache_read_index = self._bulk_input_tensor[7, :max_batch_tokens]  # only used for multimodal model
 
         # For sequence length of KV, the entries in the dict depend on the model
         self.cumulative_seqlens_k: dict[str, torch.Tensor] = {}
@@ -253,7 +253,7 @@ class ContinuousBatchingIOs:
         other.max_kv_read = self.max_kv_read
         other.num_request_in_batch = self.num_request_in_batch
         other.use_block_table = self.use_block_table
-        other.encoder_cache_read = self.encoder_cache_read
+        other.embeddings_cache_read = self.embeddings_cache_read
         other.total_seqlen_q = self.total_seqlen_q
         other.total_seqlen_k = dict(self.total_seqlen_k)
         other.max_seqlen_q = self.max_seqlen_q
@@ -288,8 +288,8 @@ class ContinuousBatchingIOs:
 
         # Reset the attributes part of the bulk input tensor in one kernel
         self._bulk_input_tensor[: self.static_inputs, : q_len + 1].zero_()
-        # Safe for the encoder cache read index, which is reset to -1
-        self.encoder_cache_read_index[:q_len].fill_(-1)
+        # Safe for the embeddings cache read index, which is reset to -1
+        self.embeddings_cache_read_index[:q_len].fill_(-1)
         # ... and the logits processors arguments, which are reset to their default values
         if full_reset:
             self._bulk_input_tensor[self.static_inputs :] = self.logits_processors_defaults
@@ -351,7 +351,7 @@ class ContinuousBatchingIOs:
         # Otherwise, we can return an empty list because they wont be used
         else:
             logprobs = None
-        return self.requests_in_batch, new_tokens, logprobs, self.encoder_cache_to_free
+        return self.requests_in_batch, new_tokens, logprobs, self.embeddings_cache_to_free
 
     def prepare_batch_tensors(
         self,
@@ -392,8 +392,8 @@ class ContinuousBatchingIOs:
         self.requests_in_batch = []
         self.req_id_to_new_token_position = {}
         self.encoder_kwargs = []
-        self.encoder_cache_read = False
-        self.encoder_cache_to_free = set()
+        self.embeddings_cache_read = False
+        self.embeddings_cache_to_free = set()
 
         # Prepare accumulators. For batches with no past cache to read, we leave read_index empty: the cache.update
         # will detect the 0-size indices and skip the read.
@@ -404,7 +404,7 @@ class ContinuousBatchingIOs:
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
         write_index = [[] for _ in range(self.cache.num_groups)]
         read_index = None if self.max_kv_read == 0 else [[] for _ in range(self.cache.num_groups)]
-        encoder_cache_read_index = []
+        embeddings_cache_read_index = []
 
         # Go through all the requests in the batch
         for i, future_state in enumerate(requests_in_batch):
@@ -435,14 +435,14 @@ class ContinuousBatchingIOs:
                 self.cache.extend_read_and_write_indices(
                     state.request_id, past_length, query_length, read_index, write_index
                 )
-            # Also accumulate the encoder cache read index if there is an encoder cache
-            if self.cache.encoder_cache is not None:
-                encoder_cache_read, to_free = self.cache.encoder_cache.extend_read_indices(
-                    state.request_id, past_length, query_length, encoder_cache_read_index
+            # Also accumulate the embeddings cache read index if there is an embeddings cache
+            if self.cache.embeddings_cache is not None:
+                embeddings_cache_read, to_free = self.cache.embeddings_cache.extend_read_indices(
+                    state.request_id, past_length, query_length, embeddings_cache_read_index
                 )
-                self.encoder_cache_read |= encoder_cache_read
+                self.embeddings_cache_read |= embeddings_cache_read
                 if to_free:
-                    self.encoder_cache_to_free.add(state.request_id)
+                    self.embeddings_cache_to_free.add(state.request_id)
 
             # If the request has no remaining prefill tokens, it means the next token prediction is relevant
             if future_state.has_new_token:
@@ -453,7 +453,7 @@ class ContinuousBatchingIOs:
             # If the request is an encoder request, we accumulate the encoder arguments
             if state.multimodal_inputs:
                 # Build a shallow copy of the dict in case it's shared between requests
-                request_id_key = self.cache.encoder_cache.REQUEST_ID_KEY  # type: ignore (was already checked)
+                request_id_key = self.cache.embeddings_cache.REQUEST_ID_KEY  # type: ignore (was already checked)
                 self.encoder_kwargs.append({**state.multimodal_inputs, request_id_key: state.request_id})
                 state.multimodal_inputs = {}  # means there was multimodal data and it has already been processed
 
@@ -496,7 +496,7 @@ class ContinuousBatchingIOs:
         self.position_ids[: len(position_ids)] = to_tensor(position_ids)
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
-        self.encoder_cache_read_index[: len(encoder_cache_read_index)] = to_tensor(encoder_cache_read_index)
+        self.embeddings_cache_read_index[: len(embeddings_cache_read_index)] = to_tensor(embeddings_cache_read_index)
 
         # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
         for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
@@ -544,7 +544,7 @@ class ContinuousBatchingIOs:
             attention_mask=None if self.attention_mask is None else {},
             read_index=[],
             write_index=[],
-            encoder_cache_read_index=self.encoder_cache_read_index[:q_size] if self.encoder_cache_read else None,
+            embeddings_cache_read_index=self.embeddings_cache_read_index[:q_size] if self.embeddings_cache_read else None,
             cache=self.cache,
             block_table=self.block_table[:, :num_sequences] if self.use_block_table else None,
             use_cache=False,
@@ -645,7 +645,7 @@ class HostDeviceIOPair:
             continuous_batching_config=continuous_batching_config,
             device=device,
             logit_processor=logit_processor,
-            _use_inputs_embeds=cache.encoder_cache is not None,  # only needed for multimodal models
+            _use_inputs_embeds=cache.embeddings_cache is not None,  # only needed for multimodal models
         )
         # Create events only on CUDA devices
         self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None

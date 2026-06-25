@@ -110,9 +110,9 @@ class Scheduler(ABC):
                 if request_id in self.waiting_requests_order:
                     self.waiting_requests_order.remove(request_id)
                 self.cache.free_blocks(request_id)
-                # If there is an encoder cache, it might also need to free blocks for the cancelled request
-                if self.cache.encoder_cache is not None:
-                    self.cache.encoder_cache.release_cache_for_requests({request_id})
+                # If there is an embeddings cache, it might also need to free blocks for the cancelled request
+                if self.cache.embeddings_cache is not None:
+                    self.cache.embeddings_cache.release_cache_for_requests({request_id})
             self._requests_to_cancel = set()
         return cancelled_states
 
@@ -123,10 +123,10 @@ class Scheduler(ABC):
         )
 
     def _can_store_mm_embeddings(self, state: RequestState) -> bool:
-        """Checks if there is enough space in the encoder cache to store the multimodal embeddings."""
-        if self.cache.encoder_cache is None:
-            raise ValueError(f"Request has multimodal data but there is no encoder cache: {state = }")
-        return self.cache.encoder_cache.can_store_mm_embeddings(state)
+        """Checks if there is enough space in the embeddings cache to store the multimodal embeddings."""
+        if self.cache.embeddings_cache is None:
+            raise ValueError(f"Request has multimodal data but there is no embeddings cache: {state = }")
+        return self.cache.embeddings_cache.can_store_mm_embeddings(state)
 
     def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
         """Allocate additional cache blocks for a request if the currently allocated blocks are insufficient to
@@ -245,7 +245,7 @@ class Scheduler(ABC):
                 )
                 break
 
-            # Check if there is enough space in the encoder cache (performed first because very cheap)
+            # Check if there is enough space in the embeddings cache (performed first because very cheap)
             if state.multimodal_inputs and not self._can_store_mm_embeddings(state):
                 continue
 
@@ -282,9 +282,9 @@ class Scheduler(ABC):
             self._schedule_request(state, request_tokens, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.tokens_to_process)  # it may change after scheduling
 
-            # If the request has multimodal data to process, we allocate space in the encoder cache
+            # If the request has multimodal data to process, we allocate space in the embeddings cache
             if state.multimodal_inputs:
-                self.cache.encoder_cache.allocate_blocks(state)  # type: ignore (was already checked)
+                self.cache.embeddings_cache.allocate_blocks(state)  # type: ignore (was already checked)
 
             # The decode fast path is only used if the request is a single token and its length is less than the max blocks per request
             decode_fast_path &= request_len == 1 and state.position_offset < self.max_decode_fast_path_length

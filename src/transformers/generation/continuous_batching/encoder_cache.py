@@ -25,7 +25,7 @@ from .requests import RequestState
 
 # TODO: add block-based indexing
 # TODO: add hash-based indexing for multimodal inputs
-class EncoderCache:
+class EmbeddingsCache:
     cache: torch.Tensor
     REQUEST_ID_KEY: str = "_cb_request_id"
 
@@ -45,11 +45,11 @@ class EncoderCache:
         self.free_blocks = deque(range(cache_size))
         self.allocated_blocks_masks: dict[str, torch.Tensor] = {}
         self.embeddings_lengths: dict[str, int] = {}
-        # Specialize on modality the encoder cache object
+        # Specialize on modality the embeddings cache object
         self._specialize_on_modality(config, modality)
 
     def _specialize_on_modality(self, config: PretrainedConfig, modality: str) -> None:
-        """Specialize the encoder cache depending on the model's modality by retrieving the special token ID."""
+        """Specialize the embeddings cache depending on the model's modality by retrieving the special token ID."""
         # Infer the name of the special token ID
         if modality == "image":
             possible_token_names = ["image_token_id", "image_token_index"]
@@ -84,7 +84,7 @@ class EncoderCache:
         raise ValueError(f"Invalid encoding output: {og_encoding_output}")
 
     def can_store_mm_embeddings(self, state: RequestState) -> bool:
-        """Checks if there is enough space in the encoder cache to store the multimodal embeddings."""
+        """Checks if there is enough space in the embeddings cache to store the multimodal embeddings."""
         # Retrieve the number of multimodal embeddings from the multimodal data (or compute and cache it)
         num_mm_embeddings = self.embeddings_lengths.get(state.request_id)
         if num_mm_embeddings is None:
@@ -110,7 +110,7 @@ class EncoderCache:
         self, request_id: str, past_length: int, query_length: int, read_indices: list[int]
     ) -> tuple[bool, bool]:
         """
-        Extends the list of indices being read from the encoder cache for a given request. Returns a tuple of booleans:
+        Extends the list of indices being read from the embeddings cache for a given request. Returns a tuple of booleans:
             - cache_read: True if any multimodal embedding is read by this request
             - to_free: True if the request has all its multimodal embeddings read and can be freed from the cache
         For instance, if the initial tokens and allocated blocks are as follows:
@@ -145,7 +145,7 @@ class EncoderCache:
         return cache_read, to_free
 
     def store_mm_embeddings(self, request_id: str, mm_embedding: torch.Tensor) -> None:
-        """Stores the multimodal embeddings for a request in the encoder cache."""
+        """Stores the multimodal embeddings for a request in the embeddings cache."""
         # Retrieve the allocated blocks mask for the request
         allocated_blocks_mask = self.allocated_blocks_masks.get(request_id)
         if allocated_blocks_mask is None:
@@ -157,7 +157,7 @@ class EncoderCache:
         self.cache[allocated_blocks] = mm_embedding
 
     def release_cache_for_requests(self, requests: set[str]) -> None:
-        """Releases the cache for the given requests from the encoder cache. The set of request for which to release
+        """Releases the cache for the given requests from the embeddings cache. The set of request for which to release
         cache is kept by the InputAndOutputs object, because in the case of asynchronous batching, a request for which
         the multimodal embeddings were fully processed in batch N cannot be freed in batch N+1."""
         # Loop until there are no requests for which to release cache
@@ -174,6 +174,6 @@ class EncoderCache:
             self.embeddings_lengths.pop(request_id, None)
 
     def free_all_requests(self) -> None:
-        """Frees all requests from the encoder cache, whatever their state."""
+        """Frees all requests from the embeddings cache, whatever their state."""
         all_requests_stored = set(self.allocated_blocks_masks.keys()) | set(self.embeddings_lengths.keys())
         self.release_cache_for_requests(all_requests_stored)
