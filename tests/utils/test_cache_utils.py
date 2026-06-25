@@ -150,7 +150,7 @@ class CacheTest(unittest.TestCase):
         config = LlamaConfig(num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=2, hidden_size=32)
         config.layer_types = ["full_attention", "linear_attention"]
         cache = StaticCache(config=config, max_cache_len=8)
-        self.assertEqual(cache.max_cache_len, 8)
+        self.assertEqual(cache.get_max_length(), 8)
 
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
@@ -586,7 +586,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
             return_dict_in_generate=True,
         )
         self.assertIsInstance(out.past_key_values, StaticCache)
-        self.assertEqual(out.past_key_values.max_cache_len, requested_max_cache_len)
+        self.assertEqual(out.past_key_values.get_max_length(), requested_max_cache_len)
 
     def test_chunked_prefill_initializes_static_cache_eagerly(self):
         """

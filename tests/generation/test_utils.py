@@ -2486,9 +2486,7 @@ class GenerationTesterMixin:
             else:
                 model_input_length = prompt_length + generated_length
             query_length = (
-                prompt_length + generated_length
-                if not has_static_cache
-                else decoder_past_key_values.get_max_cache_shape()
+                prompt_length + generated_length if not has_static_cache else decoder_past_key_values.get_max_length()
             )
 
             expected_shape = (
