@@ -125,6 +125,16 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     test_torch_exportable = False
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        # `is_moe_model` (used by generation tests to pick a looser tolerance for MoE routing noise) checks
+        # `config._experts_implementation`, which is only populated when a model is instantiated. Some tests
+        # (e.g. `test_generate_with_static_cache`) check it on the bare config, so mark the model's default
+        # experts implementation here to get the MoE tolerance. The ring-buffer vs. static sliding cache
+        # differ by ~1e-3 once amplified through the sparse expert routing, which is well within that bound.
+        config._experts_implementation = "grouped_mm"
+        return config, inputs_dict
+
     @unittest.skip(
         reason="UnlimitedOcrVisionModel builds a hybrid bidirectional+causal mask internally, so SDPA is always called with a non-null `attn_mask`."
     )
@@ -265,9 +275,12 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
             )
         )
-        inputs = self.processor(images=[image1, image2], text="<image><image>\nMulti page parsing.", crop_to_patches=False, return_tensors="pt").to(
-            model.device
-        )
+        inputs = self.processor(
+            images=[image1, image2],
+            text="<image><image>\nMulti page parsing.",
+            crop_to_patches=False,
+            return_tensors="pt",
+        ).to(model.device)
 
         with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
             generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
