@@ -1203,6 +1203,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         - **can_record_outputs** (dict):
     """
 
+    b = 1
+
     # General model properties
     config_class: type[PreTrainedConfig] | None = None
     generation_config_class: type[GenerationConfig] = GenerationConfig  # default, used with `GenerationMixin`
