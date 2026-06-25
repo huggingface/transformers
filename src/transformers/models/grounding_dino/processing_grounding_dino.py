@@ -217,7 +217,8 @@ class GroundingDinoProcessor(ProcessorMixin):
             # extract text labels
             prob = probs[keep]
             label_ids = get_phrases_from_posmap(prob > text_threshold, input_ids[idx])
-            objects_text_labels = self.batch_decode(label_ids)
+            # batch_decode([]) returns [""] instead of []
+            objects_text_labels = self.batch_decode(label_ids) if label_ids else []
 
             result = DictWithDeprecationWarning(
                 {
