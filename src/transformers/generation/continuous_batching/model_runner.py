@@ -104,8 +104,14 @@ class ModelRunner:
             for encoder_kw in encoder_kwargs:
                 encoder_kw["return_dict"] = True
                 request_id = encoder_kw.pop(self.cache.encoder_cache.REQUEST_ID_KEY)
-                encoding_fn = getattr(model, self.cache.encoder_cache.encoding_fn_name)
-                encoding_output = encoding_fn(**encoder_kw)
+
+                if self.cache.encoder_cache.modality == "image":
+                    encoding_output = model.get_image_features(**encoder_kw)
+                elif self.cache.encoder_cache.modality == "audio":
+                    encoding_output = model.get_audio_features(**encoder_kw)
+                else:
+                    raise ValueError(f"Invalid modality: {self.cache.encoder_cache.modality}")
+
                 mm_embeddings = self.cache.encoder_cache.extract_mm_embeddings(encoding_output)
                 self.cache.encoder_cache.store_mm_embeddings(request_id, mm_embeddings)
 

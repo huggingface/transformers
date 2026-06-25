@@ -673,7 +673,6 @@ class EncoderCacheTest(unittest.TestCase):
             config=config,
             modality=modality,
             max_batch_tokens=max_batch_tokens,
-            use_async_batching=use_async_batching,
             model_dtype=torch.float32,
             device=torch.device("cpu"),
         )
@@ -689,9 +688,9 @@ class EncoderCacheTest(unittest.TestCase):
         config, cache = self.get_config_and_encoder_cache(modality=modality)
         # Check that the modality resolves the right token and function
         self.assertEqual(cache.special_token_id, getattr(config, token_attr))
-        self.assertEqual(cache.encoding_fn_name, expected_fn)
+        self.assertEqual(cache.modality, modality)
         # Check that the cache detects an invalid modality
-        wrong_modality = {"image": "audio", "audio": "image"}
+        wrong_modality = {"image": "audio", "audio": "image"}[modality]
         with self.assertRaises(ValueError):
             self.get_config_and_encoder_cache(modality=wrong_modality, config=config)
         # Check that the specialized token is present

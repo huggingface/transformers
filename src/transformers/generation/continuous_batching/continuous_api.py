@@ -252,7 +252,7 @@ class ContinuousBatchProcessor:
             cb_config=self.cb_config,
             cache=self.cache,
             inputs_and_outputs=self.inputs_and_outputs,
-            do_sample=getattr(generation_config, "do_sample", True),
+            do_sample=bool(generation_config.do_sample),  # do_sample: bool | None, this resolves None to False
             return_logprobs=continuous_batching_config.return_logprobs,
         )
 

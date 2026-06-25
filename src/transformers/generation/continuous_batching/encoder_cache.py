@@ -49,26 +49,25 @@ class EncoderCache:
         self._specialize_on_modality(config, modality)
 
     def _specialize_on_modality(self, config: PretrainedConfig, modality: str) -> None:
-        # Retrieve special token ID and encoding functions names
+        """Specialize the encoder cache depending on the model's modality by retrieving the special token ID."""
+        # Infer the name of the special token ID
         if modality == "image":
             possible_token_names = ["image_token_id", "image_token_index"]
-            encoding_fn_name = "get_image_features"
         elif modality == "audio":
             possible_token_names = ["audio_token_id", "audio_token_index"]
-            encoding_fn_name = "get_audio_features"
         else:
             raise ValueError(f"Invalid modality: {modality}")
-        # Retrieve the actual token ID for the modality
+        # Retrieve the actual token ID
         token_id = None
         for token_name in possible_token_names:
-            if hasattr(config, token_name):
-                token_id = getattr(config, token_name)
+            token_id = getattr(config, token_name, None)
+            if token_id is not None:
                 break
         if not isinstance(token_id, int) or token_id <= 0:
             raise ValueError(f"{token_name} token ID must be a positive integer but got {token_id = }")
         # Save attribute values
         self.special_token_id = token_id
-        self.encoding_fn_name = encoding_fn_name
+        self.modality = modality
 
     def extract_mm_embeddings(self, encoding_output: Any) -> torch.Tensor:
         """Extracts the multimodal embeddings from the encoding output."""
