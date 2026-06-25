@@ -44,7 +44,7 @@ NUM_EPOCHS=1
 MAX_SEQ_LENGTH=1024
 BATCH_SIZE=4
 GRAD_ACCUM_STEPS=8
-COMPILE=${COMPILE:-1}
+export COMPILE=${COMPILE:-1}
 
 LORA_R=32
 LORA_ALPHA=16
@@ -74,17 +74,20 @@ torchrun --nproc_per_node="${NUM_PROC}" \
     --dataset_name "$DATASET_NAME" \
     --learning_rate $LEARNING_RATE \
     --num_train_epochs $NUM_EPOCHS \
-    --packing \
+    --packing false \
     --bf16 true \
     --max_length $MAX_SEQ_LENGTH \
+    --pad_to_multiple_of $MAX_SEQ_LENGTH \
     --per_device_train_batch_size $BATCH_SIZE \
     --gradient_accumulation_steps $GRAD_ACCUM_STEPS \
     --eos_token '<|im_end|>' \
     --eval_strategy no \
     --logging_steps 10 \
+    --save_steps 500 \
     --warmup_steps 100 \
     --weight_decay 0.01 \
     --max_grad_norm 1.0 \
+    --trust_remote_code \
     --use_peft true \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \

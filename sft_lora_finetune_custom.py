@@ -286,6 +286,8 @@ def main():
                 inputs = batch[:, :-1].to(device)
                 labels = batch[:, 1:].to(device)
 
+                print(f"inputs: {inputs.shape}, labels: {labels.shape}")
+
                 # Forward and backward
                 loss = model(inputs, labels=labels).loss
                 (loss / args.gradient_accumulation_steps).backward()

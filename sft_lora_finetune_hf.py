@@ -12,27 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Minimalist SFT example with LoRA and Tensor Parallelism. Works on any device that supports TP
-(Trainium, CUDA, ...). The companion shell script sets the Neuron-specific environment variables.
-
-# LoRA + TP=2 (Neuron)
-```
-bash examples/scripts/sft_neuron.sh
-```
-
-# Or launch directly on any device
-```
-torchrun --nproc_per_node=2 examples/scripts/sft_neuron.py \
-    --model_name_or_path Qwen/Qwen3.5-9B \
-    --dataset_name trl-lib/Capybara \
-    --use_peft \
-    --lora_r 32 \
-    --lora_alpha 16 \
-    --output_dir Qwen3.5-9B-SFT-LoRA
-```
-"""
-
 import os
 
 import torch
@@ -65,9 +44,6 @@ def main(script_args, training_args, model_args):
         kwargs["tp_plan"] = tp_plan
         kwargs["tp_size"] = tp_size
 
-    # ---------------------------------------------------------------------------
-    # Model
-    # ---------------------------------------------------------------------------
     config = AutoConfig.from_pretrained(
         model_args.model_name_or_path,
         revision=model_args.model_revision,
@@ -87,13 +63,8 @@ def main(script_args, training_args, model_args):
     if int(os.environ.get("COMPILE", "0")):
         model = torch.compile(model, backend="neuron")
 
-    # ---------------------------------------------------------------------------
-    # Dataset
-    # ---------------------------------------------------------------------------
     dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
-    # ---------------------------------------------------------------------------
-    # Trainer
-    # ---------------------------------------------------------------------------
+
     trainer = SFTTrainer(
         model=model,
         args=training_args,
