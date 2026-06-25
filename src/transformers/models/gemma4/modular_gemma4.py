@@ -27,10 +27,12 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import (
+    blockwise_overlay,
     create_bidirectional_mask,
     create_causal_mask,
     create_masks_for_generate,
     create_sliding_window_causal_mask,
+    sliding_window_overlay,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -56,7 +58,6 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3RotaryEmbedding,
     Gemma3TextModel,
     Gemma3TextScaledWordEmbedding,
-    create_masks_for_vision_model,  # noqa: F811
 )
 from ..gemma3n.modeling_gemma3n import (
     Gemma3nCausalLMOutputWithPast,
@@ -80,6 +81,48 @@ if is_accelerate_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+def create_masks_for_vision_model(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    past_key_values: Cache | None,
+    position_ids: torch.Tensor | None,
+    block_sequence_ids: torch.Tensor,
+) -> dict:
+    """Create full_attention and sliding_attention masks with correct composition.
+
+    For global (full attention) layers:  causal only (no bidirectional)
+    For local (sliding window) layers:  AND(sliding_window, OR(causal, blockwise))
+
+    Unlike Gemma 3 (which applies bidirectional attention on all layers), Gemma 4
+    explicitly disables bidirectional attention on global attention layers.
+    """
+    mask_kwargs = {
+        "config": config,
+        "inputs_embeds": inputs_embeds,
+        "attention_mask": attention_mask,
+        "past_key_values": past_key_values,
+        "position_ids": position_ids,
+    }
+
+    # Full attention: causal only — no bidirectional blockwise overlay.
+    full_mask = create_causal_mask(**mask_kwargs)
+
+    # Sliding attention: AND(sliding_window, OR(causal, blockwise))
+    # Pass blockwise as or_mask_function (applied as step 2 in create_causal_mask)
+    # Pass sliding_window as and_mask_function (applied as step 3, after OR)
+    sliding_mask = create_causal_mask(
+        **mask_kwargs,
+        or_mask_function=blockwise_overlay(block_sequence_ids),
+        and_mask_function=sliding_window_overlay(config.sliding_window),
+    )
+
+    return {
+        "full_attention": full_mask,
+        "sliding_attention": sliding_mask,
+    }
 
 
 class Gemma4ModelOutputWithPast(Gemma3nModelOutputWithPast):

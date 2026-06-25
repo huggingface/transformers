@@ -630,14 +630,20 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         full_mask = mask_dict["full_attention"]
         sliding_mask = mask_dict["sliding_attention"]
 
-        # In full_attention, bidirectional image block (tokens 5-11) is fully visible
-        # (Both look-back and look-ahead are 0.0)
-        self.assertEqual(full_mask[0, 0, 5, 11].item(), 0.0)
+        # In full_attention (global layers), Gemma 4 uses causal-only masking —
+        # no bidirectional attention on vision tokens. This matches the internal
+        # Gemax/Gemini3 transformer which sets bidirectional_segment_ids=None
+        # for GLOBAL layers.
+        # Token 5 looking ahead at token 11 -> MASKED (causal prevents look-ahead)
+        self.assertLess(full_mask[0, 0, 5, 11].item(), -1000)
+        # Token 11 looking back at token 5 -> VISIBLE (causal allows look-back)
         self.assertEqual(full_mask[0, 0, 11, 5].item(), 0.0)
 
-        # In sliding_attention, look-back within the sliding window is visible bidirectionally
+        # In sliding_attention (local layers), bidirectional IS applied within the window.
         # Token 8 looking back at 5 (dist 3 < 4) -> VISIBLE
         self.assertEqual(sliding_mask[0, 0, 8, 5].item(), 0.0)
+        # Token 5 looking ahead at 8 (dist 3 < 4, same image block) -> VISIBLE (bidirectional)
+        self.assertEqual(sliding_mask[0, 0, 5, 8].item(), 0.0)
 
         # In sliding_attention, look-back outside the sliding window is strictly masked
         # Token 11 looking back at 5 (dist 6 > 4) -> MASKED

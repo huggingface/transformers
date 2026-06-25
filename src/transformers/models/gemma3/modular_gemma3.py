@@ -644,7 +644,6 @@ def create_masks_for_vision_model(
     # Sliding attention: AND(sliding_window, OR(causal, blockwise))
     # Pass blockwise as or_mask_function (applied as step 2 in create_causal_mask)
     # Pass sliding_window as and_mask_function (applied as step 3, after OR)
-    # Do NOT pass block_sequence_ids (to avoid the incorrect step 4 final OR)
     sliding_mask = create_causal_mask(
         **mask_kwargs,
         or_mask_function=blockwise_overlay(block_sequence_ids),

@@ -2115,8 +2115,11 @@ def create_masks_for_vision_model(
 ) -> dict:
     """Create full_attention and sliding_attention masks with correct composition.
 
-    For global (full attention) layers:  OR(causal, blockwise)
+    For global (full attention) layers:  causal only (no bidirectional)
     For local (sliding window) layers:  AND(sliding_window, OR(causal, blockwise))
+
+    Unlike Gemma 3 (which applies bidirectional attention on all layers), Gemma 4
+    explicitly disables bidirectional attention on global attention layers.
     """
     mask_kwargs = {
         "config": config,
@@ -2126,13 +2129,12 @@ def create_masks_for_vision_model(
         "position_ids": position_ids,
     }
 
-    # Full attention: OR(causal, blockwise) — use block_sequence_ids directly
-    full_mask = create_causal_mask(**mask_kwargs, block_sequence_ids=block_sequence_ids)
+    # Full attention: causal only — no bidirectional blockwise overlay.
+    full_mask = create_causal_mask(**mask_kwargs)
 
     # Sliding attention: AND(sliding_window, OR(causal, blockwise))
     # Pass blockwise as or_mask_function (applied as step 2 in create_causal_mask)
     # Pass sliding_window as and_mask_function (applied as step 3, after OR)
-    # Do NOT pass block_sequence_ids (to avoid the incorrect step 4 final OR)
     sliding_mask = create_causal_mask(
         **mask_kwargs,
         or_mask_function=blockwise_overlay(block_sequence_ids),
