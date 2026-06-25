@@ -32,7 +32,7 @@ from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutpu
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
-from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, no_inherit_decorator, torch_int
+from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, no_inherit_decorator, torch_compilable_check, torch_int
 from transformers.utils.generic import merge_with_config_defaults
 from transformers.utils.output_capturing import capture_outputs
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
@@ -41,7 +41,8 @@ from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7Visi
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
 from ..siglip.modeling_siglip import SiglipVisionEmbeddings
 from ..mimi.modeling_mimi import MimiLayerScale
-from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention, MiniMaxM3VLDecoderLayer, MiniMaxM3VLRotaryEmbedding, MiniMaxM3VLDenseMLP, MiniMaxM3VLRMSNorm, MiniMaxM3VLSparseMoeBlock, MiniMaxM3VLTopKRouter, MiniMaxM3VLVisionMLP, MiniMaxM3VLVisionAttention, MiniMaxM3VLVisionEncoderLayer, rotate_half, apply_rotary_pos_emb, repeat_kv, eager_attention_forward
+from ..deepseek_vl.modeling_deepseek_vl import DeepseekVLModel
+from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3SparseForConditionalGeneration, MiniMaxM3VLAttention, MiniMaxM3VLDecoderLayer, MiniMaxM3VLRotaryEmbedding, MiniMaxM3VLDenseMLP, MiniMaxM3VLRMSNorm, MiniMaxM3VLSparseMoeBlock, MiniMaxM3VLTextModel, MiniMaxM3VLTopKRouter, MiniMaxM3VLVisionMLP, MiniMaxM3VLVisionAttention, MiniMaxM3VLVisionEncoderLayer, rotate_half, apply_rotary_pos_emb, repeat_kv, eager_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -482,28 +483,11 @@ class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer): #TODO: switch to llama
         self.post_attention_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class Step3p7TextPreTrainedModel(Step3p7PreTrainedModel):
-    config_class = Step3p7TextConfig
-
-
-class Step3p7TextModel(Step3p7TextPreTrainedModel):
+class Step3p7TextModel(MiniMaxM3VLTextModel):
     _no_split_modules = ["Step3p7DecoderLayer"]
     config_class = Step3p7TextConfig
     config: Step3p7TextConfig
     _can_record_outputs = {"hidden_states": Step3p7DecoderLayer}
-
-    def __init__(self, config: Step3p7TextConfig):
-        super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [Step3p7DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Step3p7RotaryEmbedding(config)
-        self.gradient_checkpointing = False
-        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs
@@ -566,7 +550,7 @@ class Step3p7TextModel(Step3p7TextPreTrainedModel):
         )
 
 
-class Step3p7Model(Step3p7PreTrainedModel):
+class Step3p7Model(DeepseekVLModel):
     config: Step3p7Config
 
     def __init__(self, config: Step3p7Config):
@@ -578,36 +562,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
             config.vision_config.hidden_size * 4, config.text_config.hidden_size, bias=config.projector_bias
         )
         self.image_placeholder_token_id = config.image_token_id
-
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        return self.language_model.set_input_embeddings(value)
-
-    def _compute_inputs_embeds(
-        self,
-        input_ids: torch.Tensor,
-        multimodal_embeddings=None,
-    ) -> torch.Tensor:
-        embed = self.language_model.get_input_embeddings()
-        if multimodal_embeddings is None:
-            return embed(input_ids)
-        # Process each batch item separately so batch_size > 1 works (during beam search).
-        results = []
-        for b in range(input_ids.shape[0]):
-            ids = input_ids[b]
-            is_text = ids != self.config.image_token_id
-            text_embeds = embed(ids[is_text])
-            item_embeds = torch.empty(ids.shape[0], text_embeds.shape[-1], dtype=text_embeds.dtype, device=text_embeds.device)
-            item_embeds[is_text] = text_embeds
-            image_mask = ~is_text
-            if image_mask.any() and b < len(multimodal_embeddings):
-                item_embeds[image_mask] = multimodal_embeddings[b].reshape(-1, text_embeds.shape[-1]).to(text_embeds)
-            results.append(item_embeds)
-        return torch.stack(results, dim=0)
 
     def get_image_features(
         self,
@@ -674,17 +629,20 @@ class Step3p7Model(Step3p7PreTrainedModel):
         )
 
         if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
             if pixel_values is not None:
-                image_features = self.get_image_features(pixel_values, patch_pixel_values, num_patches)
+                image_features = torch.cat(
+                    self.get_image_features(pixel_values, patch_pixel_values, num_patches), dim=0
+                ).to(inputs_embeds)
+                image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
+                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
             elif image_embeds is not None:
-                if image_embeds.dim() < 2:
-                    raise ValueError(f"Unexpected shape for image_embeds: {image_embeds.shape}")
-                processed = self.multi_modal_projector(image_embeds.to(self.dtype).to(self.device))
-                image_features = [processed[i].view(-1, processed.shape[-1]) for i in range(processed.shape[0])]
-            else:
-                image_features = None
-            inputs_embeds = self._compute_inputs_embeds(input_ids, image_features)
+                image_features = self.multi_modal_projector(image_embeds.to(self.dtype).to(self.device))
+                image_features = image_features.view(-1, image_features.shape[-1]).to(inputs_embeds)
+                image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
+                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
             input_ids = None
+
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
@@ -707,20 +665,15 @@ class Step3p7Model(Step3p7PreTrainedModel):
         )
 
 
-class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+class Step3p7ForConditionalGeneration(MiniMaxM3SparseForConditionalGeneration):
     base_model_prefix = "model"
     config: Step3p7Config
 
-    def __init__(self, config: Step3p7Config):
-        Step3p7PreTrainedModel.__init__(self, config)
-        self.model = Step3p7Model(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.text_config.vocab_size, bias=False)
+    def get_image_features(self, pixel_values, patch_pixel_values=None, num_patches=None):
+        return self.model.get_image_features(pixel_values, patch_pixel_values, num_patches)
 
-        self.post_init()
-
-    def get_output_embeddings(self):
-        return self.lm_head
+    def get_video_features(self, *args, **kwargs):
+        raise NotImplementedError("Step3p7 does not support video.")
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
@@ -801,11 +754,8 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
         is_first_iteration=False,
         **kwargs,
     ):
-        input_ids_for_super = input_ids
-        if is_first_iteration and inputs_embeds is not None and input_ids is not None and input_ids.shape[-1] == 0:
-            input_ids_for_super = None
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids_for_super,
+            input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,

@@ -611,6 +611,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertConfig"),
         ("stablelm", "StableLmConfig"),
         ("starcoder2", "Starcoder2Config"),
+        ("step3p7", "Step3p7Config"),
         ("superglue", "SuperGlueConfig"),
         ("superpoint", "SuperPointConfig"),
         ("swiftformer", "SwiftFormerConfig"),
