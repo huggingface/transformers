@@ -1558,6 +1558,11 @@ def get_model_conversion_mapping(
         if not isinstance(submodule, PreTrainedModel):
             continue
 
+        # Skip it if it's custom code: it may have the same `model_type`/ClassName as a native model inside the library, but it
+        # uses custom modeling so it should not share the conversions
+        if submodule.is_custom_code():
+            continue
+
         class_name = type(submodule).__name__
         model_type = submodule.config.model_type
 

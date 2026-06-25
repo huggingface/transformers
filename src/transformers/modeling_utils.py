@@ -2506,7 +2506,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)
 
-    def _initialize_weights(self, module, is_remote_code: bool = False):
+    def _initialize_weights(self, module, is_custom_code: bool = False):
         """
         Initialize the weights if they are not already initialized.
         """
@@ -2517,7 +2517,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # which allow to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
         # otherwise
         if (
-            is_remote_code
+            is_custom_code
             and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
             and all(
                 getattr(buffer, "_is_hf_initialized", False)
@@ -2544,14 +2544,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if not hasattr(torch.nn.Module, "smart_apply"):
             # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function
             # to apply as we go down the graph
-            def smart_apply(module: nn.Module, fn: Callable[[nn.Module, bool], None], is_remote_code: bool):
+            def smart_apply(module: nn.Module, fn: Callable[[nn.Module, bool], None], is_custom_code: bool):
                 for child in module.children():
                     # We found a sub-model: recursively dispatch its own init function now!
                     if isinstance(child, PreTrainedModel):
-                        smart_apply(child, child._initialize_weights, is_remote_code)
+                        smart_apply(child, child._initialize_weights, is_custom_code)
                     else:
-                        smart_apply(child, fn, is_remote_code)
-                fn(module, is_remote_code)
+                        smart_apply(child, fn, is_custom_code)
+                fn(module, is_custom_code)
                 return module
 
             setattr(torch.nn.Module, "smart_apply", smart_apply)
@@ -2559,7 +2559,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Let the magic happen with this simple call
         smart_apply_fn = getattr(self, "smart_apply")
         # `getattr(self, ...)` returns a bound method, so `self` is already provided as the receiver.
-        smart_apply_fn(self._initialize_weights, self.is_remote_code())
+        smart_apply_fn(self._initialize_weights, self.is_custom_code())
 
     def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
         r"""
@@ -3459,7 +3459,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self.is_remote_code():
+        if self.is_custom_code():
             custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
@@ -4863,7 +4863,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             param = self.get_parameter(tied_param)
             setattr(param, "_is_hf_initialized", True)
 
-        # Some remote code models define module tying (not parameter tying) in their __init__. When modules themselves are shared,
+        # Some custom code models define module tying (not parameter tying) in their __init__. When modules themselves are shared,
         # weights inside both modules appear in the `state_dict` but only one will appear in the safetensors checkpoints
         # as they are inherently tied because the 2 modules are the same object. In this case, once we load a parameter
         # inside one of the 2 modules, the other will also automatically be loaded and will have the `_is_hf_initialized`
@@ -4872,7 +4872,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # So we remove it now - otherwise it's considered missing and will be wrongly reinitialized
         # Note: this is never an issue in main Transformers, as we never do module-tying, only parameter-tying, and we know
         # which params are supposed to be tied to which other params
-        if self.is_remote_code():
+        if self.is_custom_code():
             # Remove those that are already initialized, but appear as missing due to module tying (only if they are not known
             # tied weights, i.e. we did not explicitly mark them as initialized just above)
             loading_info.missing_keys = {
@@ -4932,7 +4932,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @classmethod
     def is_remote_code(cls) -> bool:
+        """Return whether the current model is custom code, i.e. code loaded from the hub."""
         return cls._auto_class is not None
+
+    @classmethod
+    def is_custom_code(cls) -> bool:
+        """Return whether the current model is custom code, i.e. either code loaded from the hub, or defined in any user-specific
+        module/session."""
+        return cls.is_remote_code() or not cls.__module__.startswith("transformers.")
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
