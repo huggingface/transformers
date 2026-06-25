@@ -27,48 +27,37 @@ import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
-from ... import initialization as init
+from ...activations import ACT2FN
 from ...integrations import use_kernel_func_from_hub
-from ...masking_utils import create_bidirectional_mask  # type: ignore[import]
-from ...modeling_outputs import (  # type: ignore[import]
-    BaseModelOutput,
-    MaskedLMOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
-from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel  # type: ignore[import]
+from ...masking_utils import create_bidirectional_mask, packed_sequence_mask_function
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple  # type: ignore[import]
-from ...utils.generic import maybe_autocast
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from .configuration_esmc import ESMCConfig
 
 
 class ESMCRotaryEmbedding(nn.Module):
-    """Rotary position embeddings (RoPE), returning ``(cos, sin)``.
-
-    Two ESMC-specific tweaks over the base implementation:
-
-    * ``inv_freq`` is a **non-persistent** buffer (recomputed from the config, never
-      stored in the checkpoint).
-    * ``_apply`` is overridden so ``inv_freq`` stays fp32 even when the module is cast
-      to bf16/fp16 (e.g. when ESMFold2 loads its bundled ESMC backbone in bf16), so the
-      rotary frequencies aren't rounded.
-    """
-
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: ESMCConfig, device=None):
         super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_type = {}
 
-        curr_inv_freq, curr_attention_scaling = self.compute_default_rope_parameters(self.config, device)
-        self.register_buffer("inv_freq", curr_inv_freq)
-        setattr(self, "attention_scaling", curr_attention_scaling)
-        inv_freq, _ = self.compute_default_rope_parameters(config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -85,12 +74,11 @@ class ESMCRotaryEmbedding(nn.Module):
                 The device to use for initialization of the inverse frequencies.
             seq_len (`int`, *optional*):
                 The current sequence length. Unused for this type of RoPE.
-
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        base = config.rope_theta
+        base = config.rope_parameters["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -103,56 +91,41 @@ class ESMCRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type=None):
-        inv_freq = getattr(self, "inv_freq")
-        attention_scaling = getattr(self, "attention_scaling")
-
-        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def _apply(self, fn, recurse=True):
+        # Little bit of hackery compared to Llama to match the original's dtypes
         result = super()._apply(fn, recurse=recurse)
         inv_freq, _ = self.compute_default_rope_parameters(self.config, device=self.inv_freq.device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         return result
 
 
-# ---------------------------------------------------------------------------
-# Feed-forward network helpers
-# ---------------------------------------------------------------------------
-
-
-def _swiglu_hidden_dim(expansion_ratio: float, d_model: int) -> int:
-    """Round hidden dim to the nearest multiple of 256 after applying expansion_ratio."""
-    return int(((expansion_ratio * d_model) + 255) // 256 * 256)
-
-
 class ESMCMLP(nn.Module):
-    """SwiGLU feed-forward network reusing :class:`ModernBertMLP`'s gated forward
-    (``Wo(SiLU(input) * gate)``). Bias-free, no dropout; hidden dim rounded to a
-    multiple of 256.
-    """
-
-    def __init__(self, d_model: int, expansion_ratio: float = 8 / 3) -> None:
+    def __init__(self, config):
         super().__init__()
-        ffn_hidden_size = _swiglu_hidden_dim(expansion_ratio, d_model)
-        self.Wi = nn.Linear(d_model, 2 * ffn_hidden_size, bias=False)
-        self.act = nn.SiLU()
-        self.drop = nn.Identity()
-        self.Wo = nn.Linear(ffn_hidden_size, d_model, bias=False)
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input, gate = self.Wi(hidden_states).chunk(2, dim=-1)
-        return self.Wo(self.drop(self.act(input) * gate))
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 def rotate_half(x):
@@ -216,47 +189,23 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# ---------------------------------------------------------------------------
-# Attention
-# ---------------------------------------------------------------------------
-
-
 class ESMCAttention(nn.Module):
-    """Multi-head self-attention with QK LayerNorm and RoPE.
-
-    All dims/flags are read from ``config`` (``d_model``/``n_heads``/
-    ``qk_layernorm``). ESMC is bias-free, so the linears carry no bias.
-    """
-
     def __init__(self, config: ESMCConfig):
         super().__init__()
         self.config = config
-        d_model = config.d_model
-        n_heads = config.n_heads
-        self.d_model = d_model
-        self.n_heads = n_heads
-        self.d_head = d_model // n_heads
-        self.scaling = self.d_head**-0.5
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.num_attention_heads = config.num_attention_heads
+        self.scaling = self.head_dim**-0.5
         self.attention_dropout = 0.0
-        # ESMC is a bidirectional encoder: never apply causal masking. Without
-        # this, the sdpa/flash interfaces default `is_causal` to True when no
-        # attention_mask is passed (unpadded inputs), silently masking causally.
         self.is_causal = False
 
-        # Fused QKV projection (``Wqkv``) and output projection (``Wo``), matching
-        # ModernBERT's attention layout. The pre-attention LayerNorm lives in
-        # :class:`ESMCLayer` (``attn_norm``); the published checkpoint's fused
-        # ``attn.layernorm_qkv`` / ``attn.out_proj`` map onto these via
-        # ``conversion_mapping.py``.
-        self.Wqkv = nn.Linear(d_model, d_model * 3, bias=False)
-        self.Wo = nn.Linear(d_model, d_model, bias=False)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
-        if config.qk_layernorm:
-            self.q_ln = nn.LayerNorm(d_model, bias=False)
-            self.k_ln = nn.LayerNorm(d_model, bias=False)
-        else:
-            self.q_ln = nn.Identity()
-            self.k_ln = nn.Identity()
+        self.q_ln = nn.LayerNorm(config.hidden_size, bias=False) if config.qk_layernorm else nn.Identity()
+        self.k_ln = nn.LayerNorm(config.hidden_size, bias=False) if config.qk_layernorm else nn.Identity()
 
     def forward(
         self,
@@ -264,32 +213,29 @@ class ESMCAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         output_attentions: bool = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Return ``(context, attn_weights)``.
 
         Attention is computed by the backend selected through
-        ``config._attn_implementation`` (``eager`` / ``sdpa`` /
-        ``flash_attention_2`` / ...). QK-LayerNorm and RoPE (via
-        ``position_embeddings``) are applied here; the backend only computes
-        ``softmax(QKᵀ)V``. ``attn_weights`` is ``None`` unless the backend
-        exposes the probabilities — ``output_attentions=True`` forces the
-        ``eager`` interface so they are observable.
+        ``config._attn_implementation``. ``attn_weights`` is ``None`` unless the backend
+        exposes the probabilities -- ``output_attentions=True`` forces the ``eager``
+        interface so they are observable.
         """
-        b, s, _ = hidden_states.shape
-        qkv = self.Wqkv(hidden_states)
-        q, k, v = torch.chunk(qkv, 3, dim=-1)
-        q = self.q_ln(q).to(q.dtype)
-        k = self.k_ln(k).to(q.dtype)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # (B, S, D) -> (B, H, S, Dh)
-        q = q.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
-        k = k.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
-        v = v.view(b, s, self.n_heads, self.d_head).transpose(1, 2)
+        query_states = self.q_ln(self.q_proj(hidden_states)).to(hidden_states.dtype)
+        key_states = self.k_ln(self.k_proj(hidden_states)).to(hidden_states.dtype)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(hidden_shape).transpose(1, 2)
+        key_states = key_states.view(hidden_shape).transpose(1, 2)
+        value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         if position_embeddings is not None:
             cos, sin = position_embeddings
-            q, k = apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         attention_interface: Callable = eager_attention_forward
         if not output_attentions:
@@ -299,182 +245,74 @@ class ESMCAttention(nn.Module):
 
         attn_output, attn_weights = attention_interface(
             self,
-            q,
-            k,
-            v,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
         )
-        attn_output = attn_output.reshape(b, s, -1)
-        return self.Wo(attn_output), attn_weights
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return self.o_proj(attn_output), attn_weights
 
 
-# ---------------------------------------------------------------------------
-# Transformer blocks
-# ---------------------------------------------------------------------------
-
-
-class ESMCLayer(nn.Module):
-    """Single transformer block: pre-norm attention + pre-norm FFN with residual scaling.
-
-    All dims/flags are read from ``config``. The ESM3 residue-scaling factor
-    (``sqrt(num_hidden_layers / 36)`` when ``config.scale_residue``) is derived
-    from the config here rather than threaded in.
-    """
+class ESMCLayer(GradientCheckpointingLayer):
+    """Single transformer block: pre-norm attention + pre-norm FFN with residual scaling."""
 
     def __init__(self, config: ESMCConfig):
         super().__init__()
-        d_model = config.d_model
-        # Pre-norm layout (cf. ModernBERT): the LayerNorms that the published ESMC
-        # checkpoint fuses into ``attn.layernorm_qkv`` / ``ffn`` live here as
-        # ``attn_norm`` / ``mlp_norm`` (remapped in ``conversion_mapping.py``).
-        self.attn_norm = nn.LayerNorm(d_model)
-        self.attn = ESMCAttention(config)
-        self.mlp_norm = nn.LayerNorm(d_model)
-        self.mlp = ESMCMLP(d_model, config.expansion_ratio)
-
-        self.scaling_factor = math.sqrt(config.n_layers / 36) if config.scale_residue else 1.0
+        self.input_layernorm = nn.LayerNorm(config.hidden_size)
+        self.self_attn = ESMCAttention(config)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
+        self.mlp = ESMCMLP(config)
+        self.scaling_factor = math.sqrt(config.num_hidden_layers / 36) if config.scale_residue else 1.0
 
     def forward(
         self,
-        x: torch.Tensor,
+        hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         output_attentions: bool = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """
-        Args:
-            x: ``(batch, seq_len, d_model)``
-            attention_mask: Additive attention bias broadcastable to
-                ``(batch, num_heads, seq_len, seq_len)``, or ``None`` for full
-                (unmasked) attention.
-            output_attentions: When ``True``, returns the per-head attention
-                weights for this block alongside the residual output.
-
-        Returns:
-            ``(output, attn_weights_or_None)``.  Shape of ``output`` is
-            ``(batch, seq_len, d_model)``; ``attn_weights`` shape is
-            ``(batch, num_heads, seq_len, seq_len)`` or ``None``.
-        """
-        attn_out, attn_weights = self.attn(
-            self.attn_norm(x),
+        residual = hidden_states
+        attn_output, attn_weights = self.self_attn(
+            self.input_layernorm(hidden_states),
             attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
             **kwargs,
         )
-        x = x + attn_out / self.scaling_factor
-        x = x + self.mlp(self.mlp_norm(x)) / self.scaling_factor
-        return x, attn_weights
-
-
-class ESMCEncoder(nn.Module):
-    """Stack of :class:`ESMCLayer` layers with a final LayerNorm. All dims/flags
-    are read from ``config``."""
-
-    def __init__(self, config: ESMCConfig):
-        super().__init__()
-        self.blocks = nn.ModuleList([ESMCLayer(config) for _ in range(config.n_layers)])
-        self.norm = nn.LayerNorm(config.d_model, bias=False)
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        layers_to_collect: list[int] | None = None,
-        output_attentions: bool = False,
-        **kwargs,
-    ) -> tuple[
-        torch.Tensor,
-        torch.Tensor,
-        tuple[torch.Tensor, ...],
-        tuple[torch.Tensor, ...] | None,
-    ]:
-        """Run the full transformer stack.
-
-        Args:
-            x: ``(batch, seq_len, d_model)``
-            attention_mask: Additive attention bias forwarded to each block, or
-                ``None`` for full attention.
-            layers_to_collect: Layer indices (0-based pre-block inputs plus
-                ``n_layers`` for the post-norm output) whose hidden states
-                should be returned.
-            output_attentions: When ``True``, collects the per-block attention
-                weights and returns them as the fourth tuple element.
-
-        Returns:
-            ``(post_norm, pre_norm, hidden_states, attentions)`` where
-            ``hidden_states`` is a (possibly empty) tuple of tensors and
-            ``attentions`` is a tuple of per-block ``(B, H, L, L)`` tensors
-            or ``None`` when ``output_attentions`` is ``False``.
-        """
-        if layers_to_collect is None:
-            layers_to_collect = []
-
-        collected: list[torch.Tensor] = []
-        all_attentions: list[torch.Tensor] = []
-        for layer_idx, block in enumerate(self.blocks):
-            if layer_idx in layers_to_collect:
-                collected.append(x)
-            x, attn_weights = block(
-                x,
-                attention_mask,
-                position_embeddings=position_embeddings,
-                output_attentions=output_attentions,
-                **kwargs,
-            )
-            if output_attentions and attn_weights is not None:
-                all_attentions.append(attn_weights)
-
-        norm_x = self.norm(x)
-        if len(self.blocks) in layers_to_collect:
-            collected.append(norm_x)
-
-        attentions = tuple(all_attentions) if output_attentions else None
-        return norm_x, x, tuple(collected), attentions
-
-
-# ---------------------------------------------------------------------------
-# Pre-trained model base class
-# ---------------------------------------------------------------------------
+        # ESM3 residue scaling on each residual branch.
+        hidden_states = residual + attn_output / self.scaling_factor
+        residual = hidden_states
+        hidden_states = residual + self.mlp(self.post_attention_layernorm(hidden_states)) / self.scaling_factor
+        return hidden_states, attn_weights
 
 
 @auto_docstring
 class ESMCPreTrainedModel(PreTrainedModel):
     config_class = ESMCConfig
     base_model_prefix = "esmc"
-    supports_gradient_checkpointing = False
+    supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
     _no_split_modules = ["ESMCLayer"]
-    _keys_to_ignore_on_load_unexpected = [r"\._extra_state$"]
-
-    def _init_weights(self, module: nn.Module):
-        if isinstance(module, ESMCRotaryEmbedding):
-            inv_freq, _ = module.compute_default_rope_parameters(module.config)
-            init.copy_(module.inv_freq, inv_freq)
-        else:
-            # nn.Linear / nn.Embedding / nn.LayerNorm via the base initializer.
-            super()._init_weights(module)
-
-
-# ---------------------------------------------------------------------------
-# Base encoder model
-# ---------------------------------------------------------------------------
+    # ``inv_freq`` / ``original_inv_freq`` are non-persistent rotary buffers; ``_extra_state``
+    # keys come from the published checkpoint's fused TransformerEngine layout.
+    _keys_to_ignore_on_load_unexpected = [r"\._extra_state$", r"\.inv_freq$", r"\.original_inv_freq$"]
 
 
 @auto_docstring
 class ESMCModel(ESMCPreTrainedModel):
     def __init__(self, config: ESMCConfig):
         super().__init__(config)
-        self.embed = nn.Embedding(config.vocab_size, config.d_model)
+        self.embed = nn.Embedding(config.vocab_size, config.hidden_size)
         self.rotary_emb = ESMCRotaryEmbedding(config)
-        self.transformer = ESMCEncoder(config)
+        self.layers = nn.ModuleList([ESMCLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Embedding:
@@ -493,16 +331,18 @@ class ESMCModel(ESMCPreTrainedModel):
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...] | BaseModelOutput:
         r"""
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Integer chain-ID tensor for chain-aware attention masking. Tokens with the same
             non-negative integer value can attend to each other; tokens with different values
-            cannot (cross-chain masking). Padding positions should be set to ``-1``.
-            When provided, ``attention_mask`` is ignored. The ``flash_attention_2`` backend
-            only supports single-chain inputs (all non-padding values must be ``0``); pass
-            multi-chain ``sequence_id`` with ``attn_implementation='sdpa'`` (or ``'eager'``).
+            cannot (cross-chain masking). Padding positions should be set to ``-1`` and inputs
+            must be **right-padded** (RoPE uses absolute positions starting at 0). When provided,
+            ``attention_mask`` is ignored. Passing ``sequence_id`` builds a custom attention
+            mask, which requires ``torch>=2.6``. Multi-chain inputs additionally require a
+            non-flash ``attn_implementation`` (``'sdpa'`` / ``'eager'`` / ``'flex_attention'``);
+            flash attention only supports the single-chain case.
         output_attentions (`bool`, *optional*):
             Whether to return the per-block attention weights of shape
             ``(batch_size, num_heads, sequence_length, sequence_length)``.
@@ -529,84 +369,63 @@ class ESMCModel(ESMCPreTrainedModel):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        # Collect per-layer hidden states only when the caller asks for them.
-        layers_to_collect: list[int] = list(range(self.config.n_layers + 1)) if output_hidden_states else []
+        hidden_states = self.embed(input_ids)
+        position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        user_supplied_sequence_id = sequence_id is not None
-        if not user_supplied_sequence_id and attention_mask is None:
-            attention_mask = input_ids != self.config.pad_token_id
-
-        x = self.embed(input_ids)
-        position_ids = torch.arange(x.shape[1], device=x.device).unsqueeze(0)
-        position_embeddings = self.rotary_emb(x, position_ids)
-
-        if user_supplied_sequence_id:
-            if self.config._attn_implementation == "flash_attention_2" and (sequence_id > 0).any():
+        if sequence_id is not None:
+            # Chain-aware attention: a token attends only to tokens sharing its
+            # ``sequence_id`` (block-diagonal), expressed as an additional ``and`` mask
+            # over the bidirectional mask. ``attention_mask`` is ignored here -- padding
+            # is encoded as ``sequence_id == -1``. Flash attention can't represent a
+            # block-diagonal mask without varlen, so multi-chain inputs are rejected.
+            if is_flash_attention_requested(self.config) and (sequence_id > 0).any():
                 raise ValueError(
-                    "Multi-chain ``sequence_id`` (any value > 0) is not "
-                    "supported with attn_implementation='flash_attention_2'. "
-                    "Re-load the model with attn_implementation='sdpa' (or "
-                    "'eager') for chain-aware attention masking."
+                    "Multi-chain ``sequence_id`` (any value > 0) is not supported with "
+                    "flash attention. Re-load the model with attn_implementation='sdpa' "
+                    "(or 'eager' / 'flex_attention') for chain-aware attention masking."
                 )
-            # Block-diagonal chain mask: a token attends only to tokens sharing
-            # its ``sequence_id``. Additive bias broadcast over heads, shape
-            # ``(batch, 1, seq_len, seq_len)``; handled by the eager / sdpa paths.
-            same_chain = sequence_id.unsqueeze(-1) == sequence_id.unsqueeze(-2)
-            attn_bias = torch.zeros(same_chain.shape, dtype=x.dtype, device=x.device).masked_fill_(
-                ~same_chain, torch.finfo(x.dtype).min
+            attn_bias = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=hidden_states,
+                attention_mask=None,
+                and_mask_function=packed_sequence_mask_function(sequence_id),
             )
-            attn_bias = attn_bias.unsqueeze(1)
         else:
             attn_bias = create_bidirectional_mask(
                 config=self.config,
-                inputs_embeds=x,
+                inputs_embeds=hidden_states,
                 attention_mask=attention_mask,
             )
 
-        last_hidden_state, _, collected, attentions = self.transformer(
-            x,
-            attention_mask=attn_bias,
-            position_embeddings=position_embeddings,
-            layers_to_collect=layers_to_collect,
-            output_attentions=output_attentions,
-        )
+        all_hidden_states: tuple[torch.Tensor, ...] = () if output_hidden_states else None
+        all_attentions: tuple[torch.Tensor, ...] = () if output_attentions else None
 
-        # Standard Transformers convention: a tuple of per-layer hidden states (the
-        # live activations collected in the encoder), not a stacked tensor. Consumers
-        # that want a single tensor (e.g. ESMFold2's LM projection) stack it themselves.
-        hidden_states = collected if output_hidden_states else None
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    last_hidden_state,
-                    hidden_states,
-                    attentions,
-                ]
-                if v is not None
+        for layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+            hidden_states, attn_weights = layer(
+                hidden_states,
+                attn_bias,
+                position_embeddings=position_embeddings,
+                output_attentions=output_attentions,
+                **kwargs,
             )
+            if output_attentions and attn_weights is not None:
+                all_attentions += (attn_weights,)
+
+        last_hidden_state = self.norm(hidden_states)
+        if output_hidden_states:
+            all_hidden_states += (last_hidden_state,)
 
         return BaseModelOutput(
             last_hidden_state=last_hidden_state,
-            hidden_states=hidden_states,
-            attentions=attentions,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
-# ---------------------------------------------------------------------------
-# LM head
-# ---------------------------------------------------------------------------
-
-
 class ESMCMaskedLMHead(nn.Module):
-    """Masked-language-modelling head: Linear → GELU → LayerNorm → Linear.
-
-    The published checkpoints store this head as an ``nn.Sequential`` (keys
-    ``lm_head.{0,2,3}``); the ``esmc`` entry in ``conversion_mapping.py`` remaps
-    them onto ``dense`` / ``layer_norm`` / ``decoder`` on load (and back on save).
-    """
-
     def __init__(self, d_model: int, output_dim: int, hidden_dim: int | None = None) -> None:
         super().__init__()
         hidden_dim = hidden_dim if hidden_dim is not None else d_model
@@ -621,17 +440,12 @@ class ESMCMaskedLMHead(nn.Module):
         return self.decoder(hidden_states)
 
 
-# ---------------------------------------------------------------------------
-# Masked language model
-# ---------------------------------------------------------------------------
-
-
 @auto_docstring
 class ESMCForMaskedLM(ESMCPreTrainedModel):
     def __init__(self, config: ESMCConfig):
         super().__init__(config)
         self.esmc = ESMCModel(config)
-        self.lm_head = ESMCMaskedLMHead(config.d_model, config.vocab_size)
+        self.lm_head = ESMCMaskedLMHead(config.hidden_size, config.vocab_size)
         self.post_init()
 
     def get_output_embeddings(self) -> nn.Linear:
@@ -650,7 +464,7 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...] | MaskedLMOutput:
         r"""
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -701,18 +515,13 @@ class ESMCForMaskedLM(ESMCPreTrainedModel):
 
 
 class ESMCClassificationHead(nn.Module):
-    """Dense classification head applied to the ``<cls>`` token representation.
-
-    Identical to :class:`~transformers.models.esm.modeling_esm.EsmClassificationHead`
-    (``<cls>`` token -> dropout -> ``tanh(dense)`` -> dropout -> ``out_proj``); ESMC just
-    sources the dropout rate from ``classifier_dropout`` instead of ``hidden_dropout_prob``.
-    """
+    """Head for sentence-level classification tasks."""
 
     def __init__(self, config: ESMCConfig):
         super().__init__()
-        self.dense = nn.Linear(config.d_model, config.d_model)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.classifier_dropout)
-        self.out_proj = nn.Linear(config.d_model, config.num_labels)
+        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
 
     def forward(self, features, **kwargs):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
@@ -722,11 +531,6 @@ class ESMCClassificationHead(nn.Module):
         x = self.dropout(x)
         x = self.out_proj(x)
         return x
-
-
-# ---------------------------------------------------------------------------
-# Sequence classification
-# ---------------------------------------------------------------------------
 
 
 @auto_docstring
@@ -747,7 +551,7 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...] | SequenceClassifierOutput:
         r"""
         output_attentions (`bool`, *optional*):
@@ -798,11 +602,6 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         )
 
 
-# ---------------------------------------------------------------------------
-# Token classification
-# ---------------------------------------------------------------------------
-
-
 @auto_docstring
 class ESMCForTokenClassification(ESMCPreTrainedModel):
     def __init__(self, config: ESMCConfig):
@@ -810,7 +609,7 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
         self.num_labels = config.num_labels
         self.esmc = ESMCModel(config)
         self.dropout = nn.Dropout(config.classifier_dropout)
-        self.classifier = nn.Linear(config.d_model, config.num_labels)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.post_init()
 
     @can_return_tuple
@@ -822,7 +621,7 @@ class ESMCForTokenClassification(ESMCPreTrainedModel):
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...] | TokenClassifierOutput:
         r"""
         output_attentions (`bool`, *optional*):
