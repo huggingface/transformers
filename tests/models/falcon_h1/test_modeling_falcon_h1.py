@@ -17,10 +17,11 @@ import unittest
 
 import pytest
 
-from transformers import FalconH1Config, is_torch_available
+from transformers import DynamicCache, FalconH1Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     get_device_properties,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -240,6 +241,41 @@ class FalconH1ModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_mamba_chunked_prefill(self, config, input_ids, *args, device="cpu"):
+        """
+        Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
+        to check whether multi-token cached input is properly handled.
+
+        Can either be run on GPU (fast path) or CPU (slow path), see `test_mamba_chunked_prefill_*`
+        """
+        model = FalconH1Model(config=config)
+        model.to(device)
+        model.eval()
+
+        input_ids = input_ids[:1].to(device)
+        prefill_len = input_ids.shape[1] // 2 + 1
+        prompt = input_ids[:, :prefill_len]
+        next_token = input_ids[:, prefill_len : prefill_len + 1]
+        distractors = input_ids[:, prefill_len + 1 :]
+        multi_input = torch.cat([next_token, distractors], dim=1)
+
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        self.parent.assertTrue(
+            torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
+            msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
+        )
+
 
 @require_torch
 class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -285,6 +321,16 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_mamba_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_attention_outputs(self):
         r"""
