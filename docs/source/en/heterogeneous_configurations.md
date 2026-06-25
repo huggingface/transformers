@@ -124,12 +124,11 @@ overridden layers. Code that allocates a key-value cache from a global `num_key_
 would be incorrect for the layers that override it.
 
 By default, an `AmbiguousGlobalPerLayerAttributeError` will be raised for this access pattern, directing callers to use
-`config.per_layer_config[layer_idx]` instead. This is not an `AttributeError`, because the global attribute exists;
-it is just more error-prone to read without a layer-specific context.
+`config.per_layer_config[layer_idx]` instead. We raise this error instead of `AttributeError` because the attribute
+exists on the global config, but reading it there is ambiguous without layer-specific context.
 
 Set `allow_global_per_layer_attribute_access=True` only when the caller intentionally needs the global fallback value
-and can safely handle heterogeneous configurations. In that case, global access is allowed, but a
-`warning_once` message will be emitted.
+and can safely handle heterogeneous configurations. In that case, global access is allowed, but a warning will be emitted once.
 
 ```py
 config = LlamaConfig(
