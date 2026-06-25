@@ -49,7 +49,6 @@ class _HeterogeneitySpec:
     per_layer_overrides: dict[int, dict[str, Any]]
     per_layer_attributes: set[str]
     explicit_per_layer_attributes: set[str]
-    fallback_values: dict[str, Any]
 
 
 class HeterogeneousConfigMixin:
@@ -198,8 +197,7 @@ def _apply_heterogeneous_config(
     (e.g., different ``intermediate_size``, ``num_key_value_heads``, or entire
     sub-layers skipped via the ``skip`` attribute).
 
-    This function validates the overrides, computes fallback values from the global
-    config, and stores a ``_HeterogeneitySpec`` on ``config._heterogeneity_spec``.
+    This function validates the overrides and stores a ``_HeterogeneitySpec`` on ``config._heterogeneity_spec``.
     At model-init time, ``apply_heterogeneous_modeling`` reads this spec to patch
     each layer with its resolved config.
 
@@ -244,28 +242,23 @@ class _PerLayerConfigView(Sequence["PreTrainedConfig"]):
         heterogeneity_spec = self._config._heterogeneity_spec
         return _get_layer_config(
             self._config,
-            heterogeneity_spec.per_layer_overrides.get(layer_idx),
-            heterogeneity_spec.per_layer_attributes,
-            heterogeneity_spec.fallback_values,
+            heterogeneity_spec.per_layer_overrides.get(layer_idx, {}),
         )
 
 
 def _get_layer_config(
     config: PreTrainedConfig,
-    layer_overrides: dict[str, Any] | None,
-    per_layer_attributes: set[str],
-    fallback_values: dict[str, Any],
+    layer_overrides: dict[str, Any],
 ) -> PreTrainedConfig:
     output_config = copy.copy(config)
 
     _remove_heterogeneity_spec(output_config)
 
-    output_config.skip = layer_overrides.get("skip", []) if layer_overrides is not None else []
+    output_config.skip = layer_overrides.get("skip", [])
 
-    for attr in per_layer_attributes:
-        value = fallback_values[attr]
-        if layer_overrides is not None and attr in layer_overrides:
-            value = layer_overrides[attr]
+    for attr, value in layer_overrides.items():
+        if attr == "skip":
+            continue
         setattr(output_config, attr, value)
 
     return output_config
@@ -375,13 +368,10 @@ def _modify_config_and_create_heterogeneity_spec(
             del per_layer_overrides[layer_idx]
 
     per_layer_attributes = _get_per_layer_attributes(per_layer_overrides)
-    fallback_values = {attr: getattr(config, attr, None) for attr in explicit_per_layer_attributes}
-
     heterogeneity_spec = _HeterogeneitySpec(
         per_layer_overrides=per_layer_overrides,
         per_layer_attributes=per_layer_attributes,
         explicit_per_layer_attributes=explicit_per_layer_attributes,
-        fallback_values=fallback_values,
     )
 
     return heterogeneity_spec
@@ -395,13 +385,15 @@ def _get_explicit_per_layer_overrides(config: PreTrainedConfig) -> dict[int, dic
     heterogeneity_spec = config._heterogeneity_spec
     explicit_per_layer_overrides = {}
 
-    for layer_idx in range(config.num_hidden_layers):
-        layer_overrides = copy.deepcopy(heterogeneity_spec.per_layer_overrides.get(layer_idx, {}))
+    with config._disable_heterogeneous_attribute_access_validation():
+        for layer_idx in range(config.num_hidden_layers):
+            layer_overrides = copy.deepcopy(heterogeneity_spec.per_layer_overrides.get(layer_idx, {}))
 
-        for attr in heterogeneity_spec.explicit_per_layer_attributes:
-            layer_overrides.setdefault(attr, heterogeneity_spec.fallback_values[attr])
+            for attr in heterogeneity_spec.explicit_per_layer_attributes:
+                if attr not in layer_overrides:
+                    layer_overrides[attr] = getattr(config, attr)
 
-        if layer_overrides:
-            explicit_per_layer_overrides[layer_idx] = layer_overrides
+            if layer_overrides:
+                explicit_per_layer_overrides[layer_idx] = layer_overrides
 
     return explicit_per_layer_overrides

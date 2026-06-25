@@ -152,6 +152,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
         # PreTrainedModel.__init__ updates this after config construction.
         config._attn_implementation_internal = "sdpa"
         config.hidden_size = 96
+        config.intermediate_size = 192
 
         self.assertIs(type(config.per_layer_config[0]), type(config))
         self.assertFalse(config.per_layer_config[0].is_heterogeneous)
@@ -161,7 +162,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.per_layer_config[0].hidden_size, 96)
         self.assertEqual(config.per_layer_config[1].hidden_size, 96)
         self.assertEqual(config.per_layer_config[0].intermediate_size, 64)
-        self.assertEqual(config.per_layer_config[1].intermediate_size, 128)
+        self.assertEqual(config.per_layer_config[1].intermediate_size, 192)
 
         layer_dict = config.per_layer_config[0].to_dict()
         self.assertNotIn("per_layer_config", layer_dict)
@@ -327,6 +328,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
             per_layer_config={0: {"num_key_value_heads": 1}},
             serialize_explicit_per_layer_config=True,
         )
+        explicit_config.num_key_value_heads = 8
         explicit_config_dict = explicit_config.to_dict()
 
         self.assertEqual(sparse_config.to_dict()["per_layer_config"], {"0": {"num_key_value_heads": 1}})
@@ -334,8 +336,8 @@ class TestHeterogeneousConfig(unittest.TestCase):
             explicit_config_dict["per_layer_config"],
             {
                 "0": {"num_key_value_heads": 1},
-                "1": {"num_key_value_heads": 4},
-                "2": {"num_key_value_heads": 4},
-                "3": {"num_key_value_heads": 4},
+                "1": {"num_key_value_heads": 8},
+                "2": {"num_key_value_heads": 8},
+                "3": {"num_key_value_heads": 8},
             },
         )
