@@ -224,7 +224,6 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> BatchFeature:
         # --- Local patches (batched by shape group) ---
-        num_local_patches_grouped = {}
         local_patches_grouped = {}
 
         if crop_to_patches:
@@ -245,10 +244,8 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
                         flat_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
                     )
                     local_patches_grouped[shape] = flat_patches.reshape(stacked_patches.shape)
-                    num_local_patches_grouped[shape] = [n_patches] * stacked_images.shape[0]
                 else:
                     local_patches_grouped[shape] = [None] * stacked_images.shape[0]
-                    num_local_patches_grouped[shape] = [0] * stacked_images.shape[0]
 
             ordered_local = reorder_images(local_patches_grouped, grouped_images_index)
         else:
