@@ -19,8 +19,8 @@ from typing import Any
 
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
 from huggingface_hub.dataclasses import strict
+from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
