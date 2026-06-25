@@ -353,6 +353,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
             )
 
         max_dim = max(height, width)
+        # Use round(x/2) instead of x//2 to match PIL.ImageOps.pad behavior
         paste_x_left = round((max_dim - width) / 2)
         paste_y_left = round((max_dim - height) / 2)
         paste_x_right = max_dim - width - paste_x_left
