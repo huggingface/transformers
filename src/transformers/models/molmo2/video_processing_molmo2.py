@@ -104,7 +104,7 @@ def resize_and_normalize_image(
 
 def build_resized_image(
     backend: "TorchvisionBackend",
-    image_chw: torch.Tensor,
+    images_nchw: torch.Tensor,
     base_image_input_size: int,
     resample: PILImageResampling,
     do_rescale: bool,
@@ -114,9 +114,10 @@ def build_resized_image(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    chw_resized = resize_and_normalize_image(
+    # `images_nchw`: a batch of same-shape images `[N, C, H, W]`; resize the whole batch at once.
+    resized = resize_and_normalize_image(
         backend,
-        image_chw,
+        images_nchw,
         [base_image_input_size, base_image_input_size],
         resample,
         do_rescale=do_rescale,
@@ -125,9 +126,11 @@ def build_resized_image(
         image_mean=image_mean,
         image_std=image_std,
     )
-    resized = chw_resized.permute(1, 2, 0).unsqueeze(0)
+    # [N, C, S, S] -> [N, 1, S, S, C]: one global (low-res) view per image.
+    resized = resized.permute(0, 2, 3, 1).unsqueeze(1)
+    # The per-patch index grid depends only on the (shared) shape, so it is built once.
     crop_patch_h = crop_patch_w = base_image_input_size // image_patch_size
-    resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32, device=image_chw.device).reshape(
+    resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32, device=images_nchw.device).reshape(
         crop_patch_h, crop_patch_w
     )
     return resized, resize_idx
@@ -200,9 +203,10 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         image_pooling_h: int,
         image_pooling_w: int,
     ) -> tuple[list[int], torch.Tensor, torch.Tensor]:
+        # `build_resized_image` is batch-native (`[N, C, H, W]`); a frame is a 1-image batch.
         hwc, resize_idx = build_resized_image(
             self,
-            frame_chw,
+            frame_chw.unsqueeze(0),
             base_image_input_size,
             resample,
             do_rescale,
@@ -212,6 +216,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
             image_std,
             image_patch_size,
         )
+        hwc = hwc[0]
         pooling_idx = arange_for_pooling(resize_idx, image_pooling_h, image_pooling_w)
         num_patch_rows, num_patch_cols = pooling_idx.shape[:2]
         pooling_idx = pooling_idx.reshape([-1, image_pooling_h * image_pooling_w])

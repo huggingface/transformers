@@ -26,6 +26,7 @@ from torch.nn import functional as F
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -130,7 +131,7 @@ def resize_and_normalize_image(
 
 def build_resized_image(
     backend: "TorchvisionBackend",
-    image_chw: torch.Tensor,
+    images_nchw: torch.Tensor,
     base_image_input_size: int,
     resample: PILImageResampling,
     do_rescale: bool,
@@ -140,9 +141,10 @@ def build_resized_image(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    chw_resized = resize_and_normalize_image(
+    # `images_nchw`: a batch of same-shape images `[N, C, H, W]`; resize the whole batch at once.
+    resized = resize_and_normalize_image(
         backend,
-        image_chw,
+        images_nchw,
         [base_image_input_size, base_image_input_size],
         resample,
         do_rescale=do_rescale,
@@ -151,9 +153,11 @@ def build_resized_image(
         image_mean=image_mean,
         image_std=image_std,
     )
-    resized = chw_resized.permute(1, 2, 0).unsqueeze(0)
+    # [N, C, S, S] -> [N, 1, S, S, C]: one global (low-res) view per image.
+    resized = resized.permute(0, 2, 3, 1).unsqueeze(1)
+    # The per-patch index grid depends only on the (shared) shape, so it is built once.
     crop_patch_h = crop_patch_w = base_image_input_size // image_patch_size
-    resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32, device=image_chw.device).reshape(
+    resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32, device=images_nchw.device).reshape(
         crop_patch_h, crop_patch_w
     )
     return resized, resize_idx
@@ -181,7 +185,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def _build_overlapping_crops(
         self,
-        image_chw: torch.Tensor,
+        images_nchw: torch.Tensor,
         max_crops: int,
         overlap_margins: list[int],
         base_image_input_size: int,
@@ -193,7 +197,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_std: list[float],
         image_patch_size: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Tile `image_chw` into overlapping square crops and return per-patch global indices with overlap patches collapsed to a single owner."""
+        """Tile a batch of same-shape images `[N, C, H, W]` into overlapping square crops. The tiling and the per-patch index grid depend only on the (shared) shape, so they are computed once and the resize/unfold are batched over N."""
         crop_size = base_image_input_size
         left_margin, right_margin = overlap_margins
         crop_patches = crop_size // image_patch_size
@@ -201,7 +205,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         window_size = window_patches * image_patch_size
         margin_size = (left_margin + right_margin) * image_patch_size
 
-        _, original_height, original_width = image_chw.shape
+        _, _, original_height, original_width = images_nchw.shape
         tiling_h, tiling_w = select_tiling(
             original_height - margin_size, original_width - margin_size, window_size, max_crops
         )
@@ -210,7 +214,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         src = resize_and_normalize_image(
             self,
-            image_chw,
+            images_nchw,
             [src_height, src_width],
             resample,
             do_rescale=do_rescale,
@@ -220,11 +224,16 @@ class Molmo2ImageProcessor(TorchvisionBackend):
             image_std=image_std,
         )
 
-        crops = src.unfold(1, crop_size, window_size).unfold(2, crop_size, window_size)
-        crops = crops.permute(1, 2, 3, 4, 0).reshape(tiling_h * tiling_w, crop_size, crop_size, 3).contiguous()
+        # [N, C, src_h, src_w] -> unfold spatial dims -> [N, C, tiling_h, tiling_w, crop, crop]
+        crops = src.unfold(2, crop_size, window_size).unfold(3, crop_size, window_size)
+        crops = (
+            crops.permute(0, 2, 3, 4, 5, 1)
+            .reshape(src.shape[0], tiling_h * tiling_w, crop_size, crop_size, 3)
+            .contiguous()
+        )
 
         patch_idx = torch.arange(
-            tiling_h * tiling_w * crop_patches * crop_patches, dtype=torch.int32, device=image_chw.device
+            tiling_h * tiling_w * crop_patches * crop_patches, dtype=torch.int32, device=images_nchw.device
         ).reshape(tiling_h, tiling_w, crop_patches, crop_patches)
         if left_margin:
             patch_idx[1:, :, :left_margin, :] = -1
@@ -238,9 +247,9 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         return crops, patch_idx
 
-    def _image_to_patches_and_grids(
+    def _image_batch_to_patches_and_grids(
         self,
-        image_chw: torch.Tensor,
+        images_nchw: torch.Tensor,
         max_crops: int,
         overlap_margins: list[int],
         base_image_input_size: int,
@@ -254,13 +263,16 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_pooling_w: int,
         image_pooling_h: int,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Process a batch of same-shape images `[N, C, H, W]`. The grid and pooling indices are
+        shape-dependent (shared across the batch) and returned expanded to `[N, ...]` so the caller
+        can reorder them per-image alongside the batched patch tensor."""
         base_image_input_d = image_patch_size
         pooling_w = image_pooling_w
         pooling_h = image_pooling_h
         crop_patch_h = crop_patch_w = base_image_input_size // base_image_input_d
 
         crop_arr, patch_idx_arr = self._build_overlapping_crops(
-            image_chw,
+            images_nchw,
             max_crops,
             overlap_margins,
             base_image_input_size,
@@ -278,7 +290,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         resized, resize_idx = build_resized_image(
             self,
-            image_chw,
+            images_nchw,
             base_image_input_size,
             resample,
             do_rescale,
@@ -288,7 +300,8 @@ class Molmo2ImageProcessor(TorchvisionBackend):
             image_std,
             image_patch_size,
         )
-        crop_arr = torch.cat([resized, crop_arr], 0)
+        # [N, 1, S, S, C] + [N, ncrops, S, S, C] -> [N, 1 + ncrops, S, S, C]
+        crop_arr = torch.cat([resized, crop_arr], dim=1)
 
         resize_idx = arange_for_pooling(resize_idx, pooling_h, pooling_w)
         resized_h, resized_w = resize_idx.shape[:2]
@@ -297,10 +310,17 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         pooling_idx = torch.where(pooling_idx >= 0, pooling_idx + crop_patch_h * crop_patch_w, -1)
         pooling_idx = torch.cat([resize_idx, pooling_idx])
         image_grid = torch.tensor(
-            [[resized_h, resized_w, num_patch_rows, num_patch_cols]], dtype=torch.int64, device=image_chw.device
+            [[resized_h, resized_w, num_patch_rows, num_patch_cols]], dtype=torch.int64, device=images_nchw.device
         )
 
-        return image_grid, batch_pixels_to_patches(crop_arr, image_patch_size), pooling_idx
+        # [N, total_crops, S, S, C] -> patches [N, total_crops, n_patch, pixels_per_patch]
+        n_images, total_crops = crop_arr.shape[0], crop_arr.shape[1]
+        patches = batch_pixels_to_patches(
+            crop_arr.reshape(n_images * total_crops, *crop_arr.shape[2:]), image_patch_size
+        ).reshape(n_images, total_crops, -1, image_patch_size * image_patch_size * 3)
+
+        # Expand the shared grid / pooling indices to the batch so they reorder per-image.
+        return image_grid.expand(n_images, -1), patches, pooling_idx.unsqueeze(0).expand(n_images, -1, -1)
 
     def _prepare_images_structure(
         self,
@@ -334,6 +354,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         overlap_margins: list[int],
         patch_size: int,
         pooling_size: list[int],
+        disable_grouping: bool | None = None,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
@@ -342,42 +363,56 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         base_image_input_size = size.height
         image_pooling_h, image_pooling_w = pooling_size
 
+        # Group images by shape and process each unique shape as a single batch (the tiling and all
+        # patch/pooling indices are shape-dependent only), then restore the original order.
+        flat_images = [image for sample_images in images for image in sample_images]
+        device = flat_images[0].device
+        grouped_images, grouped_index = group_images_by_shape(flat_images, disable_grouping=disable_grouping)
+
+        grids_grouped: dict = {}
+        patches_grouped: dict = {}
+        pooled_grouped: dict = {}
+        for shape, stacked_images in grouped_images.items():
+            image_grid, patches, pooled_idx = self._image_batch_to_patches_and_grids(
+                stacked_images,
+                max_crops,
+                overlap_margins,
+                base_image_input_size,
+                resample,
+                do_rescale,
+                rescale_factor,
+                do_normalize,
+                image_mean,
+                image_std,
+                patch_size,
+                image_pooling_w,
+                image_pooling_h,
+            )
+            grids_grouped[shape] = image_grid
+            patches_grouped[shape] = patches
+            pooled_grouped[shape] = pooled_idx
+
+        grids = reorder_images(grids_grouped, grouped_index)
+        patches = reorder_images(patches_grouped, grouped_index)
+        pooled = reorder_images(pooled_grouped, grouped_index)
+
         all_grids: list[torch.Tensor] = []
         all_crops: list[torch.Tensor] = []
         all_pooled: list[torch.Tensor] = []
         all_num_crops: list[int] = []
         patch_offset = 0
+        for image_grid, crops, pooled_idx in zip(grids, patches, pooled):
+            pooled_idx = torch.where(pooled_idx >= 0, pooled_idx + patch_offset, pooled_idx)
+            patch_offset += crops.shape[0] * crops.shape[1]
+            all_grids.append(image_grid)
+            all_crops.append(crops)
+            all_pooled.append(pooled_idx)
+            all_num_crops.append(crops.shape[0])
 
-        for sample_images in images:
-            for image in sample_images:
-                image_grid, crops, pooled_idx = self._image_to_patches_and_grids(
-                    image,
-                    max_crops,
-                    overlap_margins,
-                    base_image_input_size,
-                    resample,
-                    do_rescale,
-                    rescale_factor,
-                    do_normalize,
-                    image_mean,
-                    image_std,
-                    patch_size,
-                    image_pooling_w,
-                    image_pooling_h,
-                )
-                pooled_idx = torch.where(pooled_idx >= 0, pooled_idx + patch_offset, pooled_idx)
-                patch_offset += crops.shape[0] * crops.shape[1]
-
-                all_grids.append(image_grid)
-                all_crops.append(crops)
-                all_pooled.append(pooled_idx)
-                all_num_crops.append(crops.shape[0])
-
-        device = all_crops[0].device
         data = {
             "pixel_values": torch.cat(all_crops, dim=0),
             "image_token_pooling": torch.cat(all_pooled, dim=0),
-            "image_grids": torch.cat(all_grids, dim=0),
+            "image_grids": torch.stack(all_grids, dim=0),
             "image_num_crops": torch.tensor(all_num_crops, dtype=torch.int64, device=device),
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
