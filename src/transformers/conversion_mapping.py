@@ -883,29 +883,38 @@ def _build_checkpoint_conversion_mapping():
                 "rotary_embeddings.inv_freq",
             ),
         ],
-        # The published ESMC checkpoints fuse each transformer block's two pre-norms
-        # into the QKV / FFN projections: ``attn.layernorm_qkv`` is ``LayerNorm + Linear``
-        # and ``ffn`` is ``LayerNorm + SwiGLU`` (weights ``fc1_weight`` / ``fc2_weight``).
-        # The model uses the standard ModernBERT-style pre-norm layout instead -- separate
-        # block-level ``attn_norm`` / ``mlp_norm`` with fused ``attn.Wqkv`` / ``attn.Wo``
-        # and ``mlp.Wi`` / ``mlp.Wo``. Remap on load (and reverse on save). Registered on
-        # the "esmc" model_type so it also covers the bundled ESMC backbone nested under
-        # ``esmc.*`` inside an ESMFold2 checkpoint (sub-modules are remapped by model_type).
         "esmc": [
-            WeightRenaming(r"attn\.layernorm_qkv\.layer_norm_weight", "attn_norm.weight"),
-            WeightRenaming(r"attn\.layernorm_qkv\.layer_norm_bias", "attn_norm.bias"),
-            WeightRenaming(r"attn\.layernorm_qkv\.weight", "attn.Wqkv.weight"),
-            WeightRenaming(r"attn\.out_proj\.", "attn.Wo."),
-            WeightRenaming(r"ffn\.layer_norm_weight", "mlp_norm.weight"),
-            WeightRenaming(r"ffn\.layer_norm_bias", "mlp_norm.bias"),
-            WeightRenaming(r"ffn\.fc1_weight", "mlp.Wi.weight"),
-            WeightRenaming(r"ffn\.fc2_weight", "mlp.Wo.weight"),
+            WeightRenaming(r"transformer\.blocks", "layers"),
+            # The negative lookbehinds anchor the *reverse* search to the final encoder
+            # norm only (they are stripped from the forward replacement), so saving does
+            # not rewrite the "norm" inside ``input_layernorm`` / ``post_attention_layernorm``.
+            WeightRenaming(r"transformer\.norm\.", r"(?<!layer)(?<!_)norm\."),
+            WeightRenaming(r"attn\.layernorm_qkv\.layer_norm_weight", "input_layernorm.weight"),
+            WeightRenaming(r"attn\.layernorm_qkv\.layer_norm_bias", "input_layernorm.bias"),
+            WeightRenaming(r"attn\.q_ln", "self_attn.q_ln"),
+            WeightRenaming(r"attn\.k_ln", "self_attn.k_ln"),
+            WeightRenaming(r"attn\.out_proj", "self_attn.o_proj"),
+            WeightRenaming(r"ffn\.layer_norm_weight", "post_attention_layernorm.weight"),
+            WeightRenaming(r"ffn\.layer_norm_bias", "post_attention_layernorm.bias"),
+            WeightRenaming(r"ffn\.fc2_weight", "mlp.down_proj.weight"),
+            WeightConverter(
+                source_patterns=["attn.layernorm_qkv.weight"],
+                target_patterns=[
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["ffn.fc1_weight"],
+                target_patterns=[
+                    "mlp.gate_proj.weight",
+                    "mlp.up_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
         ],
-        # Scoped to the class (not the "esmc" model_type) so it only applies to the
-        # head model: the published ESMC checkpoints store the masked-LM head as an
-        # ``nn.Sequential`` (keys ``lm_head.{0,2,3}``); ``ESMCForMaskedLM`` uses a
-        # named ``ESMCMaskedLMHead`` (``dense`` / ``layer_norm`` / ``decoder``). Remap
-        # on load (and reverse on save). ``ESMCModel`` (the backbone) has no lm_head.
         "ESMCForMaskedLM": [
             WeightRenaming(r"lm_head\.0\.", "lm_head.dense."),
             WeightRenaming(r"lm_head\.2\.", "lm_head.layer_norm."),
