@@ -41,6 +41,7 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers import UdopEncoderModel, UdopForConditionalGeneration, UdopModel, UdopProcessor
+    from transformers.models.udop.modeling_udop import combine_image_text_embeddings
 
 
 class UdopModelTester:
@@ -404,6 +405,19 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @unittest.skip(reason="TODO: Fix me @joao")
     def test_generate_without_input_ids(self):
         pass
+
+    def test_combine_image_text_embeddings_no_float64(self):
+        # combine_image_text_embeddings previously cast bbox to float64, which fails on MPS.
+        # Verify that the function runs with float32 inputs and produces a finite result.
+        num_patches, batch_size, seq_len, hidden_size = 14, 2, 4, 32
+        image_embeddings = torch.randn(batch_size, num_patches * num_patches, hidden_size, device=torch_device)
+        inputs_embeds = torch.zeros(batch_size, seq_len, hidden_size, device=torch_device)
+        # Use all-zero bboxes to exercise the target_seg mask.
+        bbox = torch.zeros(batch_size, seq_len, 4, device=torch_device)
+        result, _, _ = combine_image_text_embeddings(
+            image_embeddings, inputs_embeds, bbox, visual_bbox=None, num_patches=num_patches
+        )
+        self.assertFalse(torch.any(result.isnan()))
 
 
 class UdopEncoderOnlyModelTester:

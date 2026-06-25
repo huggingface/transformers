@@ -43,6 +43,8 @@ from ...test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
+    from transformers.models.musicflamingo.modeling_musicflamingo import apply_rotary_time_emb
+
 
 class MusicFlamingoModelTester(ALMModelTester):
     """
@@ -146,6 +148,16 @@ class MusicFlamingoForConditionalGenerationModelTest(ALMModelTest, unittest.Test
 
         inferred = model._build_audio_timestamps(input_ids, post_lengths, max_post_length)
         torch.testing.assert_close(inferred, audio_timestamps)
+
+    def test_apply_rotary_time_emb_preserves_dtype(self):
+        # Verifies that apply_rotary_time_emb does not upcast to float64, which would fail on MPS.
+        batch, seq, dim = 2, 4, 8
+        hidden_states = torch.randn(batch, seq, dim, dtype=torch.float32, device=torch_device)
+        cos = torch.randn(batch, seq, dim // 2, dtype=torch.float32, device=torch_device)
+        sin = torch.randn(batch, seq, dim // 2, dtype=torch.float32, device=torch_device)
+        out = apply_rotary_time_emb(hidden_states, cos, sin)
+        self.assertEqual(out.dtype, torch.float32)
+        self.assertEqual(out.shape, hidden_states.shape)
 
     @unittest.skip(
         reason="This test does not apply to MusicFlamingo since High-level inputs_embeds corresponding to audio tokens are replaced when input features are provided."
