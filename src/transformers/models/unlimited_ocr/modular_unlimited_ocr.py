@@ -36,7 +36,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_flex_attn_available,
     torch_int,
 )
 from ...utils.generic import merge_with_config_defaults
@@ -85,14 +84,10 @@ from ..deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor, Deep
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
 
 
-if is_torch_flex_attn_available():
-    pass
-
-
 class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
     tile_size = 640
     max_patches = 32
-    model_input_names = ["pixel_values", "num_local_patches", "image_spatial_crop"]
+    model_input_names = ["pixel_values", "num_local_patches", "local_patches_grid"]
 
     def pad_to_square(
         self,
@@ -210,7 +205,7 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
             data["pixel_values_local"] = flat_local_list
 
         # Compute per-image spatial crop grid and local-patch counts.
-        image_spatial_crop = []
+        local_patches_grid = []
         num_local_patches = []
         for image in images:
             height, width = image.shape[-2:]
@@ -222,11 +217,10 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
             else:
                 num_columns, num_rows = 1, 1
                 num_local_patches.append(0)
-            image_spatial_crop.append([num_columns, num_rows])
+            local_patches_grid.append([num_columns, num_rows])
 
-        # TODO: rename
-        data["image_spatial_crop"] = image_spatial_crop
         data["num_local_patches"] = num_local_patches
+        data["local_patches_grid"] = local_patches_grid
 
         return BatchFeature(
             data=data,
@@ -246,10 +240,10 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
     def _expand_image_tokens(
         self,
         text: list[TextInput],
-        image_spatial_crop: torch.Tensor,
+        local_patches_grid: torch.Tensor,
         num_local_patches: list[int] | torch.Tensor,
     ) -> list[str]:
-        num_images = len(image_spatial_crop)
+        num_images = len(local_patches_grid)
         total_image_tokens = sum(t.count(self.image_token) for t in text)
         if total_image_tokens != num_images:
             raise ValueError(
@@ -267,8 +261,8 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
         crop_index = 0
         for i in range(len(text)):
             while self.image_token in text[i]:
-                num_columns = int(image_spatial_crop[crop_index][0])
-                num_rows = int(image_spatial_crop[crop_index][1])
+                num_columns = int(local_patches_grid[crop_index][0])
+                num_rows = int(local_patches_grid[crop_index][1])
                 num_tokens = num_queries_global * (num_queries_global + 1) + 1
                 if int(num_local_patches[crop_index]) > 0:
                     num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
@@ -303,7 +297,7 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
         text = text.copy()  # below lines change text in-place
 
         image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        text = self._expand_image_tokens(text, image_inputs["image_spatial_crop"], image_inputs["num_local_patches"])
+        text = self._expand_image_tokens(text, image_inputs["local_patches_grid"], image_inputs["num_local_patches"])
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
@@ -868,7 +862,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
         pixel_values: torch.FloatTensor,
         pixel_values_local: torch.FloatTensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
-        image_spatial_crop: torch.Tensor | None = None,
+        local_patches_grid: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> "UnlimitedOcrModelOutputWithPooling":
         r"""
@@ -876,7 +870,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             All local patches flattened across the batch, or `None` if no local views.
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image, e.g. `[6, 0, 4]`.
-        image_spatial_crop (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+        local_patches_grid (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
             The local crop grid `(num_columns, num_rows)` per image.
         """
         if isinstance(num_local_patches, torch.Tensor):
@@ -913,7 +907,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
 
             local_features = per_image_local[idx]
             if local_features is not None and local_features.shape[0] > 0:
-                num_columns, num_rows = int(image_spatial_crop[idx][0]), int(image_spatial_crop[idx][1])
+                num_columns, num_rows = int(local_patches_grid[idx][0]), int(local_patches_grid[idx][1])
                 num_queries_local = int(local_features.shape[1] ** 0.5)
                 local_grid = local_features.reshape(
                     num_rows, num_columns, num_queries_local, num_queries_local, hidden_size
@@ -949,7 +943,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
         pixel_values: torch.FloatTensor | None = None,
         pixel_values_local: torch.FloatTensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
-        image_spatial_crop: torch.Tensor | None = None,
+        local_patches_grid: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -962,7 +956,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             Local patch pixel values of shape `(total_patches, 3, H, W)`.
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image in the batch.
-        image_spatial_crop (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+        local_patches_grid (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
             The local crop grid `(num_columns, num_rows)` per image.
         """
         if inputs_embeds is None:
@@ -971,7 +965,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
         image_features = None
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values, pixel_values_local, num_local_patches, image_spatial_crop, return_dict=True
+                pixel_values, pixel_values_local, num_local_patches, local_patches_grid, return_dict=True
             ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
@@ -1006,7 +1000,7 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
         pixel_values: torch.FloatTensor | None = None,
         pixel_values_local: torch.FloatTensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
-        image_spatial_crop: torch.Tensor | None = None,
+        local_patches_grid: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -1021,7 +1015,7 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
             Local patch pixel values of shape `(total_patches, 3, H, W)`.
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image in the batch.
-        image_spatial_crop (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+        local_patches_grid (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
             The local crop grid `(num_columns, num_rows)` per image.
         """
         outputs = self.model(
@@ -1029,7 +1023,7 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
             pixel_values=pixel_values,
             pixel_values_local=pixel_values_local,
             num_local_patches=num_local_patches,
-            image_spatial_crop=image_spatial_crop,
+            local_patches_grid=local_patches_grid,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1069,7 +1063,7 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
         pixel_values=None,
         pixel_values_local=None,
         num_local_patches=None,
-        image_spatial_crop=None,
+        local_patches_grid=None,
         attention_mask=None,
         logits_to_keep=None,
         is_first_iteration=False,
@@ -1090,7 +1084,7 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
             model_inputs["pixel_values"] = pixel_values
             model_inputs["pixel_values_local"] = pixel_values_local
             model_inputs["num_local_patches"] = num_local_patches
-            model_inputs["image_spatial_crop"] = image_spatial_crop
+            model_inputs["local_patches_grid"] = local_patches_grid
 
         return model_inputs
 

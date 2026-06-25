@@ -62,7 +62,7 @@ class UnlimitedOcrProcessor(ProcessorMixin):
     def _expand_image_tokens(
         self,
         text: list[TextInput],
-        image_spatial_crop: torch.Tensor,
+        local_patches_grid: torch.Tensor,
         num_local_patches: list[int] | torch.Tensor,
     ) -> list[str]:
         """
@@ -78,7 +78,7 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         Returns:
             `list[str]`: Text with expanded image token placeholders.
         """
-        num_images = len(image_spatial_crop)
+        num_images = len(local_patches_grid)
         total_image_tokens = sum(t.count(self.image_token) for t in text)
         if total_image_tokens != num_images:
             raise ValueError(
@@ -96,8 +96,8 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         crop_index = 0
         for i in range(len(text)):
             while self.image_token in text[i]:
-                num_columns = int(image_spatial_crop[crop_index][0])
-                num_rows = int(image_spatial_crop[crop_index][1])
+                num_columns = int(local_patches_grid[crop_index][0])
+                num_rows = int(local_patches_grid[crop_index][1])
                 num_tokens = num_queries_global * (num_queries_global + 1) + 1
                 if int(num_local_patches[crop_index]) > 0:
                     num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
@@ -143,7 +143,7 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         text = text.copy()  # below lines change text in-place
 
         image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        text = self._expand_image_tokens(text, image_inputs["image_spatial_crop"], image_inputs["num_local_patches"])
+        text = self._expand_image_tokens(text, image_inputs["local_patches_grid"], image_inputs["num_local_patches"])
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
