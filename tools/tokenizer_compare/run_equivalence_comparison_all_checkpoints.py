@@ -211,9 +211,32 @@ pre.diff{background:#0f1720;color:#d8eefe;padding:12px;border-radius:6px;overflo
 .models a{overflow-wrap:anywhere;word-break:break-word}
 .badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#0d6efd;color:#fff;margin-left:8px;font-size:0.8rem}
 h2{margin:0 0 12px 0;font-size:1rem}
+.safe h2{color:#15803d}
+.legend{margin:12px 0 4px;font-size:0.875rem;color:#374151}
+.legend-dot{display:inline-block;width:11px;height:11px;border-radius:50%;background:#15803d;margin-right:6px;vertical-align:middle}
 @media(max-width:1200px){.grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:768px){.grid{grid-template-columns:1fr}}
 """
+
+
+def is_safe_pattern(diff: dict) -> bool:
+    """Return True if diff is the known-safe Metaspace→Prepend+Replace reorganization."""
+    if set(diff.keys()) - {"normalizer", "pre_tokenizer"}:
+        return False
+    if "normalizer" not in diff or "pre_tokenizer" not in diff:
+        return False
+    norm = diff["normalizer"]
+    pre = diff["pre_tokenizer"]
+    if norm.get("auto") != "None":
+        return False
+    backend_norm = norm.get("backend") or ""
+    if not (re.search(r"Prepend\(prepend=['\"]▁['\"]\)", backend_norm) and re.search(r"Replace\(", backend_norm)):
+        return False
+    if not re.search(r"Metaspace\(", pre.get("auto") or ""):
+        return False
+    if pre.get("backend") != "None":
+        return False
+    return True
 
 
 def make_report(data: list[dict], out_path: Path, ignore_useless_flags: bool = True) -> None:
@@ -264,13 +287,16 @@ def make_report(data: list[dict], out_path: Path, ignore_useless_flags: bool = T
         f"<style>{_CSS}</style></head><body>",
         "<h1>Tokenizer backend equivalence report</h1>",
         f'<p class="muted">Models checked: {len(data)} — mismatches: {len(mismatches)} — unique patterns: {len(groups)}</p>',
+        '<p class="legend"><span class="legend-dot"></span> <strong>Green</strong> pattern title = already checked safe to ignore by https://github.com/huggingface/transformers/pull/44255, check xlni equivalence with <code>python tools/tokenizer_compare/compare_tokenizer_xlni_roundtrip.py &lt;checkpoint&gt; v1 --backend tokenizers --compare-backend auto</code></p>',
         '<div class="grid">',
     ]
 
     for idx, (_, info) in enumerate(sorted(groups.items(), key=lambda kv: -len(kv[1]["models"])), 1):
         diff_html = colorize(diff_to_text(info["diff"]) or "(empty)")
+        safe = is_safe_pattern(info["diff"])
+        card_class = "card safe" if safe else "card"
         parts += [
-            f'<div class="card" id="pattern-{idx}"><h2>Pattern #{idx} <span class="badge">{len(info["models"])} models</span></h2>',
+            f'<div class="{card_class}" id="pattern-{idx}"><h2>Pattern #{idx} <span class="badge">{len(info["models"])} models</span></h2>',
             f'<pre class="diff">{diff_html}</pre>',
             '<div class="models"><strong>Affected models:</strong><ul>',
         ]
@@ -337,7 +363,9 @@ def main() -> int:
         except Exception as e:
             print(f"Warning: could not load existing results: {e}")
 
-    models_to_process = sorted(set(models_map) - processed)
+    models_to_process = sorted(
+        m for m in set(models_map) - processed if not any(part.startswith("mistral") for part in m.lower().split("/"))
+    )
     write_lock = threading.Lock()
 
     def process_one(m: str) -> None:
@@ -374,7 +402,11 @@ def main() -> int:
         print("Nothing new to process.")
 
     html_path = out_path.with_suffix(".html")
-    make_report(results, html_path, ignore_useless_flags=not args.show_all)
+    report_results = [
+        r for r in results
+        if not any(part.startswith("mistral") for part in (r.get("model_id") or "").lower().split("/"))
+    ]
+    make_report(report_results, html_path, ignore_useless_flags=not args.show_all)
     print("Wrote", html_path)
     return 0
 
