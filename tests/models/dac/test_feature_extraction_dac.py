@@ -31,7 +31,7 @@ if is_torch_available():
 
 
 @require_torch
-# Copied from transformers.tests.encodec.test_feature_extraction_dac.EncodecFeatureExtractionTester with Encodec->Dac
+# Copied from transformers.tests.encodec.test_feature_extraction_encodec.EncodecFeatureExtractionTester with Encodec->Dac
 class DacFeatureExtractionTester:
     # Ignore copy
     def __init__(
@@ -84,7 +84,7 @@ class DacFeatureExtractionTester:
 
 
 @require_torch
-# Copied from transformers.tests.encodec.test_feature_extraction_dac.EnCodecFeatureExtractionTest with Encodec->Dac
+# Copied from transformers.tests.encodec.test_feature_extraction_encodec.EnCodecFeatureExtractionTest with Encodec->Dac
 class DacFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = DacFeatureExtractor
 
