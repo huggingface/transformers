@@ -48,7 +48,7 @@ from transformers.generation.continuous_batching.cache import (
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
 from transformers.generation.continuous_batching.continuous_api import OutputRouter
 from transformers.generation.continuous_batching.distributed import DistributedHelper
-from transformers.generation.continuous_batching.encoder_cache import EmbeddingsCache
+from transformers.generation.continuous_batching.embeddings_cache import EmbeddingsCache
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
 from transformers.generation.continuous_batching.requests import GenerationOutput, RequestState, RequestStatus
