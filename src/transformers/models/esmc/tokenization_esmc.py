@@ -17,7 +17,7 @@ from tokenizers import AddedToken, Tokenizer
 from tokenizers.models import BPE
 from tokenizers.processors import TemplateProcessing
 
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 
@@ -64,7 +64,7 @@ SEQUENCE_VOCAB = [
 ]
 
 
-class ESMCTokenizer(PreTrainedTokenizerFast):
+class ESMCTokenizer(TokenizersBackend):
     r"""
     Construct an ESMC tokenizer.
 
@@ -100,6 +100,7 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
@@ -112,8 +113,7 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
         chain_break_token="|",
         **kwargs,
     ):
-        all_tokens = SEQUENCE_VOCAB
-        token_to_id = {tok: ind for ind, tok in enumerate(all_tokens)}
+        token_to_id = {tok: ind for ind, tok in enumerate(SEQUENCE_VOCAB)}
 
         # Normalise: always work with plain strings
         unk_token = self._ensure_str(unk_token)
@@ -125,24 +125,15 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
         bos_token = self._ensure_str(bos_token) if bos_token is not None else cls_token
         chain_break_token = self._ensure_str(chain_break_token)
 
-        bpe = BPE(token_to_id, merges=[], unk_token=unk_token)
-        tokenizer = Tokenizer(bpe)
-
-        special_tokens = [
-            cls_token,
-            pad_token,
-            mask_token,
-            eos_token,
-            chain_break_token,
-        ]
-        tokenizer.add_special_tokens(special_tokens)
+        self._tokenizer = Tokenizer(BPE(token_to_id, merges=[], unk_token=unk_token))
+        self._tokenizer.add_special_tokens([cls_token, pad_token, mask_token, eos_token, chain_break_token])
 
         # Automatically wrap every encoded sequence with <cls> … <eos>.
-        tokenizer.post_processor = TemplateProcessing(
+        self._tokenizer.post_processor = TemplateProcessing(
             single=f"{cls_token} $A {eos_token}",
             special_tokens=[
-                (cls_token, tokenizer.token_to_id(cls_token)),
-                (eos_token, tokenizer.token_to_id(eos_token)),
+                (cls_token, self._tokenizer.token_to_id(cls_token)),
+                (eos_token, self._tokenizer.token_to_id(eos_token)),
             ],
         )
 
@@ -156,7 +147,6 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
         self._chain_break_token = chain_break_token
 
         super().__init__(
-            tokenizer_object=tokenizer,
             unk_token=unk_token,
             bos_token=bos_token,
             cls_token=cls_token,
