@@ -239,7 +239,7 @@ class AfmoeSparseMoeBlock(nn.Module):
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
 
         # Get routing decisions (returns flattened top-k)
-        router_logits, top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
+        _, top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
 
         # Process through shared experts
         shared_output = self.shared_experts(hidden_states_flat).view(batch_size, seq_len, hidden_dim)
