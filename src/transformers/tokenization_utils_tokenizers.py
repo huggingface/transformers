@@ -727,6 +727,17 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if special_tokens:
             return self._tokenizer.add_special_tokens(new_tokens)
 
+        # For tokenizers loaded from a .json that bakes in prepend_scheme="always",
+        # swap a standalone Metaspace to "first" once a non-special token enters so
+        # the chunk after the added token does not pick up a spurious "▁" (#28218).
+        if any(isinstance(t, str) or not t.special for t in new_tokens):
+            pre_tokenizer = self._tokenizer.pre_tokenizer
+            if isinstance(pre_tokenizer, pre_tokenizers_fast.Metaspace) and pre_tokenizer.prepend_scheme == "always":
+                self._tokenizer.pre_tokenizer = pre_tokenizers_fast.Metaspace(
+                    replacement=pre_tokenizer.replacement,
+                    prepend_scheme="first",
+                    split=pre_tokenizer.split,
+                )
         return self._tokenizer.add_tokens(new_tokens)
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:

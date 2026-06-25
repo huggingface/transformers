@@ -16,7 +16,6 @@
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
-from ...tokenization_utils_base import _get_prepend_scheme
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -144,7 +143,8 @@ class XLNetTokenizer(TokenizersBackend):
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
         add_prefix_space = True
-        prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
+        # WhitespaceSplit + Metaspace needs "always" so each split word gets the "▁" marker.
+        prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
                 pre_tokenizers.WhitespaceSplit(),
