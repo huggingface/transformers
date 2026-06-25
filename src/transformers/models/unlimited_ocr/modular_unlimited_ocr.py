@@ -55,30 +55,9 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
     DeepseekOcr2ModelOutputWithPast,
     DeepseekOcr2ModelOutputWithPooling,
     DeepseekOcr2PreTrainedModel,
-    DeepseekOcr2SamLayerNorm,
-    DeepseekOcr2SamMLPBlock,
-    DeepseekOcr2SamPatchEmbeddings,
-    DeepseekOcr2SamVisionAttention,
-    DeepseekOcr2SamVisionEncoder,
-    DeepseekOcr2SamVisionLayer,
-    DeepseekOcr2SamVisionNeck,
-    DeepseekOcr2SamVisionProj,
-    DeepseekOcr2SamVisionSdpaAttention,
-    DeepseekOcr2TextAttention,
-    DeepseekOcr2TextDecoderLayer,
-    DeepseekOcr2TextExperts,
-    DeepseekOcr2TextMLP,
     DeepseekOcr2TextModel,
-    DeepseekOcr2TextMoe,
     DeepseekOcr2TextPreTrainedModel,
-    DeepseekOcr2TextRMSNorm,
-    DeepseekOcr2TextRotaryEmbedding,
-    DeepseekOcr2VisionAttention,
-    DeepseekOcr2VisionEncoderLayer,
-    DeepseekOcr2VisionMLP,
     DeepseekOcr2VisionModel,
-    DeepseekOcr2VisionRMSNorm,
-    DeepseekOcr2VisionRotaryEmbedding,
 )
 from ..deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor, DeepseekOcr2ProcessorKwargs
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
@@ -505,67 +484,10 @@ class UnlimitedOcrPreTrainedModel(DeepseekOcr2PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
 
 
-class UnlimitedOcrSamVisionAttention(DeepseekOcr2SamVisionAttention):
-    pass
-
-
-class UnlimitedOcrSamMLPBlock(DeepseekOcr2SamMLPBlock):
-    pass
-
-
-class UnlimitedOcrSamVisionSdpaAttention(DeepseekOcr2SamVisionSdpaAttention):
-    pass
-
-
-class UnlimitedOcrSamVisionLayer(DeepseekOcr2SamVisionLayer):
-    pass
-
-
-class UnlimitedOcrSamLayerNorm(DeepseekOcr2SamLayerNorm):
-    pass
-
-
-class UnlimitedOcrSamVisionNeck(DeepseekOcr2SamVisionNeck):
-    pass
-
-
-class UnlimitedOcrSamPatchEmbeddings(DeepseekOcr2SamPatchEmbeddings):
-    pass
-
-
-class UnlimitedOcrSamVisionProj(DeepseekOcr2SamVisionProj):
-    pass
-
-
-class UnlimitedOcrSamVisionEncoder(DeepseekOcr2SamVisionEncoder):
-    pass
-
-
-class UnlimitedOcrVisionMLP(DeepseekOcr2VisionMLP):
-    pass
-
-
-class UnlimitedOcrVisionRMSNorm(DeepseekOcr2VisionRMSNorm):
-    pass
-
-
-class UnlimitedOcrVisionRotaryEmbedding(DeepseekOcr2VisionRotaryEmbedding):
-    pass
-
-
-class UnlimitedOcrVisionAttention(DeepseekOcr2VisionAttention):
-    pass
-
-
-class UnlimitedOcrVisionEncoderLayer(DeepseekOcr2VisionEncoderLayer):
-    pass
-
-
 class UnlimitedOcrAttention(CLIPAttention):
     def __init__(self, config: UnlimitedOcrVisionEncoderConfig):
         super().__init__(config)
-        # The shared `eager_attention_forward` calls `repeat_kv(..., num_key_value_groups)`; CLIP attention is
-        # plain multi-head attention, so the group count is 1 and `repeat_kv` becomes a no-op.
+        # Required for repeat_kv(..., num_key_value_groups)
         self.num_key_value_groups = 1
 
 
@@ -579,6 +501,7 @@ class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
         position_embedding = self.position_embedding.weight.unsqueeze(0)
         num_positions = position_embedding.shape[1] - 1
 
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embedding(self.position_ids)
 
@@ -594,12 +517,13 @@ class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
+        # TODO: check if we can drop dtype cast
         target_dtype = patch_pos_embed.dtype
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.to(torch.float32),
             size=(new_height, new_width),
             mode="bicubic",
-            antialias=True,
+            antialias=True,  # different from CLIP
             align_corners=False,
         ).to(target_dtype)
 
@@ -615,6 +539,7 @@ class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
         """
         batch_size, _, grid_height, grid_width = patch_embeds.shape
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
         embeddings = embeddings + self.interpolate_pos_encoding(
@@ -640,11 +565,11 @@ class UnlimitedOcrVisionEncoder(CLIPVisionModel):
     def forward(self, patch_embeds: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         r"""
         patch_embeds (`torch.Tensor` of shape `(batch_size, hidden_size, grid_height, grid_width)`):
-            The SAM feature map used in place of the CLIP patch embeddings.
+            Patch embeddings.
         """
         hidden_states = self.embeddings(patch_embeds)
         hidden_states = self.pre_layrnorm(hidden_states)
-        encoder_outputs: BaseModelOutput = self.encoder(inputs_embeds=hidden_states, **kwargs)
+        encoder_outputs = self.encoder(inputs_embeds=hidden_states, **kwargs)
         return BaseModelOutput(last_hidden_state=encoder_outputs.last_hidden_state)
 
 
@@ -763,34 +688,6 @@ class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
             generated_before = 0
         generated_after = min(generated_before + query_length, self.sliding_window)
         return prefill_length + generated_after
-
-
-class UnlimitedOcrTextRotaryEmbedding(DeepseekOcr2TextRotaryEmbedding):
-    pass
-
-
-class UnlimitedOcrTextAttention(DeepseekOcr2TextAttention):
-    pass
-
-
-class UnlimitedOcrTextMLP(DeepseekOcr2TextMLP):
-    pass
-
-
-class UnlimitedOcrTextExperts(DeepseekOcr2TextExperts):
-    pass
-
-
-class UnlimitedOcrTextMoe(DeepseekOcr2TextMoe):
-    pass
-
-
-class UnlimitedOcrTextRMSNorm(DeepseekOcr2TextRMSNorm):
-    pass
-
-
-class UnlimitedOcrTextDecoderLayer(DeepseekOcr2TextDecoderLayer):
-    pass
 
 
 class UnlimitedOcrTextPreTrainedModel(DeepseekOcr2TextPreTrainedModel):
@@ -933,9 +830,6 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
                     [local_grid, newline.expand(num_rows * num_queries_local, 1, hidden_size)], dim=1
                 )
                 local_flat = local_grid.reshape(-1, hidden_size)
-                # NOTE: local-then-global ordering matches the reference `forward` (the feature order the weights
-                # were trained on), NOT the token order built by the reference `infer`.
-                # TODO: verify correctness
                 all_features.append(torch.cat([local_flat, global_flat, view_separator], dim=0))
             else:
                 all_features.append(torch.cat([global_flat, view_separator], dim=0))
@@ -1093,7 +987,6 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
             **kwargs,
         )
 
-        # Image inputs are only needed during prefill or when the cache is disabled
         if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
             model_inputs["pixel_values_local"] = pixel_values_local
