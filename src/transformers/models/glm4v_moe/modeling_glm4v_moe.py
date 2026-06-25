@@ -1504,7 +1504,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         super().__init__(config)
         self.model = Glm4vMoeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.num_experts = config.text_config.num_experts
+        self.num_experts = config.text_config.num_local_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
 
         self.post_init()
