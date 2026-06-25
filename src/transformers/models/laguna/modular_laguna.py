@@ -49,12 +49,12 @@ logger = logging.get_logger(__name__)
 @strict
 class LagunaConfig(Qwen2MoeConfig):
     r"""
-    num_attention_heads_per_layer (`list[int]`, *optional*):
-        Per-layer override for ``num_attention_heads``. Length must equal ``num_hidden_layers``.
     gating (`bool` or `str`, *optional*, defaults to `True`):
         Softplus output-gate granularity. ``True`` or ``"per-head"`` applies one gate per head,
         broadcast across ``head_dim``; ``"per-element"`` applies one gate per ``(head, head_dim)``
         channel.
+    num_attention_heads_per_layer (`list[int]`, *optional*):
+        Per-layer override for ``num_attention_heads``. Length must equal ``num_hidden_layers``.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type — ``"dense"`` or ``"sparse"``. Length must equal
         ``num_hidden_layers``. Defaults to first layer dense, rest sparse.

@@ -72,6 +72,7 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = None  # no Moe
 
     vocab_size: int = 248320
     hidden_size: int = 4096

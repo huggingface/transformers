@@ -78,10 +78,6 @@ class GlmMoeDsaConfig(DeepseekV32Config):
     >>> configuration = model.config
     ```"""
 
-    attribute_map = {
-        "num_local_experts": "n_routed_experts",
-    }
-
     vocab_size: int = 154880
     hidden_size: int = 6144
     intermediate_size: int = 12288

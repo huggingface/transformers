@@ -142,6 +142,7 @@ class Cohere2MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
         self.expert_selection_fn = config.expert_selection_fn
         self.norm_topk_prob = config.norm_topk_prob
         self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))

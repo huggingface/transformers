@@ -99,7 +99,7 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
         "layers.*.mlp.down_proj": "rowwise",
     }
 
-    attribute_map = {"num_local_experts": "num_experts"}
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 129280
     hidden_size: int = 7168
@@ -137,7 +137,6 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
     index_head_dim: int = 128
     index_n_heads: int = 64
     mlp_bias: bool = False
-    num_experts: int = 256
     head_dim: int = 64
     first_k_dense_replace: int = 3
     pretraining_tp = AttributeError()
@@ -156,6 +155,10 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+        # BC: re-route `num_experts` to `n_routed_experts`
+        if (num_experts := kwargs.get("num_experts")) is not None:
+            self.n_routed_experts = num_experts
+
         super().__post_init__(**kwargs)
 
 
