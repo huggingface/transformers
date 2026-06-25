@@ -192,7 +192,14 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class ESMCAttention(nn.Module):
-    """Multi-head self-attention with QK-LayerNorm and RoPE."""
+    """Multi-head self-attention with QK-LayerNorm and RoPE.
+
+    Inherits Llama's projection setup -- ``q/k/v/o_proj`` are bias-free
+    (``config.attention_bias=False``) and there is no GQA
+    (``num_key_value_heads == num_attention_heads``). On top of Llama it applies
+    QK-LayerNorm to the projected query/key (before the head reshape) and runs
+    bidirectionally (``is_causal=False``).
+    """
 
     def __init__(self, config: ESMCConfig, layer_idx: int | None = None):
         super().__init__()
@@ -226,6 +233,12 @@ class ESMCAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Return ``(context, attn_weights)``.
+
+        Attention is computed by the backend selected through ``config._attn_implementation``.
+        ``attn_weights`` is captured by the output recorder when requested and is only populated
+        by backends that expose the probabilities (e.g. ``eager``).
+        """
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -496,7 +509,12 @@ class ESMCClassificationHead(nn.Module):
         return x
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    ESMC Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """
+)
 class ESMCForSequenceClassification(ESMCPreTrainedModel):
     def __init__(self, config: ESMCConfig):
         super().__init__(config)
@@ -511,55 +529,64 @@ class ESMCForSequenceClassification(ESMCPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, ...] | SequenceClassifierOutput:
+    ) -> tuple | SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for sequence classification loss.  Indices must be in
-            ``[0, config.num_labels - 1]``.  For regression pass a float
-            tensor of shape ``(batch_size,)``.
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        encoder_outputs = self.esmc(
+
+        outputs = self.esmc(
             input_ids,
             attention_mask=attention_mask,
-            return_dict=True,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
             **kwargs,
         )
-        logits = self.classifier(encoder_outputs.last_hidden_state)
+        sequence_output = outputs[0]
+        logits = self.classifier(sequence_output)
 
-        loss: torch.Tensor | None = None
+        loss = None
         if labels is not None:
             labels = labels.to(logits.device)
 
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and labels.dtype in (torch.long, torch.int):
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
 
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(
-                    logits.squeeze() if self.num_labels == 1 else logits,
-                    labels.squeeze() if self.num_labels == 1 else labels,
-                )
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
-                loss = CrossEntropyLoss()(logits.view(-1, self.num_labels), labels.view(-1))
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
-                loss = BCEWithLogitsLoss()(logits, labels)
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
 class ESMCForTokenClassification(GenericForTokenClassification, ESMCPreTrainedModel):
+    # ``dropout`` (from ``config.classifier_dropout``) + a ``score`` linear over the
+    # per-token hidden states, identical to the ESM token-classification head.
     pass
 
 
