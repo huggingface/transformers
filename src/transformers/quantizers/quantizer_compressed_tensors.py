@@ -201,6 +201,9 @@ class DecompressExperts(ConversionOps):
                 self.weight_scale = nn.Parameter(scale, requires_grad=False)
                 self.weight_shape = nn.Parameter(shape, requires_grad=False)
 
+        # `pack_factor` low-bit weights are packed per int32 along the packed dim.
+        pack_factor = 32 // quantization_scheme.weights.num_bits
+
         # Per-expert compressed projections of size (input-dim; output-dim)
         processed_out = {}
         for key, value in input_dict.items():
@@ -208,18 +211,27 @@ class DecompressExperts(ConversionOps):
                 continue
             quantized = value
             scales = input_dict[key.replace("weight_packed", "weight_scale")]
-            shapes = input_dict[key.replace("weight_packed", "weight_shape")]
 
             # Create a dummy module to not rely on low-lvl API and iter over each expert
             decompessed_tensors = []
-            for quant, scale, shape in zip(quantized, scales, shapes):
+            for quant, scale in zip(quantized, scales):
+                # The checkpoint's `weight_shape` holds the *full* [out, in] of the unsharded weight.
+                # Under tensor/expert parallelism the loader shards every source sibling mapped to this
+                # target (`weight_packed`/`weight_scale`/`weight_shape`) with the same op, which leaves
+                # the 2-element `weight_shape` empty on most ranks (and stale on rank 0). The packed
+                # tensor is the source of truth for the *shard's* geometry: it is `[rows, cols]` with
+                # `pack_factor` values packed per int32 along the last dim, so the decompressed shard is
+                # `[rows, cols * pack_factor]`. Rebuild the shape from it so decompression is correct for
+                # every shard; in the non-distributed path this equals the stored `weight_shape`, so that
+                # path is unchanged.
+                shape = torch.tensor([quant.shape[0], quant.shape[1] * pack_factor])
                 module = DummyModule(quant, scale, shape)
 
                 module.quantization_scheme = quantization_scheme
                 compressor.decompress_module(module)
                 decompessed_tensors.append(module.weight)
 
-            del quantized, scales, shapes, module
+            del quantized, scales, module
             processed_out[key] = decompessed_tensors
 
         return processed_out
