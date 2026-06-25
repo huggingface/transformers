@@ -76,9 +76,7 @@ class Dots1Config(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
-    # BC: `num_local_experts` was used previously but we opt for `num_experts` (fp8 compatibility)
     attribute_map = {
-        "num_experts": "n_routed_experts",
         "num_local_experts": "n_routed_experts",
     }
 

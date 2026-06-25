@@ -65,6 +65,7 @@ class Mistral4TopkRouter(DeepseekV2TopkRouter):
     def __init__(self, config):
         super().__init__(config)
         del self.topk_method
+        self.num_experts = config.num_local_experts
         self.norm_topk_prob = config.norm_topk_prob
 
     def forward(self, hidden_states):

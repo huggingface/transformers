@@ -92,6 +92,7 @@ class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
     def __init__(self, config):
         super().__init__(config)
         del self.topk_method
+        self.num_experts = config.num_local_experts
         self.norm_topk_prob = config.norm_topk_prob
         self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
 
@@ -124,7 +125,9 @@ class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
 
 
 class DeepseekV3Experts(Qwen2MoeExperts):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_experts = config.num_local_experts
 
 
 class DeepseekV3MoE(DeepseekV2Moe):

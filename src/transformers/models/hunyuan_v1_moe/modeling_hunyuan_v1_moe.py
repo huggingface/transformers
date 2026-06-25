@@ -290,9 +290,6 @@ class HunYuanMoEV1Moe(nn.Module):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: int | None = None):
         super().__init__()
         self.config = config
-        self.layer_idx = layer_idx
-        self.num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
-        self.top_k = config.moe_topk if isinstance(config.moe_topk, int) else config.moe_topk[layer_idx]
         self.gate = HunYuanMoEV1Gate(config, layer_idx=layer_idx)
         self.experts = HunYuanMoEV1Experts(config)
         self.shared_mlp = HunYuanMoEV1MLP(config)

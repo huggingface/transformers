@@ -99,11 +99,7 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
         "layers.*.mlp.down_proj": "rowwise",
     }
 
-    # BC: `num_local_experts` was used previously but we opt for `num_experts` (fp8 compatibility)
-    attribute_map = {
-        "num_experts": "n_routed_experts",
-        "num_local_experts": "n_routed_experts",
-    }
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 129280
     hidden_size: int = 7168

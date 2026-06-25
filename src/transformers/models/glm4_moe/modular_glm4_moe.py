@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch GLM-4-MOE model."""
 
+import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
@@ -91,9 +92,7 @@ class Glm4MoeConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
-    # BC: `num_local_experts` was used previously but we opt for `num_experts` (fp8 compatibility)
     attribute_map = {
-        "num_experts": "n_routed_experts",
         "num_local_experts": "n_routed_experts",
     }
 
@@ -168,7 +167,17 @@ class Glm4MoeMLP(DeepseekV3MLP):
 
 
 class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
-    pass
+    def __init__(self, config: Glm4MoeConfig):
+        nn.Module.__init__(self)
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.num_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.register_buffer("e_score_correction_bias", torch.zeros((self.num_experts), dtype=torch.float32))
 
 
 class Glm4MoeRMSNorm(DeepseekV3RMSNorm):
