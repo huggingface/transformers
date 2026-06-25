@@ -17,8 +17,8 @@ from tokenizers import AddedToken, Tokenizer
 from tokenizers.models import BPE
 from tokenizers.processors import TemplateProcessing
 
-from ...tokenization_utils_fast import PreTrainedTokenizerFast  # type: ignore[import]
-from ...utils import logging  # type: ignore[import]
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -83,6 +83,7 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
             The mask token, used for masked language modelling.
         eos_token (`str`, *optional*, defaults to `"<eos>"`):
             The end-of-sequence token (appended to every sequence).
+        bos_token (`<fill_type>`, *optional*): <fill_docstring>
         chain_break_token (`str`, *optional*, defaults to `"|"`):
             Token inserted between chains in multi-chain protein inputs.
 
@@ -107,6 +108,7 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
         pad_token="<pad>",
         mask_token="<mask>",
         eos_token="<eos>",
+        bos_token=None,
         chain_break_token="|",
         **kwargs,
     ):
@@ -119,6 +121,8 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
         pad_token = self._ensure_str(pad_token)
         mask_token = self._ensure_str(mask_token)
         eos_token = self._ensure_str(eos_token)
+        # ESMC uses <cls> as the sequence-start token, so `bos_token` defaults to it.
+        bos_token = self._ensure_str(bos_token) if bos_token is not None else cls_token
         chain_break_token = self._ensure_str(chain_break_token)
 
         bpe = BPE(token_to_id, merges=[], unk_token=unk_token)
@@ -154,26 +158,13 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
         super().__init__(
             tokenizer_object=tokenizer,
             unk_token=unk_token,
+            bos_token=bos_token,
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
             eos_token=eos_token,
             **kwargs,
         )
-
-    # ------------------------------------------------------------------
-    # bos / cls aliases
-    # The model uses <cls> as the sequence-start token; the HF base class
-    # expects `bos_token`.  We alias them to avoid confusion.
-    # ------------------------------------------------------------------
-
-    @property
-    def bos_token(self):
-        return self.cls_token
-
-    @property
-    def bos_token_id(self):
-        return self.cls_token_id
 
     # ------------------------------------------------------------------
     # Chain-break token
@@ -189,18 +180,6 @@ class ESMCTokenizer(PreTrainedTokenizerFast):
         if not isinstance(token_id, int):
             raise TypeError(f"Expected a single token id for the chain-break token, got {token_id!r}.")
         return token_id
-
-    # ------------------------------------------------------------------
-    # Convenience helpers used by downstream code
-    # ------------------------------------------------------------------
-
-    @property
-    def all_token_ids(self):
-        return list(range(self.vocab_size))
-
-    @property
-    def special_token_ids(self):
-        return self.all_special_ids
 
     # ------------------------------------------------------------------
     # Internal utilities

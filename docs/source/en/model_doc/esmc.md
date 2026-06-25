@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-06-22.*
+*This model was contributed to Hugging Face Transformers on 2026-06-25.*
 
 # ESMC
 
@@ -26,25 +26,28 @@ Like [ESM-2](./esm), ESMC produces per-residue representations that are useful f
 ESMC is suitable for fine-tuning on protein classification or token classification tasks. It is also used as the
 backbone of [ESMFold2](./esmfold2), where it generates representations that are used as input to the folding head.
 
-Pre-trained checkpoints are available on the Hugging Face Hub, including
-[`biohub/ESMC-300M`](https://huggingface.co/biohub/ESMC-300M),
-[`biohub/ESMC-600M`](https://huggingface.co/biohub/ESMC-600M) and
-[`biohub/ESMC-6B`](https://huggingface.co/biohub/ESMC-6B).
+Pre-trained checkpoints are available on the Hugging Face Hub:
+
+- [`biohub/ESMC-300M`](https://huggingface.co/biohub/ESMC-300M)
+- [`biohub/ESMC-600M`](https://huggingface.co/biohub/ESMC-600M)
+- [`biohub/ESMC-6B`](https://huggingface.co/biohub/ESMC-6B)
 
 ## Usage example
 
 ```python
 import torch
-from transformers import AutoTokenizer, ESMCModel
+from transformers import AutoModel, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
-model = ESMCModel.from_pretrained("biohub/ESMC-300M")
+# ESMC is registered with the auto classes (AutoModel, AutoModelForMaskedLM,
+# AutoModelForSequenceClassification, AutoModelForTokenClassification).
+model = AutoModel.from_pretrained("biohub/ESMC-300M")
 
 inputs = tokenizer("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ", return_tensors="pt")
 with torch.no_grad():
     outputs = model(**inputs)
 
-# Per-residue representations of shape (batch, sequence_length, d_model).
+# Per-residue representations of shape (batch, sequence_length, hidden_size).
 representations = outputs.last_hidden_state
 ```
 
