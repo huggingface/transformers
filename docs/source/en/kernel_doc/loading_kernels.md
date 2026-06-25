@@ -29,7 +29,7 @@ Install the kernels package. We recommend the latest version which provides the 
 pip install -U kernels
 ```
 
-Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to load the most performant kernels available on the Hub for your device. This replaces supported PyTorch operations with the kernel implementation. The default kernels differ by device type, and they're updated as faster kernels become available.
+Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to load the most performant kernels available on the Hub for your device. This replaces supported PyTorch operations with the kernel implementation.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -41,8 +41,21 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+The default kernels differ by device type. The table below lists the Hub repository that supplies each operation's default kernel. When no default kernel is registered, the operation falls back to standard PyTorch.
+
+| Operation | NVIDIA (CUDA) | AMD (ROCm) | Intel (XPU) |
+|---|---|---|---|
+| RMSNorm | `kernels-community/liger-kernels` | `kernels-community/liger-kernels` | `kernels-community/rmsnorm` |
+| MoE MLP | `kernels-community/megablocks` | `kernels-community/megablocks` | `kernels-community/megablocks` |
+| MLP (SwiGLU, GeGLU) | `kernels-community/liger-kernels` | — | — |
+| Linear | `kernels-community/liger-kernels` | — | — |
+| Activations (GELU variants, SiLU) | `kernels-community/activation` | — | — |
+| Rotary embeddings | `kernels-community/rotary` | `kernels-community/aiter-rope` | `kernels-community/rotary` |
+| Causal LM loss | `kernels-community/liger-kernels` | — | — |
+| Deformable attention | `kernels-community/deformable-detr` | — | — |
+
 > [!NOTE]
-> AMD GPUs report their device type as `cuda` in PyTorch. Transformers detects ROCm at runtime and routes supported operations to kernels built for AMD hardware, such as [AITER](https://github.com/ROCm/aiter) Triton kernels. You don't need to set the device type yourself.
+> AMD GPUs report their device type as `cuda` in PyTorch. Transformers detects ROCm at runtime and routes supported operations to the AMD kernels above, including [AITER](https://github.com/ROCm/aiter) builds such as `kernels-community/aiter-rope`. You don't need to set the device type yourself.
 
 Browse available kernels in the [kernels-community](https://huggingface.co/kernels-community) organization.
 
