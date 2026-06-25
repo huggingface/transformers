@@ -18,7 +18,7 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
 from ...masking_utils import create_bidirectional_mask, packed_sequence_mask_function
@@ -26,7 +26,6 @@ from ...modeling_layers import GenericForTokenClassification, GradientCheckpoint
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
-    SequenceClassifierOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -38,7 +37,7 @@ from ...utils import (
 )
 from ...utils.generic import is_flash_attention_requested
 from ...utils.output_capturing import capture_outputs
-from ..esm.modeling_esm import EsmClassificationHead, eager_attention_forward
+from ..esm.modeling_esm import EsmClassificationHead, EsmForSequenceClassification, eager_attention_forward
 from ..llama.modeling_llama import LlamaAttention, LlamaMLP, LlamaRotaryEmbedding, apply_rotary_pos_emb
 from .configuration_esmc import ESMCConfig
 
@@ -347,67 +346,15 @@ class ESMCClassificationHead(EsmClassificationHead):
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
 
 
-@auto_docstring
-class ESMCForSequenceClassification(ESMCPreTrainedModel):
+class ESMCForSequenceClassification(EsmForSequenceClassification):
+    # Same `<cls>`-token classification head + problem-type loss as ESM-2; only the
+    # backbone (no `add_pooling_layer`) and the `classifier_dropout`-sourced head differ.
     def __init__(self, config: ESMCConfig):
-        super().__init__(config)
+        ESMCPreTrainedModel.__init__(self, config)
         self.num_labels = config.num_labels
         self.esmc = ESMCModel(config)
         self.classifier = ESMCClassificationHead(config)
         self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, ...] | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for sequence classification loss.  Indices must be in
-            ``[0, config.num_labels - 1]``.  For regression pass a float
-            tensor of shape ``(batch_size,)``.
-        """
-        encoder_outputs = self.esmc(
-            input_ids,
-            attention_mask=attention_mask,
-            return_dict=True,
-            **kwargs,
-        )
-        logits = self.classifier(encoder_outputs.last_hidden_state)
-
-        loss: torch.Tensor | None = None
-        if labels is not None:
-            labels = labels.to(logits.device)
-
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and labels.dtype in (torch.long, torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                loss = loss_fct(
-                    logits.squeeze() if self.num_labels == 1 else logits,
-                    labels.squeeze() if self.num_labels == 1 else labels,
-                )
-            elif self.config.problem_type == "single_label_classification":
-                loss = CrossEntropyLoss()(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss = BCEWithLogitsLoss()(logits, labels)
-
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
 
 
 class ESMCForTokenClassification(GenericForTokenClassification, ESMCPreTrainedModel):
