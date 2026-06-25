@@ -250,7 +250,7 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
             raise ValueError(
                 f"Number of `{self.image_token}` tokens in the text ({total_image_tokens}) does not match the "
                 f"number of images passed ({num_images}). Use one `{self.image_token}` placeholder per image, "
-                f"e.g. `'<image>' * len(images) + '\\nMulti page parsing.'`"
+                f"e.g. `'<image>' * len(images) + 'Multi page parsing.'`"
             )
 
         size = self.image_processor.size["height"]
