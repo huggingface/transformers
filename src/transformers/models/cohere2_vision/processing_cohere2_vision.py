@@ -48,7 +48,9 @@ class Cohere2VisionProcessor(ProcessorMixin):
         self.img_line_break_token = tokenizer.img_line_break_token
         self.image_token_id = tokenizer.image_token_id
 
-        self.image_ids = tokenizer.convert_tokens_to_ids(
+    @property
+    def image_token_ids(self) -> list[int]:
+        return self.tokenizer.convert_tokens_to_ids(
             [
                 self.image_token,
                 self.boi_token,

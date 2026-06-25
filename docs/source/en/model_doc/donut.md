@@ -12,7 +12,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
-*This model was released on 2021-11-30 and added to Hugging Face Transformers on 2022-08-12.*
+*This model was published in HF papers on 2021-11-30 and contributed to Hugging Face Transformers on 2022-08-12.*
 
 
 # Donut

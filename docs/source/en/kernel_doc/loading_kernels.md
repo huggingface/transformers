@@ -115,19 +115,20 @@ loss = model(input_ids, labels=labels).loss
 loss.backward()
 ```
 
-Explicitly enable training and inference modes with the `mode` argument in the [`~kernels.kernelize`] function. Training mode also supports an additional torch.compile mode.
+Explicitly enable training and inference modes with the `mode` argument in the [`~transformers.kernelize`] function. Training mode also supports an additional torch.compile mode.
 
 ```py
 from kernels import Mode
+from transformers import kernelize
 
 # inference optimized kernels
-model.kernelize(mode=Mode.INFERENCE)
+kernelize(model, mode=Mode.INFERENCE)
 
 # training optimized kernels
-model.kernelize(mode=Mode.TRAINING)
+kernelize(model, mode=Mode.TRAINING)
 
 # training and torch-compile friendly kernels
-model.kernelize(mode=Mode.TRAINING | Mode.TORCH_COMPILE)
+kernelize(model, mode=Mode.TRAINING | Mode.TORCH_COMPILE)
 ```
 
 ## KernelConfig
@@ -169,6 +170,31 @@ kernel_config = KernelConfig(
     }
 )
 ```
+
+## Module fusion
+
+Fuse adjacent modules into a single kernel by passing a tuple of `(class_name, path_pattern)` pairs as the key in [`KernelConfig`]. All patterns must share the same parent module. `*` matches any single path segment.
+
+```python
+from transformers import AutoModelForCausalLM, KernelConfig
+
+kernel_config = KernelConfig(
+    {
+        (
+            ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+            ("MLP",     "model.layers.*.mlp"),
+        ): "owner/fused-rmsnorm-mlp:RMSNormMLP",
+    }
+)
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    use_kernels=True,
+    kernel_config=kernel_config,
+    device_map="cuda",
+)
+```
+
+Fusion requires the kernel repo to provide a companion `KernelNameLayout` class alongside the `KernelName` class. See the [Writing kernels](./writing_kernels) guide for how to implement one.
 
 ## Local kernels
 
