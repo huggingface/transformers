@@ -35,6 +35,9 @@ You can find the model card and checkpoint [here](https://huggingface.co/google/
 
 Despite it being a text diffusion model and having a custom generation loop, most of the interface is shared with other models that can generate text with [`DiffusionGemmaGenerationMixin.generate`]. If you're using another `transformers` model in your app, you should be able to directly replace it with this model.
 
+> [!NOTE]
+> DiffusionGemma is available in both `transformers` and `diffusers`. We recommend using `diffusers` for all new features, as it is the primary home for this model and provides the full set of scheduling options and pipeline utilities. See the [pipeline docs](https://huggingface.co/docs/diffusers/main/en/api/pipelines/diffusion_gemma) for usage examples. The `transformers` implementation is maintained for backward compatibility only. We will continue to fix bugs, but new features (such as additional schedulers, stopping criteria, or sampling strategies) will be added exclusively to `diffusers`. If you would like to experiment with different schedulers or have a feature request, please open an issue in [`diffusers`](https://github.com/huggingface/diffusers/issues).
+
 ### Common caveats
 
 - DiffusionGemma doesn't accept `use_cache`. It always uses a KV cache;
