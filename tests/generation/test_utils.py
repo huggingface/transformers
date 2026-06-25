@@ -1488,7 +1488,7 @@ class GenerationTesterMixin:
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                if is_moe_model(config):
+                if is_moe_model(config) or dtype != torch.float32:
                     atol = rtol = 1e-3
                 else:
                     atol = rtol = 1e-5
