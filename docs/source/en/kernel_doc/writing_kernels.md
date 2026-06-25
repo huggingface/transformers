@@ -85,7 +85,7 @@ Load this kernel by passing the repo and class name to [`KernelConfig`]. The key
 ```python
 from transformers import AutoModelForCausalLM, KernelConfig
 
-kernel_config = KernelConfig({"RMSNorm": "owner/my-kernel:CustomRMSNorm"})
+kernel_config = KernelConfig({"RMSNorm": ("owner/my-kernel:CustomRMSNorm", {"trust_remote_code": True, "version": 1})})
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
@@ -166,7 +166,7 @@ kernel_config = KernelConfig(
         (
             ("RMSNorm", "model.layers.*.post_attention_layernorm"),
             ("MLP",     "model.layers.*.mlp"),
-        ): "owner/my-kernel:RMSNormMLP",
+        ): ("owner/my-kernel:RMSNormMLP", {"trust_remote_code": True, "version": 1}),
     }
 )
 model = AutoModelForCausalLM.from_pretrained(
