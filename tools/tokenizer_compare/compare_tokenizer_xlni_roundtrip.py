@@ -304,7 +304,7 @@ def main():
         help="Model checkpoint to evaluate. Omit to use --all-checkpoints.",
     )
     parser.add_argument("version_tag", type=str, nargs="?", default="v1")
-    parser.add_argument("--num-samples", type=int, default=1000)
+    parser.add_argument("--num-samples", type=int, default=5000)
     parser.add_argument("--compare-to", type=str, default=None)
     parser.add_argument("--backend", type=str, choices=["auto", "tokenizers"], default="auto")
     parser.add_argument(
