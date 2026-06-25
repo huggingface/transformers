@@ -87,26 +87,19 @@ def resize_and_normalize_image(
     image_mean: list[float],
     image_std: list[float],
 ) -> torch.Tensor:
-    input_dtype = image_chw.dtype
     resized = backend.resize(
         image_chw,
         size=SizeDict(height=output_size[0], width=output_size[1]),
         resample=resample,
         antialias=False,
     )
-
-    if image_chw.dtype != torch.uint8:
-        raise TypeError(f"Molmo2 expects float images or uint8 images, but got {image_chw.dtype}")
-    resized = torch.clip(resized, 0, 255).to(input_dtype)
-
-    resized = resized.to(torch.float32)
-    if do_rescale and input_dtype == torch.uint8:
-        resized = resized / (1.0 / rescale_factor)
-    if do_normalize:
-        mean = resized.new_tensor(image_mean)[:, None, None]
-        std = resized.new_tensor(image_std)[:, None, None]
-        resized = (resized - mean) / std
-    return resized
+    # Clip resize-interpolation overshoot for integer inputs; float inputs keep their (user-defined)
+    # range -- we trust `do_rescale` to be set correctly for the scale of float images.
+    if image_chw.dtype == torch.uint8:
+        resized = torch.clip(resized, 0, 255).to(image_chw.dtype)
+    # `rescale_and_normalize` honors `do_rescale`/`do_normalize` for any dtype and builds the
+    # mean/std tensors on the input's device (no uint8-only gating, no CPU round-trip).
+    return backend.rescale_and_normalize(resized, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
 
 def build_resized_image(
@@ -134,7 +127,9 @@ def build_resized_image(
     )
     resized = chw_resized.permute(1, 2, 0).unsqueeze(0)
     crop_patch_h = crop_patch_w = base_image_input_size // image_patch_size
-    resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32).reshape(crop_patch_h, crop_patch_w)
+    resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32, device=image_chw.device).reshape(
+        crop_patch_h, crop_patch_w
+    )
     return resized, resize_idx
 
 
