@@ -92,7 +92,7 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
     when building the per-type inv_freq buffers.
     """
 
-    def __init__(self, config: DeepseekV4Config):
+    def __init__(self, config: DeepseekV4Config, device=None):
         nn.Module.__init__(self)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -108,7 +108,7 @@ class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, attention_scaling = rope_init_fn(config, layer_type=layer_type)
+            inv_freq, attention_scaling = rope_init_fn(config, layer_type=layer_type, device=device)
             self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
