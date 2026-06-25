@@ -1,26 +1,23 @@
-"""Build a mini Step-3.7-Flash checkpoint from the original hub code.
+"""Build a mini Step-3.7-Flash hub-format checkpoint from the original code.
 
-Weights are created with the original code (scripts/step_3_7_flash/original_code/)
-and saved in hub checkpoint key format so the new local code can load them via
-from_pretrained (which applies _checkpoint_conversion_mapping).
+Weights are created with the original code
+(src/transformers/models/step_3_7_flash_original/) and saved in hub checkpoint
+key format so the new local code can load them via convert_step3p7_weights_to_hf.
 
 Saves to --out (default ./mini-step-3-7-flash):
-  config.json       — from original code's config class
-  pytorch_model.bin — weights in hub key format
+  config.json       — in original hub-checkpoint format (moe_layers_enum, not mlp_layer_types)
+  pytorch_model.bin — weights in hub key format (model.embed_tokens.*, vision_model.*, ...)
 
 Run:
-    PYTHONPATH=src python scripts/step_3_7_flash/build_mini_model.py
+    PYTHONPATH=src python scripts/step_3_7_flash/build_mini_model.py [--push-to-hub]
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 import torch
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 def _remote_sd_to_hub_format(state_dict: dict) -> dict:
@@ -50,14 +47,21 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out",  type=Path, default=Path("./mini-step-3-7-flash"))
     parser.add_argument("--seed", type=int,  default=0)
+    parser.add_argument(
+        "--push-to-hub",
+        metavar="REPO_ID",
+        nargs="?",
+        const="itazap/Step-3.7-Flash-Mini-Original",
+        help="Push hub-format checkpoint to HF Hub. Pass a repo_id or omit to use default.",
+    )
     args = parser.parse_args()
 
-    from original_code.configuration_step3p7 import (
+    from transformers.models.step_3_7_flash_original.configuration_step3p7 import (
         Step3p7Config,
         Step3p7TextConfig,
         StepRoboticsVisionEncoderConfig,
     )
-    from original_code.modeling_step3p7 import Step3p7ForConditionalGeneration
+    from transformers.models.step_3_7_flash_original.modeling_step3p7 import Step3p7ForConditionalGeneration
 
     text_cfg = Step3p7TextConfig(
         hidden_size=128,
@@ -134,6 +138,13 @@ def main() -> None:
     config_path.write_text(json.dumps(saved, indent=2) + "\n")
 
     print(f"Saved {len(hub_sd)} keys → {args.out.resolve()}/")
+
+    if args.push_to_hub:
+        from huggingface_hub import HfApi
+        api = HfApi()
+        api.create_repo(repo_id=args.push_to_hub, exist_ok=True)
+        api.upload_folder(folder_path=str(args.out), repo_id=args.push_to_hub)
+        print(f"Pushed → https://huggingface.co/{args.push_to_hub}")
 
 
 if __name__ == "__main__":

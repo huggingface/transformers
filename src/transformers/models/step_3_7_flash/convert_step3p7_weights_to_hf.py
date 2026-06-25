@@ -73,8 +73,10 @@ STATE_DICT_MAPPING = [
     # ── top-level module path remaps ─────────────────────────────────────────
     # vision_model.* → model.vision_model.*
     (r"^vision_model\.",                                r"model.vision_model."),
-    # vit_large_projector.* → model.multi_modal_projector.*
+    # vit_large_projector.* → model.multi_modal_projector.*  (top-level form)
     (r"^vit_large_projector\.",                         r"model.multi_modal_projector."),
+    # model.vit_large_projector.* → model.multi_modal_projector.*  (prefixed form)
+    (r"^model\.vit_large_projector\.",                  r"model.multi_modal_projector."),
     # multi_modal_projector.* → model.multi_modal_projector.*  (no-op if already renamed)
     (r"^multi_modal_projector\.",                       r"model.multi_modal_projector."),
     # model.* → model.language_model.*  (skip already-remapped sub-modules)
