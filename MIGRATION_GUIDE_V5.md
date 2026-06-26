@@ -290,7 +290,7 @@ tokenizer.extra_special_tokens  # Additional tokens
 
 **Deprecated Methods:**
 - `sanitize_special_tokens()`: Already deprecated in v4, removed in v5.
-- `prepare_seq2seq_batch()`: Deprecated; use `__call__()` with `text_target` parameter instead.
+- `_seq2seq_batch()`: Deprecated; use `__call__()` with `text_target` parameter instead.
 
 ```python
 # v4
@@ -306,6 +306,25 @@ model_inputs["labels"] = model_inputs.pop("input_ids_target")
 **Removed Methods:**
 - `create_token_type_ids_from_sequences()`: Removed from base class. Subclasses that need custom token type ID creation should implement this method directly.
 - `prepare_for_model()`, `build_inputs_with_special_tokens()`, `truncate_sequences()`: Moved from `tokenization_utils_base.py` to `tokenization_python.py` for `PythonBackend` tokenizers. `TokenizersBackend` provides model-ready input via `tokenize()` and `encode()`, so these methods are no longer needed in the base class.
+
+```python
+# v4 — manually build model-ready inputs from pre-tokenized ids
+inputs = tokenizer.prepare_for_model(
+    tokenizer.convert_tokens_to_ids(tokenizer.tokenize(query)),
+    tokenizer.convert_tokens_to_ids(tokenizer.tokenize(passage)),
+    add_special_tokens=True, truncation=True, max_length=512,
+    padding="max_length", return_tensors="pt",
+)
+
+# v5 — call the tokenizer directly; __call__ / encode() return a model-ready BatchEncoding
+inputs = tokenizer(
+    query, passage,
+    truncation=True, max_length=512,
+    padding="max_length", return_tensors="pt",
+)
+```
+`build_inputs_with_special_tokens()` and `truncate_sequences()` follow the same pattern — prefer `tokenizer(...)` / `encode()`. If you only have token ids (not the original text) and must combine a pair, these methods remain available on `PythonBackend` tokenizers in `tokenization_python.py`.
+
 - `_switch_to_input_mode()`, `_switch_to_target_mode()`, `as_target_tokenizer()`: Removed from base class. Use `__call__()` with `text_target` parameter instead.
 
 ```python
