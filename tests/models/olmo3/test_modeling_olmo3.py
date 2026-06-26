@@ -101,7 +101,7 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
-        # Gemma3n has different RoPE configs per layer type
+        # Olmo3 has different RoPE configs per layer type
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
