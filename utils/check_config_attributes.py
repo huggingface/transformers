@@ -273,6 +273,7 @@ ATTRIBUTES_TO_ALLOW = (
     "vision_feature_layer",
     "vision_feature_select_strategy",
     "vision_aspect_ratio",
+    "num_mtp_layers",  # for MTP, not used by main model architecture
 )
 
 
