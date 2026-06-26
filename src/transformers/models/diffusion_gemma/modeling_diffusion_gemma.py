@@ -162,7 +162,7 @@ class DiffusionGemmaRMSNorm(nn.Module):
 
     def _norm(self, hidden_states: torch.Tensor):
         mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
-        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to addess compiler differences between Torch and JAX
+        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -1413,8 +1413,8 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             if layer_pattern == "sliding_attention" and past_key_values.is_compileable:
                 layer_idx = past_key_values.is_sliding.index(True)
                 sliding_layer = past_key_values.layers[layer_idx]
-                if kv_length >= sliding_layer.max_cache_len + additional_kv_length:
-                    kv_length = sliding_layer.max_cache_len + additional_kv_length
+                if kv_length >= sliding_layer.get_max_length() + additional_kv_length:
+                    kv_length = sliding_layer.get_max_length() + additional_kv_length
 
             mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
             attention_mask = mask_interface(

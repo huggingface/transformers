@@ -567,7 +567,7 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
         Returns:
             `list[list[dict]]`: Outer list is over images, inner list is over persons.
             Each dict contains:
-            - `keypoints` (`torch.FloatTensor` of shape `(num_keypoints, 2)`): absolut x/y coordinates in
+            - `keypoints` (`torch.FloatTensor` of shape `(num_keypoints, 2)`): absolute x/y coordinates in
               the source image space, or in target space if `target_sizes` is provided.
             - `scores` (`torch.FloatTensor` of shape `(num_keypoints,)`): per-keypoint confidence.
             - `labels` (`torch.LongTensor` of shape `(num_keypoints,)`): keypoint indices.
@@ -1661,6 +1661,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         flip_pairs: torch.Tensor | None = None,
         labels: torch.FloatTensor | None = None,
+        label_weights: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sapiens2PoseEstimatorOutput:
         r"""
@@ -1671,6 +1672,8 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
             original orientation.
         labels (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
             Heatmap ground truth for computing the loss.
+        label_weights (`torch.FloatTensor` of shape `(batch_size, num_labels, 1, 1)` or `(batch_size, num_labels, height, width)`, *optional*):
+            Visibility weights for each keypoint. Must be broadcastable to the shape of `labels`.
 
         Example:
 
@@ -1710,7 +1713,7 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            raise NotImplementedError("Training is not yet supported")
+            loss = F.mse_loss(heatmaps, labels, weight=label_weights)
 
         return Sapiens2PoseEstimatorOutput(
             loss=loss,
