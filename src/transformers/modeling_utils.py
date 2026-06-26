@@ -3584,6 +3584,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 os.remove(full_filename)
 
         # Save the model
+        meta_state_dict = model_to_save.state_dict()
         for shard_file, tensor_names in logging.tqdm(
             state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
         ):
@@ -3598,7 +3599,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # or something. Note that multiple weights may be loaded by `load_offloaded_parameter`
                 # but each weight is only loaded once
                 if is_offloaded and tensor.device.type == "meta":
-                    state_dict.update(load_offloaded_parameter(model_to_save, tensor_name))
+                    state_dict.update(load_offloaded_parameter(model_to_save, tensor_name, meta_state_dict))
                     tensor = state_dict.pop(tensor_name)
 
                 # only do contiguous after it's permuted correctly in case of TP
