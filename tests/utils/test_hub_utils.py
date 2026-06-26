@@ -230,10 +230,19 @@ class GetCheckpointShardFilesSecurityTests(unittest.TestCase):
         from transformers.utils.hub import get_checkpoint_shard_files
 
         return get_checkpoint_shard_files(
-            d, index_path,
-            local_files_only=True, cache_dir=None, force_download=False, proxies=None,
-            local_files_only_enabled=None, token=None, revision="main",
-            subfolder="", user_agent=None, _commit_hash=None, tqdm_class=None,
+            d,
+            index_path,
+            local_files_only=True,
+            cache_dir=None,
+            force_download=False,
+            proxies=None,
+            local_files_only_enabled=None,
+            token=None,
+            revision="main",
+            subfolder="",
+            user_agent=None,
+            _commit_hash=None,
+            tqdm_class=None,
         )
 
     def test_rejects_absolute_path_in_weight_map(self):
