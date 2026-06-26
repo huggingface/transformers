@@ -1737,7 +1737,7 @@ def convert_and_load_state_dict_in_model(
     return loading_info, disk_offload_index
 
 
-def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
+def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     """
     Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
     if the model was created in another way and is part of the default mappings.
