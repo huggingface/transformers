@@ -14,6 +14,7 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.hub import cached_file
+from ..cohere.modeling_cohere import CohereRotaryEmbedding
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     AMPBlock,
     DiTDecoderLayer,
@@ -983,26 +984,8 @@ class Qwen3TTSTokenizerSingleCodebookDecoderPreTrainedModel(Qwen3TTSTokenizerSin
     _can_compile_fullgraph = False
 
 
-class Qwen3TTSTokenizerSingleCodebookDecoderDiTRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
-
-    def __init__(self, dim, base=10000):
-        super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
-
-    def forward(self, x):
-        batch_size, seq_len = x.shape[0], x.shape[1]
-        t = torch.arange(seq_len, device=x.device)
-        device_type = x.device.type if x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = t.unsqueeze(1).float() @ self.inv_freq.unsqueeze(0).float()
-            freqs = torch.stack((freqs, freqs), dim=-1)
-            freqs = freqs.reshape(*freqs.shape[:-2], -1)
-            freqs = freqs.repeat(batch_size, *([1] * freqs.dim()))
-            cos = freqs.cos()
-            sin = freqs.sin()
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class Qwen3TTSTokenizerSingleCodebookDecoderDiTRotaryEmbedding(CohereRotaryEmbedding):
+    pass
 
 
 class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen2_5OmniToken2WavDiTModel):
@@ -1012,8 +995,8 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen2_5OmniToken2WavDiTMode
 
     def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig):
         super().__init__(config)
-        # Uses a simpler rotary embedding that takes only x (no position_ids)
-        self.rotary_embed = Qwen3TTSTokenizerSingleCodebookDecoderDiTRotaryEmbedding(config.head_dim)
+        # Interleaved (GPT-J style) rotary, reused from Cohere; same config-driven init as the base DiT rotary
+        self.rotary_embed = Qwen3TTSTokenizerSingleCodebookDecoderDiTRotaryEmbedding(config)
         # Uses the SingleCodebook DiT decoder layer alias
         self.transformer_blocks = nn.ModuleList(
             [
