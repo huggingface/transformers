@@ -213,19 +213,20 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Set every device budget to `0` to offload the entire model to disk. `max_memory` only overrides the devices you name, so cap each GPU and the CPU to push every weight to disk.
+Set `max_memory={}` to specify that no gpu or cpu memory is available and to force offloading the entire model to disk.
 
 ```py
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-7b",
     device_map="auto",
-    max_memory={0: 0, "cpu": 0},
+    max_memory={},
     offload_folder="./offload",
 )
 ```
 
 > [!NOTE]
 > Disk offloading trades memory for speed. Reading weights from disk on every forward pass is slower than reading from CPU or GPU memory.
+> Fully disk offloading requires `accelerate>1.14.0`
 
 ### Model data type
 
