@@ -237,6 +237,15 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
     attention_dropout: float | None = 0.0
     mlp_bias: bool = False
     head_dim: int | None = None
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    attribute_map = {
+        "num_experts": "n_routed_experts",
+    }
     n_group: int | None = None
     n_routed_experts: int = 64
     n_shared_experts: int = 2

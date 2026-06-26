@@ -52,7 +52,11 @@ _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 @functools.cache
 def _get_ue8m0_dtype() -> torch.dtype:
-    """Return ``torch.float8_e8m0fnu`` or raise a clear error on torch without FP8 support."""
+    """Return ``torch.float8_e8m0fnu`` or raise a clear error on torch without FP8 support.
+
+    UE8M0 scales are always stored/consumed as this single dtype — the kernels (Triton
+    finegrained + DeepGEMM) read it natively, and supporting the same scales in mixed
+    container dtypes would be a mess — so fail loudly rather than fall back."""
     if not hasattr(torch, "float8_e8m0fnu"):
         raise RuntimeError(
             "scale_fmt='ue8m0' requires torch.float8_e8m0fnu, which is only available in "
@@ -294,7 +298,10 @@ class FP8Linear(nn.Linear):
             sf_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
             scale_out_features = (out_features + self.block_size[0] - 1) // self.block_size[0]
             scale_in_features = (in_features + self.block_size[1] - 1) // self.block_size[1]
-            self.weight_scale_inv = nn.Parameter(torch.empty(scale_out_features, scale_in_features, dtype=sf_dtype))
+            self.weight_scale_inv = nn.Parameter(
+                torch.empty(scale_out_features, scale_in_features, dtype=sf_dtype),
+                requires_grad=sf_dtype.is_floating_point,
+            )
 
         if self.activation_scheme == "static":
             self.activation_scale = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
@@ -864,18 +871,18 @@ class Fp8Quantize(ConversionOps):
         # We store inverse scale to match the upstream ``weight_scale_inv`` convention
         scales = _FP8_MAX / safe_max_abs
         scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))  # keep zeros stable
+        inv_scales = (1.0 / scales).to(torch.float32)
+        # ue8m0 stores weight_scale_inv as a power of two. Round it before quantizing and derive the
+        # forward scale from it, so dequant multiplies by the exact scale the weight was divided by.
+        if self.hf_quantizer.quantization_config.scale_fmt == "ue8m0":
+            inv_scales = torch.pow(2.0, torch.ceil(torch.log2(inv_scales.clamp(min=torch.finfo(torch.float32).tiny))))
+            inv_scales = inv_scales.to(_get_ue8m0_dtype())
+            scales = 1.0 / inv_scales.to(torch.float32)  # forward scale = exact reciprocal of the stored inverse
         # Broadcast scales over the block dims and quantize
         scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # (..., rows_tiles, 1, cols_tiles, 1)
         scaled = reshaped * scales_broadcast
         quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
         quantized = quantized.reshape(original_shape)
-        inv_scales = (1.0 / scales).to(torch.float32)
-        # DeepSeek V4-style storage (`scale_fmt="ue8m0"`): round inv_scales to UE8M0-representable
-        # values (powers of 2) and cast to `float8_e8m0fnu` byte storage so the on-disk dtype
-        # matches the parameter allocation in `FP8Linear`/`FP8Experts`.
-        if self.hf_quantizer.quantization_config.scale_fmt == "ue8m0":
-            inv_scales = torch.pow(2.0, torch.ceil(torch.log2(inv_scales.clamp(min=torch.finfo(torch.float32).tiny))))
-            inv_scales = inv_scales.to(_get_ue8m0_dtype())
         scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith(".weight") else key + "_scale_inv"
         return {key: quantized, scale_key: inv_scales}
 
@@ -1045,29 +1052,3 @@ class Fp8Dequantize(ConversionOps):
         # checkpoint preserves the FP8 format (weight + per-block ``weight_scale_inv``)
         # whether the in-memory state stayed quantized or was dequantized for compute.
         return Fp8Quantize(self.hf_quantizer)
-
-
-class Fp8DecodeScale(ConversionOps):
-    """Decode MXFP8 ``ue8m0`` per-block scales (stored as ``uint8`` exponents) into the
-    float32 multiplicative scales the FP8 compute path expects.
-
-    Native MXFP8 loading (``dequantize=False``) keeps weights in ``float8_e4m3fn`` and only
-    needs the sibling ``*.weight_scale_inv`` tensors turned from raw E8M0 bytes into real
-    scales (``2 ** (byte - 127)``). Prepended to each weight converter, this op runs before
-    any merge/concat collapses the per-expert structure: it rewrites only the ``uint8`` scale
-    entries and passes weights (and already-float scales) through untouched.
-    """
-
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    @staticmethod
-    def _decode(tensor: torch.Tensor) -> torch.Tensor:
-        # E8M0 stores one exponent byte per block; the real scale is ``2 ** (byte - 127)``.
-        return (tensor.to(torch.float32) - 127.0).exp2() if tensor.dtype == torch.uint8 else tensor
-
-    def convert(self, input_dict: dict[str, list[torch.Tensor] | torch.Tensor], **kwargs):
-        return {
-            key: [self._decode(t) for t in value] if isinstance(value, list) else self._decode(value)
-            for key, value in input_dict.items()
-        }

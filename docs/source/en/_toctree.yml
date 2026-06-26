@@ -117,6 +117,8 @@
         title: Kernels
       - local: kernel_doc/loading_kernels
         title: Loading kernels
+      - local: kernel_doc/writing_kernels
+        title: Writing kernels
       title: Kernels
     - local: perf_torch_compile
       title: torch.compile
@@ -219,8 +221,10 @@
       title: Accelerator selection
     - local: accelerate
       title: Accelerate
+    - local: ddp
+      title: DDP
     - local: fsdp
-      title: FullyShardedDataParallel
+      title: FSDP2
     - local: deepspeed
       title: DeepSpeed ZeRO
     - local: deepspeed_alst
@@ -243,7 +247,7 @@
     - local: perf_hardware
       title: Building a GPU workstation
     - local: model_memory_anatomy
-      title: Model training anatomy
+      title: GPU memory usage
     title: Hardware
   title: Training
 - isExpanded: false
@@ -1167,6 +1171,8 @@
         title: Whisper
       - local: model_doc/xcodec
         title: X-Codec
+      - local: model_doc/xcodec2
+        title: X-Codec2
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2
