@@ -863,10 +863,10 @@ class Gemma4UnifiedVisionEmbedder(nn.Module):
             (batch, num_patches, mm_embed_dim) — embedded features (including padding positions).
         """
         # Step 1: Patch embedding (LN → Dense → LN)
-        target_dtype = getattr(self.patch_dense, "compute_dtype", None)
-        if target_dtype is None:
-            target_dtype = self.patch_dense.weight.dtype
-        hidden_states = self.patch_ln1(pixel_values.to(target_dtype))
+        target_dtype = self.patch_dense.weight.dtype
+        if target_dtype.is_floating_point:
+            pixel_values = pixel_values.to(target_dtype)
+        hidden_states = self.patch_ln1(pixel_values)
         hidden_states = self.patch_dense(hidden_states)
         hidden_states = self.patch_ln2(hidden_states)
 
@@ -897,10 +897,7 @@ class Gemma4UnifiedMultimodalEmbedder(Gemma4MultimodalEmbedder):
 
     def forward(self, inputs_embeds: torch.Tensor) -> torch.Tensor:
         # Additional dtype casting
-        target_dtype = getattr(self.embedding_projection, "compute_dtype", None)
-        if target_dtype is None:
-            target_dtype = self.embedding_projection.weight.dtype
-        inputs_embeds = inputs_embeds.to(target_dtype)
+        inputs_embeds = inputs_embeds.to(self.embedding_projection.weight.dtype)
         embs_normed = self.embedding_pre_projection_norm(inputs_embeds)
         return self.embedding_projection(embs_normed)
 
@@ -1110,7 +1107,7 @@ class Gemma4UnifiedModel(Gemma4Model):
             )
 
             inputs_embeds = inputs_embeds.masked_scatter(
-                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device)
+                audio_mask.to(inputs_embeds.device), audio_features.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             )
 
         # It may already have been prepared by, e.g., `generate`
