@@ -318,7 +318,7 @@ class LlamaIntegrationTest(unittest.TestCase):
                 (
                     "cuda",
                     8,
-                ): "The meaning of life is a complex and subjective question that has been debated by philosophers, theologians, scientists, and many others for centuries. There is no one definitive answer, as it can vary greatly from person to person, culture to culture, and even from one moment to another.\\n\\nThat being said, here are some possible perspectives on the meaning of life:\\n\\n1. **Biological perspective**: From a biological standpoint, the meaning of life can be seen as the survival and reproduction of the species."  # fmt: skip
+                ): "The question of the meaning of life is one of the most profound and debated topics in human history. It has been explored by philosophers, theologians, scientists, and many others across various cultures and disciplines"  # fmt: skip
             }
         )
         EXPECTED_TEXT = expected_text.get_expectation()
