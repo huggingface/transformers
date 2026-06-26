@@ -651,7 +651,7 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
         )
 
 
-@staticmethod
+    @staticmethod
     def _timesfm2_5_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
         """Calculates the moving average using PyTorch's convolution function."""
         # Pad with zeros to handle initial window positions
