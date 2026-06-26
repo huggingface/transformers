@@ -18,6 +18,7 @@ from transformers.configuration_utils import PreTrainedConfig
 from transformers.modeling_rope_utils import RopeParameters
 from transformers.utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -48,60 +49,47 @@ class OpenPanguV2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: int | None = None,
-        hidden_size: int | None = None,
-        intermediate_size: int | None = None,
-        moe_intermediate_size: int | None = None,
-        num_hidden_layers: int | None = 0,
-        num_attention_heads: int | None = None,
-        num_key_value_heads: int | None = None,
-        head_dim: int | None = None,
-        v_head_dim: int | None = None,
-        use_mla: bool | None = False,
-        n_shared_experts: int | None = None,
-        n_routed_experts: int | None = None,
-        routed_scaling_factor: float | None = None,
-        kv_lora_rank: int | None = None,
-        q_lora_rank: int | None = None,
-        qk_rope_head_dim: int | None = None,
-        qk_nope_head_dim: int | None = None,
-        n_group: int | None = 1,
-        topk_group: int | None = 1,
-        num_experts_per_tok: int | None = None,
-        first_k_dense_replace: int | None = 0,
-        norm_topk_prob: bool | None = None,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = None,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-5,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        rope_interleave: bool | None = False,
-        sliding_window: int | list[int] | None = None,
-        swa_layers: list[str] | None = None,
-        layer_types: list[str] | None = None,
         attention_dropout: float | None = 0.0,
-        attention_bias: bool | None = False,
-        pad_token_id: int | None = 0,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 2,
-        param_sink_number: int | None = 0,
-        attn_groupnorm: bool | None = False,
-        attn_elementwise_gate: bool | None = False,
-        router_sliding_window: int | None = 0,
-        sandwich_norm: bool | None = False,
         block_post_layernorm_idx: list[int] | None = None,
-        use_mhc: bool | None = False,
-        mhc_use_gamma: bool | None = None,
-        mhc_recur_norm: int | None = None,
-        mhc_num_stream: int | None = None,
-        vanilla_mlp: bool | None = False,
-        attn_k_layernorm: bool | None = False,
         dsa_layers: list[str] | None = None,
-        index_topk: int | None = None,
+        first_k_dense_replace: int | None = 0,
+        head_dim: int | None = None,
+        hidden_act: str | None = "silu",
+        hidden_size: int | None = None,
         index_head_dim: int | None = None,
         index_n_heads: int | None = None,
+        index_topk: int | None = None,
+        intermediate_size: int | None = None,
+        kv_lora_rank: int | None = None,
+        layer_types: list[str] | None = None,
+        max_position_embeddings: int | None = None,
+        mhc_num_stream: int | None = None,
+        mhc_recur_norm: int | None = None,
+        mhc_use_gamma: bool | None = None,
+        moe_intermediate_size: int | None = None,
+        n_routed_experts: int | None = None,
+        n_shared_experts: int | None = None,
+        norm_topk_prob: bool | None = None,
+        num_attention_heads: int | None = None,
+        num_experts_per_tok: int | None = None,
+        num_hidden_layers: int | None = 0,
+        num_key_value_heads: int | None = None,
+        param_sink_number: int | None = 0,
+        q_lora_rank: int | None = None,
+        qk_nope_head_dim: int | None = None,
+        qk_rope_head_dim: int | None = None,
+        rms_norm_eps: float | None = 1e-5,
+        rope_interleave: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        routed_scaling_factor: float | None = None,
+        router_sliding_window: int | None = 0,
+        sandwich_norm: bool | None = False,
+        sliding_window: int | list[int] | None = None,
+        swa_layers: list[str] | None = None,
+        use_cache: bool | None = True,
+        use_mhc: bool | None = False,
+        v_head_dim: int | None = None,
+        vocab_size: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -118,43 +106,31 @@ class OpenPanguV2Config(PreTrainedConfig):
         self.head_dim = head_dim
         self.v_head_dim = v_head_dim
         self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_parameters = rope_parameters
         self.attention_dropout = attention_dropout
-        self.attention_bias = attention_bias
         self.layer_types = layer_types
 
-        self.use_mla = use_mla
         self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
         self.routed_scaling_factor = routed_scaling_factor
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
         self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
         self.qk_nope_head_dim = qk_nope_head_dim
         if qk_rope_head_dim is not None and qk_nope_head_dim is not None:
             self.head_dim = qk_rope_head_dim
             self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
-        self.n_group = n_group
-        self.topk_group = topk_group
         self.num_experts_per_tok = num_experts_per_tok
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.rope_interleave = rope_interleave
 
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
         self.sliding_window = sliding_window
         self.swa_layers = swa_layers
-        self.tie_word_embeddings = tie_word_embeddings
 
         self.param_sink_number = param_sink_number
-        self.attn_groupnorm = attn_groupnorm
-        self.attn_elementwise_gate = attn_elementwise_gate
         self.router_sliding_window = router_sliding_window
         self.sandwich_norm = sandwich_norm
         self.block_post_layernorm_idx = block_post_layernorm_idx
@@ -162,8 +138,6 @@ class OpenPanguV2Config(PreTrainedConfig):
         self.mhc_use_gamma = mhc_use_gamma
         self.mhc_recur_norm = mhc_recur_norm
         self.mhc_num_stream = mhc_num_stream
-        self.vanilla_mlp = vanilla_mlp
-        self.attn_k_layernorm = attn_k_layernorm
         
         # Indexer (DSA) parameters
         self.dsa_layers = dsa_layers
@@ -189,7 +163,6 @@ class OpenPanguV2Config(PreTrainedConfig):
             )
 
         super().__init__(**kwargs)
-
 
 
 __all__ = ["OpenPanguV2Config"]

@@ -28,12 +28,11 @@ from torch.nn import functional as F
 
 from transformers.cache_utils import Cache
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
-from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.processing_utils import Unpack
 from transformers.utils import logging
 from transformers.models.llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaPreTrainedModel,
@@ -41,26 +40,20 @@ from transformers.models.llama.modeling_llama import (
     LlamaModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
+    repeat_kv
 )
 from transformers.models.deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3TopkRouter,
     DeepseekV3MoE,
-    DeepseekV3Attention,
     apply_rotary_pos_emb_interleave,
     yarn_get_mscale,
 )
 from transformers.models.mixtral.modeling_mixtral import MixtralExperts
 from transformers.models.phi.modeling_phi import PhiRotaryEmbedding
-from transformers.models.qwen2_moe.modeling_qwen2_moe import (
-    Qwen2MoeExperts,
-    Qwen2MoeTopKRouter,
-    Qwen2MoeSparseMoeBlock, 
-)
 
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.import_utils import get_torch_version
 from ...utils.generic import check_model_inputs
 from .configuration_openpangu_v2 import OpenPanguV2Config
@@ -257,20 +250,6 @@ class FastGELU(nn.Module):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         abs_value = torch.abs(input)
         return input * torch.sigmoid(1.702 * abs_value) * torch.exp(0.851 * (input - abs_value))
-
-
-class OpenPanguV2MLPVanilla(LlamaMLP):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__(config)
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.gate_proj2 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.gelu = FastGELU()
-    
-    def forward(self, x):
-        return self.down_proj((self.act_fn(self.gate_proj(x)) + self.gelu(self.gate_proj2(x))) * self.up_proj(x))
 
 
 class mHCModule(nn.Module):
@@ -486,130 +465,7 @@ class OpenPanguV2MLP(LlamaMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
-class OpenPanguV2Attention(LlamaAttention):
-    def __init__(self, config: OpenPanguV2Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        self.hidden_size = config.hidden_size
-        self.num_attention_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
-        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
-        self.rotary_ndims = int(self.head_dim * partial_rotary_factor)
-        self.v_head_dim = config.v_head_dim if config.v_head_dim is not None else config.head_dim
-
-        self.attn_groupnorm = config.attn_groupnorm
-        self.attn_elementwise_gate = config.attn_elementwise_gate
-        self.param_sink_number = config.param_sink_number
-        self.attn_k_layernorm  = config.attn_k_layernorm
-
-        if self.param_sink_number > 0:
-            self.param_sink_key = torch.nn.Parameter(
-                torch.empty(
-                    (self.param_sink_number, self.num_key_value_heads, self.head_dim),
-                    dtype=config.torch_dtype,
-                )
-            )
-            self.param_sink_value = torch.nn.Parameter(
-                torch.empty(
-                    (self.param_sink_number, self.num_key_value_heads, self.v_head_dim),
-                    dtype=config.torch_dtype,
-                )
-            )
-        
-        if self.attn_groupnorm:
-            self.groupnorm = OpenPanguV2RMSNorm(hidden_size=self.head_dim, eps=config.rms_norm_eps)
-        
-        if self.attn_elementwise_gate:
-            self.attention_gate = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-
-        if self.attn_k_layernorm:
-            self.k_layernorm = OpenPanguV2RMSNorm(hidden_size=self.head_dim, eps=config.rms_norm_eps)
-        
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        # cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        if self.attn_elementwise_gate:
-            gate_score = self.attention_gate(hidden_states)
-        else:
-            gate_score = None
-
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        if self.attn_k_layernorm:
-            key_states = self.k_layernorm(key_states)
-        
-        cos, sin = position_embeddings
-        # Partial rotary embedding
-        query_rot, query_pass = (
-            query_states[..., : self.rotary_ndims],
-            query_states[..., self.rotary_ndims :],
-        )
-        key_rot, key_pass = (
-            key_states[..., : self.rotary_ndims],
-            key_states[..., self.rotary_ndims :],
-        )
-        # [batch_size, seq_length, num_heads, head_dim * config.partial_rotary_factor]
-        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
-
-        # [batch_size, seq_length, num_heads, head_dim]
-        query_states = torch.cat((query_rot, query_pass), dim=-1)
-        key_states = torch.cat((key_rot, key_pass), dim=-1)
-
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            # cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        if self.param_sink_number > 0:
-            # [b, n, s, d]
-            batch_size, kv_seq_len = key_states.shape[0], key_states.shape[2]
-            param_sink_key = self.param_sink_key.permute(1, 0, 2).unsqueeze(0).expand(batch_size, -1, -1, -1).to(key_states.device)
-            param_sink_value = self.param_sink_value.permute(1, 0, 2).unsqueeze(0).expand(batch_size, -1, -1, -1).to(value_states.device)
-            key_states = torch.cat([param_sink_key, key_states], dim=2)
-            value_states = torch.cat([param_sink_value, value_states], dim=2)
-            kv_seq_len += self.param_sink_number
-
-            attention_mask = torch.nn.functional.pad(attention_mask, (self.param_sink_number, 0), value=0.0)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-        
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
-
-        if self.attn_groupnorm:
-            attn_output = self.groupnorm(attn_output)
-        if self.attn_elementwise_gate:
-            attn_output *= gate_score.sigmoid().view(attn_output.shape)    
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
-class OpenPanguV2MLAAttention(nn.Module):
+class OpenPanguV2Attention(nn.Module):
     def __init__(self, config: OpenPanguV2Config, layer_idx: int):
         super().__init__()
         self.config = config
@@ -629,14 +485,14 @@ class OpenPanguV2MLAAttention(nn.Module):
         if self.q_lora_rank is None:
             self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         else:
-            self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=False)
             self.q_a_layernorm = OpenPanguV2RMSNorm(config.q_lora_rank)
             self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
         self.kv_a_proj_with_mqa = nn.Linear(
             config.hidden_size,
             self.kv_lora_rank + self.qk_rope_head_dim,
-            bias=config.attention_bias,
+            bias=False,
         )
         self.kv_a_layernorm = OpenPanguV2RMSNorm(self.kv_lora_rank)
         self.kv_b_proj = nn.Linear(
@@ -648,7 +504,7 @@ class OpenPanguV2MLAAttention(nn.Module):
         self.o_proj = nn.Linear(
             self.num_heads * self.v_head_dim,
             config.hidden_size,
-            bias=config.attention_bias,
+            bias=False,
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
@@ -715,7 +571,6 @@ class OpenPanguV2MLAAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        # cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -761,8 +616,6 @@ class OpenPanguV2MLAAttention(nn.Module):
         key_states = torch.cat((k_pass, k_rot), dim=-1)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            # cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         if self.use_dsa:
@@ -873,7 +726,7 @@ class OpenPanguV2SparseMoeBlock(DeepseekV3MoE):
         )
         self.n_routed_experts = config.n_routed_experts
         self.n_group = 1
-        self.topk_group = config.topk_group
+        self.topk_group = 1
         self.norm_topk_prob = config.norm_topk_prob
         self.routed_scaling_factor = config.routed_scaling_factor
         self.top_k = config.num_experts_per_tok
@@ -910,16 +763,11 @@ class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
-        if config.use_mla:
-            self.self_attn = OpenPanguV2MLAAttention(config=config, layer_idx=layer_idx)
-        else:
-            self.self_attn = OpenPanguV2Attention(config=config, layer_idx=layer_idx)
+        self.self_attn = OpenPanguV2Attention(config=config, layer_idx=layer_idx)
         self.attention_type = config.layer_types[layer_idx]
 
         if config.first_k_dense_replace > 0 and layer_idx >= config.first_k_dense_replace:
             self.mlp = OpenPanguV2SparseMoeBlock(config)
-        elif config.vanilla_mlp and layer_idx == 0:
-            self.mlp = OpenPanguV2MLPVanilla(config)
         else:
             self.mlp = OpenPanguV2MLP(config)
 
@@ -966,7 +814,6 @@ class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
-        # cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -983,7 +830,6 @@ class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            # cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -1049,7 +895,6 @@ class OpenPanguV2Model(LlamaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        # cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1060,12 +905,6 @@ class OpenPanguV2Model(LlamaModel):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-
-        # if cache_position is None:
-        #     past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        #     cache_position = torch.arange(
-        #         past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-        #     )
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1079,7 +918,6 @@ class OpenPanguV2Model(LlamaModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                # "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -1105,7 +943,6 @@ class OpenPanguV2Model(LlamaModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                # cache_position=cache_position,
                 **kwargs,
             )
 
