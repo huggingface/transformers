@@ -1395,8 +1395,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.attn\.", ".self_attn."),
             WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),  # if config.use_swiglu_ffn=False
             WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),  # if config.use_swiglu_ffn=False
-            # WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."), # if config.use_swiglu_ffn=True
-            # WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."), # if config.use_swiglu_ffn=True
+            WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."),  # if config.use_swiglu_ffn=True
+            WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."),  # if config.use_swiglu_ffn=True
             WeightConverter(
                 source_patterns=r"\.in_proj_weight",
                 target_patterns=[".q_proj.weight", ".k_proj.weight", ".v_proj.weight"],
