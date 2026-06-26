@@ -4281,6 +4281,8 @@ class ModelTesterMixin:
                     module._update_mamba_mask = lambda attention_mask, *args, **kwargs: attention_mask
                 if hasattr(module, "_update_linear_attn_mask"):
                     module._update_linear_attn_mask = lambda attention_mask, *args, **kwargs: attention_mask
+                if hasattr(module, "_update_cca_mask"):
+                    module._update_cca_mask = lambda attention_mask, *args, **kwargs: attention_mask
 
             return model, inputs_dict
 
