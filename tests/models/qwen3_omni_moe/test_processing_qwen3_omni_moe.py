@@ -166,8 +166,8 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for k in out_dict:
             self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
 
-    @unittest.skip("Skipping but this one is important, should be fixed ASAP")
     @parameterized.expand([(1, "pt"), (2, "pt")])
+    @unittest.skip("Skipping but this one is important, should be fixed ASAP")
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         pass
 
