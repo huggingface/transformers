@@ -651,6 +651,18 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
         )
 
 
+@staticmethod
+    def _timesfm2_5_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
+        """Calculates the moving average using PyTorch's convolution function."""
+        # Pad with zeros to handle initial window positions
+        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
+        # Create a convolution kernel
+        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
+        # Apply convolution to calculate the moving average
+        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
+        return [smoothed_arr, arr - smoothed_arr]
+
+
 __all__ = [
     "TimesFm2_5Config",
     "TimesFm2_5ModelForPrediction",
