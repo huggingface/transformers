@@ -143,6 +143,67 @@ class MemoryTrackerPlugin:
             self._log_file.close()
             self._log_file = None
 
+    def pytest_terminal_summary(self, terminalreporter):
+        """Print aggregated memory summary after pytest's own pass/fail/skip line."""
+        import glob
+
+        files = sorted(glob.glob(os.path.join(self._log_dir, "worker_*.jsonl")))
+        if not files:
+            return
+
+        records = []
+        for path in files:
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            records.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+
+        if not records:
+            return
+
+        # Only the controller process has a real terminalreporter; workers have a
+        # no-op one. Guard so we don't print 8 copies of the summary.
+        if not hasattr(terminalreporter, "write_sep"):
+            return
+
+        top_n = 30
+        by_delta = sorted(records, key=lambda r: r["delta_mb"], reverse=True)
+
+        terminalreporter.write_sep("=", f"memory usage — top {top_n} tests by retained RSS after test")
+        terminalreporter.write_line(
+            f"  {'Delta MB':>9}  {'End MB':>9}  {'Worker':>6}  Test"
+        )
+        terminalreporter.write_line(
+            f"  {'-'*9}  {'-'*9}  {'-'*6}  {'-'*60}"
+        )
+        for r in by_delta[:top_n]:
+            sign = "+" if r["delta_mb"] >= 0 else ""
+            terminalreporter.write_line(
+                f"  {sign}{r['delta_mb']:>8.1f}  {r['end_mb']:>9.1f}  {r['worker']:>6}  {r['nodeid']}"
+            )
+
+        # Per-worker totals
+        from collections import defaultdict
+        by_worker = defaultdict(list)
+        for r in records:
+            by_worker[r["worker"]].append(r)
+
+        terminalreporter.write_sep("-", "per-worker RSS summary")
+        terminalreporter.write_line(
+            f"  {'Worker':>6}  {'Tests':>6}  {'Peak RSS MB':>12}  {'Net growth MB':>14}"
+        )
+        for worker, recs in sorted(by_worker.items()):
+            peak = max(r["high_mb"] for r in recs)
+            growth = recs[-1]["end_mb"] - recs[0]["start_mb"]
+            sign = "+" if growth >= 0 else ""
+            terminalreporter.write_line(
+                f"  {worker:>6}  {len(recs):>6}  {peak:>12.1f}  {sign}{growth:>13.1f}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Pytest hooks (picked up when loaded via -p memory_tracker_plugin)
