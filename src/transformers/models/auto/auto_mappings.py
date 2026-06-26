@@ -23,6 +23,7 @@ from collections import OrderedDict
 
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
+        ("AXK2", "AXK2Config"),
         ("afmoe", "AfmoeConfig"),
         ("aimv2", "Aimv2Config"),
         ("aimv2_text_model", "Aimv2TextConfig"),

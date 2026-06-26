@@ -18,6 +18,7 @@ from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .AXK2 import *
     from .afmoe import *
     from .aimv2 import *
     from .albert import *
