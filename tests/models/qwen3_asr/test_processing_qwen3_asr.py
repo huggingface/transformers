@@ -107,7 +107,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "path": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_en.wav",
+                        "path": "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
                     },
                 ],
             },
