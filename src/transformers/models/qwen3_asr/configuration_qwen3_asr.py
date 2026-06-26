@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B-hf")
+@auto_docstring(checkpoint="Qwen/Qwen3-ASR-1.7B-hf")
 @strict
 class Qwen3ASREncoderConfig(PreTrainedConfig):
     r"""
@@ -68,7 +68,7 @@ class Qwen3ASREncoderConfig(PreTrainedConfig):
     max_position_embeddings: int = 13
 
 
-@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B-hf")
+@auto_docstring(checkpoint="Qwen/Qwen3-ASR-1.7B-hf")
 @strict
 class Qwen3ASRConfig(PreTrainedConfig):
     r"""

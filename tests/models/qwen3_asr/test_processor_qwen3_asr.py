@@ -40,7 +40,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_torchaudio
     def setUpClass(cls):
-        cls.checkpoint = "bezzam/Qwen3-ASR-0.6B-hf"
+        cls.checkpoint = "Qwen/Qwen3-ASR-0.6B-hf"
         cls.tmpdirname = tempfile.mkdtemp()
         processor = Qwen3ASRProcessor.from_pretrained(cls.checkpoint)
         processor.save_pretrained(cls.tmpdirname)

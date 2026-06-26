@@ -54,7 +54,6 @@ import argparse
 import json
 import logging
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -161,14 +160,14 @@ def clean_config(src_root: Path, model_type: str) -> dict:
 
         # Override max_source_positions: the original checkpoint uses 1500 (inherited from Whisper/OmniMoe),
         # but Qwen3ASR chunks are fixed at n_window*2=100 mel frames → 13 post-CNN positions.
-        config_dict["audio_config"]["max_source_positions"] = 13
+        config_dict["audio_config"]["max_position_embeddings"] = 13
 
     # Audio config: strip non-standard fields
     if "audio_config" in config_dict:
         audio_unused = [
             "_name_or_path", "architectures", "dtype", "model_type", "use_bfloat16", "add_cross_attention",
             "chunk_size_feed_forward", "cross_attention_hidden_size", "decoder_start_token_id",
-            "finetuning_task", "id2label", "label2id", "is_decoder", "is_encoder_decoder",
+            "finetuning_task", "id2label", "label2id", "is_decoder", "is_encoder_decoder", "max_source_positions",
             "output_attentions", "output_hidden_states", "pad_token_id", "bos_token_id", "eos_token_id",
             "prefix", "problem_type", "pruned_heads", "return_dict", "sep_token_id", "task_specific_params",
             "tf_legacy_loss", "tie_encoder_decoder", "tie_word_embeddings", "tokenizer_class", "torchscript",
@@ -340,8 +339,7 @@ def main() -> None:
     # Determine source directory
     if args.model_id:
         logger.info("Downloading model from Hugging Face Hub: %s", args.model_id)
-        src_root = Path(tempfile.mkdtemp())
-        src_root = Path(snapshot_download(args.model_id, cache_dir=str(src_root)))
+        src_root = Path(snapshot_download(args.model_id))
         logger.info("Model downloaded to: %s", src_root)
     elif args.src_dir:
         src_root = Path(args.src_dir).resolve()

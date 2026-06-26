@@ -39,7 +39,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
 from ..voxtral.modeling_voxtral import VoxtralMultiModalProjector
 
 
-@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B-hf")
+@auto_docstring(checkpoint="Qwen/Qwen3-ASR-1.7B-hf")
 @strict
 class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     r"""
@@ -65,7 +65,7 @@ class Qwen3ASREncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     max_source_positions = AttributeError()
 
 
-@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B-hf")
+@auto_docstring(checkpoint="Qwen/Qwen3-ASR-1.7B-hf")
 @strict
 class Qwen3ASRConfig(PreTrainedConfig):
     r"""
@@ -289,7 +289,7 @@ class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         ```python
         >>> from transformers import Qwen3ASRForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "bezzam/Qwen3-ASR-1.7B-hf"
+        >>> model_id = "Qwen/Qwen3-ASR-1.7B-hf"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         ```"""

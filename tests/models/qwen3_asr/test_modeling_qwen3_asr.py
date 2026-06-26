@@ -113,7 +113,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cleanup(torch_device, gc_collect=True)
-        cls.checkpoint = "bezzam/Qwen3-ASR-0.6B-hf"
+        cls.checkpoint = "Qwen/Qwen3-ASR-0.6B-hf"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
         cls.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr"
 
@@ -225,7 +225,7 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cleanup(torch_device, gc_collect=True)
-        cls.aligner_checkpoint = "bezzam/Qwen3-ForcedAligner-0.6B-hf"
+        cls.aligner_checkpoint = "Qwen/Qwen3-ForcedAligner-0.6B-hf"
         cls.aligner_processor = AutoProcessor.from_pretrained(cls.aligner_checkpoint)
         cls.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr"
 

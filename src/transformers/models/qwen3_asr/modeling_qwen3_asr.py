@@ -640,7 +640,7 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
         ```python
         >>> from transformers import Qwen3ASRForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "bezzam/Qwen3-ASR-1.7B-hf"
+        >>> model_id = "Qwen/Qwen3-ASR-1.7B-hf"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         ```"""
