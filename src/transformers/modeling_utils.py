@@ -3511,8 +3511,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         is_offloaded = False
         if (
             hasattr(self, "hf_device_map")
-            and len(set(self.hf_device_map.values())) > 1
-            and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
+            and (
+                len(set(self.hf_device_map.values())) > 1
+                or "disk" in self.hf_device_map.values()
+            )
         ):
             is_offloaded = True
             warnings.warn(
@@ -3593,9 +3595,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
                 # but it would otherwise not be contained in the saved shard if we were to simply move the file
-                # or something
+                # or something. Note that multiple weights may be loaded by `load_offloaded_parameter`
+                # but each weight is only loaded once
                 if is_offloaded and tensor.device.type == "meta":
-                    tensor = load_offloaded_parameter(model_to_save, tensor_name)
+                    state_dict.update(load_offloaded_parameter(model_to_save, tensor_name))
+                    tensor = state_dict.pop(tensor_name)
 
                 # only do contiguous after it's permuted correctly in case of TP
                 shard_state_dict[tensor_name] = tensor.contiguous()
