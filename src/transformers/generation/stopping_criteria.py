@@ -1,3 +1,4 @@
+import json
 import time
 import warnings
 from abc import ABC
@@ -241,29 +242,41 @@ class StopStringCriteria(StoppingCriteria):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
         self.stop_strings: tuple[str, ...] = tuple(stop_strings)
+        self._stop_string_matching_mode = self._get_stop_string_matching_mode(tokenizer)
+        self._stop_strings_for_matching = self._get_stop_strings_for_matching(
+            self.stop_strings, self._stop_string_matching_mode
+        )
         vocab = tokenizer.get_vocab()
         token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = self.clean_and_embed_tokens_with_cache(
             token_list, token_indices, tokenizer
         )
 
-        self.maximum_token_len = max(len(stop_string) for stop_string in self.stop_strings)
+        self.maximum_token_len = max(len(stop_string) for stop_string in self._stop_strings_for_matching)
         self.num_stop_strings = len(self.stop_strings)
-        self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
+        self.target_lens = torch.tensor(
+            [len(stop_string) for stop_string in self._stop_strings_for_matching], dtype=torch.int32
+        )
 
     def clean_and_embed_tokens_with_cache(self, token_list, token_indices, tokenizer):
         # We don't use the tokenizer in the cache key, because I don't trust it to have well-behaved equality
-        if (token_list, token_indices, self.stop_strings) in STOP_STRING_EMBEDDING_CACHE:
-            embedding_vec, max_valid_positions, max_valid_end_lens = STOP_STRING_EMBEDDING_CACHE[
-                (token_list, token_indices, self.stop_strings)
-            ]
-            STOP_STRING_EMBEDDING_CACHE.move_to_end((token_list, token_indices, self.stop_strings))
+        cache_key = (
+            token_list,
+            token_indices,
+            self._stop_strings_for_matching,
+            self._stop_string_matching_mode,
+        )
+        if cache_key in STOP_STRING_EMBEDDING_CACHE:
+            embedding_vec, max_valid_positions, max_valid_end_lens = STOP_STRING_EMBEDDING_CACHE[cache_key]
+            STOP_STRING_EMBEDDING_CACHE.move_to_end(cache_key)
         else:
-            clean_token_list, clean_token_indices = self.clean_tokenizer_vocab(tokenizer)
-            embedding_vec, max_valid_positions, max_valid_end_lens = self._stop_string_create_embedding_vec(
-                clean_token_list, clean_token_indices, self.stop_strings
+            clean_token_list, clean_token_indices = self.clean_tokenizer_vocab(
+                tokenizer, stop_string_matching_mode=self._stop_string_matching_mode
             )
-            STOP_STRING_EMBEDDING_CACHE[(token_list, token_indices, self.stop_strings)] = (
+            embedding_vec, max_valid_positions, max_valid_end_lens = self._stop_string_create_embedding_vec(
+                clean_token_list, clean_token_indices, self._stop_strings_for_matching
+            )
+            STOP_STRING_EMBEDDING_CACHE[cache_key] = (
                 embedding_vec,
                 max_valid_positions,
                 max_valid_end_lens,
@@ -273,22 +286,93 @@ class StopStringCriteria(StoppingCriteria):
         return embedding_vec, max_valid_positions, max_valid_end_lens
 
     @staticmethod
-    def clean_tokenizer_vocab(tokenizer, static_prefix="abcdef"):
+    def _get_stop_string_matching_mode(tokenizer):
+        decoder = getattr(getattr(tokenizer, "backend_tokenizer", None), "decoder", None)
+        if decoder is None:
+            return None
+
+        decoder_state = getattr(decoder, "__getstate__", lambda: None)()
+        if isinstance(decoder_state, str):
+            decoder_state = decoder_state.encode()
+        decoder_config = None
+        if isinstance(decoder_state, bytes):
+            try:
+                decoder_config = json.loads(decoder_state)
+            except json.JSONDecodeError:
+                decoder_config = None
+
+        # Some decoders do not expose a JSON state.
+        if decoder.__class__.__name__ == "ByteLevel":
+            return "byte_level"
+        if decoder_config is not None:
+            # Prefer explicit "<0xNN>" byte-fallback tokens if both markers appear.
+            if StopStringCriteria._decoder_has_type(decoder_config, "ByteFallback"):
+                return "byte_fallback"
+            if StopStringCriteria._decoder_has_type(decoder_config, "ByteLevel"):
+                return "byte_level"
+        return None
+
+    @staticmethod
+    def _decoder_has_type(decoder_config, decoder_type):
+        if isinstance(decoder_config, dict):
+            if decoder_config.get("type") == decoder_type:
+                return True
+            return any(StopStringCriteria._decoder_has_type(value, decoder_type) for value in decoder_config.values())
+        if isinstance(decoder_config, list):
+            return any(StopStringCriteria._decoder_has_type(value, decoder_type) for value in decoder_config)
+        return False
+
+    @staticmethod
+    def _get_stop_strings_for_matching(stop_strings, matching_mode):
+        if matching_mode is None:
+            return stop_strings
+        return tuple(stop_string.encode("utf-8") for stop_string in stop_strings)
+
+    @staticmethod
+    def _byte_level_decoder():
+        from ..convert_slow_tokenizer import bytes_to_unicode
+
+        return {unicode_char: byte for byte, unicode_char in bytes_to_unicode().items()}
+
+    @staticmethod
+    def _token_to_bytes(token, stop_string_matching_mode, byte_decoder):
+        if stop_string_matching_mode == "byte_level":
+            if byte_decoder is not None and all(char in byte_decoder for char in token):
+                return bytes(byte_decoder[char] for char in token)
+            return None
+        if stop_string_matching_mode == "byte_fallback":
+            if (
+                len(token) == 6
+                and token.startswith("<0x")
+                and token.endswith(">")
+                and all(char in "0123456789abcdefABCDEF" for char in token[3:5])
+            ):
+                return bytes([int(token[3:5], 16)])
+        return None
+
+    @staticmethod
+    def clean_tokenizer_vocab(tokenizer, static_prefix="abcdef", stop_string_matching_mode=None):
         """
         This method turns a tokenizer vocab into a "clean" vocab where each token represents the actual string
         it will yield, without any special prefixes like "##" or "Ġ". This is trickier than it looks - the method
         tokenizer.convert_tokens_to_string() does not always return the correct string because of issues with prefix
         space addition/removal. To work around this, we add a static prefix to the start of the token, then remove
-        it (and any prefix that may have been introduced with it) after calling convert_tokens_to_string().
+        it (and any prefix that may have been introduced with it) after calling convert_tokens_to_string(). For
+        byte-level vocabularies, incomplete UTF-8 fragments are kept as bytes until the stop string match is computed.
         """
         vocab = tokenizer.get_vocab()
         clean_token_list = []
         clean_token_indices = []
+        byte_decoder = StopStringCriteria._byte_level_decoder() if stop_string_matching_mode == "byte_level" else None
         sentence_base = tokenizer(static_prefix, add_special_tokens=False)["input_ids"]
         tokens_base = [tokenizer._convert_id_to_token(tok) for tok in sentence_base]
         for token, token_idx in vocab.items():
-            token_string = tokenizer.convert_tokens_to_string(tokens_base + [token])
-            token_string = token_string[token_string.index(static_prefix) + len(static_prefix) :]
+            token_string = StopStringCriteria._token_to_bytes(token, stop_string_matching_mode, byte_decoder)
+            if token_string is None:
+                token_string = tokenizer.convert_tokens_to_string(tokens_base + [token])
+                token_string = token_string[token_string.index(static_prefix) + len(static_prefix) :]
+                if stop_string_matching_mode is not None:
+                    token_string = token_string.encode("utf-8")
             clean_token_list.append(token_string)
             clean_token_indices.append(token_idx)
         return tuple(clean_token_list), tuple(clean_token_indices)
@@ -296,7 +380,7 @@ class StopStringCriteria(StoppingCriteria):
     @staticmethod
     def _stop_string_get_matching_positions(
         token_list, token_indices, stop_strings
-    ) -> tuple[dict[str, dict[str, list[int]]], dict[str, dict[str, list[int]]]]:
+    ) -> tuple[dict[str | bytes, dict[str, list[int]]], dict[str | bytes, dict[str, list[int]]]]:
         """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
         validly appear in the stop strings. For each token, it computes a list of positions in the stop string where the
         token appears, as well as a list of the possible "end overlaps" for that token - that is, the number of characters

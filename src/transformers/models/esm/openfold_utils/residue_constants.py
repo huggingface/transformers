@@ -117,7 +117,7 @@ chi_pi_periodic: list[list[float]] = [
 # 4,5,6,7: 'chi1,2,3,4-group'
 # The atom positions are relative to the axis-end-atom of the corresponding
 # rotation axis. The x-axis is in direction of the rotation axis, and the y-axis
-# is defined such that the dihedral-angle-definiting atom (the last entry in
+# is defined such that the dihedral-angle-defining atom (the last entry in
 # chi_angles_atoms above) is in the xy-plane (with a positive y-coordinate).
 # format: [atomname, group_idx, rel_position]
 rigid_group_atom_positions: dict[str, list[tuple[str, int, tuple[float, float, float]]]] = {

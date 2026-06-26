@@ -804,7 +804,7 @@ class WeightTransform:
         """
         Return whether the current Transform matched any weights during loading/saving. This is needed as some
         weight renaming transforms are not bijective, i.e. if we drop/add full parts of a name with PrefixChange, we
-        lose some informations that we cannot get back if we don't know if the Transform was used before already (say we
+        lose some information that we cannot get back if we don't know if the Transform was used before already (say we
         have a prefix to drop, we need to know whether the checkpoints we loaded before contained the said prefix or not
         before adding it back, or not, during saving).
         """
@@ -1429,6 +1429,10 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
+                    # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
+                    # distributed op selects whole experts. The signal is a `MergeModulelist`
+                    # in the chain; it isn't always `operations[0]` (e.g. an FP8 quantizer
+                    # prepends a scale-decode op), so scan the whole chain rather than just the head.
                     shard_index = (
                         len(mapping.collected_tensors.get(source_pattern, []))
                         if isinstance(mapping, WeightConverter)

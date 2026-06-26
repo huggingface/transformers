@@ -18,7 +18,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import CaptureStdout, cleanup, require_torch, slow, tooslow, torch_device
+from transformers.testing_utils import CaptureStdout, Expectations, cleanup, require_torch, slow, tooslow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -92,7 +92,7 @@ class DiffusionGemmaVisionText2TextModelTester:
         image_token_id=4,
         boi_token_id=5,
         eoi_token_id=6,
-        seq_length=25,
+        seq_length=25,  # See: `test_generate_beyond_sliding_window` before changing this value!
         self_conditioning_size=16,
         canvas_length=16,
         is_training=False,
@@ -179,7 +179,7 @@ class DiffusionGemmaVisionText2TextModelTester:
 class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (DiffusionGemmaModel, DiffusionGemmaForBlockDiffusion) if is_torch_available() else ()
     all_generative_model_classes = ()  # No class inherits `GenerationMixin`
-    additional_model_inputs = ["mm_token_type_ids", "decoder_input_ids"]
+    additional_model_inputs = ["mm_token_type_ids", "decoder_input_ids", "image_position_ids"]
 
     test_torch_exportable = False  # This model always returns cache -> export test fails in `_get_leaf_tensors`
 
@@ -405,7 +405,12 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         )
         expected_attention_mask_shape_full = (batch_size, 1, canvas_length, concat_kv_length_full)
         expected_non_zero_sliding = concat_kv_length_sliding * batch_size * canvas_length
-        expected_attention_mask_shape_sliding = (batch_size, 1, canvas_length, concat_kv_length_sliding)
+        expected_attention_mask_shape_sliding = (
+            batch_size,
+            1,
+            canvas_length,
+            sliding_window_length + canvas_length - 1,
+        )
         # Double-check test assumption that left-padding should be past the sliding window
         self.assertTrue(prefill_length - left_padding_length > sliding_window_length)
 
@@ -444,15 +449,19 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         original test, the mask is materialized (a materialized mask is needed at compile time)
         """
 
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
         prefill_length = 8
-        canvas_length = 4
-        static_cache_length = 16
+        canvas_length = config.canvas_length
+        total_input_length = prefill_length + canvas_length
+
+        # More than input so we don't hit sliding window being cropped yet
+        static_cache_length = total_input_length + 20
         concat_kv_length = static_cache_length + canvas_length
         batch_size = 2
-        expected_non_zero = (prefill_length + canvas_length) * canvas_length * batch_size
+        expected_non_zero = total_input_length * canvas_length * batch_size
         expected_attention_mask_shape = (batch_size, 1, canvas_length, concat_kv_length)
 
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
         # Apply prefill (smaller than sliding window)
@@ -461,11 +470,10 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
 
         # Get the mask (correctly designed for the static cache)
-        decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.bool, device=torch_device)
-        decoder_attention_mask[:, prefill_length:static_cache_length] = 0  # unfilled KV cache values
+        decoder_attention_mask = torch.ones((batch_size, total_input_length), dtype=torch.bool, device=torch_device)
         dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
         mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
-            config=config.text_config,
+            config=config,
             inputs_embeds=dummy_canvas.unsqueeze(-1),
             past_key_values=past_key_values,
             decoder_attention_mask=decoder_attention_mask,
@@ -475,63 +483,42 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         self.assertEqual(mask_mapping["sliding_attention"].shape, expected_attention_mask_shape)
         self.assertEqual(mask_mapping["sliding_attention"].sum(), expected_non_zero)
 
-    def test_diffusion_decoder_mask_static_cache_bad_attention_mask(self):
-        """
-        Same as `test_diffusion_decoder_mask_static_cache`, but assuming the user forgot to set to 0
-        the attention mask entries corresponding to unfilled cache positions. It will raise an exception
-        """
-
-        prefill_length = 8
-        canvas_length = 4
-        static_cache_length = 16
-        concat_kv_length = static_cache_length + canvas_length
-        batch_size = 2
-
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
-
-        # Apply prefill (smaller than sliding window)
-        past_key_values = StaticCache(config=config, max_cache_len=static_cache_length)
-        prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
-        past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
-
-        # Get the mask (INCORRECTLY designed for the static cache)
-        decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.bool, device=torch_device)
-        dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
-        with self.assertRaises(ValueError):
-            _ = model.model.decoder.create_diffusion_decoder_attention_mask(
-                config=config.text_config,
-                inputs_embeds=dummy_canvas.unsqueeze(-1),
-                past_key_values=past_key_values,
-                decoder_attention_mask=decoder_attention_mask,
-            )
-
     def test_diffusion_decoder_mask_static_cache_beyond_sliding_window(self):
         """
         Same as `test_diffusion_decoder_mask_dynamic_cache_beyond_sliding_window`, but with a Static Cache.
         This is the most complex mask preparation test, including static caches, left-padding, and mask preparation
         beyond the sliding window length.
         """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
         prefill_length = 16
         sliding_window_length = 8
-        canvas_length = 4
-        static_cache_length = 32
+        canvas_length = config.canvas_length
+        total_input_length = prefill_length + canvas_length
+
+        # Max-cache-len is less than `total_input_length` to trigger going beyond sliding window
+        concat_kv_length_sliding = sliding_window_length + canvas_length - 1
+        static_cache_length = total_input_length - 4
         concat_kv_length_full = static_cache_length + canvas_length
-        # No -1 -> the STATIC sliding window kv cache has len=window
-        concat_kv_length_sliding = sliding_window_length + canvas_length
         batch_size = 2
         left_padding_length = 2  # only applied on batch item 0
+
+        # Current query (`canvas`) attends to key (`prefill + itself`). Optionally, doesn't attend if pading present
         expected_non_zero_full = (
-            ((prefill_length + canvas_length - left_padding_length) * canvas_length)  # batch item 0
-            + ((prefill_length + canvas_length) * canvas_length)  # batch item 1
+            ((total_input_length - left_padding_length) * canvas_length)  # batch item 0
+            + (total_input_length * canvas_length)  # batch item 1
         )
         expected_attention_mask_shape_full = (batch_size, 1, canvas_length, concat_kv_length_full)
         expected_non_zero_sliding = concat_kv_length_sliding * batch_size * canvas_length
-        expected_attention_mask_shape_sliding = (batch_size, 1, canvas_length, concat_kv_length_sliding)
+        expected_attention_mask_shape_sliding = (
+            batch_size,
+            1,
+            canvas_length,
+            concat_kv_length_sliding + 1,
+        )
         # Double-check test assumption that left-padding should be past the sliding window
         self.assertTrue(prefill_length - left_padding_length > sliding_window_length)
 
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.text_config.sliding_window = sliding_window_length
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
@@ -541,12 +528,11 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
 
         # Get the mask (correctly designed for the static cache)
-        decoder_attention_mask = torch.ones((batch_size, concat_kv_length_full), dtype=torch.bool, device=torch_device)
+        decoder_attention_mask = torch.ones((batch_size, total_input_length), dtype=torch.bool, device=torch_device)
         decoder_attention_mask[0, :left_padding_length] = 0
-        decoder_attention_mask[:, prefill_length:static_cache_length] = 0  # unfilled KV cache values
         dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
         mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
-            config=config.text_config,
+            config=config,
             inputs_embeds=dummy_canvas.unsqueeze(-1),
             past_key_values=past_key_values,
             decoder_attention_mask=decoder_attention_mask,
@@ -603,6 +589,18 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
         self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+
+    def test_generate_without_return_dict(self):
+        """Same as `test_generate_text_only`, but return_dict_in_generate=False"""
+        config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+        model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
+        model.generation_config.return_dict_in_generate = False
+
+        generation_outputs = model.generate(model_inputs["input_ids"], max_new_tokens=16, max_denoising_steps=2)
+
+        expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
+        self.assertEqual(generation_outputs.shape, expected_shape)
 
     def test_generate_from_generation_config(self):
         """
@@ -674,12 +672,23 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
     def test_generate_beyond_sliding_window(self, name, cache_implementation):
         """Tests that generate can run beyond the sliding window length"""
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        config.text_config.sliding_window = 16
+        # Canvas length has to be much smaller than sliding window to correctly check the mask
+        # and input-length has to be smaller than sliding length! We will check three cases:
+        # 1) input/mask is smaller than window
+        # 2) input length approaching full cache length
+        # 3) input length goes beyond window length
+        # Input length is 25 in model tester, so we will set sliding window to 48 tokens
+        # After generating `max_new_tokens=32`, the final length will go beyond sliding window
+        config.text_config.sliding_window = 48
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
         model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
 
         generation_outputs = model.generate(
-            **model_inputs, max_new_tokens=32, max_denoising_steps=2, cache_implementation=cache_implementation
+            **model_inputs,
+            max_new_tokens=32,
+            max_denoising_steps=2,
+            disable_compile=True,
+            cache_implementation=cache_implementation,
         )
         self.assertTrue(generation_outputs.sequences.shape[1] > config.text_config.sliding_window)
 
@@ -844,30 +853,34 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(model_out.logits[:, :10, :12])
         # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
-        expected_logits = [
-            [
-                [ 4.12986183, 20.66659164,  6.75712347,  4.16051483, 13.11566544,  3.59206009,  3.46879172,
-                3.86895919,  3.14465618,  2.47871161,  4.43598938,  4.77164030],
-                [ 3.20645595, 22.52679825,  7.78647614,  2.71133161, 14.73279667,  4.55818033,  4.16051483,
-                3.03644228,  3.91504526,  1.58446193,  4.52764702,  4.46655130],
-                [ 4.77164030, 23.55075455,  5.80103159,  3.65364885, 15.66178513,  4.19115925,  5.01498747,
-                2.92814803,  4.55818033,  2.92814803,  5.28794241,  7.87383986],
-                [ 4.64972258, 24.27903175,  6.01130199,  3.66904116, 15.57065392,  3.17555952,  5.25765753,
-                3.40711212,  4.95421267,  4.28303957,  5.71073294,  8.10610390],
-                [ 5.16673803, 24.27903175,  6.42998266,  3.36083388, 16.89584923,  4.49710369,  5.77094412,
-                4.40541792,  5.22736216,  4.12986183,  7.05306482,  8.68214703],
-                [ 5.28794241, 24.36471176,  7.58207989,  3.53044105, 17.31759644,  4.49710369,  5.31821585,
-                4.40541792,  4.98460531,  3.88432312,  7.46494198,  8.33732700],
-                [ 5.10607004, 24.27903175,  7.17103910,  3.34540391, 16.55123901,  3.96111226,  4.09919930,
-                4.25242186,  4.34424734,  4.46655130,  5.71073294,  8.27962112],
-                [ 6.81642532, 24.19219208,  8.56747913,  5.37872887, 17.15010071,  5.80103159,  5.86117029,
-                4.25242186,  6.34047985,  4.49710369,  7.61132526,  9.36425304],
-                [ 6.99399042, 24.44923782,  8.96760273,  5.34847832, 16.81029892,  5.77094412,  4.95421267,
-                4.49710369,  5.68060923,  4.68021679,  6.93485880,  8.85363007],
-                [ 7.93200207, 23.83295822,  7.81561375,  6.51936626, 17.72932053,  5.98130083,  5.83110666,
-                5.43919706,  6.60862780,  5.28794241,  7.66977119,  9.86893463]
-            ]
-        ]
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [
+                    [
+                        [ 4.12986183, 20.66659164,  6.75712347,  4.16051483, 13.11566544,  3.59206009,  3.46879172,
+                        3.86895919,  3.14465618,  2.47871161,  4.43598938,  4.77164030],
+                        [ 3.20645595, 22.52679825,  7.78647614,  2.71133161, 14.73279667,  4.55818033,  4.16051483,
+                        3.03644228,  3.91504526,  1.58446193,  4.52764702,  4.46655130],
+                        [ 4.77164030, 23.55075455,  5.80103159,  3.65364885, 15.66178513,  4.19115925,  5.01498747,
+                        2.92814803,  4.55818033,  2.92814803,  5.28794241,  7.87383986],
+                        [ 4.64972258, 24.27903175,  6.01130199,  3.66904116, 15.57065392,  3.17555952,  5.25765753,
+                        3.40711212,  4.95421267,  4.28303957,  5.71073294,  8.10610390],
+                        [ 5.16673803, 24.27903175,  6.42998266,  3.36083388, 16.89584923,  4.49710369,  5.77094412,
+                        4.40541792,  5.22736216,  4.12986183,  7.05306482,  8.68214703],
+                        [ 5.28794241, 24.36471176,  7.58207989,  3.53044105, 17.31759644,  4.49710369,  5.31821585,
+                        4.40541792,  4.98460531,  3.88432312,  7.46494198,  8.33732700],
+                        [ 5.10607004, 24.27903175,  7.17103910,  3.34540391, 16.55123901,  3.96111226,  4.09919930,
+                        4.25242186,  4.34424734,  4.46655130,  5.71073294,  8.27962112],
+                        [ 6.81642532, 24.19219208,  8.56747913,  5.37872887, 17.15010071,  5.80103159,  5.86117029,
+                        4.25242186,  6.34047985,  4.49710369,  7.61132526,  9.36425304],
+                        [ 6.99399042, 24.44923782,  8.96760273,  5.34847832, 16.81029892,  5.77094412,  4.95421267,
+                        4.49710369,  5.68060923,  4.68021679,  6.93485880,  8.85363007],
+                        [ 7.93200207, 23.83295822,  7.81561375,  6.51936626, 17.72932053,  5.98130083,  5.83110666,
+                        5.43919706,  6.60862780,  5.28794241,  7.66977119,  9.86893463]
+                    ]
+                ]
+            }
+        )
         # fmt: on
 
         model = self._load_model()
@@ -885,11 +898,14 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         )
         model_inputs["decoder_input_ids"] = decoder_input_ids
 
-        model_out = model(**model_inputs)
+        with torch.no_grad():
+            model_out = model(**model_inputs)
         self.assertEqual(
             list(model_out.logits.shape), [1, model.config.canvas_length, model.config.text_config.vocab_size]
         )
-        torch.testing.assert_close(model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits))
+        torch.testing.assert_close(
+            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectation())
+        )
 
     @tooslow
     def test_diffusion_gemma_forward_with_image(self):
@@ -897,30 +913,34 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(model_out.logits[:, :10, :12])
         # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
-        expected_logits = [
-            [
-                [ 6.93485880, 20.60072327,  3.89968514,  7.49424887,  6.99399042, -0.03344725,  0.44332713,
-                -0.53900456,  2.18363142,  0.35545215,  1.24927723,  3.53044105],
-                [ 6.81642532, 19.92110252,  4.92381001,  5.74084425, 10.31235313,  4.83253860,  0.94890219,
-                1.05425322,  0.87475199,  0.16503741,  0.06933582,  2.74232340],
-                [ 6.40016174, 22.63516045,  2.88171268,  6.75712347, 12.08642769,  5.25765753,  2.60281467,
-                2.60281467,  5.55999660,  2.66483307,  2.05925679,  5.98130083],
-                [ 9.86893463, 21.78874207,  2.35452294,  7.78647614, 15.01560497,  7.11208105,  5.07571983,
-                5.80103159,  4.68021679,  4.86297274,  3.45337439,  7.78647614],
-                [ 5.01498747, 21.18004990,  1.31166339,  4.95421267, 11.13002872,  2.54077387,  0.40427244,
-                2.40110350,  0.42770541,  1.23367894, -0.29100651,  1.06205606],
-                [ 5.74084425, 21.42788887,  2.12145352,  4.77164030, 11.82355690,  3.12920213,  3.66904116,
-                3.43795562,  2.64933062,  2.88171268,  2.71133161,  4.89339685],
-                [ 6.28074551, 22.30597687,  4.16051483,  4.52764702, 12.08642769,  4.64972258,  4.31364775,
-                5.89122152,  1.52212954,  3.74597287,  2.13699985,  6.31061935],
-                [ 6.37032795, 23.92457008,  9.02448273,  3.28366685, 10.64161205,  3.22190189,  3.00550938,
-                4.83253860,  0.88255781,  1.63899159,  1.81808197,  5.49961996],
-                [ 7.46494198, 25.78687286,  9.36425304,  3.63825440, 13.06506538,  2.02815175,  3.23734570,
-                5.37872887,  3.02097654,  2.27686334,  2.16808867,  6.63835430],
-                [ 6.16112089, 26.16215897,  5.71073294,  3.34540391, 11.92896748,  1.55329728,  4.77164030,
-                4.12986183,  1.02304065,  3.49961996,  1.73244548,  6.45979071]
-           ]
-        ]
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [
+                    [
+                        [ 6.93485880, 20.60072327,  3.89968514,  7.49424887,  6.99399042, -0.03344725,  0.44332713,
+                        -0.53900456,  2.18363142,  0.35545215,  1.24927723,  3.53044105],
+                        [ 6.81642532, 19.92110252,  4.92381001,  5.74084425, 10.31235313,  4.83253860,  0.94890219,
+                        1.05425322,  0.87475199,  0.16503741,  0.06933582,  2.74232340],
+                        [ 6.40016174, 22.63516045,  2.88171268,  6.75712347, 12.08642769,  5.25765753,  2.60281467,
+                        2.60281467,  5.55999660,  2.66483307,  2.05925679,  5.98130083],
+                        [ 9.86893463, 21.78874207,  2.35452294,  7.78647614, 15.01560497,  7.11208105,  5.07571983,
+                        5.80103159,  4.68021679,  4.86297274,  3.45337439,  7.78647614],
+                        [ 5.01498747, 21.18004990,  1.31166339,  4.95421267, 11.13002872,  2.54077387,  0.40427244,
+                        2.40110350,  0.42770541,  1.23367894, -0.29100651,  1.06205606],
+                        [ 5.74084425, 21.42788887,  2.12145352,  4.77164030, 11.82355690,  3.12920213,  3.66904116,
+                        3.43795562,  2.64933062,  2.88171268,  2.71133161,  4.89339685],
+                        [ 6.28074551, 22.30597687,  4.16051483,  4.52764702, 12.08642769,  4.64972258,  4.31364775,
+                        5.89122152,  1.52212954,  3.74597287,  2.13699985,  6.31061935],
+                        [ 6.37032795, 23.92457008,  9.02448273,  3.28366685, 10.64161205,  3.22190189,  3.00550938,
+                        4.83253860,  0.88255781,  1.63899159,  1.81808197,  5.49961996],
+                        [ 7.46494198, 25.78687286,  9.36425304,  3.63825440, 13.06506538,  2.02815175,  3.23734570,
+                        5.37872887,  3.02097654,  2.27686334,  2.16808867,  6.63835430],
+                        [ 6.16112089, 26.16215897,  5.71073294,  3.34540391, 11.92896748,  1.55329728,  4.77164030,
+                        4.12986183,  1.02304065,  3.49961996,  1.73244548,  6.45979071]
+                ]
+                ]
+            }
+        )
         # fmt: on
 
         model = self._load_model()
@@ -950,11 +970,14 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # sanity check: has image inputs
         self.assertIn("pixel_values", model_inputs)
 
-        model_out = model(**model_inputs)
+        with torch.no_grad():
+            model_out = model(**model_inputs)
         self.assertEqual(
             list(model_out.logits.shape), [1, model.config.canvas_length, model.config.text_config.vocab_size]
         )
-        torch.testing.assert_close(model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits))
+        torch.testing.assert_close(
+            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectation())
+        )
 
     @tooslow
     def test_diffusion_gemma_forward_batched(self):
@@ -962,42 +985,46 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(model_out.logits[:, :5, :12])
         # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
-        expected_logits = [
-            [
-                [-1.56108880e+00,  1.99211025e+01,  1.60004282e+00,  1.01073846e-01,  7.58207989e+00,
-                -5.98130083e+00, -4.40541792e+00, -1.73244548e+00, -1.42860627e+00, -5.97577214e-01,
-                -1.81808197e+00,  8.74021053e-02],
-                [-1.02304065e+00,  2.26888294e+01,  9.53315258e+00, -3.37876350e-01,  8.91065121e+00,
-                1.29394531e-02,  5.35099506e-01, -2.52526045e+00, -7.91013837e-02, -2.02815175e+00,
-                2.27686334e+00,  8.86460662e-01],
-                [-2.33393744e-01,  2.34054356e+01,  5.04535866e+00, -4.94095922e-01,  1.10760899e+01,
-                1.23367894e+00,  9.56706762e-01, -1.94259071e+00,  1.51433694e+00,  1.03864717e+00,
-                2.61832142e+00,  5.65047359e+00],
-                [-1.21808004e+00,  2.25267982e+01,  4.43598938e+00, -1.23367894e+00,  8.62484741e+00,
-                6.79571211e-01,  7.10804522e-01, -2.02815175e+00, -4.82380331e-01,  7.57651389e-01,
-                2.01259756e+00,  4.92381001e+00],
-                [ 4.56995904e-01,  2.34541931e+01,  4.09919930e+00, -5.39550222e-02,  1.30143728e+01,
-                7.14708507e-01,  1.21028030e+00,  5.11669159e-01,  1.81029797e+00,  1.63120234e+00,
-                4.68021679e+00,  7.72815514e+00]
-            ],
-            [
-                [ 1.15722090e-01,  2.06007233e+01,  3.12920213e+00, -2.12145352e+00,  5.37872887e+00,
-                -3.46879172e+00, -5.80103159e+00, -4.12986183e+00, -2.47871161e+00, -5.52981424e+00,
-                -5.01498747e+00, -8.16204786e-01],
-                [ 2.88171268e+00,  2.27421646e+01,  8.62484741e+00,  5.11669159e-01,  8.51004219e+00,
-                2.41662765e+00,  5.89767814e-01,  2.88171268e+00, -5.19479334e-01, -2.66483307e+00,
-                -2.52526045e+00,  2.33899355e+00],
-                [ 5.37872887e+00,  2.53779068e+01,  8.96760273e+00,  1.32725811e+00,  1.13449488e+01,
-                1.28826988e+00, -6.79571211e-01,  3.45337439e+00,  3.66904116e+00, -2.52526045e+00,
-                -1.18688023e+00,  2.61832142e+00],
-                [ 5.04535866e+00,  2.42790318e+01,  8.68214703e+00,  4.43598938e+00,  9.47692776e+00,
-                3.78886133e-01, -4.61921787e+00,  6.28814161e-01,  4.99953747e-01, -3.69981956e+00,
-                -6.49413019e-02,  3.63825440e+00],
-                [ 6.13118267e+00,  2.50096397e+01,  8.68214703e+00,  4.52764702e+00,  1.17707224e+01,
-                -9.52148531e-03, -3.34540391e+00,  2.16808867e+00,  3.08282948e+00, -3.32997227e+00,
-                -6.32718682e-01,  3.26822829e+00]
-            ]
-        ]
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [
+                    [
+                        [-1.56108880e+00,  1.99211025e+01,  1.60004282e+00,  1.01073846e-01,  7.58207989e+00,
+                        -5.98130083e+00, -4.40541792e+00, -1.73244548e+00, -1.42860627e+00, -5.97577214e-01,
+                        -1.81808197e+00,  8.74021053e-02],
+                        [-1.02304065e+00,  2.26888294e+01,  9.53315258e+00, -3.37876350e-01,  8.91065121e+00,
+                        1.29394531e-02,  5.35099506e-01, -2.52526045e+00, -7.91013837e-02, -2.02815175e+00,
+                        2.27686334e+00,  8.86460662e-01],
+                        [-2.33393744e-01,  2.34054356e+01,  5.04535866e+00, -4.94095922e-01,  1.10760899e+01,
+                        1.23367894e+00,  9.56706762e-01, -1.94259071e+00,  1.51433694e+00,  1.03864717e+00,
+                        2.61832142e+00,  5.65047359e+00],
+                        [-1.21808004e+00,  2.25267982e+01,  4.43598938e+00, -1.23367894e+00,  8.62484741e+00,
+                        6.79571211e-01,  7.10804522e-01, -2.02815175e+00, -4.82380331e-01,  7.57651389e-01,
+                        2.01259756e+00,  4.92381001e+00],
+                        [ 4.56995904e-01,  2.34541931e+01,  4.09919930e+00, -5.39550222e-02,  1.30143728e+01,
+                        7.14708507e-01,  1.21028030e+00,  5.11669159e-01,  1.81029797e+00,  1.63120234e+00,
+                        4.68021679e+00,  7.72815514e+00]
+                    ],
+                    [
+                        [ 1.15722090e-01,  2.06007233e+01,  3.12920213e+00, -2.12145352e+00,  5.37872887e+00,
+                        -3.46879172e+00, -5.80103159e+00, -4.12986183e+00, -2.47871161e+00, -5.52981424e+00,
+                        -5.01498747e+00, -8.16204786e-01],
+                        [ 2.88171268e+00,  2.27421646e+01,  8.62484741e+00,  5.11669159e-01,  8.51004219e+00,
+                        2.41662765e+00,  5.89767814e-01,  2.88171268e+00, -5.19479334e-01, -2.66483307e+00,
+                        -2.52526045e+00,  2.33899355e+00],
+                        [ 5.37872887e+00,  2.53779068e+01,  8.96760273e+00,  1.32725811e+00,  1.13449488e+01,
+                        1.28826988e+00, -6.79571211e-01,  3.45337439e+00,  3.66904116e+00, -2.52526045e+00,
+                        -1.18688023e+00,  2.61832142e+00],
+                        [ 5.04535866e+00,  2.42790318e+01,  8.68214703e+00,  4.43598938e+00,  9.47692776e+00,
+                        3.78886133e-01, -4.61921787e+00,  6.28814161e-01,  4.99953747e-01, -3.69981956e+00,
+                        -6.49413019e-02,  3.63825440e+00],
+                        [ 6.13118267e+00,  2.50096397e+01,  8.68214703e+00,  4.52764702e+00,  1.17707224e+01,
+                        -9.52148531e-03, -3.34540391e+00,  2.16808867e+00,  3.08282948e+00, -3.32997227e+00,
+                        -6.32718682e-01,  3.26822829e+00]
+                    ]
+                ]
+            }
+        )
         # fmt: on
 
         model = self._load_model()
@@ -1028,11 +1055,12 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         self.assertFalse((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, -1]).any())
         self.assertTrue((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, 0]).any())
 
-        model_out = model(**model_inputs)
+        with torch.no_grad():
+            model_out = model(**model_inputs)
         self.assertEqual(
             list(model_out.logits.shape), [2, model.config.canvas_length, model.config.text_config.vocab_size]
         )
-        torch.testing.assert_close(model_out.logits[:, :5, :12].cpu(), torch.tensor(expected_logits))
+        torch.testing.assert_close(model_out.logits[:, :5, :12].cpu(), torch.tensor(expected_logits.get_expectation()))
 
     @tooslow
     def test_diffusion_gemma_generate_with_image_batched(self):
@@ -1045,60 +1073,64 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(generated_tokens)
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
-        expected_sequences = [
-            [
-                1018,    818,  21065,  41025, 236787,    562,  61774,  77985,    529,  23613,   1018,
-                108,   5141,   3059,    580,    506,  16425,   3374,   7377,    529,  49566,   3879,
-                236764,   1298,    506, 211050,   2601,   6861,  15741,    531,    506,  12529,  21065,
-                18414, 236764,  23613,    563,    496,   7097,   5221,    684,   1061,   4191,    607,
-                506,   5442, 236761,   1701,  24744, 236764,    625,    815,   7779,    618,    496,
-                44701,   1534,    506,  10687,   4109,    532,    506,   1799, 236764,    496,  11825,
-                1534,  20117,    532,  70548, 236761,   2282,   3050,  23613,    563,    531,   3050,
-                496,   3996, 105362,    529,  49094,  27877, 236764,  44040,  11858,  24637, 236764,
-                532,    496,   4709,   9226,  78729,   3224,    618,    808,   4834,    689,   1007,
-                236829, 237028, 236746,   5268, 236764,  85539,   7833,  86508,    573,   2613,   5745,
-                653,   8229,   2752,   1765, 236761,    108,  10354,    562,  34641,  84181, 236787,
-                4934, 117838,    576,   4848,    531,  41254,    108,    818,   4083,    529,  23613,
-                563,    886,    529,  35691,    532,  10534, 236761,  42251,    618,    496,  21880,
-                528,    506, 236743, 236770, 236778,    594,   7691,   1913,    506, 117838,    576,
-                4848,    699,  78763,   1044,   6157, 236764,  23613,   5452,    886,    529,    506,
-                24625,   7097, 236772,  26582,    528,   3879, 236761,   5978,   1061,  23789,    964,
-                3187, 204045,    528,   6145,  77486,  42469, 236764,  23613,   6976,  44630, 236761,
-                236743,    108,    818, 236743, 236770, 236810,    594,    532, 236743, 236770, 236825,
-                594,  24744,  11373,   1061,  16522,  17884, 236764,    506,  17884,    529,  41254,
-                236761,   8382,    506,  91295,    529,   9732,   1133,  18934,  12297,    506,  60137,
-                236764,  41082,   2556,  41516,  19482,   6998,    506,    623,  46811,    529, 106819,
-                2098,  15468,    506,   9992,   9383,    532,  17154,   4673, 236761, 125620,   1776,
-                150225,  11788,    506,   5442,   9116,    531,   4673,    528, 236743, 236770, 236812,
-                236819, 236828, 236764
-            ],
-            [
-                2094,   2471,   3831,    506,  16522,  26010,  17936,    528,   5054,  14322, 236764,
-                7151, 236761,    669,   4429,    563,   3523,    699,    506,  15891,   2678, 236764,
-                18482,   9975,  10654,    528,    506,  44529,    532,    506,  69480,  10901,   6615,
-                528,    506,   1695, 236761,    106,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0
-            ]
-        ]
+        expected_sequences = Expectations(
+            {
+                ("cuda", None): [
+                    [
+                        1018,    818,  21065,  41025, 236787,    562,  61774,  77985,    529,  23613,   1018,
+                        108,   5141,   3059,    580,    506,  16425,   3374,   7377,    529,  49566,   3879,
+                        236764,   1298,    506, 211050,   2601,   6861,  15741,    531,    506,  12529,  21065,
+                        18414, 236764,  23613,    563,    496,   7097,   5221,    684,   1061,   4191,    607,
+                        506,   5442, 236761,   1701,  24744, 236764,    625,    815,   7779,    618,    496,
+                        44701,   1534,    506,  10687,   4109,    532,    506,   1799, 236764,    496,  11825,
+                        1534,  20117,    532,  70548, 236761,   2282,   3050,  23613,    563,    531,   3050,
+                        496,   3996, 105362,    529,  49094,  27877, 236764,  44040,  11858,  24637, 236764,
+                        532,    496,   4709,   9226,  78729,   3224,    618,    808,   4834,    689,   1007,
+                        236829, 237028, 236746,   5268, 236764,  85539,   7833,  86508,    573,   2613,   5745,
+                        653,   8229,   2752,   1765, 236761,    108,  10354,    562,  34641,  84181, 236787,
+                        4934, 117838,    576,   4848,    531,  41254,    108,    818,   4083,    529,  23613,
+                        563,    886,    529,  35691,    532,  10534, 236761,  42251,    618,    496,  21880,
+                        528,    506, 236743, 236770, 236778,    594,   7691,   1913,    506, 117838,    576,
+                        4848,    699,  78763,   1044,   6157, 236764,  23613,   5452,    886,    529,    506,
+                        24625,   7097, 236772,  26582,    528,   3879, 236761,   5978,   1061,  23789,    964,
+                        3187, 204045,    528,   6145,  77486,  42469, 236764,  23613,   6976,  44630, 236761,
+                        236743,    108,    818, 236743, 236770, 236810,    594,    532, 236743, 236770, 236825,
+                        594,  24744,  11373,   1061,  16522,  17884, 236764,    506,  17884,    529,  41254,
+                        236761,   8382,    506,  91295,    529,   9732,   1133,  18934,  12297,    506,  60137,
+                        236764,  41082,   2556,  41516,  19482,   6998,    506,    623,  46811,    529, 106819,
+                        2098,  15468,    506,   9992,   9383,    532,  17154,   4673, 236761, 125620,   1776,
+                        150225,  11788,    506,   5442,   9116,    531,   4673,    528, 236743, 236770, 236812,
+                        236819, 236828, 236764
+                    ],
+                    [
+                        2094,   2471,   3831,    506,  16522,  26010,  17936,    528,   5054,  14322, 236764,
+                        7151, 236761,    669,   4429,    563,   3523,    699,    506,  15891,   2678, 236764,
+                        18482,   9975,  10654,    528,    506,  44529,    532,    506,  69480,  10901,   6615,
+                        528,    506,   1695, 236761,    106,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0
+                    ]
+                ]
+            }
+        )
         # fmt: on
 
         model = self._load_model()
@@ -1136,7 +1168,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         set_seed(42)
         gen_out = model.generate(**model_inputs, max_new_tokens=256)
         generated_tokens = gen_out.sequences[:, -256:]
-        self.assertEqual(generated_tokens.tolist(), expected_sequences)
+        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectation())
 
     @tooslow
     def test_diffusion_gemma_generate_with_image_batched_long(self):
@@ -1150,60 +1182,64 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(generated_tokens)
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
-        expected_sequences = [
-            [
-                21042,   2846, 236764,  23613,    691,    506,   3988,    529,    506,   1902, 236764,
-                614,  38613,    600,  39349,    699,  14600,    531, 126382, 236764,    532,  73420,
-                531,  72449, 236761,   1174,   6933,   6111,  36628,  12821,    532,   9226,   8770,
-                236764, 175676,    528,    506,  94079,  37704,    688,  31035,   3117, 236764,  17202,
-                684,   1061,  82647,  59491,   1133,  70186, 236764,  35809, 236764,    532,  83798,
-                47397, 236761,  16961, 236764,    506,   3825,    529,  38613,  10734,   5378,    531,
-                16670, 236764,   6641,    684,   1440,  13443,    529,   6658,  23049,    532,    506,
-                56845,    808,  66856, 107130, 236829, 102708,   1208, 187920,    569,  81237, 118882,
-                236761,   1030,    691,    711,   3097,    506,  33275,    567,  24817,    529, 236743,
-                236770, 236819, 236832, 236812, 237028, 236746,  73887, 236764,    569, 236772,  18377,
-                236748,   4806,   1933,   7820,  28622,   1298,  11838,   7006,  37067,    847,    528,
-                506,    520, 204532,    529,  18187, 236789,  79689, 237028,   7705,  23613, 130661,
-                1131,    506,  28239, 236764,  29810,   6693,   8927, 236772,  14531,   7097,    625,
-                563,   3124, 236761,    108,   8551,  69565, 236764,  23613,    563,  33887,  12801,
-                9785,   1061,  30997,   2425, 236761,    669,   4695,    563,  52803,    532,   3826,
-                236764,   2033,    531,    506, 176165,  15706,    530,  11849, 236764,    506,   1902,
-                236858, 236751,  24625, 115368,    774,  10135,   4128, 236764,   1298,   6944,   3776,
-                81026, 103534,    531,  25465,  26607,   1949, 236761,    669,   3988,    563,  27222,
-                684,    506,   1429,   3194,   5400, 236764,    496,  12529, 236764,  13935, 152990,
-                529,  26012, 154863,    532,  64192,  32049,  24599,   1298,   1972,  12489,    657,
-                496,  31878,  17723, 236761,   2282,    506,   8710, 236764,    506, 201172,   5469,
-                20997,  62260, 236764,  11497,   5442,    505,  21294, 236764,    532,    496,   6962,
-                32920,  10022, 236761,  43725,    506,   2891, 236764,    506,  21065,  18414,   7474,
-                506,   4512,  61102
-            ],
-            [
-                563,  88076,    580,   1903,    529,    672,   5441, 236761,    108,    902,    506,
-                1695, 236764,   3418,    506,   1813, 236764,    506,  19519, 236764, 127150, 236772,
-                30497,  26607,    529,    506,  69480,  10901,   6615,    659,  11325,   1208,    506,
-                6425,   1933,   7217, 236761,    669,  15408,    563,   7804,    532,   1982, 236764,
-                22169,    496,  17635,   1719, 236764,  30439,   3538,  37676,    580,    506,  31035,
-                4065,    529,    506,  11825,    532,    506,   7845, 236761,    106,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-                0,      0,      0
-            ]
-        ]
+        expected_sequences = Expectations(
+            {
+                ("cuda", None): [
+                    [
+                        21042,   2846, 236764,  23613,    691,    506,   3988,    529,    506,   1902, 236764,
+                        614,  38613,    600,  39349,    699,  14600,    531, 126382, 236764,    532,  73420,
+                        531,  72449, 236761,   1174,   6933,   6111,  36628,  12821,    532,   9226,   8770,
+                        236764, 175676,    528,    506,  94079,  37704,    688,  31035,   3117, 236764,  17202,
+                        684,   1061,  82647,  59491,   1133,  70186, 236764,  35809, 236764,    532,  83798,
+                        47397, 236761,  16961, 236764,    506,   3825,    529,  38613,  10734,   5378,    531,
+                        16670, 236764,   6641,    684,   1440,  13443,    529,   6658,  23049,    532,    506,
+                        56845,    808,  66856, 107130, 236829, 102708,   1208, 187920,    569,  81237, 118882,
+                        236761,   1030,    691,    711,   3097,    506,  33275,    567,  24817,    529, 236743,
+                        236770, 236819, 236832, 236812, 237028, 236746,  73887, 236764,    569, 236772,  18377,
+                        236748,   4806,   1933,   7820,  28622,   1298,  11838,   7006,  37067,    847,    528,
+                        506,    520, 204532,    529,  18187, 236789,  79689, 237028,   7705,  23613, 130661,
+                        1131,    506,  28239, 236764,  29810,   6693,   8927, 236772,  14531,   7097,    625,
+                        563,   3124, 236761,    108,   8551,  69565, 236764,  23613,    563,  33887,  12801,
+                        9785,   1061,  30997,   2425, 236761,    669,   4695,    563,  52803,    532,   3826,
+                        236764,   2033,    531,    506, 176165,  15706,    530,  11849, 236764,    506,   1902,
+                        236858, 236751,  24625, 115368,    774,  10135,   4128, 236764,   1298,   6944,   3776,
+                        81026, 103534,    531,  25465,  26607,   1949, 236761,    669,   3988,    563,  27222,
+                        684,    506,   1429,   3194,   5400, 236764,    496,  12529, 236764,  13935, 152990,
+                        529,  26012, 154863,    532,  64192,  32049,  24599,   1298,   1972,  12489,    657,
+                        496,  31878,  17723, 236761,   2282,    506,   8710, 236764,    506, 201172,   5469,
+                        20997,  62260, 236764,  11497,   5442,    505,  21294, 236764,    532,    496,   6962,
+                        32920,  10022, 236761,  43725,    506,   2891, 236764,    506,  21065,  18414,   7474,
+                        506,   4512,  61102
+                    ],
+                    [
+                        563,  88076,    580,   1903,    529,    672,   5441, 236761,    108,    902,    506,
+                        1695, 236764,   3418,    506,   1813, 236764,    506,  19519, 236764, 127150, 236772,
+                        30497,  26607,    529,    506,  69480,  10901,   6615,    659,  11325,   1208,    506,
+                        6425,   1933,   7217, 236761,    669,  15408,    563,   7804,    532,   1982, 236764,
+                        22169,    496,  17635,   1719, 236764,  30439,   3538,  37676,    580,    506,  31035,
+                        4065,    529,    506,  11825,    532,    506,   7845, 236761,    106,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0
+                    ]
+                ]
+            }
+        )
         # fmt: on
 
         model = self._load_model()
@@ -1249,7 +1285,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # sanity check: we went beyond the sliding window length
         self.assertTrue(gen_out.sequences.shape[1] > model.config.text_config.sliding_window)
         generated_tokens = gen_out.sequences[:, -256:]
-        self.assertEqual(generated_tokens.tolist(), expected_sequences)
+        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectation())
 
     # The tests below use a botched model, using the first six layers, to respect memory constraints of HF's CI.
     # Six layers = minimum number of layers to have both sliding window attention and full attention.
@@ -1259,30 +1295,32 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(model_out.logits[:, :10, :12])
         # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
-        expected_logits = [
-            [
-                [ 21.36647987, -29.92865181,  -3.86895919,  29.14220428,  29.96334648,  28.18346024,
-                27.68740082,   0.78888065, -27.24345016, -29.00568390,  -1.03864717, -18.21017647],
-                [ 29.49378586,  17.56583405,  26.10184860,  29.87437057,  29.99975395, -17.89120674,
-                -29.92623520, -19.99079323, -14.92172623, -28.82887459, -29.78616714, -29.99817467],
-                [ -2.33899355, -29.99688721, -29.98895645,  26.50611115,  13.36728001, -24.69602203,
-                -4.52764702, -18.28892136, -29.44104195, -29.94533730, -25.58675003, -29.89002419],
-                [ -1.58446193, -29.44104195,  16.28858566,  26.71912193,  29.87012291,  14.35028839,
-                21.96432686, -10.20196629, -29.24793625, -28.15386963,   2.15254474, -23.83295822],
-                [ 28.06227112, -28.93834877,  26.96818924,  29.90688133,  29.90992928,  18.28892136,
-                27.83115768,   4.12986183, -24.69602203, -28.92082787,  24.53262520, -22.30597687],
-                [  4.16051483, -29.89710426,   5.43919706,  28.68712234,  29.92115784, -14.39843941,
-                21.30470467, -18.67665863, -29.31869316, -29.09888268,   5.71073294, -27.49481583],
-                [ 22.07961273, -25.51811981, -23.30696678,  27.15444756,  27.53452492,  -9.42062664,
-                    4.03784895, -16.98100090, -29.70199203, -25.37790680,  24.69602203,   1.42081141],
-                [ 20.79719925, -29.45920181,  17.89120674,  29.67082214,  29.83608246,  -9.25128651,
-                26.82098389, -13.16617393, -29.42227936, -29.45920181,   4.74117613, -22.19349098],
-                [  7.99010134, -29.54159164,  14.82745647,  29.19678497,  29.38286209, -16.63799286,
-                28.66555023, -12.55404091, -28.37808609, -29.71171379,  -6.81642532, -18.28892136],
-                [ 18.13103485, -29.98779488,  29.29586983,  29.34078217,  29.71171379, -25.00963974,
-                    7.75732422, -28.03077507, -29.52617455, -29.92865181, -25.51811981, -26.77043152]
-            ]
-        ]
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 20.99029922, -29.92623520,  -3.96111226,  29.14220428,  29.95949554,  28.15386963,
+                    27.72417641,   1.10106778, -27.28695297, -29.00568390,  -1.60783303, -18.21017647],
+                    [ 29.49378586,  17.06575012,  25.72111511,  29.87012291,  29.99975395, -17.31759644,
+                    -29.92115784, -20.06009483, -14.73279667, -28.84785843, -29.78616714, -29.99817467],
+                    [ -1.54550576, -29.99688721, -29.98895645,  26.56055069,  13.76502132, -24.44923782,
+                    -4.55818033, -17.40074539, -29.42227936, -29.94157219, -25.58675003, -29.89002419],
+                    [ -1.14787686, -29.44104195,  16.55123901,  26.77043152,  29.86572838,  13.56690025,
+                    21.36647987, -10.31235313, -29.22277641, -28.15386963,   2.49422908, -24.27903175],
+                    [ 28.09328270, -28.88492966,  27.24345016,  29.90688133,  29.90688133,  18.13103485,
+                    27.99878311,   4.00716066, -24.53262520, -28.88492966,  24.44923782, -22.52679825],
+                    [  0.10205039, -29.93098831,   7.55281830,  28.48003769,  29.93098831, -14.25369835,
+                    21.11716843, -19.27641296, -29.42227936, -29.02185059,   8.16400814, -27.41356468],
+                    [ 22.19349098, -27.10892868, -24.10417366,  27.37199974,  26.82098389, -10.03579903,
+                        4.71070147, -16.46408844, -29.68155670, -25.30630493,  24.77605438,   1.80251384],
+                    [ 20.73208427, -29.44104195,  17.97154999,  29.67082214,  29.82481384,  -9.47692776,
+                    26.77043152, -12.86174679, -29.40289116, -29.44104195,   4.77164030, -22.13672829],
+                    [  7.81561375, -29.63641167,  15.66178513,  29.14220428,  29.40289116, -15.93279934,
+                    28.37808609, -13.11566544, -28.35157776, -29.76376724,  -7.49424887, -19.20282745],
+                    [ 17.72932053, -29.98895645,  29.31869316,  29.31869316,  29.69194221, -25.00963974,
+                        7.58207989, -28.12381363, -29.51024628, -29.93098831, -25.58675003, -26.87078667]]
+                    ]
+            }
+        )
         # fmt: on
 
         model = self._load_model(minified=True)
@@ -1300,11 +1338,14 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         )
         model_inputs["decoder_input_ids"] = decoder_input_ids
 
-        model_out = model(**model_inputs)
+        with torch.no_grad():
+            model_out = model(**model_inputs)
         self.assertEqual(
             list(model_out.logits.shape), [1, model.config.canvas_length, model.config.text_config.vocab_size]
         )
-        torch.testing.assert_close(model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits))
+        torch.testing.assert_close(
+            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectation())
+        )
 
     @slow
     def test_minified_diffusion_gemma_forward_with_image(self):
@@ -1312,30 +1353,32 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(model_out.logits[:, :10, :12])
         # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
-        expected_logits = [
-            [
-                [ 18.28892136, -29.96683311, -26.33790970,  27.61213493,  29.29586983,  24.27903175,
-                5.71073294,   7.81561375, -19.12884521, -22.41707611,  -0.74984390, -25.00963974],
-                [ 28.40418053,  26.91985321,  28.92082787,  29.64826202,  29.99992561,  -9.75730991,
-                -29.90047264, -25.23368835,  -0.45113790, -29.24793625, -29.90992928, -29.99850464],
-                [ -2.30793095, -29.59842873, -29.96082115,  24.77605438,   5.46941423, -25.37790680,
-                -18.36726570, -27.32979774, -28.93834877, -29.95215416, -27.86572838, -29.98458862],
-                [ -6.51936626, -26.45086479, -25.65441132,  26.39480209,  29.91287804,  -2.77330947,
-                4.31364775,  -4.00716066, -27.99878311,  -9.25128651, -10.96796322, -25.58675003],
-                [ 28.72925377, -29.79991150,  28.88492966,  29.91287804,  29.98179245,   9.47692776,
-                27.61213493,  -9.36425304, -13.41732597, -26.71912193,  28.55237961, -22.30597687],
-                [ -2.05925679, -29.81889534,  -6.60862780,  25.85169601,  29.65972710, -19.27641296,
-                4.19115925, -21.66990089, -29.54159164, -28.12381363,  -4.34424734, -28.48003769],
-                [-20.33346367, -27.68740082, -27.79604530,  14.92172623,  -7.37692833, -26.39480209,
-                -18.21017647, -25.00963974, -29.68155670,  -4.03784895,  25.91559219,  -8.96760273],
-                [  3.17555952, -29.27229309,  11.92896748,  28.57573891,  26.91985321, -23.92457008,
-                3.17555952, -23.74012756, -29.74754906, -29.63641167,  -5.80103159, -26.71912193],
-                [-13.81431580, -29.06881332,   8.91065121,  26.96818924,  26.16215897, -22.95215607,
-                14.35028839, -15.75251865, -28.77006149, -29.31869316,  -9.98025513, -27.37199974],
-                [  3.08282948, -29.98509216,  28.68712234,  28.80958176,  26.71912193, -28.45515060,
-                -16.11148643, -28.50453377, -29.19678497, -29.77148056, -26.87078667, -28.45515060]
-          ]
-        ]
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [[
+                    [ 18.59990692, -29.96792030, -26.71912193,  27.65005684,  29.36216545,  24.36471176,
+                        6.40016174,   6.81642532, -19.49482346, -22.19349098,  -0.41794172, -24.77605438],
+                    [ 28.35157776,  26.91985321,  28.80958176,  29.63641167,  29.99991417,  -9.47692776,
+                    -29.90373039, -25.30630493,  -0.17089660, -29.27229309, -29.90688133, -29.99860191],
+                    [ -2.52526045, -29.38286209, -29.96454811,  25.08536720,   7.08258057, -27.01581001,
+                    -21.11716843, -26.45086479, -28.62135887, -29.92865181, -28.90302277, -29.99154091],
+                    [ -3.26822829, -27.10892868, -26.91985321,  25.91559219,  29.90373039,   1.14007568,
+                        1.52212954,  -5.98130083, -27.61213493,  -8.79653835,  -8.22184658, -25.91559219],
+                    [ 28.74981880, -29.79991150,  28.92082787,  29.91287804,  29.98117638,   9.47692776,
+                    27.68740082,  -8.51004219, -12.13874054, -26.56055069,  28.45515060, -22.13672829],
+                    [  0.53900456, -29.77148056,  -0.21874613,  26.22159958,  29.67082214, -20.92630577,
+                        3.65364885, -21.18004990, -29.55650711, -28.18346024,  -3.20645595, -28.64363098],
+                    [-18.52275848, -26.16215897, -28.62135887,  14.05937004, -12.29514503, -25.58675003,
+                    -15.38721085, -26.33790970, -29.47677803,  -7.93200207,  27.37199974,  -2.44767213],
+                    [  2.43215036, -29.29586983,  12.39897156,  28.50453377,  26.66704369, -24.44923782,
+                        3.40711212, -24.10417366, -29.74754906, -29.64826202,  -6.42998266, -26.66704369],
+                    [-14.49445248, -29.22277641,   9.98025513,  27.01581001,  25.30630493, -23.40543556,
+                    14.01054859, -17.48348808, -28.62135887, -29.36216545,  -9.08129215, -27.61213493],
+                    [  4.64972258, -29.98651123,  28.42986679,  28.88492966,  26.39480209, -28.40418053,
+                    -15.38721085, -28.42986679, -29.09888268, -29.77148056, -26.61419106, -28.35157776]
+                    ]]
+            }
+        )
         # fmt: on
 
         model = self._load_model(minified=True)
@@ -1365,45 +1408,47 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # sanity check: has image inputs
         self.assertIn("pixel_values", model_inputs)
 
-        model_out = model(**model_inputs)
+        with torch.no_grad():
+            model_out = model(**model_inputs)
         self.assertEqual(
             list(model_out.logits.shape), [1, model.config.canvas_length, model.config.text_config.vocab_size]
         )
-        torch.testing.assert_close(model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits))
+        torch.testing.assert_close(
+            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectation())
+        )
 
     @slow
     def test_minified_diffusion_gemma_forward_batched(self):
         """[Minified (6 first layers)] bsz>1, no image"""
-        # fmt: off
         # print(model_out.logits[:, :5, :12])
         # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
-        expected_logits = [
-            [
-                [ 20.26569748, -29.95372391,  -4.92381001,  28.84785843,  29.96454811,  27.89977074,
-                28.26949692,   4.58870411, -27.49481583, -29.11355782,   0.93719494, -22.47210884],
-                [ 29.55650711,  -9.42062664,  24.77605438,  29.89710426,  29.99937248, -20.99029922,
-                -29.93754959, -22.41707611, -17.89120674, -28.80958176, -29.81277657, -29.99840164],
-                [ -0.89426625, -29.99745178, -29.98966789,  27.10892868,  14.49445248, -24.61488152,
-                -7.14156723, -18.59990692, -29.57094383, -29.93098831, -26.22159958, -29.91572952],
-                [ -0.71080452, -29.27229309,  16.98100090,  26.82098389,  29.84144211,  13.56690025,
-                21.72950172, -11.45190430, -29.42227936, -27.65005684,   2.43215036, -24.36471176],
-                [ 27.96628952, -28.93834877,  27.28695297,  29.90373039,  29.91287804,  18.21017647,
-                27.89977074,   3.56125450, -25.00963974, -28.92082787,  24.36471176, -22.41707611]
-            ],
-            [
-                [ 20.66659164, -29.81889534, -14.15672493,  29.40289116,  29.85164261,  27.53452492,
-                22.95215607,   9.86893463, -28.29728889, -28.09328270,  -1.10106778, -25.16004562],
-                [ 29.15618324,  20.40085030,  20.33346367,  29.89710426,  29.99983406, -17.89120674,
-                -29.87012291, -14.82745647, -18.13103485, -28.48003769, -29.71171379, -29.99777031],
-                [ 10.96796322, -29.97776413, -29.97542572,  28.88492966,  18.67665863, -19.99079323,
-                    4.34424734, -12.08642769, -29.54159164, -29.87848091, -22.90015602, -29.73022270],
-                [-10.91377544, -28.50453377,  15.93279934,  27.01581001,  29.71171379,  16.02234268,
-                16.55123901, -15.20219231, -29.49378586, -27.86572838,  -3.29910398, -23.92457008],
-                [ 25.44850922, -29.51024628,  27.53452492,  29.89710426,  29.63641167,  13.26691246,
-                24.10417366,   5.28794241, -27.10892868, -28.45515060,  19.63847351, -24.27903175]
-           ]
-        ]
-        # fmt: on
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 21.60994148, -29.94348526,  -9.81315899,  29.09888268,  29.96454811,  28.35157776,
+                    27.37199974,   5.13640928, -26.56055069, -28.70835686,  -0.13183509, -18.97969818],
+                    [ 29.54159164,  12.19096375,  24.93285370,  29.89002419,  29.99975395, -18.44520950,
+                    -29.92623520, -21.05392075, -17.23404694, -29.08397102, -29.74754906, -29.99850464],
+                    [ -0.04980464, -29.99727631, -29.99208641,  26.61419106,  17.81046486, -23.92457008,
+                    -6.10123110, -18.13103485, -29.27229309, -29.93543434, -25.30630493, -29.86572838],
+                    [  0.15429553, -29.38286209,  14.54231548,  26.77043152,  29.90373039,  15.93279934,
+                    21.30470467, -10.20196629, -29.19678497, -27.99878311,   4.03784895, -24.36471176],
+                    [ 27.99878311, -28.93834877,  27.01581001,  29.90992928,  29.92865181,  18.36726570,
+                    27.53452492,   3.69981956, -24.27903175, -28.82887459,  25.23368835, -22.58115005]],
+
+                    [[ 20.73208427, -29.81889534, -14.01054859,  29.42227936,  29.85649490,  27.61213493,
+                    23.05516243,   9.81315899, -28.26949692, -28.06227112,  -1.21028030, -25.08536720],
+                    [ 29.09888268,  20.12901306,  19.99079323,  29.89002419,  29.99984360, -17.64777756,
+                    -29.86572838, -14.54231548, -17.64777756, -28.52864838, -29.72112274, -29.99791336],
+                    [ 12.08642769, -29.97701073, -29.97776413,  28.92082787,  18.90453339, -20.33346367,
+                        4.09919930, -11.18388462, -29.52617455, -29.87437057, -22.74216461, -29.72112274],
+                    [-10.03579903, -28.59873009,  15.47912979,  27.06271935,  29.69194221,  15.01560497,
+                    16.81029892, -15.66178513, -29.49378586, -27.86572838,  -3.56125450, -24.19219208],
+                    [ 25.37790680, -29.47677803,  27.32979774,  29.89710426,  29.67082214,  13.41732597,
+                    24.01497269,   4.95421267, -26.96818924, -28.42986679,  19.92110252, -24.44923782]]
+                ]
+            }
+        )  # fmt: skip
 
         model = self._load_model(minified=True)
         processor = AutoProcessor.from_pretrained(self._model_path)
@@ -1433,11 +1478,12 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         self.assertFalse((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, -1]).any())
         self.assertTrue((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, 0]).any())
 
-        model_out = model(**model_inputs)
+        with torch.no_grad():
+            model_out = model(**model_inputs)
         self.assertEqual(
             list(model_out.logits.shape), [2, model.config.canvas_length, model.config.text_config.vocab_size]
         )
-        torch.testing.assert_close(model_out.logits[:, :5, :12].cpu(), torch.tensor(expected_logits))
+        torch.testing.assert_close(model_out.logits[:, :5, :12].cpu(), torch.tensor(expected_logits.get_expectation()))
 
     @slow
     def test_minified_diffusion_gemma_generate_with_image_batched(self):
@@ -1447,46 +1493,33 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         This test has a LOT of non-determinism (sampling canvases, sampling tokens), so it is normal
         if different platforms need to set different expected outcomes.
         """
-        # fmt: off
         # print(generated_tokens)
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
-        expected_sequences = [
-            [
-                48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,
-                371, 371,  48,  48, 371, 371, 371,  48, 371, 379, 379,  48, 595, 371, 371, 516,  48, 371,
-                48, 371, 516, 595,  48, 957,  48, 371, 371, 595, 516, 379, 371,  48, 371, 371,  48, 516,
-                595, 371, 371,  48, 371, 549,  48, 173,  48, 371, 595, 371, 658, 371, 983,  48, 516, 595,
-                48, 516, 516, 516, 595, 595, 371, 371, 595, 832, 379, 371, 728, 371, 516, 371, 516, 516,
-                371,  48, 371,  48, 371, 371, 498, 371, 371,  48,  48,  48, 371,  48,  48,  48, 595,  48,
-                48,  48, 516,  48, 371,  48, 379,  48, 516,  48,  48,  48, 371,  48,  48,  48,  48,  48,
-                48, 595,  48, 841, 173,  48,  48,  48,  48,  48,  48,  48, 516,  48,  48,  48, 405,  48,
-                48, 371,  48,  48, 371,  48,  48,  48,  48,  48,  48,  48, 173,  48, 371,  48,  48,  48,
-                48,  48, 516, 371,  48, 516,  48,  48, 516,  48, 841, 371,  48,  48,  48, 516, 595, 371,
-                48,  48, 516, 371,  48,  48, 371,  48, 516, 371, 371,  48,  48,  48,  48, 371, 595,  48,
-                48,  48,  48,  48,  48,  48,  48,  48, 371, 516,  48,  48,  48,  48,  48, 379, 371,  48,
-                371,  48,  48,  48,  48, 371,  48,  48,  48, 371, 371,  48,  48,  48,  48, 516, 371,  48,
-                48, 172, 516, 371, 516,  48, 371,  48,  48,  48, 173,  48, 173, 371,  48,  48,  48,  48,
-                379,  48,  48,  48
-            ],
-            [
-                5, 530, 595, 371,  48, 371,  48, 371,  48, 371,  48,  48, 595, 371, 859,  48, 371, 595,
-                379, 371, 371, 371,  48, 371, 595, 595,  48, 595, 841, 379,  48, 379, 634,  48,  48, 371,
-                48, 371, 841,  48,  48,  48,  48, 379,  48, 379,  48, 379, 371, 371, 379,  48,  48,  48,
-                48,  48,  48,  48, 832, 371, 371, 371,  48,  48, 371,  48, 371,  48, 371, 371,  48, 595,
-                595, 654, 516, 516,  48, 371,  48,  48,  48, 595, 371, 371, 517,  48,  48, 832, 371, 983,
-                48,  48,  48, 841,  48,  48,  48,  48,  48,  48,  48, 841,  48,  48,  48,  48,  48,  48,
-                48,  48,  48,  48, 371,  48,  48,  48,  48,  48,  48,  48,  48, 841,  48,  48,  48,  48,
-                48,  48,  48,  48,  48,  48,  48,  48,  48,  48, 500, 379,  48,  48,  48,  48,  48,  48,
-                48,  48, 595,  48,  48,  48,  48, 371,  48, 379, 371,  48,  48, 371,  48,  48, 832, 371,
-                48, 371, 371,  48,  48,  48,  48,  48,  48, 371,  48,  48, 174,  48,  48, 841,  48,  48,
-                48,  48,  48,  48, 371,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,
-                48,  48, 371,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48, 371,  48, 841,
-                371,  48, 371,  48,  48,  48,  48,  48,  48,  48,  48, 841,  48,  48,  48,  48,  48,  48,
-                516, 371,  48,  48,  48,  48, 832, 841,  48,  48,  48,  48, 841,  48,  48,  48,  48,  48,
-                48,  48,  48, 371
-            ]
-        ]
-        # fmt: on
+        expected_sequences = Expectations(
+            {
+                ("cuda", None): [
+                    [48, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 728, 48, 48, 48, 48, 598, 371, 48, 48, 595, 48, 48,
+                     983, 371, 48, 598, 371, 48, 48, 595, 48, 48, 371, 595, 371, 516, 371, 595, 516, 516, 516, 379, 48, 371, 48, 48, 371, 371, 173, 516, 4,
+                     595, 516, 371, 595, 48, 516, 48, 371, 516, 495, 371, 516, 516, 983, 371, 516, 516, 48, 371, 516, 371, 48, 516, 48, 371, 516, 48, 983,
+                     48, 841, 371, 48, 516, 48, 379, 516, 832, 48, 371, 48, 371, 371, 371, 48, 48, 48, 371, 371, 48, 48, 48, 48, 48, 371, 371, 48, 48, 173,
+                     48, 48, 48, 516, 48, 48, 48, 371, 379, 48, 371, 48, 516, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48,
+                     48, 841, 48, 48, 48, 48, 516, 173, 371, 48, 48, 48, 516, 48, 48, 516, 48, 48, 48, 48, 371, 48, 371, 48, 48, 371, 48, 379, 48, 371, 48,
+                     832, 595, 48, 688, 48, 48, 371, 48, 371, 48, 48, 48, 48, 48, 516, 371, 371, 48, 48, 48, 371, 48, 405, 48, 48, 48, 48, 48, 48, 48, 48,
+                     48, 48, 48, 371, 48, 371, 48, 371, 48, 48, 371, 371, 516, 48, 371, 48, 516, 516, 48, 48, 48, 173, 48, 48, 48, 516, 371, 516, 48, 160,
+                     516, 48, 371, 173, 48, 48, 48, 371, 48, 48, 48, 48, 516],
+                    [48, 371, 627, 371, 48, 651, 371, 379, 379, 371, 371, 371, 595, 48, 48, 595, 371, 48, 371, 379, 595, 595, 371, 977, 48, 48, 48, 517,
+                     371, 841, 48, 48, 517, 832, 516, 371, 418, 48, 48, 48, 48, 371, 48, 48, 48, 48, 371, 516, 379, 371, 371, 48, 48, 371, 371, 656, 371,
+                     48, 371, 371, 371, 48, 48, 48, 48, 371, 371, 841, 371, 371, 841, 516, 371, 371, 841, 371, 656, 48, 48, 371, 983, 48, 48, 379, 48, 48,
+                     595, 48, 371, 983, 371, 983, 48, 48, 48, 371, 48, 48, 48, 48, 516, 48, 48, 48, 48, 48, 48, 48, 48, 48, 172, 48, 48, 371, 598, 48, 48,
+                     48, 371, 656, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 371, 841, 48, 48, 48, 48, 832, 48, 48,
+                     498, 832, 371, 48, 371, 371, 48, 48, 371, 48, 371, 371, 48, 48, 371, 48, 654, 516, 48, 48, 48, 172, 371, 634, 48, 48, 48, 48, 516,
+                     48, 48, 371, 48, 48, 595, 371, 48, 371, 48, 48, 48, 48, 48, 48, 48, 48, 48, 371, 48, 371, 379, 595, 48, 48, 48, 371, 48, 48, 634, 48,
+                     48, 48, 172, 48, 48, 48, 48, 379, 48, 48, 48, 371, 48, 371, 48, 48, 48, 371, 48, 48, 371, 48, 48, 48, 371, 48, 48, 371, 48, 371, 48,
+                     48, 549, 48, 48, 48, 48, 48, 634, 499, 172, 48, 48, 48, 48, 48, 48, 48
+                    ]
+                ]
+            }
+        )  # fmt: skip
 
         model = self._load_model(minified=True)
         processor = AutoProcessor.from_pretrained(self._model_path)
@@ -1523,7 +1556,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         set_seed(42)
         gen_out = model.generate(**model_inputs, max_new_tokens=256)
         generated_tokens = gen_out.sequences[:, -256:]
-        self.assertEqual(generated_tokens.tolist(), expected_sequences)
+        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectation())
 
     @slow
     def test_minified_diffusion_gemma_generate_with_image_batched_long(self):
@@ -1534,46 +1567,34 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         This test has a LOT of non-determinism (sampling canvases, sampling tokens), so it is normal
         if different platforms need to set different expected outcomes.
         """
-        # fmt: off
         # print(generated_tokens)
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
-        expected_sequences = [
-            [
-                48,  48,  48,  48,  48,  48, 379, 379, 379,  48, 379, 379, 405, 379,  48, 379, 379, 379,
-                379, 379, 595, 379,  48, 379,  48, 379,  48, 379, 379, 379,  48,  48,  48, 516, 379,  48,
-                48,  48, 379, 379, 379,  48, 379, 379, 379,  48,  48, 379,  48,  48,  48,  48,  48,  48,
-                48,  48, 379, 379,  48,  48, 379, 379,  48, 379,  48,  48,  48, 379,  48,  48,  48,  48,
-                379,  48,  48,  48,  48, 516,  48,  48, 379, 379,  48, 379, 379,  48, 379,  48, 379,  48,
-                371,  48, 379,  48,  48,  48,  48,  48,  48, 418,  48, 379, 379,  48,  48, 379, 516,  48,
-                379,  48,  48,  48,  48, 379, 379, 379, 379,  48,  48,  48, 379, 379, 379, 516, 379,  48,
-                379,  48, 379,  48,  48, 405,  48,  48,  48,  48, 379, 379,  48,  48,  48,  48, 379,  48,
-                379,  48, 379,  48,  48, 379,  48,  48, 516, 379,  48,  48,  48,  48,  48, 379,  48, 379,
-                379,  48,  48,  48, 418, 379, 379, 379,  48, 516,  48,  48,  48, 379,  48,  48, 379, 516,
-                48,  48,  48, 379, 379, 379, 516,  48,  48,  48,  48, 379, 379, 516, 379,  48,  48, 379,
-                48,  48,  48,  48, 379,  48,  48,  48,  48,  48,  48,  48, 841, 379,  48, 379, 499,  48,
-                48,  48,  48,  48, 379,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48, 405, 379,  48,
-                48,  48,  48,  48,  48,  48,  48, 379,  48, 379,  48, 379,  48, 379,  48,  48,  48,  48,
-                48,  48,  48,  48
-            ],
-            [
-                48,  48,  48,  48,  48,  48, 379, 379, 379, 379, 379, 516, 379,  48,  48, 379,  48, 379,
-                48, 379, 379, 379, 977, 379, 379, 379,  48,  48, 379, 379, 379, 379,  48,  48, 379, 379,
-                379, 379,  48,  48, 379,  48, 379,  48,  48,  48,  48,  48, 379, 516, 379,  48,  48, 379,
-                517,  48,  48, 379, 379,  48, 379,  48,  48, 516, 516, 379,  48,  48, 379, 379,  48, 379,
-                379,  48, 379, 379, 516, 379,  48,  48, 379,  48, 379,  48, 379,  48,  48,  48,  48, 379,
-                379, 418,  48, 379, 379, 379,  48, 379,  48, 379, 379, 379, 379, 379, 379, 379,  48, 379,
-                371,  48,  48,  48, 379,  48,  48, 379,  48,  48, 379,  48, 379,  48,  48, 379, 379, 379,
-                48,  48, 499,  48,  48, 379,  48,  48,  48,  48,  48,  48,  48,  48,  48, 379,  48,  48,
-                379, 371,  48, 379,  48, 379, 405,  48,  48, 516,  48, 379, 379,  48,  48, 379, 379, 379,
-                379, 379,  48, 379, 379, 379, 379,  48, 379, 516,  48, 379, 379,  48,  48, 379, 499, 516,
-                379,  48,  48, 379, 379,  48,  48,  48,  48,  48, 379, 379,  48,  48,  48, 379, 379,  48,
-                516,  48,  48,  48,  48, 379,  48, 379,  48,  48, 379, 379,  48,  48,  48,  48, 379,  48,
-                517,  48, 371,  48,  48,  48, 379,  48,  48,  48, 379, 379,  48,  48, 379, 379,  48, 379,
-                48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48,  48, 379,  48,  48,  48,  48,  48,
-                48, 379,  48,  48
-            ]
-        ]
-        # fmt: on
+        expected_sequences = Expectations(
+            {
+                ("cuda", None): [
+                    [48, 48, 48, 567, 48, 405, 48, 48, 379, 48, 379, 379, 379, 379, 379, 379, 48, 48, 48, 48, 48, 379, 379, 379, 379, 48, 48, 379, 48, 48,
+                     379, 379, 379, 379, 379, 379, 379, 379, 379, 379, 379, 595, 48, 48, 379, 48, 379, 48, 379, 379, 48, 516, 379, 48, 48, 48, 379, 379,
+                     48, 516, 379, 595, 379, 379, 379, 48, 516, 418, 48, 379, 48, 379, 48, 48, 379, 48, 48, 379, 48, 379, 379, 379, 48, 48, 48, 48, 379,
+                     48, 48, 379, 379, 379, 48, 48, 48, 48, 48, 48, 379, 379, 48, 48, 379, 48, 48, 516, 48, 48, 379, 48, 379, 48, 48, 48, 48, 48, 48, 48,
+                     379, 379, 48, 379, 48, 48, 379, 379, 48, 48, 48, 48, 48, 48, 48, 379, 379, 48, 48, 379, 48, 48, 379, 48, 379, 48, 48, 379, 48, 48, 48,
+                     48, 48, 48, 48, 977, 48, 48, 379, 48, 379, 379, 379, 379, 379, 48, 48, 48, 48, 48, 379, 379, 379, 379, 48, 48, 48, 379, 48, 48, 48, 48,
+                     379, 379, 379, 48, 379, 48, 48, 48, 48, 48, 48, 379, 48, 379, 48, 48, 48, 48, 48, 516, 379, 48, 48, 379, 48, 48, 48, 516, 48, 379, 48,
+                     48, 48, 48, 379, 48, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 48, 48, 516, 48, 48, 48, 379, 379, 48, 379, 48, 371,
+                     48, 379, 48, 48, 379, 48, 48, 379, 48, 48, 48, 48, 48
+                    ],
+                    [48, 48, 48, 379, 48, 379, 379, 48, 48, 379, 379, 516, 516, 379, 48, 48, 379, 379, 379, 379, 379, 379, 379, 379, 48, 48, 379, 379, 379,
+                     48, 48, 48, 379, 379, 379, 595, 379, 379, 379, 379, 379, 48, 48, 516, 48, 379, 379, 379, 379, 48, 48, 379, 595, 48, 379, 379, 379, 48,
+                     379, 379, 379, 48, 379, 48, 516, 379, 379, 48, 379, 379, 379, 379, 379, 379, 379, 379, 48, 48, 48, 379, 48, 379, 48, 48, 379, 516, 48,
+                     48, 379, 379, 379, 379, 379, 379, 48, 48, 48, 516, 379, 379, 48, 595, 48, 379, 48, 48, 516, 48, 499, 48, 48, 48, 379, 379, 48, 48, 379,
+                     379, 48, 379, 516, 379, 379, 48, 379, 379, 379, 379, 48, 379, 379, 48, 379, 379, 379, 379, 371, 48, 379, 48, 48, 371, 48, 48, 48, 48,
+                     379, 379, 379, 379, 48, 379, 379, 48, 48, 48, 48, 48, 379, 379, 48, 379, 379, 379, 48, 379, 48, 379, 379, 379, 48, 379, 48, 841, 379,
+                     379, 379, 48, 48, 379, 379, 48, 48, 48, 379, 48, 48, 379, 499, 379, 48, 516, 48, 48, 379, 48, 48, 379, 48, 379, 379, 48, 379, 379, 379,
+                     48, 379, 48, 379, 379, 48, 379, 516, 48, 48, 516, 379, 379, 48, 379, 48, 379, 48, 379, 379, 379, 48, 48, 48, 48, 379, 48, 379, 379, 48,
+                     48, 48, 48, 379, 48, 48, 379, 371, 48, 48, 371, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48
+                    ]
+                ]
+            }
+        )  # fmt: skip
 
         model = self._load_model(minified=True)
         processor = AutoProcessor.from_pretrained(self._model_path)
@@ -1618,4 +1639,4 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # sanity check: we went beyond the sliding window length
         self.assertTrue(gen_out.sequences.shape[1] > model.config.text_config.sliding_window)
         generated_tokens = gen_out.sequences[:, -256:]
-        self.assertEqual(generated_tokens.tolist(), expected_sequences)
+        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectation())
