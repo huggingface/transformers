@@ -20,7 +20,7 @@ from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from ...utils import auto_docstring
 
 
-__all__ = ["RadioConfig", "RADIOConfig"]
+__all__ = ["RadioConfig"]
 
 
 @auto_docstring(checkpoint="nvidia/C-RADIOv4-H")
@@ -93,7 +93,3 @@ class RadioConfig(PreTrainedConfig):
     def num_summary_tokens(self) -> int:
         """Number of skipped prefix tokens (cls + registers) before spatial features."""
         return self.num_cls_tokens + self.num_registers
-
-
-# Backward-compatible alias: the published checkpoints and prior releases expose `RADIOConfig`.
-RADIOConfig = RadioConfig

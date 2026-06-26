@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import RADIOConfig
+from transformers import RadioConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
@@ -26,10 +26,10 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 if is_torch_available():
     import torch
 
-    from transformers import RADIOModel
+    from transformers import RadioModel
 
 
-class RADIOModelTester:
+class RadioModelTester:
     def __init__(
         self,
         parent,
@@ -81,7 +81,7 @@ class RADIOModelTester:
         self.seq_length = self.num_prefix_tokens + self.num_patches
 
     def get_config(self):
-        return RADIOConfig(
+        return RadioConfig(
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -113,7 +113,7 @@ class RADIOModelTester:
         return config, inputs_dict
 
     def create_and_check_model(self, config, pixel_values):
-        model = RADIOModel(config=config)
+        model = RadioModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -125,7 +125,7 @@ class RADIOModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_layer_scale_init(self, config, pixel_values):
-        model = RADIOModel(config=config)
+        model = RadioModel(config=config)
         for layer in model.encoder.layer:
             self.parent.assertTrue(
                 torch.allclose(layer.layer_scale1.lambda1, torch.ones_like(layer.layer_scale1.lambda1)),
@@ -137,7 +137,7 @@ class RADIOModelTester:
             )
 
     def create_and_check_variable_resolution(self, config, pixel_values):
-        model = RADIOModel(config=config)
+        model = RadioModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -154,24 +154,21 @@ class RADIOModelTester:
 
 
 @require_torch
-class RADIOModelTest(ModelTesterMixin, unittest.TestCase):
+class RadioModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as RADIOModel
-    does not use input_ids, inputs_embeds, or attention_mask, does not output intermediate
-    hidden_states, and does not support return_dict=False.
+    Here we also overwrite some of the tests of test_modeling_common.py, as RadioModel
+    does not use input_ids, inputs_embeds, or attention_mask.
     """
 
-    all_model_classes = (RADIOModel,) if is_torch_available() else ()
+    all_model_classes = (RadioModel,) if is_torch_available() else ()
     pipeline_model_mapping = {}
     test_resize_embeddings = False
     test_head_masking = False
     test_pruning = False
-    # RadioModelOutput does not carry attentions; skip attention-shape tests inherited from the mixin.
-    has_attentions = False
 
     def setUp(self):
-        self.model_tester = RADIOModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RADIOConfig, has_text_modality=False, hidden_size=16)
+        self.model_tester = RadioModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=RadioConfig, has_text_modality=False, hidden_size=16)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -188,67 +185,44 @@ class RADIOModelTest(ModelTesterMixin, unittest.TestCase):
         config, pixel_values = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_variable_resolution(config, pixel_values)
 
-    @unittest.skip(reason="RADIOModel does not use inputs_embeds")
+    @unittest.skip(reason="RadioModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="RADIOModel does not use inputs_embeds")
+    @unittest.skip(reason="RadioModel does not use inputs_embeds")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="RADIOModel does not support feedforward chunking")
+    @unittest.skip(reason="RadioModel does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="RADIOModel uses pixel_values, not token embeddings")
+    @unittest.skip(reason="RadioModel uses pixel_values, not token embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="RadioModelOutput does not carry per-layer hidden_states")
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="RadioModelOutput does not carry per-layer hidden_states")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="RADIOModel.forward does not support return_dict=False")
-    def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="norm_mean/norm_std/summary_idxs buffers are initialized in __init__, not _init_weights")
-    def test_init_weights_can_init_buffers(self):
-        pass
-
-    @unittest.skip(
-        reason="summary_idxs is a persistent index buffer set in __init__, not re-initialized by _init_weights; "
-        "the meta-device -> to_empty -> init_weights flow leaves it unset, so the forward indexing it drives fails."
-    )
-    def test_all_tensors_are_parameter_or_buffer(self):
         pass
 
     @unittest.skip(
         reason="The shared 'radio' conversion mapping includes a video_embedder rename for video-capable "
-        "checkpoints; the image-only RADIOModel has no matching key, so the reverse-mapping check does not apply."
+        "checkpoints; the image-only RadioModel has no matching key, so the reverse-mapping check does not apply."
     )
     def test_reverse_loading_mapping(self):
         pass
 
     @unittest.skip(
-        reason="RADIOModel has no classification head, so the test body is a no-op; its `_config_zero_init` helper "
-        "also sets the `_std`-suffixed `norm_std` config field to a scalar, which the strict RADIOConfig rejects."
+        reason="RadioModel has no classification head, so the test body is a no-op; its `_config_zero_init` helper "
+        "also sets the `_std`-suffixed `norm_std` config field to a scalar, which the strict RadioConfig rejects."
     )
     def test_can_load_ignoring_mismatched_shapes(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        model = RADIOModel.from_pretrained("nvidia/C-RADIOv4-H")
+        model = RadioModel.from_pretrained("nvidia/C-RADIOv4-H")
         self.assertIsNotNone(model)
 
     @slow
     def test_inference(self):
-        model = RADIOModel.from_pretrained("nvidia/C-RADIOv4-H").to(torch_device)
+        model = RadioModel.from_pretrained("nvidia/C-RADIOv4-H").to(torch_device)
         model.eval()
 
         torch.manual_seed(42)
@@ -261,11 +235,3 @@ class RADIOModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(outputs.features.shape, (1, 196, 1280))
         self.assertFalse(outputs.summary.isnan().any(), "summary contains NaN")
         self.assertFalse(outputs.features.isnan().any(), "features contain NaN")
-
-
-# Parameterized SDPA inference comparison tests access outputs["hidden_states"],
-# which RadioModelOutput does not provide. Override each inherited test with a skip.
-_skip_sdpa = unittest.skip("RadioModelOutput does not provide hidden_states")(lambda self, *a, **kw: None)
-for _name in [n for n in dir(ModelTesterMixin) if n.startswith("test_") and "sdpa_inference" in n]:
-    setattr(RADIOModelTest, _name, _skip_sdpa)
-del _name, _skip_sdpa

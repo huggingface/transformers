@@ -28,16 +28,18 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_radio import RadioConfig
 
 
 @dataclass
 class RadioModelOutput(ModelOutput):
-    """Output of [`RADIOModel`].
+    """Output of [`RadioModel`].
 
     Args:
         summary (`torch.FloatTensor` of shape `(batch_size, num_summary_idxs * hidden_size)`):
@@ -46,11 +48,18 @@ class RadioModelOutput(ModelOutput):
             Dense spatial patch features.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Full token sequence (prefix tokens + patches) from the final encoder layer.
+        hidden_states (`tuple[torch.FloatTensor]`, *optional*, returned when `output_hidden_states=True`):
+            Tuple of `(batch_size, sequence_length, hidden_size)` tensors, one for the embedding output plus one for
+            each encoder layer.
+        attentions (`tuple[torch.FloatTensor]`, *optional*, returned when `output_attentions=True`):
+            Tuple of `(batch_size, num_heads, sequence_length, sequence_length)` attention weights, one per layer.
     """
 
     summary: torch.FloatTensor | None = None
     features: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 class RadioInputConditioner(nn.Module):
@@ -347,17 +356,6 @@ class RadioLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-class RadioEncoder(nn.Module):
-    def __init__(self, config: RadioConfig):
-        super().__init__()
-        self.layer = nn.ModuleList([RadioLayer(config) for _ in range(config.num_hidden_layers)])
-
-    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
-        for layer in self.layer:
-            hidden_states = layer(hidden_states)
-        return hidden_states
-
-
 @auto_docstring
 class RadioPreTrainedModel(PreTrainedModel):
     config_class = RadioConfig
@@ -368,6 +366,10 @@ class RadioPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"layer_scale\d+\.lambda1"]
     _supports_sdpa = True
     _supports_flash_attn = True
+    _can_record_outputs = {
+        "hidden_states": RadioLayer,
+        "attentions": RadioSelfAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -386,10 +388,29 @@ class RadioPreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.cls_register_token, mean=0.0, std=std)
         elif isinstance(module, RadioLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
+        elif isinstance(module, RadioInputConditioner):
+            module.norm_mean.copy_(torch.tensor(self.config.norm_mean).view(-1, 1, 1))
+            module.norm_std.copy_(torch.tensor(self.config.norm_std).view(-1, 1, 1))
+        elif isinstance(module, RadioModel):
+            module.summary_idxs.copy_(torch.tensor(self.config.summary_idxs, dtype=torch.long))
+
+
+class RadioEncoder(RadioPreTrainedModel):
+    def __init__(self, config: RadioConfig):
+        super().__init__(config)
+        self.layer = nn.ModuleList([RadioLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        for layer in self.layer:
+            hidden_states = layer(hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
-class RADIOModel(RadioPreTrainedModel):
+class RadioModel(RadioPreTrainedModel):
     def __init__(self, config: RadioConfig):
         super().__init__(config)
         self.config = config
@@ -409,18 +430,26 @@ class RADIOModel(RadioPreTrainedModel):
         self.input_conditioner = nn.Identity()
         return conditioner
 
+    @can_return_tuple
     @auto_docstring
-    def forward(self, pixel_values: torch.Tensor, **kwargs) -> RadioModelOutput:
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> RadioModelOutput:
         pixel_values = self.input_conditioner(pixel_values)
         hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.encoder(hidden_states, **kwargs)
+        encoder_outputs: BaseModelOutput = self.encoder(hidden_states, **kwargs)
+        last_hidden_state = encoder_outputs.last_hidden_state
 
         num_skip = self.config.num_summary_tokens
-        all_summary = hidden_states[:, : self.config.num_cls_tokens]
+        all_summary = last_hidden_state[:, : self.config.num_cls_tokens]
         summary = all_summary[:, self.summary_idxs].flatten(1)
-        features = hidden_states[:, num_skip:]
+        features = last_hidden_state[:, num_skip:]
 
-        return RadioModelOutput(summary=summary, features=features, last_hidden_state=hidden_states)
+        return RadioModelOutput(
+            summary=summary,
+            features=features,
+            last_hidden_state=last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
-__all__ = ["RADIOModel", "RadioPreTrainedModel"]
+__all__ = ["RadioModel", "RadioPreTrainedModel"]

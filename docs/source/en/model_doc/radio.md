@@ -27,22 +27,22 @@ rendered properly in your Markdown viewer.
 
 [RADIO](https://huggingface.co/papers/2312.06709) (Reduce All Domains Into One) is a family of vision foundation models from NVIDIA trained by multi-teacher distillation (e.g. CLIP, DINOv2, SAM) into a single ViT backbone. It produces both an image-level `summary` embedding and dense spatial `features`, and supports variable input resolutions through a Cropped Position Embedding (CPE) patch generator.
 
-The example below demonstrates how to extract image features with the [`RADIOModel`] class.
+The example below demonstrates how to extract image features with the [`RadioModel`] class.
 
 <hfoptions id="usage">
-<hfoption id="RADIOModel">
+<hfoption id="RadioModel">
 
 ```python
 import requests
 import torch
 from PIL import Image
 
-from transformers import CLIPImageProcessor, RADIOModel
+from transformers import CLIPImageProcessor, RadioModel
 
 
 hf_repo = "nvidia/C-RADIOv4-H"
 
-model = RADIOModel.from_pretrained(hf_repo)
+model = RadioModel.from_pretrained(hf_repo)
 model.eval().cuda()
 
 image_processor = CLIPImageProcessor(
@@ -68,11 +68,7 @@ features = outputs.features   # (1, 196, 1280) dense spatial features
 
 [[autodoc]] RadioConfig
 
-## RADIOConfig
+## RadioModel
 
-[[autodoc]] RADIOConfig
-
-## RADIOModel
-
-[[autodoc]] RADIOModel
+[[autodoc]] RadioModel
     - forward
