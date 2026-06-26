@@ -101,6 +101,7 @@ class ZayaConfig(LagunaConfig):
     shared_expert_intermediate_size = AttributeError()
     router_aux_loss_coef = AttributeError()
     num_attention_heads_per_layer = AttributeError()
+    gating = AttributeError()
     mlp_layer_types = AttributeError()
     moe_routed_scaling_factor = AttributeError()
     moe_apply_router_weight_on_input = AttributeError()
