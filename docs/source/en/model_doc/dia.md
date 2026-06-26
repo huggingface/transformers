@@ -42,21 +42,20 @@ tokens and decodes them back into audio.
 
 ```python
 from transformers import AutoProcessor, DiaForConditionalGeneration
-import torch
+
 
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 text = ["[S1] Dia is an open weights text to dialogue model."]
 processor = AutoProcessor.from_pretrained(model_checkpoint)
+inputs = processor(text=text, padding=True, return_tensors="pt").to(model.device)
 
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint)
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
+outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
 
-inputs = processor(text=text, padding=True, return_tensors="pt")
-outputs = model.generate(**inputs, max_new_tokens=256)
-
-# decode the generated IDs back to text
-output_text = processor.batch_decode(outputs, skip_special_tokens=True)
-print(output_text)
+# save audio to a file
+outputs = processor.batch_decode(outputs)
+processor.save_audio(outputs, "example.wav")
 ```
 
 ### Generation with Text and Audio (Voice Cloning)
@@ -76,17 +75,15 @@ audio = ds[-1]["audio"]["array"]
 text = ["[S1] I know. It's going to save me a lot of money, I hope. [S2] I sure hope so for you."]
 
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint)
-
-inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt")
-inputs = {k: v.to(model.device) for k, v in inputs.items()}
+inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(model.device)
 prompt_len = processor.get_audio_prompt_len(inputs["decoder_attention_mask"])
 
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
 
 # retrieve actually generated audio and save to a file
-output_text = processor.batch_decode(outputs, audio_prompt_len=prompt_len, skip_special_tokens=True)
-print(output_text)
+outputs = processor.batch_decode(outputs, audio_prompt_len=prompt_len)
+processor.save_audio(outputs, "example_with_audio.wav")
 ```
 
 ### Training
@@ -106,17 +103,16 @@ audio = ds[-1]["audio"]["array"]
 text = ["[S1] I know. It's going to save me a lot of money, I hope."]
 
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint)
-
 inputs = processor(
     text=text,
     audio=audio,
     generation=False,
     output_labels=True,
     padding=True,
-    return_tensors="pt",
-)
-inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    return_tensors="pt"
+).to(model.device)
+
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 out = model(**inputs)
 out.loss.backward()
 ```
