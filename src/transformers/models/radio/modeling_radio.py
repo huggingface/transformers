@@ -32,7 +32,7 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from .configuration_radio import RADIOConfig as RadioConfig
+from .configuration_radio import RadioConfig
 
 
 @dataclass

@@ -23,7 +23,7 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ..dinov2.modeling_dinov2 import Dinov2Attention, Dinov2Layer, Dinov2LayerScale, Dinov2MLP
-from .configuration_radio import RADIOConfig as RadioConfig
+from .configuration_radio import RadioConfig
 
 
 logger = logging.get_logger(__name__)

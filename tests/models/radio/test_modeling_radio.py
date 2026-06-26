@@ -234,6 +234,13 @@ class RADIOModelTest(ModelTesterMixin, unittest.TestCase):
     def test_reverse_loading_mapping(self):
         pass
 
+    @unittest.skip(
+        reason="RADIOModel has no classification head, so the test body is a no-op; its `_config_zero_init` helper "
+        "also sets the `_std`-suffixed `norm_std` config field to a scalar, which the strict RADIOConfig rejects."
+    )
+    def test_can_load_ignoring_mismatched_shapes(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model = RADIOModel.from_pretrained("nvidia/C-RADIOv4-H")

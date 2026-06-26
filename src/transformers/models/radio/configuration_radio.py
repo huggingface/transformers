@@ -15,88 +15,85 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+from ...utils import auto_docstring
 
 
-__all__ = ["RADIOConfig"]
+__all__ = ["RadioConfig", "RADIOConfig"]
 
 
+@auto_docstring(checkpoint="nvidia/C-RADIOv4-H")
 @strict
-class RADIOConfig(PretrainedConfig):
-    """Configuration for the RADIO vision encoder (native transformers port).
+class RadioConfig(PreTrainedConfig):
+    r"""
+    Configuration for the RADIO vision encoder (native transformers port).
 
     The defaults correspond to ``nvidia/C-RADIOv4-H`` (a ViT-H/16 backbone with a
     Cropped Position Embedding (CPE) patch generator).
+
+    mlp_ratio (`float`, *optional*, defaults to 4.0):
+        Ratio of the hidden size of the MLP relative to `hidden_size`.
+    use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
+        Whether to use a SwiGLU feed-forward network in the encoder layers instead of the standard MLP.
+    layerscale_value (`float`, *optional*, defaults to 1.0):
+        Initial value for the LayerScale parameters. C-RADIO has no LayerScale; the default of `1.0` makes the
+        (inherited) LayerScale an identity operation.
+    max_img_size (`int`, *optional*, defaults to 2048):
+        Maximum supported image size (in pixels) used to size the position embedding table of the CPE patch generator.
+    num_cls_tokens (`int`, *optional*, defaults to 3):
+        Number of learned class (summary) tokens prepended to the patch sequence.
+    num_registers (`int`, *optional*, defaults to 7):
+        Number of learned register tokens prepended to the patch sequence.
+    summary_idxs (`list[int]`, *optional*, defaults to `[0, 1]`):
+        Indices of the class tokens to gather and flatten into the `summary` output embedding.
+    norm_mean (`tuple[float, float, float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
+        Per-channel mean used by the input conditioner to normalize pixel values.
+    norm_std (`tuple[float, float, float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
+        Per-channel standard deviation used by the input conditioner to normalize pixel values.
     """
 
     model_type = "radio"
 
-    def __init__(
-        self,
-        hidden_size: int = 1280,
-        num_hidden_layers: int = 32,
-        num_attention_heads: int = 16,
-        mlp_ratio: float = 4.0,
-        hidden_act: str = "gelu",
-        layer_norm_eps: float = 1e-6,
-        attention_probs_dropout_prob: float = 0.0,
-        hidden_dropout_prob: float = 0.0,
-        drop_path_rate: float = 0.0,
-        use_swiglu_ffn: bool = False,
-        qkv_bias: bool = True,
-        # C-RADIO has no layerscale; 1.0 makes the (inherited) layerscale an identity op.
-        layerscale_value: float = 1.0,
-        # patch / image
-        num_channels: int = 3,
-        patch_size: int = 16,
-        image_size: int = 224,
-        # CPE patch generator
-        max_img_size: int = 2048,
-        num_cls_tokens: int = 3,
-        num_registers: int = 7,
-        summary_idxs: list[int] | None = None,
-        # input conditioner
-        norm_mean: tuple[float, float, float] = OPENAI_CLIP_MEAN,
-        norm_std: tuple[float, float, float] = OPENAI_CLIP_STD,
-        # resolution metadata (inference convenience)
-        max_resolution: int = 2048,
-        preferred_resolution: tuple[int, int] = (512, 512),
-        initializer_range: float = 0.02,
-        **kwargs,
-    ):
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.drop_path_rate = drop_path_rate
-        self.use_swiglu_ffn = use_swiglu_ffn
-        self.qkv_bias = qkv_bias
-        self.layerscale_value = layerscale_value
+    hidden_size: int = 1280
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 16
+    mlp_ratio: float = 4.0
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-6
+    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float = 0.0
+    drop_path_rate: float = 0.0
+    use_swiglu_ffn: bool = False
+    qkv_bias: bool = True
+    # C-RADIO has no layerscale; 1.0 makes the (inherited) layerscale an identity op.
+    layerscale_value: float = 1.0
+    # patch / image
+    num_channels: int = 3
+    patch_size: int = 16
+    image_size: int = 224
+    # CPE patch generator
+    max_img_size: int = 2048
+    num_cls_tokens: int = 3
+    num_registers: int = 7
+    summary_idxs: list[int] | None = None
+    # input conditioner
+    norm_mean: list[float] | tuple[float, float, float] = tuple(OPENAI_CLIP_MEAN)
+    norm_std: list[float] | tuple[float, float, float] = tuple(OPENAI_CLIP_STD)
+    initializer_range: float = 0.02
 
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-
-        self.max_img_size = max_img_size
-        self.num_cls_tokens = num_cls_tokens
-        self.num_registers = num_registers
-        self.summary_idxs = summary_idxs if summary_idxs is not None else [0, 1]
-
-        self.norm_mean = list(norm_mean)
-        self.norm_std = list(norm_std)
-
-        self.max_resolution = max_resolution
-        self.preferred_resolution = preferred_resolution
-        self.initializer_range = initializer_range
-
-        super().__init__(**kwargs)
+    def __post_init__(self, **kwargs):
+        if self.summary_idxs is None:
+            self.summary_idxs = [0, 1]
+        self.norm_mean = list(self.norm_mean)
+        self.norm_std = list(self.norm_std)
+        super().__post_init__(**kwargs)
 
     @property
     def num_summary_tokens(self) -> int:
         """Number of skipped prefix tokens (cls + registers) before spatial features."""
         return self.num_cls_tokens + self.num_registers
+
+
+# Backward-compatible alias: the published checkpoints and prior releases expose `RADIOConfig`.
+RADIOConfig = RadioConfig
