@@ -193,19 +193,23 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
-class Olmo3IntegrationTest(unittest.TestCase):
-    def setUp(self):
+class Olmo3InternalIntegrationTest(unittest.TestCase):
+    # Uses someone's personal repo, keeping it to have extensive testing
+    model = None
+    processor = None
+
+    @classmethod
+    def setUpClass(cls):
         cleanup(torch_device, gc_collect=True)
+        cls.model = Olmo3ForCausalLM.from_pretrained("shanearora/2025-sep-a-base-model", device_map="auto")
+        cls.tokenizer = AutoTokenizer.from_pretrained("allenai/dolma2-tokenizer")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo3ForCausalLM.from_pretrained("shanearora/2025-sep-a-base-model").to(
-            torch_device, dtype=torch.bfloat16
-        )
-        out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
+        out = self.model(torch.tensor(input_ids, device=torch_device)).logits.float()
         # Expected mean on dim = -1
         expectations = Expectations(
             {
@@ -230,82 +234,11 @@ class Olmo3IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("allenai/dolma2-tokenizer", device_map="auto")
-        model = Olmo3ForCausalLM.from_pretrained("shanearora/2025-sep-a-base-model", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
+        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(self.model.device)
 
         # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(expectations.get_expectation(), text)
-
-    def test_real_model_7b_greedy_generation(self):
-        expectations = Expectations(
-            {
-                ("cuda", None): 'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nWho would win in a fight - a dinosaur or a cow named Moo Moo?\nassistant\nThis is a fun and imaginative question! Let’s break it down:\n\n### 1. **A Dinosaur (General Case)**\nDinosaurs were a huge and diverse group, spanning from tiny feathered raptors to massive sauropods like *Brachiosaurus* or *Tyrannosaurus rex',
-            }
-        )  # fmt: skip
-
-        tokenizer = AutoTokenizer.from_pretrained("allenai/Olmo-3-7B-Instruct")
-        model = Olmo3ForCausalLM.from_pretrained("allenai/Olmo-3-7B-Instruct", device_map="auto")
-        message = [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}]
-        inputs = tokenizer.apply_chat_template(
-            message, add_generation_prompt=True, return_tensors="pt", return_dict=True
-        ).to(model.device)
-
-        generated_ids = model.generate(**inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(expectations.get_expectation(), text)
-
-    def test_real_model_7b_greedy_generation_batched(self):
-        expectations = Expectations(
-            {
-                ("cuda", None): [
-                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nWho would win in a fight - a dinosaur or a cow named Moo Moo?\nassistant\nThis is a fun and imaginative question! Let’s break it down:\n\n### 1. **A Dinosaur (General Case)**\nDinosaurs were a huge and diverse group, spanning from tiny feathered raptors to massive sauropods like *Brachiosaurus* or *Tyrannosaurus rex',
-                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nSimply put, the theory of relativity\nassistant\nSure! In simple terms, **the theory of relativity** is Einstein’s explanation of how space, time, and gravity work. It has two main parts:\n\n1. **Special Relativity (1905):**  \n   This says that the laws of physics are the same for everyone moving at a constant speed (',
-                ],
-            }
-        )  # fmt: skip
-        tokenizer = AutoTokenizer.from_pretrained("allenai/Olmo-3-7B-Instruct", padding_side="left")
-        model = Olmo3ForCausalLM.from_pretrained("allenai/Olmo-3-7B-Instruct", device_map="auto")
-        message = [
-            [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}],
-            [{"role": "user", "content": "Simply put, the theory of relativity"}],
-        ]
-        inputs = tokenizer.apply_chat_template(
-            message, add_generation_prompt=True, padding=True, return_tensors="pt", return_dict=True
-        ).to(model.device)
-
-        generated_ids = model.generate(**inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
-        texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertListEqual(expectations.get_expectation(), texts)
-
-    def test_generate_beyond_sliding_window(self):
-        expectations = Expectations(
-            {
-                ("cuda", None): """It looks like you've pasted a very lengthy and repetitive list of "This is a nice place""",
-            }
-        )  # fmt: skip
-
-        tokenizer = AutoTokenizer.from_pretrained("allenai/Olmo-3-7B-Instruct")
-        model = Olmo3ForCausalLM.from_pretrained("allenai/Olmo-3-7B-Instruct", device_map="auto")
-
-        # This is larger than 4096 tokens
-        message = [
-            {
-                "role": "user",
-                "content": "This is a nice place. " * 800 + "I really enjoy the scenery,",
-            }
-        ]
-        inputs = tokenizer.apply_chat_template(
-            message, add_generation_prompt=True, return_tensors="pt", return_dict=True
-        ).to(model.device)
-
-        input_size = inputs.input_ids.shape[-1]
-        self.assertTrue(input_size > model.config.sliding_window)
-
-        generated_ids = model.generate(**inputs, max_new_tokens=20, top_p=None, temperature=1, do_sample=False)
-        text = tokenizer.decode(generated_ids[0, input_size:], skip_special_tokens=True)
+        generated_ids = self.model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(expectations.get_expectation(), text)
 
     @pytest.mark.torch_export_test
@@ -315,18 +248,16 @@ class Olmo3IntegrationTest(unittest.TestCase):
             convert_and_export_with_cache,
         )
 
-        olmo3_model = "shanearora/2025-sep-a-base-model"
-
-        tokenizer = AutoTokenizer.from_pretrained(olmo3_model, pad_token="</s>", padding_side="right")
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2",
         ]
-        max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
+        max_generation_length = self.tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
 
-        # Load model
-        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
+        # Load model on CPU, dont use `self.model` on `torch_device`
+        # TODO (Ilyas / export experts): should be on `torch_device`, but causes GPU OOM
+        device = "cpu"
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"
@@ -341,7 +272,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
             },
         )
         model = Olmo3ForCausalLM.from_pretrained(
-            olmo3_model,
+            "shanearora/2025-sep-a-base-model",
             device_map=device,
             dtype=dtype,
             attn_implementation=attn_implementation,
@@ -349,7 +280,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
         )
 
         prompts = ["Simply put, the theory of relativity states that "]
-        prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+        prompt_tokens = self.tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
         prompt_token_ids = prompt_tokens["input_ids"]
         max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
@@ -357,7 +288,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
         eager_generated_ids = model.generate(
             **prompt_tokens, max_new_tokens=max_new_tokens, do_sample=False, cache_implementation=cache_implementation
         )
-        eager_generated_text = tokenizer.batch_decode(eager_generated_ids, skip_special_tokens=True)
+        eager_generated_text = self.tokenizer.batch_decode(eager_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, eager_generated_text)
 
         # Static Cache + export
@@ -365,5 +296,85 @@ class Olmo3IntegrationTest(unittest.TestCase):
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )
-        ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
+        ep_generated_text = self.tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+
+
+@slow
+@require_torch
+class Olmo3IntegrationTest(unittest.TestCase):
+    model_id = "allenai/Olmo-3-7B-Instruct"
+    model = None
+    processor = None
+
+    @classmethod
+    def setUpClass(cls):
+        cleanup(torch_device, gc_collect=True)
+        cls.model = Olmo3ForCausalLM.from_pretrained(cls.model_id, device_map="auto")
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_real_model_7b_greedy_generation(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): 'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nWho would win in a fight - a dinosaur or a cow named Moo Moo?\nassistant\nThis is a fun and imaginative question! Let’s break it down:\n\n### 1. **A Dinosaur (General Case)**\nDinosaurs were a huge and diverse group, spanning from tiny feathered raptors to massive sauropods like *Brachiosaurus* or *Tyrannosaurus rex',
+            }
+        )  # fmt: skip
+
+        message = [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}]
+        inputs = self.tokenizer.apply_chat_template(
+            message, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(self.model.device)
+
+        generated_ids = self.model.generate(**inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(expectations.get_expectation(), text)
+
+    def test_real_model_7b_greedy_generation_batched(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): [
+                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nWho would win in a fight - a dinosaur or a cow named Moo Moo?\nassistant\nThis is a fun and imaginative question! Let’s break it down:\n\n### 1. **A Dinosaur (General Case)**\nDinosaurs were a huge and diverse group, spanning from tiny feathered raptors to massive sauropods like *Brachiosaurus* or *Tyrannosaurus rex',
+                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nSimply put, the theory of relativity\nassistant\nSure! In simple terms, **the theory of relativity** is Einstein’s explanation of how space, time, and gravity work. It has two main parts:\n\n1. **Special Relativity (1905):**  \n   This says that the laws of physics are the same for everyone moving at a constant speed (',
+                ],
+            }
+        )  # fmt: skip
+
+        message = [
+            [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}],
+            [{"role": "user", "content": "Simply put, the theory of relativity"}],
+        ]
+        inputs = self.tokenizer.apply_chat_template(
+            message, add_generation_prompt=True, padding=True, return_tensors="pt", return_dict=True
+        ).to(self.model.device)
+
+        generated_ids = self.model.generate(**inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        texts = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertListEqual(expectations.get_expectation(), texts)
+
+    def test_generate_beyond_sliding_window(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): """It looks like you've pasted a very lengthy and repetitive list of "This is a nice place""",
+            }
+        )  # fmt: skip
+
+        # This is larger than 4096 tokens
+        message = [
+            {
+                "role": "user",
+                "content": "This is a nice place. " * 800 + "I really enjoy the scenery,",
+            }
+        ]
+        inputs = self.tokenizer.apply_chat_template(
+            message, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(self.model.device)
+
+        input_size = inputs.input_ids.shape[-1]
+        self.assertTrue(input_size > self.model.config.sliding_window)
+
+        generated_ids = self.model.generate(**inputs, max_new_tokens=20, top_p=None, temperature=1, do_sample=False)
+        text = self.tokenizer.decode(generated_ids[0, input_size:], skip_special_tokens=True)
+        self.assertEqual(expectations.get_expectation(), text)
