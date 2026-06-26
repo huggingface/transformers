@@ -545,8 +545,6 @@ def load_offloaded_parameter(model: "PreTrainedModel", param_name: str) -> dict[
     """
     from ..core_model_loading import WeightRenaming, WeightConverter, rename_source_key, revert_weight_conversion
 
-    og = param_name
-
     # Convert from source key in checkpoint to target key in model
     meta_state_dict = model.state_dict()
     renamings = [entry for entry in model._weight_conversions if isinstance(entry, WeightRenaming)]
