@@ -44,7 +44,7 @@ from transformers.generation.continuous_batching.continuous_api import OutputRou
 from transformers.generation.continuous_batching.distributed import DistributedHelper
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
-from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
+from transformers.generation.continuous_batching.requests import GenerationOutput, RequestState, RequestStatus
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
@@ -209,6 +209,54 @@ def regular_generate(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    def test_generation_outputs_are_snapshots(self):
+        state = RequestState(
+            request_id="r", initial_tokens=[10, 11], max_new_tokens=3, streaming=True, record_timestamps=True
+        )
+        state._status = RequestStatus.DECODING
+
+        self.assertFalse(state.update_and_check_completion(101, -1.01))
+        first_output = state.to_generation_output()
+        self.assertEqual(first_output.generated_tokens, [101])
+        self.assertEqual(first_output.logprobs, [-1.01])
+        self.assertEqual(len(first_output.timestamps), 1)
+
+        self.assertFalse(state.update_and_check_completion(102, -1.02))
+        second_output = state.to_generation_output()
+
+        self.assertEqual(first_output.generated_tokens, [101])
+        self.assertEqual(first_output.logprobs, [-1.01])
+        self.assertEqual(len(first_output.timestamps), 1)
+        self.assertEqual(second_output.generated_tokens, [101, 102])
+        self.assertEqual(second_output.logprobs, [-1.01, -1.02])
+        self.assertEqual(len(second_output.timestamps), 2)
+
+    def test_streaming_output_after_soft_reset_does_not_shorten_generation(self):
+        state = RequestState(request_id="r", initial_tokens=[10, 11], max_new_tokens=5, streaming=True)
+        state._status = RequestStatus.DECODING
+        for token_id in [101, 102]:
+            self.assertFalse(state.update_and_check_completion(token_id, None))
+
+        reset_state = state.create_equivalent_initial_request()
+        reset_state._status = RequestStatus.DECODING
+        reset_state.streaming = True
+
+        accepted_tokens = []
+        streamed_tokens = []
+        for token_id in [103, 104, 105, 106]:
+            previous_tokens = reset_state.generated_tokens[:]
+            is_finished = reset_state.update_and_check_completion(token_id, None)
+            if reset_state.generated_tokens != previous_tokens:
+                accepted_tokens.append(token_id)
+            streamed_tokens.append(reset_state.to_generation_output().generated_tokens)
+            if is_finished:
+                break
+
+        self.assertEqual(accepted_tokens, [103, 104, 105])
+        self.assertEqual(streamed_tokens, [[101, 102, 103], [101, 102, 103, 104], [101, 102, 103, 104, 105]])
+        self.assertEqual(reset_state.generated_tokens, [103, 104, 105])
+        self.assertEqual(reset_state.initial_tokens, [10, 11, 101, 102])
+
     @parameterized.expand(
         [
             (None, None, "0"),
@@ -430,6 +478,91 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         expected_write = reference_indices(past_length, past_length + query_length)
         self.assertEqual(allocator.get_write_indices("req", past_length, query_length), expected_write)
 
+    @parameterized.expand(
+        [
+            # (block_size, sliding_window, block_table, past_length, query_length)
+            # Prefill from empty: no cache read, only sentinels in the read indices
+            (4, 8, [0, 1], 0, 3),
+            # Decode within the window
+            (4, 8, [0, 1], 5, 1),
+            # Chunked prefill in the middle of the window
+            (4, 8, [0, 1], 2, 4),
+            # Past length beyond the window: rolling-buffer wrap-around
+            (4, 8, [0, 1], 10, 1),
+            (4, 8, [0, 1], 14, 3),
+            # Non-contiguous blocks
+            (4, 8, [3, 5], 6, 2),
+            # Query longer than the window: write indices get left-padded with the write trash index
+            (4, 8, [0, 1], 0, 10),
+            # Single-block window (block_size == sliding_window)
+            (4, 4, [7], 3, 1),
+            # Larger block size
+            (16, 32, [0, 1], 20, 4),
+        ]
+    )
+    def test_sliding_attention_get_indices(
+        self,
+        block_size: int,
+        sliding_window: int,
+        block_table: list[int],
+        past_length: int,
+        query_length: int,
+    ) -> None:
+        """Test SlidingAttentionCacheAllocator.get_read_indices and get_write_indices place the cache, sentinel and
+        write trash indices correctly, including for small block sizes and rolling-buffer wrap-around."""
+        # The special indices live in the padding zone above the allocatable blocks (see PagedAttentionCache). We pick a
+        # num_blocks larger than any block id used here so they never collide with real cache positions.
+        num_blocks = 64
+        self.assertTrue(all(b < num_blocks for b in block_table))
+        sentinel_index = num_blocks * block_size + 1
+        write_trash_index = (num_blocks + 1) * block_size
+
+        def to_physical(i: int) -> int:
+            """Reference logical-to-physical mapping inside the rolling buffer."""
+            i %= sliding_window
+            return block_table[i // block_size] * block_size + i % block_size
+
+        allocator = SlidingAttentionCacheAllocator(
+            index=0,
+            block_size=block_size,
+            sliding_window=sliding_window,
+            sentinel_index=sentinel_index,
+            write_trash_index=write_trash_index,
+        )
+        allocator.block_table["req"] = block_table
+
+        # Read indices: cache positions followed by one sentinel per query token
+        read_start = 0 if past_length < sliding_window else past_length % sliding_window
+        read_cache_length = min(past_length, sliding_window - 1)
+        expected_read = [to_physical(i) for i in range(read_start, read_start + read_cache_length)]
+        expected_read += [sentinel_index] * query_length
+        read = allocator.get_read_indices("req", past_length, query_length)
+
+        # Main check
+        self.assertEqual(read, expected_read)
+        # No sentinel in the real indices
+        self.assertNotIn(sentinel_index, read[:read_cache_length])
+        # Cache reads land in allocated blocks
+        for idx in read[:read_cache_length]:
+            self.assertIn(idx // block_size, block_table)
+
+        # Write indices: one slot per query token, left-padded with the write trash index when the query overflows the
+        # window
+        write_start = past_length % sliding_window
+        write_cache_length = min(query_length, sliding_window)
+        padding_length = query_length - write_cache_length
+        expected_write = [write_trash_index] * padding_length
+        expected_write += [to_physical(i) for i in range(write_start, write_start + write_cache_length)]
+        write = allocator.get_write_indices("req", past_length, query_length)
+
+        # Main check
+        self.assertEqual(write, expected_write)
+        # Trash only at the front
+        self.assertNotIn(write_trash_index, write[padding_length:])
+        # Cache writes land in allocated blocks
+        for idx in write[padding_length:]:
+            self.assertIn(idx // block_size, block_table)
+
     @slow
     def test_continuous_batching_no_accelerators(self) -> None:
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
@@ -629,6 +762,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Prepare non-continuous batching inputs and model
         inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
         num_input_tokens = inputs.input_ids.shape[1]
+
+        # Flush compile cache if CB used compile
+        if continuous_batching_config.default_compile_level > 0:
+            flush_memory(flush_compile=True)
 
         # Generation without continuous batching (reload model to avoid any state contamination)
         _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype)
@@ -852,10 +989,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, num_blocks=4, block_size=32
         )
 
-        # Patch offload_one_request to verify it's called at least once
-        original_offload = OffloadingManager.offload_one_request
+        # Patch offload_requests to verify it's called at least once
+        original_offload = OffloadingManager.offload_requests
         with patch.object(
-            OffloadingManager, "offload_one_request", autospec=True, side_effect=original_offload
+            OffloadingManager, "offload_requests", autospec=True, side_effect=original_offload
         ) as mock_offload:
             self._test_continuous_batching_parity(
                 model_id=model_id,
@@ -1337,6 +1474,42 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 num_repeat_prompts=4,
             )
             self.assertTrue(mock_offload.called, "_offload_to_cpu was not called despite few blocks being available.")
+
+    @require_torch_accelerator
+    def test_cpu_offloading_parity_async(self) -> None:
+        """Same as test_cpu_offloading_parity but with async batching, where offloading can evict requests that are
+        in flight in the previous batch, exercising the rollback-on-restore path."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=True,
+            allow_block_sharing=True,
+            use_async_batching=True,
+            num_blocks=4,
+            block_size=32,
+            cpu_offload_space=1.0,
+        )
+
+        # Spy on _offload_to_cpu to check it ran and that at least one victim was in flight (rollback path)
+        original_offload = OffloadingManager._offload_to_cpu
+        in_flight_victim_seen = False
+
+        def spy_offload(manager, victims):
+            nonlocal in_flight_victim_seen
+            in_flight_victim_seen |= any(
+                state.position_offset == len(state.initial_tokens) + len(state.generated_tokens) for state in victims
+            )
+            return original_offload(manager, victims)
+
+        with patch.object(OffloadingManager, "_offload_to_cpu", autospec=True, side_effect=spy_offload) as mock:
+            self._test_continuous_batching_parity(
+                model_id=model_id,
+                continuous_batching_config=continuous_batching_config,
+                attn_implementation="sdpa",
+                max_new_tokens=30,
+                num_repeat_prompts=4,
+            )
+            self.assertTrue(mock.called, "_offload_to_cpu was not called despite few blocks being available.")
+            self.assertTrue(in_flight_victim_seen, "No in-flight victim was offloaded: rollback path not exercised.")
 
     @require_torch_accelerator
     def test_cpu_offloading_disabled_when_zero(self) -> None:

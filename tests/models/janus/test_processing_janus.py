@@ -34,10 +34,13 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "eoi_token": "<end_of_image>",
         }
         processor = super()._setup_from_pretrained(model_id, extra_special_tokens=special_image_tokens)
+        return processor
+
+    @staticmethod
+    def prepare_processor_dict():
         # Set the processor to use the default system prompt to False as it's used based on input modality.
         # Hence set to False to avoid any issues in the test irrespective of inputs.
-        processor.use_default_system_prompt = False
-        return processor
+        return {"use_default_system_prompt": False, "num_image_tokens": 4}
 
     def test_chat_template_single(self):
         """
