@@ -508,6 +508,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("qwen3_5_moe_vision", "Qwen3_5MoeVisionConfig"),
         ("qwen3_5_text", "Qwen3_5TextConfig"),
         ("qwen3_5_vision", "Qwen3_5VisionConfig"),
+        ("qwen3_asr", "Qwen3ASRConfig"),
+        ("qwen3_asr_encoder", "Qwen3ASREncoderConfig"),
         ("qwen3_moe", "Qwen3MoeConfig"),
         ("qwen3_next", "Qwen3NextConfig"),
         ("qwen3_omni_moe", "Qwen3OmniMoeConfig"),
@@ -667,6 +669,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xclip_text_model", "XCLIPTextConfig"),
         ("xclip_vision_model", "XCLIPVisionConfig"),
         ("xcodec", "XcodecConfig"),
+        ("xcodec2", "Xcodec2Config"),
         ("xglm", "XGLMConfig"),
         ("xlm", "XLMConfig"),
         ("xlm-roberta", "XLMRobertaConfig"),
@@ -850,6 +853,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("qwen3_5_moe_vision", "qwen3_5_moe"),
         ("qwen3_5_text", "qwen3_5"),
         ("qwen3_5_vision", "qwen3_5"),
+        ("qwen3_asr_encoder", "qwen3_asr"),
         ("qwen3_omni_moe_audio_encoder", "qwen3_omni_moe"),
         ("qwen3_omni_moe_talker_code_predictor", "qwen3_omni_moe"),
         ("qwen3_omni_moe_talker_text", "qwen3_omni_moe"),
@@ -961,6 +965,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("pe_audio", "PeAudioFeatureExtractor"),
         ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
         ("pop2piano", "Pop2PianoFeatureExtractor"),
+        ("qwen3_asr", "Qwen3ASRFeatureExtractor"),
         ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("speecht5", "SpeechT5FeatureExtractor"),
@@ -969,6 +974,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
+        ("xcodec2", "Xcodec2FeatureExtractor"),
     ]
 )
 
@@ -1073,6 +1079,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("qwen2_5_vl", "Qwen2_5_VLProcessor"),
         ("qwen2_audio", "Qwen2AudioProcessor"),
         ("qwen2_vl", "Qwen2VLProcessor"),
+        ("qwen3_asr", "Qwen3ASRProcessor"),
         ("qwen3_omni_moe", "Qwen3OmniMoeProcessor"),
         ("qwen3_vl", "Qwen3VLProcessor"),
         ("sam", "SamProcessor"),
