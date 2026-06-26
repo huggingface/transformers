@@ -24,10 +24,10 @@ from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
-from ...utils.generic import TransformersKwargs
+from ...utils.generic import TransformersKwargs, maybe_autocast
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..olmo2.configuration_olmo2 import Olmo2Config
 from ..olmo2.modeling_olmo2 import (
@@ -198,11 +198,27 @@ class Olmo3RotaryEmbedding(Gemma3RotaryEmbedding):
     ) -> tuple["torch.Tensor", float]:
         return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
 
+    def forward(self, x, position_ids, layer_type=None):
+        # diff -> returns cos/sin in fp32 without casting to `x.dtype`
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
+
+        return cos, sin
+
 
 class Olmo3PreTrainedModel(Olmo2PreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(module)
         if isinstance(module, Olmo3RotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters

@@ -44,10 +44,10 @@ from ..olmo3.modeling_olmo3 import (
     Olmo3ForCausalLM,
     Olmo3MLP,
     Olmo3RMSNorm,
-    Olmo3RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
@@ -422,13 +422,11 @@ class OlmoHybridAttention(Olmo3Attention):
         return attn_output, attn_weights
 
 
-class OlmoHybridRotaryEmbedding(Olmo3RotaryEmbedding):
+class OlmoHybridRotaryEmbedding(Olmo2RotaryEmbedding):
     """
     RoPE for OLMo Hybrid that returns float32 cos/sin to match OLMo-core.
     """
 
-    @torch.no_grad()
-    @dynamic_rope_update
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
