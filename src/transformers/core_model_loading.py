@@ -204,7 +204,13 @@ class MergeModulelist(ConversionOps):
             # (such as the MoEs' gate_proj/up_proj merging), we are wasting quite some memory
             tensors = input_dict.pop(source_pattern)
             target_pattern = self.get_target_pattern(input_size, source_pattern, target_patterns)
-            merged[target_pattern] = torch.stack(tensors, dim=self.dim)
+            # DecompressExperts pre-allocates a stacked tensor to avoid holding N individual
+            # decompressed tensors simultaneously.  Pass it through to skip the redundant copy
+            # that torch.stack would otherwise make.
+            if isinstance(tensors, torch.Tensor):
+                merged[target_pattern] = tensors
+            else:
+                merged[target_pattern] = torch.stack(tensors, dim=self.dim)
         return merged
 
     def get_target_pattern(self, input_size: int, source_pattern: str, target_patterns: list[str]) -> str:

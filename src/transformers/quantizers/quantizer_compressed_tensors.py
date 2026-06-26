@@ -201,9 +201,16 @@ class DecompressExperts(ConversionOps):
             quantized = value
             scales = input_dict[key.replace("weight_packed", "weight_scale")]
 
-            # Create a dummy module to not rely on low-lvl API and iter over each expert
-            decompessed_tensors = []
-            for quant, scale in zip(quantized, scales):
+            # Pre-allocate the stacked output buffer to reduce cuda mem fragmentation
+            #
+            # Without pre-allocation the loop accumulates N tensors per expert so that
+            # `MergeModulelist` stacks the full list for MoE kernels compatinility.
+            # The N alloc/free cycles for scratch buffers inside decompress_module
+            # scatter memory in a fragmented pattern, so that by the time Concatenate tries
+            # to allocate the final cat output, the allocator has enough total free bytes but
+            # they are spread across many small non-contiguous holes.
+            output = None
+            for i, (quant, scale) in enumerate(zip(quantized, scales)):
                 # The checkpoint's `weight_shape` holds the *full* [out, in] of the unsharded weight.
                 # Under tensor/expert parallelism the loader shards every source sibling mapped to this
                 # target (`weight_packed`/`weight_scale`/`weight_shape`) with the same op, which leaves
@@ -215,13 +222,25 @@ class DecompressExperts(ConversionOps):
                 # path is unchanged.
                 shape = torch.tensor([quant.shape[0], quant.shape[1] * pack_factor])
                 module = DummyModule(quant, scale, shape)
-
                 module.quantization_scheme = quantization_scheme
                 compressor.decompress_module(module)
-                decompessed_tensors.append(module.weight)
 
-            del quantized, scales, module
-            processed_out[key] = decompessed_tensors
+                if output is None:
+                    # Use the first expert's decompressed shape/dtype to allocate full buffer.
+                    output = torch.empty(
+                        (len(quantized), *module.weight.shape),
+                        dtype=module.weight.dtype,
+                        device=module.weight.device,
+                    )
+                output[i].copy_(module.weight)
+                # explicitly free intermediate tensors so it does not accumulate across iterations
+                del module
+
+            del quantized, scales
+            if output is not None:
+                # Return a single pre-stacked tensor instead of a list. `MergeModulelist`
+                # passes it through without an extra `torch.stack` copy -> no x2 memory overhead
+                processed_out[key] = output
 
         return processed_out
 
