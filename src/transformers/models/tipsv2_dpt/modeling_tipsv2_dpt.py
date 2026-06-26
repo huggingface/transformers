@@ -384,7 +384,7 @@ class Tipsv2DptPreTrainedModel(PreTrainedModel):
     and semantic segmentation — running a single shared backbone forward pass.
     """
 )
-class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
+class Tipsv2DptForDensePrediction(Tipsv2DptPreTrainedModel):
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__(config)
         self.backbone = load_backbone(config)
@@ -708,7 +708,7 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
 
 __all__ = [
     "Tipsv2DptPreTrainedModel",
-    "Tipsv2DptModel",
+    "Tipsv2DptForDensePrediction",
     "Tipsv2DptForDepthEstimation",
     "Tipsv2DptForNormalEstimation",
     "Tipsv2DptForSemanticSegmentation",

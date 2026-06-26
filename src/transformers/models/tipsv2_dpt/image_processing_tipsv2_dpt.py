@@ -43,7 +43,7 @@ class Tipsv2DptImageProcessor(TorchvisionBackend):
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the output of [`Tipsv2DptForDepthEstimation`] or [`Tipsv2DptModel`] into final depth predictions.
+        Converts the output of [`Tipsv2DptForDepthEstimation`] or [`Tipsv2DptForDensePrediction`] into final depth predictions.
 
         Args:
             outputs ([`DepthEstimatorOutput`] or `Tipsv2DptOutput`):
@@ -79,7 +79,7 @@ class Tipsv2DptImageProcessor(TorchvisionBackend):
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the output of [`Tipsv2DptForNormalEstimation`] or [`Tipsv2DptModel`] into L2-normalized surface normal maps.
+        Converts the output of [`Tipsv2DptForNormalEstimation`] or [`Tipsv2DptForDensePrediction`] into L2-normalized surface normal maps.
 
         Args:
             outputs (`Tipsv2DptNormalEstimatorOutput` or `Tipsv2DptOutput`):
@@ -117,7 +117,7 @@ class Tipsv2DptImageProcessor(TorchvisionBackend):
         return_segmentation_scores: bool = False,
     ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
-        Converts the output of [`Tipsv2DptForSemanticSegmentation`] or [`Tipsv2DptModel`] into semantic segmentation maps.
+        Converts the output of [`Tipsv2DptForSemanticSegmentation`] or [`Tipsv2DptForDensePrediction`] into semantic segmentation maps.
 
         Args:
             outputs ([`SemanticSegmenterOutput`] or `Tipsv2DptOutput`):

@@ -100,18 +100,18 @@ plt.show()
 alt="tipsv2 image segmentation pipeline" width="600"/>
 
 </hfoption>
-<hfoption id="AutoModel">
+<hfoption id="Dense prediction">
 
-Use [`Tipsv2DptModel`] to run all three tasks (depth, normals, and segmentation) in a single forward pass over a shared backbone.
+Use [`Tipsv2DptForDensePrediction`] to run all three tasks (depth, normals, and segmentation) in a single forward pass over a shared backbone.
 
 ```python
 import torch
-from transformers import AutoModel, AutoImageProcessor
+from transformers import Tipsv2DptForDensePrediction, AutoImageProcessor
 from transformers.image_utils import load_image
 
 
 model_id = "google/tipsv2-b14-dpt"
-model = AutoModel.from_pretrained(model_id, device_map="auto")
+model = Tipsv2DptForDensePrediction.from_pretrained(model_id, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_id)
 
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/room.jpg")
@@ -273,7 +273,7 @@ alt="tipsv2 semantic segmentation" width="600"/>
 
 ## Notes
 
-- [`Tipsv2DptModel`] runs a single shared backbone forward pass and produces three outputs simultaneously: `predicted_depth`, `normals`, and `segmentation_logits`. Use it when you need all three tasks for the same image.
+- [`Tipsv2DptForDensePrediction`] runs a single shared backbone forward pass and produces three outputs simultaneously: `predicted_depth`, `normals`, and `segmentation_logits`. Use it when you need all three tasks for the same image.
 - [`Tipsv2DptForDepthEstimation`], [`Tipsv2DptForNormalEstimation`], and [`Tipsv2DptForSemanticSegmentation`] are single-task variants that discard the other heads. Use them in a pipeline or for inference on a single task.
 
 ## Tipsv2DptConfig
@@ -288,9 +288,9 @@ alt="tipsv2 semantic segmentation" width="600"/>
     - post_process_normal_estimation
     - post_process_semantic_segmentation
 
-## Tipsv2DptModel
+## Tipsv2DptForDensePrediction
 
-[[autodoc]] Tipsv2DptModel
+[[autodoc]] Tipsv2DptForDensePrediction
     - forward
 
 ## Tipsv2DptForDepthEstimation

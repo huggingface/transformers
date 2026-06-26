@@ -86,7 +86,7 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the output of [`Tipsv2DptForDepthEstimation`] or [`Tipsv2DptModel`] into final depth predictions.
+        Converts the output of [`Tipsv2DptForDepthEstimation`] or [`Tipsv2DptForDensePrediction`] into final depth predictions.
 
         Args:
             outputs ([`DepthEstimatorOutput`] or `Tipsv2DptOutput`):
@@ -122,7 +122,7 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
         target_sizes: TensorType | list[tuple[int, int]] | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the output of [`Tipsv2DptForNormalEstimation`] or [`Tipsv2DptModel`] into L2-normalized surface normal maps.
+        Converts the output of [`Tipsv2DptForNormalEstimation`] or [`Tipsv2DptForDensePrediction`] into L2-normalized surface normal maps.
 
         Args:
             outputs (`Tipsv2DptNormalEstimatorOutput` or `Tipsv2DptOutput`):
@@ -160,7 +160,7 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
         return_segmentation_scores: bool = False,
     ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
-        Converts the output of [`Tipsv2DptForSemanticSegmentation`] or [`Tipsv2DptModel`] into semantic segmentation maps.
+        Converts the output of [`Tipsv2DptForSemanticSegmentation`] or [`Tipsv2DptForDensePrediction`] into semantic segmentation maps.
 
         Args:
             outputs ([`SemanticSegmenterOutput`] or `Tipsv2DptOutput`):
@@ -232,10 +232,10 @@ class Tipsv2DptConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Tipsv2DptConfig, Tipsv2DptModel
+    >>> from transformers import Tipsv2DptConfig, Tipsv2DptForDensePrediction
 
     >>> configuration = Tipsv2DptConfig()
-    >>> model = Tipsv2DptModel(configuration)
+    >>> model = Tipsv2DptForDensePrediction(configuration)
     >>> configuration = model.config
     ```
     """
@@ -424,7 +424,7 @@ class Tipsv2DptPreTrainedModel(PreTrainedModel):
     and semantic segmentation — running a single shared backbone forward pass.
     """
 )
-class Tipsv2DptModel(Tipsv2DptPreTrainedModel):
+class Tipsv2DptForDensePrediction(Tipsv2DptPreTrainedModel):
     def __init__(self, config: Tipsv2DptConfig):
         super().__init__(config)
         self.backbone = load_backbone(config)
@@ -750,7 +750,7 @@ __all__ = [
     "Tipsv2DptConfig",
     "Tipsv2DptImageProcessor",
     "Tipsv2DptPreTrainedModel",
-    "Tipsv2DptModel",
+    "Tipsv2DptForDensePrediction",
     "Tipsv2DptForDepthEstimation",
     "Tipsv2DptForNormalEstimation",
     "Tipsv2DptForSemanticSegmentation",

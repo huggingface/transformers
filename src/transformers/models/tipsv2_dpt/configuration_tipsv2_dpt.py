@@ -52,10 +52,10 @@ class Tipsv2DptConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Tipsv2DptConfig, Tipsv2DptModel
+    >>> from transformers import Tipsv2DptConfig, Tipsv2DptForDensePrediction
 
     >>> configuration = Tipsv2DptConfig()
-    >>> model = Tipsv2DptModel(configuration)
+    >>> model = Tipsv2DptForDensePrediction(configuration)
     >>> configuration = model.config
     ```
     """

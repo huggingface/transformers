@@ -460,6 +460,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
     "VitMatteForImageMatting",
+    "Tipsv2DptForDensePrediction", # no auto class for dense prediction
     "SeamlessM4TTextToUnitModel",
     "SeamlessM4TTextToUnitForConditionalGeneration",
     "SeamlessM4TCodeHifiGan",
