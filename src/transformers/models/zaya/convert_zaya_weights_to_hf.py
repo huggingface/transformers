@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert original alternating-layer ZAYA checkpoints to the Transformers-native decoder-layer layout."""
+"""Convert ZAYA `-legacy` alternating-layer checkpoints (e.g. Zyphra/ZAYA1-8B-legacy) to the Transformers-native decoder-layer layout."""
 
 import argparse
 import json

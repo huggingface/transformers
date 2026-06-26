@@ -1078,7 +1078,7 @@ LAYER_TYPE_CACHE_MAPPING.update(
         "conv": LinearAttentionLayer,
         "linear_attention": LinearAttentionLayer,
         "moe": LinearAttentionLayer,
-        # Hybrid layers (e.g. zamba / zamba2) carry both a linear-attention state and a dynamic-attention state.
+        # Hybrid layers (e.g. zamba / zamba2 / zaya) carry both a linear-attention state and a dynamic-attention state.
         "hybrid": LinearAttentionAndFullAttentionLayer,
         "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
     }

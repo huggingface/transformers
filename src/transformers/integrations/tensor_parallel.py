@@ -1189,6 +1189,7 @@ class RouterParallel(TensorParallelLayer):
                 f"The number of experts must be divisible by number of ep_size: {num_experts} % {ep_size} != 0"
             )
         num_local_experts = num_experts // ep_size
+        # Some routers return extra tensors after the standard logits/scores/indices, e.g. zaya's router state.
         router_logits, router_scores, router_indices, *extra_outputs = outputs
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)

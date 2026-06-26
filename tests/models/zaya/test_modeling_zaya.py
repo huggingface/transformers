@@ -87,14 +87,6 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(layer.conv_states.shape, conv_shape)
             self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
 
-    @unittest.skip("ZAYA uses key/query normalization which is not equivalent under padding-free packing.")
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("ZAYA uses key/query normalization which is not equivalent under padding-free packing.")
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
-
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True

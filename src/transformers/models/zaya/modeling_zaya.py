@@ -211,10 +211,10 @@ class ZayaCCAProjection(nn.Module):
         self,
         hidden_states: torch.Tensor,
         past_key_values: Cache | None,
-        padding_mask: torch.Tensor | None = None,
+        conv_mask: torch.Tensor | None = None,
     ):
-        if padding_mask is not None:
-            hidden_states = hidden_states * padding_mask[:, :, None].to(hidden_states.dtype)
+        if conv_mask is not None:
+            hidden_states = hidden_states * conv_mask[:, :, None].to(hidden_states.dtype)
 
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -399,10 +399,10 @@ class ZayaAttention(nn.Module):
 
         mask_mapping = attention_mask or {}
         causal_mask = mask_mapping.get("causal")
-        padding_mask = mask_mapping.get("padding")
+        conv_mask = mask_mapping.get("conv")
 
         # ZAYA replaces the usual independent q/k/v projections with CCA projection followed by special q/k normalization.
-        query_states, key_states, value_states = self.qkv_proj(hidden_states, past_key_values, padding_mask)
+        query_states, key_states, value_states = self.qkv_proj(hidden_states, past_key_values, conv_mask)
         query_states, key_states = self.qk_norm(query_states, key_states)
 
         query_states = query_states.transpose(1, 2)
@@ -776,12 +776,12 @@ class ZayaModel(ZayaPreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             layer_type = self.config.layer_types[idx]
-            # Attention uses the prepared causal mask, while CCA projection still needs the raw 2D padding mask to
-            # zero padding tokens before convolution.
+            # Attention uses the prepared causal mask, while CCA projection still needs the raw 2D mask to zero padding
+            # tokens before convolution.
             hidden_states, prev_router_hidden_states = decoder_layer(
                 hidden_states,
                 prev_router_hidden_states,
-                attention_mask={"causal": causal_mask_mapping[layer_type], "padding": cca_mask},
+                attention_mask={"causal": causal_mask_mapping[layer_type], "conv": cca_mask},
                 past_key_values=past_key_values,
                 position_embeddings=position_embeddings[layer_type],
                 **kwargs,
