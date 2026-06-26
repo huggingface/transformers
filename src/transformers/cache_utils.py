@@ -291,6 +291,89 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         self.cumulative_length = self.keys.shape[-2]
 
 
+class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
+    """Reference sliding-window attention (R-SWA) cache layer that keeps all prefill tokens before
+    the first decode step and applies a sliding window to all decoded tokens.
+
+    Once ``sliding_window`` decode tokens have accumulated, the oldest decode tokens are evicted and
+    replaced by the most recent ones. The prefill tokens always remain in the cache.
+    """
+
+    layer_type = "reference_sliding_attention"
+
+    def __init__(self, config: PreTrainedConfig | None = None, sliding_window: int | None = None):
+        super().__init__(config=config, sliding_window=sliding_window)
+        self.prefill_length: int | None = None
+        self.ring_position = 0
+
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Lazy initialization
+        if not self.is_initialized:
+            self.lazy_initialization(key_states, value_states)
+
+        sequence_length = key_states.shape[-2]
+        self.cumulative_length += sequence_length
+
+        # Prefill with prompt context
+        if self.prefill_length is None and sequence_length > 1:
+            self.keys = torch.cat([self.keys, key_states], dim=-2)
+            self.values = torch.cat([self.values, value_states], dim=-2)
+            return self.keys, self.values
+
+        # First decode step
+        # Handle generation with empty prompt
+        if self.prefill_length is None:
+            self.prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
+
+        # Append while window grows
+        generated_length = self.keys.shape[-2] - self.prefill_length if self.keys.dim() > 1 else 0
+        append_length = min(sequence_length, max(0, self.sliding_window - generated_length))
+        if append_length > 0:
+            self.keys = torch.cat([self.keys, key_states[..., :append_length, :]], dim=-2)
+            self.values = torch.cat([self.values, value_states[..., :append_length, :]], dim=-2)
+
+        # Overwrite if window size is reached
+        overwrite_length = sequence_length - append_length
+        if overwrite_length > 0:
+            # Only the most recent `sliding_window` overwrites survive
+            write_length = min(overwrite_length, self.sliding_window)
+            start = self.ring_position + overwrite_length - write_length
+            offsets = torch.arange(write_length, device=key_states.device)
+            slots = self.prefill_length + (start + offsets) % self.sliding_window
+            self.keys[..., slots, :] = key_states[..., sequence_length - write_length :, :]
+            self.values[..., slots, :] = value_states[..., sequence_length - write_length :, :]
+            self.ring_position = (self.ring_position + overwrite_length) % self.sliding_window
+
+        return self.keys, self.values
+
+    def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
+        # Full visibility, no sliding offset: every query attends to all cached keys (all prefill plus the
+        # generated tokens currently held in the ring), so the prefill is never masked out.
+        if self.prefill_length is None:
+            return self.cumulative_length + query_length, 0
+        return self.decode_kv_length(query_length), 0
+
+    def decode_kv_length(self, query_length: int = 1) -> int | None:
+        """Physical length of the cached buffer after the upcoming `update` of `query_length` tokens.
+
+        Returns `None` before the layer is initialized. Used to size the all-visible decode mask, whose
+        width must match the key/value tensors returned by `update`.
+        """
+        if not self.is_initialized:
+            return None
+        if self.prefill_length is not None:
+            prefill_length = self.prefill_length
+            generated_before = self.keys.shape[-2] - prefill_length if self.keys.dim() > 1 else 0
+        else:
+            # Before the first decode step the whole buffer is prefill.
+            prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
+            generated_before = 0
+        generated_after = min(generated_before + query_length, self.sliding_window)
+        return prefill_length + generated_after
+
+
 class DynamicIndexedLayer(DynamicLayer):
     """
     A cache layer that extends `DynamicLayer` with an extra indexer key cache for Dynamic Sparse Attention (DSA)
@@ -598,6 +681,150 @@ class StaticSlidingWindowLayer(StaticLayer):
     def reset(self):
         super().reset()
         self.cumulative_length_int = 0
+
+
+class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
+    """Static counterpart of [`DynamicReferenceSlidingWindowLayer`], used when generating with
+    ``cache_implementation="static"``.
+
+    The backing buffer has the full, fixed ``max_cache_len`` length and is split in two regions: the first
+    ``max_cache_len - sliding_window`` slots hold the image/prompt prefill (written once, at the front, and
+    never evicted) and the last ``sliding_window`` slots are a ring for the generated tokens. Exactly like
+    [`StaticSlidingWindowLayer`] the oldest generated token is rolled out and replaced by the newest once the
+    ring is full, the only difference being that the roll is restricted to that trailing window so the prefill
+    region stays untouched. Because the buffer length is constant on every decode step, the key/value tensors
+    keep a constant shape and the SDPA backend (cuDNN included) reuses a single kernel plan instead of
+    re-planning on each new sequence length. The unused prefill slots and the not-yet-filled window slots are
+    hidden by the decode mask built by the model (e.g. ``UnlimitedOcrTextModel.forward``).
+    """
+
+    layer_type = "reference_sliding_attention"
+
+    def __init__(self, max_cache_len: int, sliding_window: int):
+        super().__init__(max_cache_len=max_cache_len, sliding_window=sliding_window)
+        # `StaticSlidingWindowLayer` shrinks its buffer to `sliding_window` and rolls the whole thing. Here the
+        # buffer must also hold the pinned prefill, so keep the full `max_cache_len` length and track the real
+        # window separately; the roll below only touches the trailing `sliding_window` slots.
+        self.max_cache_len = max_cache_len
+        self.sliding_window = sliding_window
+        self.prefill_length: int | None = None
+
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Lazy initialization
+        if not self.is_initialized:
+            self.lazy_initialization(key_states, value_states)
+
+        kv_length = key_states.shape[-2]
+
+        # Prefill. Mirror `DynamicReferenceSlidingWindowLayer`: every multi-token chunk fed before the first
+        # single-token (decode) step is prefill and stays pinned at the front of the buffer. Crucially we do
+        # *not* pin `prefill_length` here, so chunked prefill (a prompt fed in more than one chunk) keeps
+        # extending the pinned region instead of having the later chunks slid out of the window.
+        if self.prefill_length is None and kv_length > 1:
+            # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
+            # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten
+            cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
+            try:
+                self.keys.index_copy_(2, cache_position, key_states)
+                self.values.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                # Fallback for devices like MPS where index_copy_ might not be supported.
+                self.keys[:, :, cache_position] = key_states
+                self.values[:, :, cache_position] = value_states
+
+            # Keep both the int (control flow) and the tensor (cudagraph-safe indexing) versions in sync.
+            self.cumulative_length_int += kv_length
+            self.cumulative_length.add_(kv_length)
+
+            # Very important to return the `self` tensors here, as they have the static dynamo address
+            return self.keys, self.values
+
+        # First single-token step (or an empty prompt that skipped prefill above): finalize the pinned prefill
+        # region so the trailing window below is measured relative to it.
+        if self.prefill_length is None:
+            self.prefill_length = self.cumulative_length_int
+
+        # Everything below mirrors `StaticSlidingWindowLayer.update` with the difference that the sliding window
+        # is in the last `sliding_window` slots instead of spanning the whole buffer.
+        window_start = self.max_cache_len - self.sliding_window
+        current_length = self.cumulative_length_int - self.prefill_length
+        is_full = current_length >= self.sliding_window
+        # Update it now that we saved the value above
+        self.cumulative_length_int += kv_length
+
+        if is_full:
+            # In general, we should use a much simpler `cat` here as well, independently of the states size. However,
+            # dynamo is currently bugged when doing it - see https://github.com/pytorch/pytorch/issues/159855 for more details
+            if key_states.shape[-2] == 1:
+                # Roll the window region to the left by 1 position (the pinned prefill in front stays put)
+                new_keys = self.keys[:, :, window_start:, :].roll(-1, dims=-2)
+                new_values = self.values[:, :, window_start:, :].roll(-1, dims=-2)
+                # Overwrite the last position with new states
+                # (note: very important to use a tensor to index here, see https://github.com/pytorch/pytorch/issues/159855)
+                index = torch.tensor([-1], dtype=int, device=self.device)
+                new_keys[:, :, index] = key_states
+                new_values[:, :, index] = value_states
+
+                # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
+                self.keys[:, :, window_start:, :].copy_(new_keys)
+                self.values[:, :, window_start:, :].copy_(new_values)
+
+                # Very important to return the `self` tensors here, as they have the static dynamo address
+                return self.keys, self.values
+            # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
+            else:
+                full_key_states = torch.cat((self.keys[:, :, window_start + 1 :, :], key_states), dim=-2)
+                full_value_states = torch.cat((self.values[:, :, window_start + 1 :, :], value_states), dim=-2)
+        # Not yet full, but becoming full on this update
+        elif current_length + kv_length > self.sliding_window:
+            # Fast path, no need to cat() in this case, as the window is currently empty
+            if current_length == 0:
+                full_key_states = key_states
+                full_value_states = value_states
+            else:
+                window = slice(window_start, window_start + current_length)
+                full_key_states = torch.cat((self.keys[:, :, window, :], key_states), dim=-2)
+                full_value_states = torch.cat((self.values[:, :, window, :], value_states), dim=-2)
+        else:
+            # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
+            # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten.
+            # `window_start - prefill_length` is constant during decode, so it is safe to bake into the graph.
+            cache_position = (
+                torch.arange(kv_length, device=self.device)
+                + self.cumulative_length
+                + (window_start - self.prefill_length)
+            )
+            try:
+                self.keys.index_copy_(2, cache_position, key_states)
+                self.values.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                # Fallback for devices like MPS where index_copy_ might not be supported.
+                self.keys[:, :, cache_position] = key_states
+                self.values[:, :, cache_position] = value_states
+
+            # Update the tensor version of the length in-place (we don't need to update it if we are already outside
+            # of this branch, as we don't need the tensor anymore)
+            self.cumulative_length.add_(kv_length)
+
+            # Very important to return the `self` tensors here, as they have the static dynamo address
+            return self.keys, self.values
+
+        # We only keep the last `sliding_window` tokens. Unlike `StaticSlidingWindowLayer` we return `self.keys/values`
+        # because `get_mask_sizes` is fixed to the full `max_cache_len`.
+        self.keys[:, :, window_start:, :].copy_(full_key_states[:, :, -self.sliding_window :, :])
+        self.values[:, :, window_start:, :].copy_(full_value_states[:, :, -self.sliding_window :, :])
+        return self.keys, self.values
+
+    def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
+        # The buffer always spans the full `max_cache_len`.
+        # The decode mask hides the unwritten slots.
+        return self.max_cache_len, 0
+
+    def reset(self) -> None:
+        super().reset()
+        self.prefill_length = None
 
 
 class StaticIndexedLayer(StaticLayer):
@@ -1638,14 +1865,21 @@ class StaticCache(Cache):
                 layer = StaticSlidingWindowLayer(
                     max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size
                 )
+            # Custom layer types (e.g. M3's sparse-attention indexer cache, R-SWA's reference sliding window)
+            # that registered a static variant. Checked before the generic sliding branch below so a custom
+            # static layer whose dynamic counterpart subclasses `DynamicSlidingWindowLayer` (and thus appears in
+            # `sliding_layer_types`) is not silently downgraded to a plain `StaticSlidingWindowLayer`.
+            elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:
+                static_layer_cls = LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type]
+                if issubclass(static_layer_cls, StaticSlidingWindowLayer):
+                    layer = static_layer_cls(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
+                else:
+                    layer = static_layer_cls(max_cache_len=max_cache_len)
             elif layer_type in sliding_layer_types:
                 layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
             # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
             elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
                 layer = LinearAttentionLayer()
-            # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
-            elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:
-                layer = LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type](max_cache_len=max_cache_len)
             elif layer_type == "deepseek_sparse_attention":
                 # Static / compile-friendly indexed layer (preallocated indexer key cache).
                 layer = StaticIndexedLayer(max_cache_len=max_cache_len)

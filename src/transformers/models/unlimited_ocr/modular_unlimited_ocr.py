@@ -19,12 +19,12 @@ from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
+from ...cache_utils import Cache, DynamicCache, StaticReferenceSlidingWindowLayer
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -603,89 +603,6 @@ class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
         )
 
 
-class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
-    """Reference sliding-window attention (R-SWA) cache layer that keeps all prefill tokens before
-    the first decode step and applies a sliding window to all decoded tokens.
-
-    Once ``sliding_window`` decode tokens have accumulated, the oldest decode tokens are evicted and
-    replaced by the most recent ones. The prefill tokens always remain in the cache.
-    """
-
-    layer_type = "reference_sliding_attention"
-
-    def __init__(self, config: PretrainedConfig | None = None, sliding_window: int | None = None):
-        super().__init__(config=config, sliding_window=sliding_window)
-        self.prefill_length: int | None = None
-        self.ring_position = 0
-
-    def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Lazy initialization
-        if not self.is_initialized:
-            self.lazy_initialization(key_states, value_states)
-
-        sequence_length = key_states.shape[-2]
-        self.cumulative_length += sequence_length
-
-        # Prefill with prompt context
-        if self.prefill_length is None and sequence_length > 1:
-            self.keys = torch.cat([self.keys, key_states], dim=-2)
-            self.values = torch.cat([self.values, value_states], dim=-2)
-            return self.keys, self.values
-
-        # First decode step
-        # Handle generation with empty prompt
-        if self.prefill_length is None:
-            self.prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
-
-        # Append while window grows
-        generated_length = self.keys.shape[-2] - self.prefill_length if self.keys.dim() > 1 else 0
-        append_length = min(sequence_length, max(0, self.sliding_window - generated_length))
-        if append_length > 0:
-            self.keys = torch.cat([self.keys, key_states[..., :append_length, :]], dim=-2)
-            self.values = torch.cat([self.values, value_states[..., :append_length, :]], dim=-2)
-
-        # Overwrite if window size is reached
-        overwrite_length = sequence_length - append_length
-        if overwrite_length > 0:
-            # Only the most recent `sliding_window` overwrites survive
-            write_length = min(overwrite_length, self.sliding_window)
-            start = self.ring_position + overwrite_length - write_length
-            offsets = torch.arange(write_length, device=key_states.device)
-            slots = self.prefill_length + (start + offsets) % self.sliding_window
-            self.keys[..., slots, :] = key_states[..., sequence_length - write_length :, :]
-            self.values[..., slots, :] = value_states[..., sequence_length - write_length :, :]
-            self.ring_position = (self.ring_position + overwrite_length) % self.sliding_window
-
-        return self.keys, self.values
-
-    def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
-        # Full visibility, no sliding offset: every query attends to all cached keys (all prefill plus the
-        # generated tokens currently held in the ring), so the prefill is never masked out.
-        if self.prefill_length is None:
-            return self.cumulative_length + query_length, 0
-        return self.decode_kv_length(query_length), 0
-
-    def decode_kv_length(self, query_length: int = 1) -> int | None:
-        """Physical length of the cached buffer after the upcoming `update` of `query_length` tokens.
-
-        Returns `None` before the layer is initialized. Used to size the all-visible decode mask, whose
-        width must match the key/value tensors returned by `update`.
-        """
-        if not self.is_initialized:
-            return None
-        if self.prefill_length is not None:
-            prefill_length = self.prefill_length
-            generated_before = self.keys.shape[-2] - prefill_length if self.keys.dim() > 1 else 0
-        else:
-            # Before the first decode step the whole buffer is prefill.
-            prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
-            generated_before = 0
-        generated_after = min(generated_before + query_length, self.sliding_window)
-        return prefill_length + generated_after
-
-
 class UnlimitedOcrTextPreTrainedModel(DeepseekOcr2TextPreTrainedModel):
     pass
 
@@ -727,9 +644,51 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
+            # The static cache ([`StaticReferenceSlidingWindowLayer`]) keeps the prefill at the front of its
+            # buffer (slots `[0, prefill_length)`) and the most recent `sliding_window` generated tokens in the
+            # trailing window (slots `[max_cache_len - sliding_window, max_cache_len)`). Those physical slots do
+            # not line up with the tokens' logical positions, so the reference sliding window cannot be expressed
+            # as a position-based causal/sliding mask; we build it directly over the physical buffer slots
+            # instead. The dynamic cache evicts old tokens from its (compact) buffer, so the plain causal mask
+            # built by the fallback below is already correct for it.
+            reference_attention_mask = None
+            if past_key_values is not None:
+                static_reference_layer = next(
+                    (
+                        layer
+                        for layer in past_key_values.layers
+                        if isinstance(layer, StaticReferenceSlidingWindowLayer)
+                    ),
+                    None,
+                )
+                # Only decode steps (a single query token) read from the trailing window. Prefill (more than one
+                # token) is plain causal and is handled by the `create_causal_mask` fallback below.
+                if static_reference_layer is not None and inputs_embeds.shape[1] == 1:
+                    prefill_length = static_reference_layer.prefill_length
+                    if prefill_length is None:
+                        # First decode step: `prefill_length` is pinned during this step's cache update, which
+                        # runs after the mask is built, so derive it here -- every token seen so far is prefill.
+                        prefill_length = static_reference_layer.cumulative_length_int
+                    sliding_window = static_reference_layer.sliding_window
+                    window_start = static_reference_layer.max_cache_len - sliding_window
+                    # Number of trailing-window slots holding a token once this step's token has been written.
+                    decode_length = static_reference_layer.cumulative_length_int - prefill_length
+                    window_end = window_start + min(decode_length + 1, sliding_window)
+
+                    def reference_window_mask_function(batch_idx, head_idx, q_idx, kv_idx):
+                        return (kv_idx < prefill_length) | ((kv_idx >= window_start) & (kv_idx < window_end))
+
+                    # A bidirectional (all-visible) base intersected with the physical-slot selection yields
+                    # exactly the prefill plus the filled-window slots. A causal base would instead mask the
+                    # whole trailing window out, since its physical indices exceed the query's logical position.
+                    reference_attention_mask = create_bidirectional_mask(
+                        **mask_kwargs, and_mask_function=reference_window_mask_function
+                    )
+            if reference_attention_mask is None:
+                reference_attention_mask = create_causal_mask(**mask_kwargs)
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "reference_sliding_attention": create_causal_mask(**mask_kwargs),
+                "reference_sliding_attention": reference_attention_mask,
             }
 
         hidden_states = inputs_embeds
