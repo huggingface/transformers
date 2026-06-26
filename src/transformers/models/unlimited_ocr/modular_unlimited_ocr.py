@@ -604,20 +604,11 @@ class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
 
 
 class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
-    """Reference sliding-window attention (R-SWA) cache layer that keeps all prefill tokens and windows
-    only the generated ones.
+    """Reference sliding-window attention (R-SWA) cache layer that keeps all prefill tokens before
+    the first decode step and applies a sliding window to all decoded tokens.
 
-    The stock `DynamicSlidingWindowLayer` evicts the oldest tokens once the window fills, which would
-    discard the image/prompt prefill. Here the prefill (every token cached before the first single-token
-    decode step) is kept intact and never evicted. Generated tokens are appended right after the prefill
-    until ``sliding_window`` of them have accumulated; from then on the newest generated token overwrites
-    the oldest one.
-
-    While the window is filling, the cached length grows by one each step (exactly like the stock sliding
-    layer), so within the first ``sliding_window`` generated tokens the layer is indistinguishable from
-    full attention. Once the ring is full the cached tensors stay at a constant length
-    (``prefill + sliding_window``), which lets the cuDNN SDPA backend reuse a single kernel plan across the
-    (typically long) steady-state decode instead of re-planning on every distinct sequence length.
+    Once ``sliding_window`` decode tokens have accumulated, the oldest decode tokens are evicted and
+    replaced by the most recent ones. The prefill tokens always remain in the cache.
     """
 
     layer_type = "reference_sliding_attention"
