@@ -31,16 +31,16 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
+        Tipsv2DptForDensePrediction,
         Tipsv2DptForDepthEstimation,
         Tipsv2DptForNormalEstimation,
         Tipsv2DptForSemanticSegmentation,
         Tipsv2DptImageProcessor,
-        Tipsv2DptModel,
     )
     from transformers.image_utils import load_image_as_tensor
 
 
-class Tipsv2DptModelTester:
+class Tipsv2DptForDensePredictionTester:
     def __init__(
         self,
         parent,
@@ -131,7 +131,7 @@ class Tipsv2DptModelTester:
         return config, {"pixel_values": pixel_values}
 
     def create_and_check_model(self, config, pixel_values):
-        model = Tipsv2DptModel(config).to(torch_device).eval()
+        model = Tipsv2DptForDensePrediction(config).to(torch_device).eval()
         with torch.no_grad():
             outputs = model(pixel_values)
         self.parent.assertEqual(
@@ -186,10 +186,10 @@ class Tipsv2DptModelTester:
 
 
 @require_torch
-class Tipsv2DptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Tipsv2DptForDensePredictionTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            Tipsv2DptModel,
+            Tipsv2DptForDensePrediction,
             Tipsv2DptForDepthEstimation,
             Tipsv2DptForNormalEstimation,
             Tipsv2DptForSemanticSegmentation,
@@ -209,7 +209,7 @@ class Tipsv2DptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = Tipsv2DptModelTester(self)
+        self.model_tester = Tipsv2DptForDensePredictionTester(self)
         self.config_tester = ConfigTester(self, config_class=Tipsv2DptConfig, has_text_modality=False)
 
     def test_config(self):
@@ -268,7 +268,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class Tipsv2DptModelIntegrationTest(unittest.TestCase):
+class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         # TODO: switch to google repo before merge
@@ -277,7 +277,7 @@ class Tipsv2DptModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_model(self):
         # TODO: switch to google repo before merge
-        model = Tipsv2DptModel.from_pretrained("guarin/tipsv2-b14-dpt", device_map=torch_device).eval()
+        model = Tipsv2DptForDensePrediction.from_pretrained("guarin/tipsv2-b14-dpt", device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
