@@ -167,6 +167,10 @@ _is_quantized = False
 _is_ds_init_called = False
 
 
+def foo():
+    return
+
+
 @dataclass(frozen=True)
 class LoadStateDictConfig:
     """
