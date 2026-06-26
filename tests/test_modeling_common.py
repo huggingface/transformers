@@ -5735,10 +5735,24 @@ class ModelTesterMixin:
         that a few basic model output properties are honored.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        text_config = config.get_text_config()
+        text_config = config.get_text_config(decoder=True)
+        base_model_class = None
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+            ]:
+                base_model_class = model_class
+                break
+
+        if base_model_class is None:
+            self.skipTest("This model has no `base_model_class` defined in tester.")
 
         if not _config_supports_rope_scaling(text_config):
             self.skipTest("This model does not support RoPE scaling")
+
+        # TODO: raushan, add separate tests for mrope in MultimodalTester
+        if text_config.rope_parameters.get("mrope_section") is not None:
+            self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
 
         # Factor cannot be smaller than `int(2/head_dim)`, otherwise we'll end up dividing by zero!
         partial_rotary_factor = text_config.rope_parameters.get("partial_rotary_factor", 1.0)
@@ -5767,7 +5781,7 @@ class ModelTesterMixin:
                 "original_max_position_embeddings": 16384,
             },
         )
-        original_model = self.model_tester_class.base_model_class(config)
+        original_model = base_model_class(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
@@ -5783,7 +5797,7 @@ class ModelTesterMixin:
                 "partial_rotary_factor": partial_rotary_factor,
             },
         )
-        scaled_model = self.model_tester_class.base_model_class(config)
+        scaled_model = base_model_class(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
         scaled_short_output = scaled_model(short_input).last_hidden_state
@@ -5802,35 +5816,59 @@ class ModelTesterMixin:
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        text_config = config.get_text_config()
+        text_config = config.get_text_config(decoder=True)
+        base_model_class = None
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+            ]:
+                base_model_class = model_class
+                break
+
+        if base_model_class is None:
+            self.skipTest("This model has no `base_model_class` defined in tester.")
 
         if not _config_supports_rope_scaling(text_config):
             self.skipTest("This model does not support RoPE scaling")
 
         # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
         # named location of the RoPE layer class.
-        base_model = self.model_tester.base_model_class(config)
+        base_model = base_model_class(config)
         possible_rope_attributes = [
             "pos_emb",
             "rotary_emb",  # most common case
             "global_rotary_emb",
             "local_rotary_emb",
         ]
+        rope_class = None
         for name, module in base_model.named_modules():
-            if any(potential_name in name for potential_name in possible_rope_attributes):
+            # FIXME: raushan, vision RoPE layers are not standard and can't be tested here
+            # thus skip if modules doesn't operate on config. See https://github.com/huggingface/transformers/issues/46443
+            if any(potential_name in name for potential_name in possible_rope_attributes) and (
+                len(params := list(inspect.signature(module.__init__).parameters.values())) > 1
+                and params[0].name == "config"
+            ):
                 rope_class = type(module)
                 break
+
+        if rope_class is None:
+            self.skipTest("This model has no standardized RoPE module found.")
+
+        # TODO: raushan, add separate tests for mrope in MultimodalTester
+        if text_config.rope_parameters.get("mrope_section") is not None:
+            self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
 
         scaling_factor = 10
         short_input_length = 10
         partial_rotary_factor = text_config.rope_parameters.get("partial_rotary_factor", 1.0)
         long_input_length = int(text_config.max_position_embeddings * 1.5)
+        is_nested_rope = getattr(text_config, "layer_types", None) is not None and set(
+            text_config.rope_parameters.keys()
+        ).issubset(text_config.layer_types)
 
         kwargs = {}
-        if getattr(config, "layer_types", None) is not None and set(config.rope_parameters.keys()).issubset(
-            config.layer_types
-        ):
-            kwargs = {"layer_type": config.layer_types[0]}
+        if is_nested_rope:
+            kwargs = {"layer_type": text_config.layer_types[0]}
 
         # Inputs
         x = torch.randn(
@@ -5894,7 +5932,17 @@ class ModelTesterMixin:
             torch.testing.assert_close(ntk_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+        # CHeck each layer type for nested RoPE configs
+        if not is_nested_rope:
+            self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+        else:
+            for layer_type in text_config.layer_types:
+                self.assertTrue(
+                    (
+                        getattr(ntk_scaling_rope, f"{layer_type}_inv_freq")
+                        <= getattr(original_rope, f"{layer_type}_inv_freq")
+                    ).all()
+                )
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
@@ -6057,13 +6105,16 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
     """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
     config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
-    config.rope_parameters.update(rope_params)
 
     # Nested rope parameters per layer type, not all models with `layer-types` use different RoPE thus we check `issubset`
     if getattr(config, "layer_types", None) is not None and set(config.rope_parameters.keys()).issubset(
         config.layer_types
     ):
-        config.rope_parameters = {layer_type: config.rope_parameters.copy() for layer_type in config.layer_types}
+        for layer_type in config.layer_types:
+            config.rope_parameters.setdefault(layer_type, {})
+            config.rope_parameters[layer_type].update(rope_params)
+    else:
+        config.rope_parameters.update(rope_params)
 
     for sub_config in config.sub_configs.keys():
         _set_config_rope_params(getattr(config, sub_config), rope_params)

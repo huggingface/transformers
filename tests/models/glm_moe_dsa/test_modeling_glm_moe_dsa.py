@@ -172,6 +172,7 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_with_static_cache(self):
         pass
 
+
 @require_torch_accelerator
 @slow
 class GlmMoeDsaIntegrationTest(unittest.TestCase):
