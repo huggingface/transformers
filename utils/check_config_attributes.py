@@ -273,6 +273,8 @@ ATTRIBUTES_TO_ALLOW = (
     "vision_feature_layer",
     "vision_feature_select_strategy",
     "vision_aspect_ratio",
+    # used by GenericForTokenClassification in modeling_layers.py via getattr
+    "token_classification_bias",
 )
 
 
