@@ -902,9 +902,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
-            )
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits.reshape(-1, self.config.text_config.vocab_size), labels.reshape(-1))
 
         return Florence2Seq2SeqLMOutput(
             loss=loss,
