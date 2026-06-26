@@ -318,7 +318,7 @@ class LlamaIntegrationTest(unittest.TestCase):
                 (
                     "cuda",
                     8,
-                ): "The question of the meaning of life is one of the most profound and debated topics in human history. It has been explored by philosophers, theologians, scientists, and many others across various cultures and disciplines"  # fmt: skip
+                ): "The question of the meaning of life is one of the most profound and debated topics in human history. It has been explored by philosophers, theologians, scientists, and many others across various cultures and disciplines. While there is no one definitive answer, here are some perspectives to consider:\n\n1. **Religious and spiritual perspectives**: Many religions and spiritual traditions offer their own answers to the meaning of life. For example, in Christianity, the meaning of life is often seen as serving God and preparing for eternal"  # fmt: skip
             }
         )
         EXPECTED_TEXT = expected_text.get_expectation()
