@@ -322,6 +322,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("led", "LEDConfig"),
         ("levit", "LevitConfig"),
         ("lfm2", "Lfm2Config"),
+        ("lfm2_bidirectional", "Lfm2BidirectionalConfig"),
         ("lfm2_moe", "Lfm2MoeConfig"),
         ("lfm2_vl", "Lfm2VlConfig"),
         ("lightglue", "LightGlueConfig"),

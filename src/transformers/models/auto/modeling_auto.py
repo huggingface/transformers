@@ -269,6 +269,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("led", "LEDModel"),
         ("levit", "LevitModel"),
         ("lfm2", "Lfm2Model"),
+        ("lfm2_bidirectional", "Lfm2BidirectionalModel"),
         ("lfm2_moe", "Lfm2MoeModel"),
         ("lfm2_vl", "Lfm2VlModel"),
         ("lightglue", "LightGlueForKeypointMatching"),

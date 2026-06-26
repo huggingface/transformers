@@ -705,6 +705,8 @@
         title: LED
       - local: model_doc/lfm2
         title: LFM2
+      - local: model_doc/lfm2_bidirectional
+        title: LFM2Bidirectional
       - local: model_doc/lfm2_moe
         title: LFM2Moe
       - local: model_doc/llama
