@@ -20,5 +20,5 @@ permissions:
 jobs:
   pr-ci:
     # DON'T use commit sha here before the CI migration is finished
-    uses: huggingface/transformers-test-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@check_install
+    uses: huggingface/transformers-test-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@remove_fetch_0
 
