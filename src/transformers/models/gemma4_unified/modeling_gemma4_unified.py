@@ -815,7 +815,10 @@ class Gemma4UnifiedVisionEmbedder(nn.Module):
             (batch, num_patches, mm_embed_dim) — embedded features (including padding positions).
         """
         # Step 1: Patch embedding (LN → Dense → LN)
-        hidden_states = self.patch_ln1(pixel_values.to(self.patch_dense.weight.dtype))
+        target_dtype = getattr(self.patch_dense, "compute_dtype", None)
+        if target_dtype is None:
+            target_dtype = self.patch_dense.weight.dtype
+        hidden_states = self.patch_ln1(pixel_values.to(target_dtype))
         hidden_states = self.patch_dense(hidden_states)
         hidden_states = self.patch_ln2(hidden_states)
 
@@ -860,7 +863,10 @@ class Gemma4UnifiedMultimodalEmbedder(nn.Module):
             A torch.Tensor of embeddings with shape `[batch_size, seq_len, self.config.text_config.hidden_size]`.
         """
         # Additional dtype casting
-        inputs_embeds = inputs_embeds.to(self.embedding_projection.weight.dtype)
+        target_dtype = getattr(self.embedding_projection, "compute_dtype", None)
+        if target_dtype is None:
+            target_dtype = self.embedding_projection.weight.dtype
+        inputs_embeds = inputs_embeds.to(target_dtype)
         embs_normed = self.embedding_pre_projection_norm(inputs_embeds)
         return self.embedding_projection(embs_normed)
 
