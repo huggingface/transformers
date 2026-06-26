@@ -342,7 +342,7 @@ class ZayaAttention(Phi3Attention):
             **kwargs,
         )
 
-        attn_output = attn_output.view(*input_shape, -1)
+        attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
@@ -433,7 +433,9 @@ class ZayaRouter(nn.Module):
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
 
-        self.num_experts = config.num_experts + 1
+        self.num_experts = config.num_experts
+        # Zaya1 has a skip expert w/o actual compute
+        self.num_router_classes = config.num_experts + 1
         self.top_k = config.num_experts_per_tok
         self.router_hidden_size = config.router_hidden_size
 
@@ -443,9 +445,9 @@ class ZayaRouter(nn.Module):
         if self.use_eda:
             self.router_states_scale = nn.Parameter(torch.ones(self.router_hidden_size))
 
-        self.router_mlp = ZayaRouterMLP(self.router_hidden_size, self.num_experts, config.rms_norm_eps)
+        self.router_mlp = ZayaRouterMLP(self.router_hidden_size, self.num_router_classes, config.rms_norm_eps)
 
-        self.register_buffer("balancing_biases", torch.zeros(self.num_experts, dtype=torch.float32))
+        self.register_buffer("balancing_biases", torch.zeros(self.num_router_classes, dtype=torch.float32))
         self.balancing_biases[-1] = -1.0
 
     def forward(
@@ -475,7 +477,7 @@ class ZayaRouter(nn.Module):
         router_indices = router_indices.masked_fill(skip_expert, 0)
 
         return (
-            router_logits.reshape(-1, self.num_experts),
+            router_logits.reshape(-1, self.num_router_classes),
             router_probs.reshape(final_shape),
             router_indices.reshape(final_shape),
             router_hidden_states_next,
