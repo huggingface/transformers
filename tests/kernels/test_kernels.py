@@ -711,23 +711,31 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
 
 
 class TestMsaAttentionDeviceConsistency(TestCasePlus):
-    """Fast, CPU-only regression tests for the MSA attention helper ``_sparse_attention``.
+    """Regression tests for the device-mismatch bug in ``_sparse_attention`` (PR #46848).
 
-    These tests do **not** require a CUDA device or the MSA hub kernel.  They
-    patch ``_msa_sparse_atten_op`` so the actual CuTe-DSL kernel is never
-    invoked, and focus solely on the tensor-device consistency logic that was
-    broken before the fix (GitHub PR #46848).
-
-    The bug: when ``bsz == 1`` and ``cache_position`` lived on the CPU,
-    ``valid_k`` was cast to ``torch.int32`` without an explicit ``device``
-    argument, landing on CPU.  Concatenating it with the GPU-side zero tensor
-    then raised::
+    The bug: when ``bsz == 1`` and ``cache_position`` lived on the CPU (the
+    typical case in the generation loop), ``valid_k`` was cast to
+    ``torch.int32`` without an explicit ``device`` argument and therefore
+    stayed on CPU.  Concatenating that CPU tensor with the GPU-resident zero
+    tensor then raised::
 
         RuntimeError: Expected all tensors to be on the same device, but found
         at least two devices, cuda:0 and cpu!
 
     The fix adds ``device=q.device`` to the ``.to()`` call so ``valid_k``
     always follows the query tensor's device.
+
+    Two tests are provided:
+
+    * ``test_cu_seqlens_k_values_bsz1_single_token`` – CPU-only, no special
+      hardware needed. Verifies the boundary values ``[0, cache_position[-1]+1]``
+      are correct after the fix.
+
+    * ``test_cu_seqlens_k_follows_query_device_cuda`` – requires a CUDA device.
+      Reproduces the *exact* scenario that triggered the original crash:
+      ``query`` / ``key`` / ``value`` on CUDA while ``cache_position`` is on
+      CPU. Before the fix this raised a ``RuntimeError``; after the fix
+      ``cu_seqlens_k`` must land on the same CUDA device as the query.
     """
 
     def _make_module(self):
@@ -788,20 +796,41 @@ class TestMsaAttentionDeviceConsistency(TestCasePlus):
 
         return captured["cu_seqlens_k"]
 
-    def test_cu_seqlens_k_device_matches_query_cpu(self):
-        """CPU tensors: cu_seqlens_k must stay on CPU regardless of cache_position."""
-        cu_seqlens_k = self._run_sparse_attention(device="cpu", cache_position_device="cpu")
-        self.assertEqual(
-            cu_seqlens_k.device.type,
-            "cpu",
-            f"Expected cu_seqlens_k on cpu, got {cu_seqlens_k.device}",
-        )
-
     def test_cu_seqlens_k_values_bsz1_single_token(self):
-        """When bsz==1 and cache_position=[7], cu_seqlens_k must be [0, 8]."""
+        """With cache_position=[7] the boundary must be [0, 8] (= [0, 7+1]).
+
+        CPU-only; verifies the numeric correctness of the fix.
+        """
         cu_seqlens_k = self._run_sparse_attention(device="cpu", cache_position_device="cpu")
         expected = torch.tensor([0, 8], dtype=torch.int32)
         self.assertTrue(
             torch.equal(cu_seqlens_k.cpu(), expected),
             f"Expected cu_seqlens_k == {expected.tolist()}, got {cu_seqlens_k.tolist()}",
+        )
+
+    @require_torch_accelerator
+    def test_cu_seqlens_k_follows_query_device_cuda(self):
+        """Reproduce the exact bug: query on CUDA, cache_position on CPU.
+
+        Before the fix, ``valid_k`` was cast to int32 without ``device=q.device``
+        and stayed on CPU.  The subsequent::
+
+            torch.cat([torch.zeros(1, device=q.device, ...), valid_k_on_cpu])
+
+        raised::
+
+            RuntimeError: Expected all tensors to be on the same device,
+            but found at least two devices, cuda:0 and cpu!
+
+        After the fix, ``cu_seqlens_k`` must reside on the same CUDA device as
+        the query tensor.
+        """
+        cu_seqlens_k = self._run_sparse_attention(
+            device=torch_device,          # CUDA – where the model tensors live
+            cache_position_device="cpu",  # CPU  – where the generation loop creates cache_position
+        )
+        self.assertEqual(
+            cu_seqlens_k.device.type,
+            torch.device(torch_device).type,
+            f"cu_seqlens_k must be on {torch_device}, got {cu_seqlens_k.device}",
         )
