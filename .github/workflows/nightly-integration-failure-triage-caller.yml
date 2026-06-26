@@ -8,10 +8,7 @@ name: Nightly integration-failure triage
 on:
   schedule:
     - cron: "0 0 * * *"
-  # Temporary: lets us exercise the new workflow from this PR's branch.
-  push:
-    branches:
-      - tarek-ziade-ai-reviews
+  # allowing manual triggers for testing purposes
   workflow_dispatch:
     inputs:
       dry_run:
@@ -26,9 +23,9 @@ permissions:
   issues: write
   id-token: write
 
+# we will pin once the feature is stable.
 jobs:
   triage:
-    # DON'T use a commit sha here before the CI migration is finished
     uses: huggingface/transformers-ci/.github/workflows/integration-failure-triage.yml@main # main
     with:
       dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
