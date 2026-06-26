@@ -1107,7 +1107,8 @@ class Gemma4UnifiedModel(Gemma4Model):
             )
 
             inputs_embeds = inputs_embeds.masked_scatter(
-                audio_mask.to(inputs_embeds.device), audio_features.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+                audio_mask.to(inputs_embeds.device),
+                audio_features.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype),
             )
 
         # It may already have been prepared by, e.g., `generate`
