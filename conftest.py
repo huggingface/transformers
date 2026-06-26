@@ -18,8 +18,6 @@
 import doctest
 import os
 import sys
-
-pytest_plugins = ["memory_tracker_plugin"]
 import warnings
 from os.path import abspath, dirname, join
 
@@ -36,6 +34,8 @@ from transformers.testing_utils import (
 from transformers.utils import enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
 
+
+pytest_plugins = ["memory_tracker_plugin"]
 
 NOT_DEVICE_TESTS = {
     "test_tokenization",
