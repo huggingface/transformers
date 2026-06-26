@@ -24,7 +24,7 @@ from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -645,13 +645,13 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
                 "position_ids": position_ids,
             }
             # The static cache ([`StaticReferenceSlidingWindowLayer`]) keeps the prefill at the front of its
-            # buffer (slots `[0, prefill_length)`) and the most recent `sliding_window` generated tokens in the
-            # trailing window (slots `[max_cache_len - sliding_window, max_cache_len)`). Those physical slots do
-            # not line up with the tokens' logical positions, so the reference sliding window cannot be expressed
-            # as a position-based causal/sliding mask; we build it directly over the physical buffer slots
-            # instead. The dynamic cache evicts old tokens from its (compact) buffer, so the plain causal mask
-            # built by the fallback below is already correct for it.
-            reference_attention_mask = None
+            # buffer (slots `[0, prefill_length)`) followed by the most recent `sliding_window` generated tokens
+            # (slots `[prefill_length, prefill_length + sliding_window)`) and an empty tail. The valid region is
+            # therefore the contiguous prefix `[0, prefill_length + sliding_window)`: causal already hides the
+            # not-yet-written window slots while the window fills, and a constant `kv_idx < window_end` cap hides
+            # the empty tail. The dynamic cache evicts old tokens from its (compact) buffer instead, so the plain
+            # causal mask built without the cap is already correct for it.
+            reference_window_mask_function = None
             if past_key_values is not None:
                 static_reference_layer = next(
                     (
@@ -661,34 +661,26 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
                     ),
                     None,
                 )
-                # Only decode steps (a single query token) read from the trailing window. Prefill (more than one
-                # token) is plain causal and is handled by the `create_causal_mask` fallback below.
-                if static_reference_layer is not None and inputs_embeds.shape[1] == 1:
+                if static_reference_layer is not None:
                     prefill_length = static_reference_layer.prefill_length
-                    if prefill_length is None:
+                    if prefill_length is None and inputs_embeds.shape[1] == 1:
                         # First decode step: `prefill_length` is pinned during this step's cache update, which
                         # runs after the mask is built, so derive it here -- every token seen so far is prefill.
                         prefill_length = static_reference_layer.cumulative_length_int
-                    sliding_window = static_reference_layer.sliding_window
-                    window_start = static_reference_layer.max_cache_len - sliding_window
-                    # Number of trailing-window slots holding a token once this step's token has been written.
-                    decode_length = static_reference_layer.cumulative_length_int - prefill_length
-                    window_end = window_start + min(decode_length + 1, sliding_window)
+                    if prefill_length is not None:
+                        # `window_end` is constant for the whole generation, so the cap does not trigger
+                        # per-step recompiles. Prefill (`prefill_length is None`, more than one query token)
+                        # keeps `reference_window_mask_function=None` and so stays plain causal.
+                        window_end = prefill_length + self.config.sliding_window
 
-                    def reference_window_mask_function(batch_idx, head_idx, q_idx, kv_idx):
-                        return (kv_idx < prefill_length) | ((kv_idx >= window_start) & (kv_idx < window_end))
+                        def reference_window_mask_function(batch_idx, head_idx, q_idx, kv_idx):
+                            return kv_idx < window_end
 
-                    # A bidirectional (all-visible) base intersected with the physical-slot selection yields
-                    # exactly the prefill plus the filled-window slots. A causal base would instead mask the
-                    # whole trailing window out, since its physical indices exceed the query's logical position.
-                    reference_attention_mask = create_bidirectional_mask(
-                        **mask_kwargs, and_mask_function=reference_window_mask_function
-                    )
-            if reference_attention_mask is None:
-                reference_attention_mask = create_causal_mask(**mask_kwargs)
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "reference_sliding_attention": reference_attention_mask,
+                "reference_sliding_attention": create_causal_mask(
+                    **mask_kwargs, and_mask_function=reference_window_mask_function
+                ),
             }
 
         hidden_states = inputs_embeds

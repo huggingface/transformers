@@ -687,15 +687,17 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
     """Static counterpart of [`DynamicReferenceSlidingWindowLayer`], used when generating with
     ``cache_implementation="static"``.
 
-    The backing buffer has the full, fixed ``max_cache_len`` length and is split in two regions: the first
-    ``max_cache_len - sliding_window`` slots hold the image/prompt prefill (written once, at the front, and
-    never evicted) and the last ``sliding_window`` slots are a ring for the generated tokens. Exactly like
-    [`StaticSlidingWindowLayer`] the oldest generated token is rolled out and replaced by the newest once the
-    ring is full, the only difference being that the roll is restricted to that trailing window so the prefill
-    region stays untouched. Because the buffer length is constant on every decode step, the key/value tensors
-    keep a constant shape and the SDPA backend (cuDNN included) reuses a single kernel plan instead of
-    re-planning on each new sequence length. The unused prefill slots and the not-yet-filled window slots are
-    hidden by the decode mask built by the model (e.g. ``UnlimitedOcrTextModel.forward``).
+    The backing buffer has the full, fixed ``max_cache_len`` length and is split in three regions: slots
+    ``[0, prefill_length)`` hold the image/prompt prefill (written once, at the front, and never evicted),
+    slots ``[prefill_length, prefill_length + sliding_window)`` are a ring for the generated tokens, and the
+    trailing slots ``[prefill_length + sliding_window, max_cache_len)`` are an unused empty tail (the caller
+    must size ``max_cache_len >= prefill_length + sliding_window``). Exactly like [`StaticSlidingWindowLayer`]
+    the oldest generated token is rolled out and replaced by the newest once the ring is full, the only
+    difference being that the roll is restricted to that window so the prefill region stays untouched. Because
+    the buffer length is constant on every decode step, the key/value tensors keep a constant shape and the
+    SDPA backend (cuDNN included) reuses a single kernel plan instead of re-planning on each new sequence
+    length. The not-yet-written window slots and the empty tail are hidden by the decode mask built by the
+    model (e.g. ``UnlimitedOcrTextModel.forward``).
     """
 
     layer_type = "reference_sliding_attention"
@@ -704,7 +706,8 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         super().__init__(max_cache_len=max_cache_len, sliding_window=sliding_window)
         # `StaticSlidingWindowLayer` shrinks its buffer to `sliding_window` and rolls the whole thing. Here the
         # buffer must also hold the pinned prefill, so keep the full `max_cache_len` length and track the real
-        # window separately; the roll below only touches the trailing `sliding_window` slots.
+        # window separately; the roll below only touches the `sliding_window` slots right after the prefill
+        # (i.e. `[prefill_length, prefill_length + sliding_window)`).
         self.max_cache_len = max_cache_len
         self.sliding_window = sliding_window
         self.prefill_length: int | None = None
@@ -747,8 +750,8 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             self.prefill_length = self.cumulative_length_int
 
         # Everything below mirrors `StaticSlidingWindowLayer.update` with the difference that the sliding window
-        # is in the last `sliding_window` slots instead of spanning the whole buffer.
-        window_start = self.max_cache_len - self.sliding_window
+        # is in the `sliding_window` slots right after the prefill instead of spanning the whole buffer.
+        window_start = self.prefill_length
         current_length = self.cumulative_length_int - self.prefill_length
         is_full = current_length >= self.sliding_window
         # Update it now that we saved the value above
@@ -759,8 +762,8 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             # dynamo is currently bugged when doing it - see https://github.com/pytorch/pytorch/issues/159855 for more details
             if key_states.shape[-2] == 1:
                 # Roll the window region to the left by 1 position (the pinned prefill in front stays put)
-                new_keys = self.keys[:, :, window_start:, :].roll(-1, dims=-2)
-                new_values = self.values[:, :, window_start:, :].roll(-1, dims=-2)
+                new_keys = self.keys[:, :, window_start : window_start + self.sliding_window, :].roll(-1, dims=-2)
+                new_values = self.values[:, :, window_start : window_start + self.sliding_window, :].roll(-1, dims=-2)
                 # Overwrite the last position with new states
                 # (note: very important to use a tensor to index here, see https://github.com/pytorch/pytorch/issues/159855)
                 index = torch.tensor([-1], dtype=int, device=self.device)
@@ -768,15 +771,19 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
                 new_values[:, :, index] = value_states
 
                 # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
-                self.keys[:, :, window_start:, :].copy_(new_keys)
-                self.values[:, :, window_start:, :].copy_(new_values)
+                self.keys[:, :, window_start : window_start + self.sliding_window, :].copy_(new_keys)
+                self.values[:, :, window_start : window_start + self.sliding_window, :].copy_(new_values)
 
                 # Very important to return the `self` tensors here, as they have the static dynamo address
                 return self.keys, self.values
             # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
             else:
-                full_key_states = torch.cat((self.keys[:, :, window_start + 1 :, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, window_start + 1 :, :], value_states), dim=-2)
+                full_key_states = torch.cat(
+                    (self.keys[:, :, window_start + 1 : window_start + self.sliding_window, :], key_states), dim=-2
+                )
+                full_value_states = torch.cat(
+                    (self.values[:, :, window_start + 1 : window_start + self.sliding_window, :], value_states), dim=-2
+                )
         # Not yet full, but becoming full on this update
         elif current_length + kv_length > self.sliding_window:
             # Fast path, no need to cat() in this case, as the window is currently empty
@@ -790,12 +797,9 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         else:
             # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
             # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten.
-            # `window_start - prefill_length` is constant during decode, so it is safe to bake into the graph.
-            cache_position = (
-                torch.arange(kv_length, device=self.device)
-                + self.cumulative_length
-                + (window_start - self.prefill_length)
-            )
+            # The window sits right after the prefill (`window_start == prefill_length`), so the decode tokens are
+            # written at their logical positions, which already start at `prefill_length`.
+            cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
             try:
                 self.keys.index_copy_(2, cache_position, key_states)
                 self.values.index_copy_(2, cache_position, value_states)
@@ -813,8 +817,12 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
         # We only keep the last `sliding_window` tokens. Unlike `StaticSlidingWindowLayer` we return `self.keys/values`
         # because `get_mask_sizes` is fixed to the full `max_cache_len`.
-        self.keys[:, :, window_start:, :].copy_(full_key_states[:, :, -self.sliding_window :, :])
-        self.values[:, :, window_start:, :].copy_(full_value_states[:, :, -self.sliding_window :, :])
+        self.keys[:, :, window_start : window_start + self.sliding_window, :].copy_(
+            full_key_states[:, :, -self.sliding_window :, :]
+        )
+        self.values[:, :, window_start : window_start + self.sliding_window, :].copy_(
+            full_value_states[:, :, -self.sliding_window :, :]
+        )
         return self.keys, self.values
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
