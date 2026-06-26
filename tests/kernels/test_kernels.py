@@ -826,7 +826,7 @@ class TestMsaAttentionDeviceConsistency(TestCasePlus):
         the query tensor.
         """
         cu_seqlens_k = self._run_sparse_attention(
-            device=torch_device,          # CUDA – where the model tensors live
+            device=torch_device,  # CUDA – where the model tensors live
             cache_position_device="cpu",  # CPU  – where the generation loop creates cache_position
         )
         self.assertEqual(
