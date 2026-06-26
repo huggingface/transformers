@@ -58,8 +58,6 @@ class GlmMoeDsaConfig(DeepseekV32Config):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
-    indexer_rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether the indexer applies interleaved RoPE.
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
     indexer_types (`list[str]`, *optional*):
@@ -107,7 +105,6 @@ class GlmMoeDsaConfig(DeepseekV32Config):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 32
-    indexer_rope_interleave: bool = True
     # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None
 
@@ -137,7 +134,9 @@ class GlmMoeDsaRotaryEmbedding(DeepseekV32RotaryEmbedding):
 
 
 class GlmMoeDsaIndexer(DeepseekV32Indexer):
-    pass
+    def apply_indexer_rotary_pos_emb(self, q_rot, k_rot, cos, sin):
+        # GLM-MoE-DSA uses interleaved RoPE in the indexer.
+        return apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
 
 
 class GlmMoeDsaAttention(DeepseekV3Attention):
