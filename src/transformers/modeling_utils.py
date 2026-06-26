@@ -3575,7 +3575,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             is_offloaded = True
             warnings.warn(
                 "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory "
-                "exceeds the `shard_size` (50GB default)"
+                "exceeds the `shard_size` (50GB default) and/or the largest model weight size (this can "
+                "be very large for MoE models with fused experts)."
             )
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
@@ -3653,15 +3654,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             filename = os.path.join(save_directory, shard_file)
             shard_state_dict = {}
-            for tensor_name in tensor_names:
+            for tensor_name in sorted(tensor_names):
                 # Get the tensor, and remove it from state_dict to avoid keeping the ref
                 tensor = state_dict.pop(tensor_name)
 
-                # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
-                # but it would otherwise not be contained in the saved shard if we were to simply move the file
-                # or something. Note that multiple weights may be loaded by `load_offloaded_parameter`
-                # but each weight is only loaded once
+                # If the param was offloaded, we need to load it back onto cpu from disk to resave it.
+                # It's a strange pattern, but is necessary to ensure saving into the proper file shard
                 if is_offloaded and tensor.device.type == "meta":
+                    # Note that `load_offloaded_parameter` may load multiple weights for a single tensor.
+                    # While it is possible to overload CPU memory by loading parameters in a bad order,
+                    # in practice `split_torch_state_dict_into_shards` preserves weight locality
                     state_dict.update(load_offloaded_parameter(model_to_save, tensor_name, meta_state_dict))
                     tensor = state_dict.pop(tensor_name)
 
