@@ -294,13 +294,13 @@ class LlamaIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(model_name, device_map=torch_device, dtype=torch.bfloat16)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        input_text = {"role": "user", "content": "What's tre meaning of life?"}
+        input_text = {"role": "user", "content": "What's the meaning of life?"}
         inputs = tokenizer.apply_chat_template(
             [input_text], tokenize=True, return_tensors="pt", add_generation_prompt=True
         ).to(model.device)
 
         out_sdpa = model.generate(**inputs, max_new_tokens=100, cache_implementation="static", do_sample=False)
-        output_text_sdpa = tokenizer.batch_decode(out_sdpa[0, inputs.input_ids.shape[1] :])
+        output_text_sdpa = tokenizer.batch_decode(out_sdpa[0, inputs.input_ids.shape[1] :])[0]
 
         # Now toggle FA and test again
         model.set_attn_implementation("flash_attention_2")
@@ -308,7 +308,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         out_fa = model.generate(
             **inputs, max_new_tokens=100, cache_implementation="static", do_sample=False, return_dict_in_generate=True
         )
-        output_text_fa = tokenizer.batch_decode(out_fa.sequences[0, inputs.input_ids.shape[1] :])
+        output_text_fa = tokenizer.batch_decode(out_fa.sequences[0, inputs.input_ids.shape[1] :])[0]
 
         # Just to make sure
         self.assertTrue(all(isinstance(layer, StaticLayer) for layer in out_fa.past_key_values.layers))
