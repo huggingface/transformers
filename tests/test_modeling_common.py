@@ -5743,6 +5743,11 @@ class ModelTesterMixin:
         # Factor cannot be smaller than `int(2/head_dim)`, otherwise we'll end up dividing by zero!
         partial_rotary_factor = text_config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(text_config, "head_dim", text_config.hidden_size // text_config.num_attention_heads)
+
+        # Some models use different dim for RoPE, override the value if so
+        if getattr(text_config, "qk_rope_head_dim", None) is not None:
+            head_dim = text_config.qk_rope_head_dim
+
         partial_rotary_factor = max(partial_rotary_factor, math.nextafter(2 / head_dim, 1.0))
         if int(head_dim * partial_rotary_factor) <= 2:
             partial_rotary_factor = math.ceil((3 / head_dim) / 0.05) * 0.05
