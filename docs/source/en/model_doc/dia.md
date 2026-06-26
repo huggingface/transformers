@@ -42,20 +42,21 @@ tokens and decodes them back into audio.
 
 ```python
 from transformers import AutoProcessor, DiaForConditionalGeneration
-
+import torch
 
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 text = ["[S1] Dia is an open weights text to dialogue model."]
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-inputs = processor(text=text, padding=True, return_tensors="pt").to(model.device)
 
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
-outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint)
 
-# save audio to a file
-outputs = processor.batch_decode(outputs)
-processor.save_audio(outputs, "example.wav")
+inputs = processor(text=text, padding=True, return_tensors="pt")
+outputs = model.generate(**inputs, max_new_tokens=256)
+
+# decode the generated IDs back to text
+output_text = processor.batch_decode(outputs, skip_special_tokens=True)
+print(output_text)
 ```
 
 ### Generation with Text and Audio (Voice Cloning)
