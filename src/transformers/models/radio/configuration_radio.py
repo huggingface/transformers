@@ -27,11 +27,6 @@ __all__ = ["RadioConfig"]
 @strict
 class RadioConfig(PreTrainedConfig):
     r"""
-    Configuration for the RADIO vision encoder (native transformers port).
-
-    The defaults correspond to ``nvidia/C-RADIOv4-H`` (a ViT-H/16 backbone with a
-    Cropped Position Embedding (CPE) patch generator).
-
     mlp_ratio (`float`, *optional*, defaults to 4.0):
         Ratio of the hidden size of the MLP relative to `hidden_size`.
     use_swiglu_ffn (`bool`, *optional*, defaults to `False`):

@@ -389,10 +389,10 @@ class RadioPreTrainedModel(PreTrainedModel):
         elif isinstance(module, RadioLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, RadioInputConditioner):
-            module.norm_mean.copy_(torch.tensor(self.config.norm_mean).view(-1, 1, 1))
-            module.norm_std.copy_(torch.tensor(self.config.norm_std).view(-1, 1, 1))
+            init.copy_(module.norm_mean, torch.tensor(self.config.norm_mean).view(-1, 1, 1))
+            init.copy_(module.norm_std, torch.tensor(self.config.norm_std).view(-1, 1, 1))
         elif isinstance(module, RadioModel):
-            module.summary_idxs.copy_(torch.tensor(self.config.summary_idxs, dtype=torch.long))
+            init.copy_(module.summary_idxs, torch.tensor(self.config.summary_idxs, dtype=torch.long))
 
 
 class RadioEncoder(RadioPreTrainedModel):
