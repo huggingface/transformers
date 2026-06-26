@@ -154,10 +154,8 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
         )
 
     def test_training_loss_no_double_shift(self):
-        # forward right-shifts input_ids into decoder_input_ids, so the loss must be a plain CE
-        # against labels (no second shift). Regression test for the ForCausalLMLoss double-shift.
-        from torch.nn import CrossEntropyLoss
-
+        # forward right-shifts input_ids into decoder_input_ids, so the loss is computed against
+        # labels directly (no second shift). Regression test for the ForCausalLMLoss double-shift.
         config = self.model_tester.get_config()
         model = PPFormulaNetForConditionalGeneration(config).to(torch_device).eval()
         vocab_size = config.text_config.vocab_size
@@ -174,10 +172,10 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
         padded[1, -2:] = -100
 
         def aligned_ce(logits, lbl):
-            return CrossEntropyLoss()(logits.reshape(-1, vocab_size), lbl.reshape(-1))
+            return torch.nn.CrossEntropyLoss()(logits.reshape(-1, vocab_size), lbl.reshape(-1))
 
         def double_shift_ce(logits, lbl):
-            return CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
+            return torch.nn.CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
 
         for lbl in (input_ids, padded):
             with torch.no_grad():

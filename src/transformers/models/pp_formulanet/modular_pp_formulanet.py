@@ -18,7 +18,6 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -489,8 +488,15 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.reshape(-1, self.config.text_config.vocab_size), labels.reshape(-1))
+            # forward already right-shifts the target into decoder_input_ids, so labels are
+            # aligned with logits; pass shift_labels to stop ForCausalLMLoss shifting again.
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                shift_labels=labels,
+                **kwargs,
+            )
 
         return Seq2SeqLMOutput(
             loss=loss,
