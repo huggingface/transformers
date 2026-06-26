@@ -16,9 +16,8 @@
 import unittest
 
 import pytest
-from parameterized import parameterized
 
-from transformers import is_torch_available, set_seed
+from transformers import is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
@@ -30,7 +29,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():
@@ -41,13 +39,23 @@ if is_torch_available():
         Olmo3ForSequenceClassification,
         Olmo3Model,
     )
-    from transformers.models.olmo3.modeling_olmo3 import Olmo3RotaryEmbedding
 
 
 class Olmo3ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Olmo3Model
         sequence_classification_class = Olmo3ForSequenceClassification
+
+    def __init__(
+        self,
+        parent,
+        layer_types=[
+            "full_attention",
+            "sliding_attention",
+        ],  # we want to test both types
+        **kwargs,
+    ):
+        super().__init__(parent=parent, layer_types=layer_types, **kwargs)
 
 
 @require_torch
@@ -62,47 +70,24 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Olmo3ForCausalLM if is_torch_available() else None
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Rope only gets applied to full attention layers in Olmo3, so make all layers full attention.
-        config.layer_types = ["full_attention"] * len(config.layer_types)
-
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = self.model_tester_class.base_model_class(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_parameters = {"rope_type": scaling_type, "factor": 10.0, "rope_theta": 10_000.0}
-        scaled_model = self.model_tester_class.base_model_class(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
+        # Gemma3n has different RoPE configs per layer type
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Parent test class's attempt to find Olmo3 rope fails, so we pass here explicitly.
-        rope_class = Olmo3RotaryEmbedding
+        # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
+        # named location of the RoPE layer class.
+        base_model = self.model_tester.base_model_class(config)
+        possible_rope_attributes = [
+            "pos_emb",
+            "rotary_emb",  # most common case
+            "global_rotary_emb",
+            "local_rotary_emb",
+        ]
+        for name, module in base_model.named_modules():
+            if any(potential_name in name for potential_name in possible_rope_attributes):
+                rope_class = type(module)
+                break
 
         scaling_factor = 10
         short_input_length = 10
@@ -118,19 +103,21 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
-        config.rope_parameters = {"rope_type": "default", "rope_theta": 10_000.0}
+        rope_params = {"rope_type": "default", "rope_theta": 10_000.0}
+        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
         original_rope = rope_class(config=config).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
-        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short, layer_type="sliding_attention")
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long, layer_type="sliding_attention")
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_parameters = {"rope_type": "linear", "factor": scaling_factor, "rope_theta": 10_000.0}
+        rope_params = {"rope_type": "linear", "factor": scaling_factor, "rope_theta": 10_000.0}
+        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
         linear_scaling_rope = rope_class(config=config).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
         for new_position in range(0, long_input_length, scaling_factor):
@@ -141,24 +128,28 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_parameters = {"rope_type": "dynamic", "factor": scaling_factor, "rope_theta": 10_000.0}
+        rope_params = {"rope_type": "dynamic", "factor": scaling_factor, "rope_theta": 10_000.0}
+        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
         ntk_scaling_rope = rope_class(config=config).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
         torch.testing.assert_close(ntk_sin_short, original_sin_short)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+        self.assertTrue(
+            (ntk_scaling_rope.sliding_attention_inv_freq <= original_rope.sliding_attention_inv_freq).all()
+        )
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
-        config.rope_parameters = {"rope_type": "yarn", "factor": scaling_factor, "rope_theta": 10_000.0}
+        rope_params = {"rope_type": "yarn", "factor": scaling_factor, "rope_theta": 10_000.0}
+        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
         yarn_scaling_rope = rope_class(config=config).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
+        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
+        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
         with self.assertRaises(AssertionError):
@@ -259,6 +250,34 @@ class Olmo3IntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
         texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(expectations.get_expectation(), texts)
+
+    def test_generate_beyond_sliding_window(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): """It looks like you've pasted a very lengthy and repetitive list of "This is a nice place""",
+            }
+        )  # fmt: skip
+
+        tokenizer = AutoTokenizer.from_pretrained("allenai/Olmo-3-7B-Instruct")
+        model = Olmo3ForCausalLM.from_pretrained("allenai/Olmo-3-7B-Instruct", device_map="auto")
+
+        # This is larger than 4096 tokens
+        message = [
+            {
+                "role": "user",
+                "content": "This is a nice place. " * 800 + "I really enjoy the scenery,",
+            }
+        ]
+        inputs = tokenizer.apply_chat_template(
+            message, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(model.device)
+
+        input_size = inputs.input_ids.shape[-1]
+        self.assertTrue(input_size > model.config.sliding_window)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=20, top_p=None, temperature=1, do_sample=False)
+        text = tokenizer.decode(generated_ids[0, input_size:], skip_special_tokens=True)
+        self.assertEqual(expectations.get_expectation(), text)
 
     @pytest.mark.torch_export_test
     def test_export_static_cache(self):

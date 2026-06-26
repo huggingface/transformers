@@ -29,7 +29,6 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -38,6 +37,7 @@ from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
+from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
 from ..olmo3.modeling_olmo3 import (
     Olmo3Attention,
     Olmo3DecoderLayer,
@@ -47,7 +47,6 @@ from ..olmo3.modeling_olmo3 import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
