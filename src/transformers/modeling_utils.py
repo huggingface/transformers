@@ -4821,8 +4821,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             not_initialized_parameters = list(
                 {v for v in self.state_dict(keep_vars=True).values() if not getattr(v, "_is_hf_initialized", False)}
             )
-            with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
-                self.initialize_weights()
+            # Gather in bounded chunks so a model-wide coalesced all-gather never re-materializes the whole
+            # parameter set on rank 0 (e.g. sparse MoE models with packed expert weights). See #46822.
+            gather_chunk_numel = 2_000_000_000  # ~a few GB in bf16
+            chunk, chunk_numel = [], 0
+            for param in not_initialized_parameters:
+                param_numel = param.ds_shape.numel() if hasattr(param, "ds_shape") else param.numel()
+                if chunk and chunk_numel + param_numel > gather_chunk_numel:
+                    with deepspeed.zero.GatheredParameters(chunk, modifier_rank=0):
+                        self.initialize_weights()
+                    chunk, chunk_numel = [], 0
+                chunk.append(param)
+                chunk_numel += param_numel
+            if chunk:
+                with deepspeed.zero.GatheredParameters(chunk, modifier_rank=0):
+                    self.initialize_weights()
         else:
             self.initialize_weights()
 
