@@ -58,6 +58,15 @@ class RagTokenizer:
     def __call__(self, *args, **kwargs):
         return self.current_tokenizer(*args, **kwargs)
 
+    def __getattr__(self, name):
+        current_tokenizer = self.__dict__.get("current_tokenizer", None)
+        if current_tokenizer is not None:
+            try:
+                return getattr(current_tokenizer, name)
+            except AttributeError:
+                pass
+        raise AttributeError(f"{self.__class__.__name__} has no attribute {name}")
+
     def batch_decode(self, *args, **kwargs):
         return self.generator.batch_decode(*args, **kwargs)
 

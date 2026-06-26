@@ -121,6 +121,23 @@ class RagTokenizerTest(TestCase):
         self.assertIsInstance(new_rag_tokenizer.generator, RobertaTokenizer)
         self.assertEqual(new_rag_tokenizer.generator.get_vocab(), rag_tokenizer.generator.get_vocab())
 
+    @require_tokenizers
+    def test_delegates_missing_attributes_to_current_tokenizer(self):
+        rag_tokenizer = RagTokenizer(question_encoder=self.get_dpr_tokenizer(), generator=self.get_bart_tokenizer())
+
+        input_text = "want lowest"
+        self.assertEqual(rag_tokenizer.encode(input_text), rag_tokenizer.question_encoder.encode(input_text))
+
+        rag_tokenizer.question_encoder.patch_token = "<patch>"
+        rag_tokenizer.question_encoder.patch_token_id = 42
+        self.assertEqual(rag_tokenizer.patch_token, "<patch>")
+        self.assertEqual(rag_tokenizer.patch_token_id, 42)
+        self.assertFalse(hasattr(rag_tokenizer, "missing_tokenizer_attribute"))
+
+        target_text = "lower"
+        rag_tokenizer._switch_to_target_mode()
+        self.assertEqual(rag_tokenizer.encode(target_text), rag_tokenizer.generator.encode(target_text))
+
     @slow
     def test_pretrained_token_nq_tokenizer(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
