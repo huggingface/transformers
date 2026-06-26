@@ -64,9 +64,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
     "BambaConfig": ["attn_layer_indices"],
-    # layer_group_size builds `layer_types` in __post_init__ (and drives weight conversion); scoring_func/topk_method
-    # describe the router behavior the model hardcodes (sigmoid + noaux_tc), kept for checkpoint config compatibility.
-    "BailingMoeV2_5Config": ["layer_group_size", "scoring_func", "topk_method"],
+    # `layer_group_size` builds `layer_types` and `first_k_dense_replace` builds `mlp_layer_types` in __post_init__
+    # (the former also drives weight conversion), so neither is read directly by the modeling file.
+    "BailingMoeV2_5Config": ["layer_group_size", "first_k_dense_replace"],
     "Dots1Config": ["max_window_layers"],
     "JambaConfig": ["attn_layer_offset", "attn_layer_period", "expert_layer_offset", "expert_layer_period"],
     "JetMoeConfig": ["output_router_logits"],

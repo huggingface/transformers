@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_bailing2_5_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 InclusionAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 InclusionAI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -184,7 +184,7 @@ class BailingMoeV2_5LinearRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        linear_head_dim = config.hidden_size // config.num_kv_heads_for_linear_attn
+        linear_head_dim = config.hidden_size // config.linear_key_value_heads
         dim = int(linear_head_dim * config.partial_rotary_factor)
 
         attention_factor = 1.0
@@ -410,71 +410,55 @@ def torch_chunk_simple_gla(
     chunk_size=64,
     initial_state=None,
     output_final_state=False,
+    **kwargs,
 ):
-    """Pure PyTorch fallback for chunk_simple_gla when fla is not available."""
+    """Pure PyTorch fallback for ``chunk_simple_gla``, mirroring the reference FLA ``simple_gla`` kernel."""
     initial_dtype = query.dtype
-    query, key, value = [x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value)]
-    g = g.transpose(1, 2).contiguous().to(torch.float32)
+    query, key, value, g = [x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, g)]
 
     batch_size, num_heads, sequence_length, head_dim = key.shape
-    v_dim = value.shape[-1]
+    v_head_dim = value.shape[-1]
     pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
-    if pad_size > 0:
-        query = F.pad(query, (0, 0, 0, pad_size))
-        key = F.pad(key, (0, 0, 0, pad_size))
-        value = F.pad(value, (0, 0, 0, pad_size))
-        g = F.pad(g, (0, pad_size))
-    total_len = sequence_length + pad_size
-
-    scale = head_dim**-0.5
+    query = F.pad(query, (0, 0, 0, pad_size))
+    key = F.pad(key, (0, 0, 0, pad_size))
+    value = F.pad(value, (0, 0, 0, pad_size))
+    g = F.pad(g, (0, pad_size))
+    total_sequence_length = sequence_length + pad_size
+    scale = query.shape[-1] ** -0.5
     query = query * scale
 
     # Reshape into chunks
-    num_chunks = total_len // chunk_size
-    query = query.view(batch_size, num_heads, num_chunks, chunk_size, head_dim)
-    key = key.view(batch_size, num_heads, num_chunks, chunk_size, head_dim)
-    value = value.view(batch_size, num_heads, num_chunks, chunk_size, v_dim)
-    g = g.view(batch_size, num_heads, num_chunks, chunk_size)
+    query, key, value = [x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (query, key, value)]
+    g = g.reshape(g.shape[0], g.shape[1], -1, chunk_size)
 
     # Cumulative decay within each chunk
-    g_cumsum = g.cumsum(dim=-1)
+    g = g.cumsum(dim=-1)
+    decay_mask = ((g.unsqueeze(-1) - g.unsqueeze(-2)).tril().exp().float()).tril()
 
-    state = (
-        torch.zeros(batch_size, num_heads, head_dim, v_dim, device=query.device, dtype=torch.float32)
+    last_recurrent_state = (
+        torch.zeros(batch_size, num_heads, head_dim, v_head_dim, device=value.device, dtype=value.dtype)
         if initial_state is None
-        else initial_state.to(torch.float32)
+        else initial_state.to(value)
     )
-    output = torch.zeros(
-        batch_size, num_heads, num_chunks, chunk_size, v_dim, device=query.device, dtype=torch.float32
-    )
+    core_attn_out = torch.zeros_like(value)
 
-    for c in range(num_chunks):
-        q_c = query[:, :, c]  # [B, H, C, D]
-        k_c = key[:, :, c]
-        v_c = value[:, :, c]
-        g_c = g_cumsum[:, :, c]  # [B, H, C]
-
-        # Intra-chunk attention with decay
-        decay_matrix = (g_c.unsqueeze(-1) - g_c.unsqueeze(-2)).tril().exp()
-        attn = (q_c @ k_c.transpose(-1, -2)) * decay_matrix.tril()
-        intra = attn @ v_c
-
-        # Inter-chunk: query attends to state from previous chunks
-        inter = (q_c * g_c.unsqueeze(-1).exp()) @ state
-
-        output[:, :, c] = intra + inter
-
-        # Update state with this chunk's contributions
-        chunk_end_decay = g_c[:, :, -1].unsqueeze(-1).unsqueeze(-1)
-        per_step_decay = (g_c[:, :, -1].unsqueeze(-1) - g_c).exp()  # [B, H, C]
-        state = state * chunk_end_decay.exp() + (k_c * per_step_decay.unsqueeze(-1)).transpose(-1, -2) @ v_c
-
-    output = output.view(batch_size, num_heads, total_len, v_dim)[:, :, :sequence_length]
-    output = output.transpose(1, 2).contiguous().to(initial_dtype)
+    # for each chunk
+    for i in range(total_sequence_length // chunk_size):
+        q_i, k_i, v_i = query[:, :, i], key[:, :, i], value[:, :, i]
+        attn = q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]
+        attn_inter = (q_i * decay_mask[:, :, i, :, None].exp()) @ last_recurrent_state
+        core_attn_out[:, :, i] = attn_inter + attn @ v_i
+        last_recurrent_state = (
+            last_recurrent_state * decay_mask[:, :, i, -1, None, None].exp()
+            + (k_i * (decay_mask[:, :, i, -1, None] - decay_mask[:, :, i]).exp()[..., None]).transpose(-1, -2) @ v_i
+        )
 
     if not output_final_state:
-        state = None
-    return output, state
+        last_recurrent_state = None
+    core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1, core_attn_out.shape[-1])
+    core_attn_out = core_attn_out[:, :, :sequence_length]
+    core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
+    return core_attn_out, last_recurrent_state
 
 
 def torch_recurrent_simple_gla(
@@ -484,36 +468,37 @@ def torch_recurrent_simple_gla(
     g,
     initial_state=None,
     output_final_state=False,
+    **kwargs,
 ):
-    """Pure PyTorch fallback for fused_recurrent_simple_gla."""
+    """Pure PyTorch fallback for ``fused_recurrent_simple_gla``."""
     initial_dtype = query.dtype
-    query, key, value = [x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value)]
-    g = g.transpose(1, 2).contiguous().to(torch.float32)
+    query, key, value, g = [x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, g)]
 
     batch_size, num_heads, sequence_length, head_dim = key.shape
-    v_dim = value.shape[-1]
-    scale = head_dim**-0.5
+    v_head_dim = value.shape[-1]
+    scale = query.shape[-1] ** -0.5
     query = query * scale
 
-    state = (
-        torch.zeros(batch_size, num_heads, head_dim, v_dim, device=query.device, dtype=torch.float32)
+    last_recurrent_state = (
+        torch.zeros(batch_size, num_heads, head_dim, v_head_dim, device=value.device, dtype=value.dtype)
         if initial_state is None
-        else initial_state.to(torch.float32)
+        else initial_state.to(value)
     )
-    output = torch.zeros(batch_size, num_heads, sequence_length, v_dim, device=query.device, dtype=torch.float32)
+    core_attn_out = torch.zeros_like(value)
 
-    for t in range(sequence_length):
-        decay = g[:, :, t].exp().unsqueeze(-1).unsqueeze(-1)  # [B, H, 1, 1]
-        state = state * decay + key[:, :, t].unsqueeze(-1) * value[:, :, t].unsqueeze(-2)
-        output[:, :, t] = (query[:, :, t].unsqueeze(-1) * state).sum(dim=-2)
+    for i in range(sequence_length):
+        q_i, k_i, v_i = query[:, :, i], key[:, :, i], value[:, :, i]
+        decay = g[:, :, i].exp()[..., None, None]
+        last_recurrent_state = last_recurrent_state * decay + k_i.unsqueeze(-1) * v_i.unsqueeze(-2)
+        core_attn_out[:, :, i] = (q_i.unsqueeze(-1) * last_recurrent_state).sum(dim=-2)
 
     if not output_final_state:
-        state = None
-    output = output.transpose(1, 2).contiguous().to(initial_dtype)
-    return output, state
+        last_recurrent_state = None
+    core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
+    return core_attn_out, last_recurrent_state
 
 
-def _apply_rotary_pos_emb_linear(q, k, cos, sin, unsqueeze_dim=2):
+def apply_rotary_pos_emb_linear(q, k, cos, sin, unsqueeze_dim=2):
     """Apply rotary position embedding with partial rotary support for linear attention.
     Q/K are in [bsz, seq_len, n_heads, head_dim] format.
     """
@@ -537,7 +522,7 @@ class BailingMoeV2_5LightningAttention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
-        self.num_heads = config.num_kv_heads_for_linear_attn
+        self.num_heads = config.linear_key_value_heads
         self.head_dim = config.hidden_size // self.num_heads
 
         self.query_key_value = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
@@ -571,6 +556,7 @@ class BailingMoeV2_5LightningAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
@@ -581,11 +567,9 @@ class BailingMoeV2_5LightningAttention(nn.Module):
         )
 
         # Fused QKV projection
-        qkv = self.query_key_value(hidden_states)
-        qkv = qkv.view(bsz, q_len, 3, self.num_heads, self.head_dim)
-        query_states = qkv[:, :, 0]
-        key_states = qkv[:, :, 1]
-        value_states = qkv[:, :, 2]
+        query_states, key_states, value_states = (
+            self.query_key_value(hidden_states).view(bsz, q_len, 3, self.num_heads, self.head_dim).unbind(dim=2)
+        )
 
         # Apply QK norm per head before RoPE (matches training-time behaviour)
         if self.config.use_qk_norm:
@@ -594,7 +578,7 @@ class BailingMoeV2_5LightningAttention(nn.Module):
 
         # Apply partial RoPE
         cos, sin = position_embeddings
-        query_states, key_states = _apply_rotary_pos_emb_linear(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb_linear(query_states, key_states, cos, sin)
 
         # Gate projection
         g_proj = self.g_proj(hidden_states)
@@ -639,10 +623,8 @@ class BailingMoeV2_5LightningAttention(nn.Module):
         attn_output = self.g_norm(attn_output)
         attn_output = attn_output.view(bsz, q_len, self.hidden_size)
 
-        if self.config.linear_silu:
-            attn_output = attn_output * F.silu(g_proj)
-        else:
-            attn_output = attn_output * torch.sigmoid(g_proj)
+        gate_activation = F.silu if self.config.linear_silu else torch.sigmoid
+        attn_output = attn_output * gate_activation(g_proj)
 
         attn_output = self.o_proj(attn_output)
         return attn_output
@@ -886,8 +868,8 @@ class BailingMoeV2_5DecoderLayer(GradientCheckpointingLayer):
         else:
             self.linear_attn = BailingMoeV2_5LightningAttention(config=config, layer_idx=layer_idx)
 
-        # MLP: MoE or Dense
-        if layer_idx >= config.first_k_dense_replace:
+        # MLP: MoE (sparse) or Dense
+        if config.mlp_layer_types[layer_idx] == "sparse":
             self.mlp = BailingMoeV2_5MoE(config)
         else:
             self.mlp = BailingMoeV2_5MLP(config)

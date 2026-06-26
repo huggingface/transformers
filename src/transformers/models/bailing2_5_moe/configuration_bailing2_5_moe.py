@@ -1,4 +1,4 @@
-# Copyright 2025 InclusionAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 InclusionAI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,20 +35,21 @@ class BailingMoeV2_5Config(PreTrainedConfig):
         Whether to interleave the rotary position embeddings.
     group_norm_size (`int`, *optional*, defaults to 8):
         Group size for group RMS normalization in linear attention layers.
-    num_kv_heads_for_linear_attn (`int`, *optional*, defaults to 64):
+    linear_key_value_heads (`int`, *optional*, defaults to 64):
         Number of key-value heads used in linear attention layers.
     linear_silu (`bool`, *optional*, defaults to `False`):
         Whether to apply SiLU activation on the gate in linear attention.
     moe_shared_expert_intermediate_size (`int`, *optional*, defaults to 2048):
         Intermediate size of the shared expert in MoE layers.
-    topk_method (`str`, *optional*, defaults to `"noaux_tc"`):
-        Method for selecting top-k experts in the MoE layer.
-    scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
-        Scoring function for the router in the MoE layer.
     partial_rotary_factor (`float`, *optional*, defaults to 0.5):
         Fraction of the head dimension to apply rotary position embeddings in linear attention layers.
     router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
         Coefficient for the auxiliary load balancing loss from the router.
+    layer_types (`list`, *optional*):
+        Attention pattern for each layer (`"full_attention"` or `"linear_attention"`). Derived from
+        `layer_group_size` when not provided.
+    mlp_layer_types (`list`, *optional*):
+        MLP pattern for each layer (`"dense"` or `"sparse"`). Derived from `first_k_dense_replace` when not provided.
 
     Example:
 
@@ -103,13 +104,11 @@ class BailingMoeV2_5Config(PreTrainedConfig):
     qk_nope_head_dim: int = 128
     n_group: int | None = 8
     topk_group: int | None = 4
-    topk_method: str = "noaux_tc"
-    scoring_func: str = "sigmoid"
     first_k_dense_replace: int | None = 4
     norm_topk_prob: bool | None = True
     layer_group_size: int = 8
     group_norm_size: int = 8
-    num_kv_heads_for_linear_attn: int = 64
+    linear_key_value_heads: int = 64
     linear_silu: bool = False
     hidden_act: str = "silu"
     max_position_embeddings: int = 131072
@@ -129,6 +128,7 @@ class BailingMoeV2_5Config(PreTrainedConfig):
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
     layer_types: list[str] | None = None
+    mlp_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -137,10 +137,17 @@ class BailingMoeV2_5Config(PreTrainedConfig):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
 
+        # Attention pattern: every `layer_group_size`-th layer uses full MLA attention, the rest linear attention.
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if (i + 1) % self.layer_group_size == 0 else "linear_attention"
                 for i in range(self.num_hidden_layers)
+            ]
+
+        # MLP pattern: the first `first_k_dense_replace` layers are dense, the rest are MoE.
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = [
+                "dense" if i < self.first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
 
         super().__post_init__(**kwargs)
