@@ -26,6 +26,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -1103,9 +1104,8 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
-            )
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.reshape(-1, self.config.text_config.vocab_size), labels.reshape(-1))
 
         return Seq2SeqLMOutput(
             loss=loss,
