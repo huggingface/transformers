@@ -23,6 +23,7 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     SnakeBeta,
     TorchActivation1d,
 )
+from ..voxtral_realtime.modeling_voxtral_realtime import VoxtralRealtimeCausalConv1d
 from .configuration_qwen3_tts_tokenizer_single_codebook import (
     Qwen3TTSTokenizerSingleCodebookConfig,
     Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig,
@@ -910,13 +911,12 @@ class Qwen3TTSTokenizerSingleCodebookModel(Qwen3TTSTokenizerSingleCodebookPreTra
         return Qwen3TTSTokenizerSingleCodebookDecoderOutput(audio_values=audio_values)
 
 
-class CausalConv1d(nn.Conv1d):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.causal_padding = self.dilation[0] * (self.kernel_size[0] - 1)
-
-    def forward(self, x):
-        return self._conv_forward(F.pad(x, [self.causal_padding, 0]), self.weight, self.bias)
+class CausalConv1d(VoxtralRealtimeCausalConv1d):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, bias=True):
+        # Non-streaming use: cache_key is unused (padding_cache is always None in forward).
+        super().__init__(
+            in_channels, out_channels, kernel_size, cache_key="", stride=stride, dilation=dilation, bias=bias
+        )
 
 
 class Qwen3TTSTokenizerSingleCodebookAMPBlock(AMPBlock):
