@@ -22,7 +22,7 @@ import os
 import re
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Any
 
 from safetensors import safe_open
 from safetensors.torch import save_file
@@ -515,7 +515,11 @@ def offload_weight(weight: torch.Tensor, weight_name: str, offload_folder: str |
     return offload_index
 
 
-def load_offloaded_parameter(model: "PreTrainedModel", param_name: str) -> dict[str, torch.Tensor]:
+def load_offloaded_parameter(
+    model: "PreTrainedModel",
+    param_name: str,
+    meta_state_dict: Optional[dict[str, torch.Tensor | Any]] = None,
+) -> dict[str, torch.Tensor]:
     """Load source `param_name` from disk, if it was offloaded due to the device_map,
     and thus lives as a meta parameter inside `model`.
 
@@ -546,7 +550,8 @@ def load_offloaded_parameter(model: "PreTrainedModel", param_name: str) -> dict[
     from ..core_model_loading import WeightRenaming, WeightConverter, rename_source_key, revert_weight_conversion
 
     # Convert from source key in checkpoint to target key in model
-    meta_state_dict = model.state_dict()
+    if meta_state_dict is None:
+        meta_state_dict = model.state_dict()  # this can be costly: please pass as arg when possible
     renamings = [entry for entry in model._weight_conversions if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in model._weight_conversions if isinstance(entry, WeightConverter)]
     param_name = rename_source_key(param_name, renamings, converters, model.base_model_prefix, meta_state_dict)[0]
