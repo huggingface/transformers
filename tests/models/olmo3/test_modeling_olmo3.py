@@ -13,22 +13,26 @@
 # limitations under the License.
 """Testing suite for the PyTorch Olmo3 model."""
 
+import tempfile
 import unittest
 
 import pytest
 
-from transformers import is_torch_available
+from transformers import is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    is_tensor_parallel_test,
     require_torch,
     slow,
     torch_device,
 )
+from transformers.utils import is_torchao_available
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_tensor_parallel_mixin import _init_distributed, _test_tp_generation_quantized_impl
 
 
 if is_torch_available():
@@ -69,6 +73,31 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Olmo3ForCausalLM if is_torch_available() else None
+
+    @is_tensor_parallel_test
+    def test_tp_generation_quantized(self):
+        # If model uses rope-theta 50k (default value), the test fails
+        # Override and set `theta=10K`
+        self._skip_if_not_supported()
+
+        if not is_torchao_available():
+            self.skipTest("Test requires torchao")
+
+        config = self.model_tester.get_config()
+        config.rope_parameters["full_attention"]["rope_theta"] = 10_000.0
+        config.rope_parameters["sliding_attention"]["rope_theta"] = 10_000.0
+
+        model_class = self._get_tp_model_class()
+        max_new_tokens = 25
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model = model_class(config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
+
+            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
+                tmp_dir, model_class, max_new_tokens
+            )
 
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
