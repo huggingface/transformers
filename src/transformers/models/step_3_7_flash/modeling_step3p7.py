@@ -27,21 +27,22 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.activations import ACT2FN
-from transformers.cache_utils import Cache, DynamicCache
-from transformers.generation import GenerationMixin
-from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from transformers.modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from transformers.cache_utils import Cache
+from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
-from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check, torch_int
-from transformers.utils.generic import merge_with_config_defaults
-from transformers.utils.output_capturing import capture_outputs
+from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_int
 
+from ...activations import ACT2FN
+from ...cache_utils import DynamicCache
+from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...utils import ModelOutput
-from ...utils.generic import maybe_autocast
+from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...utils import torch_compilable_check
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
 
 
@@ -356,6 +357,7 @@ class Step3p7VisionModel(nn.Module):
 # Text model
 class Step3p7PreTrainedModel(PreTrainedModel):
     config_class = Step3p7Config
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
@@ -1192,6 +1194,12 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             model_inputs["num_local_patches"] = num_local_patches
 
         return model_inputs
+
+    def get_input_embeddings(self):
+        return self.model.language_model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.language_model.embed_tokens = value
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings

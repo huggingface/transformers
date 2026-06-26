@@ -84,7 +84,7 @@ class Step3p7ModelTester:
             "mlp_ratio": 1,
             "use_rope2d": True,
         },
-        image_token_id=97,  # vocab_size - 2
+        image_token_id=4,
     ):
         self.parent = parent
         self.batch_size = batch_size
