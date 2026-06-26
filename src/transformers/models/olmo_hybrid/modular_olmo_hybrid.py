@@ -713,6 +713,7 @@ class OlmoHybridModel(Qwen3NextModel):
                 for layer_idx in range(config.num_hidden_layers)
             ]
         )
+        # Released ckpt don't use any ROPE and have  it set to `None`
         self.rotary_emb = (
             OlmoHybridRotaryEmbedding(config=config)
             if getattr(config, "rope_parameters", None) is not None
