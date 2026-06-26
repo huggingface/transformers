@@ -143,7 +143,7 @@ Because the batch shapes change every step, the continuous batching system handl
 
 1. Query lengths are padded to the nearest multiple of `q_padding_interval_size`.
 2. KV lengths are padded to the nearest multiple of `kv_padding_interval_size`.
-3. Recorded graphs are stored in an LRU cache of up to `max_cached_graphs` entries.
+3. Recorded graphs are stored in a cache.
 
 When a batch's padded shape matches a cached graph, the graph replays without any CPU dispatch. New shapes trigger a new graph capture.
 

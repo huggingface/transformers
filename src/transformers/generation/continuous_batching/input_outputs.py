@@ -111,7 +111,7 @@ class ContinuousBatchingIOs:
         # Setup other accumulators
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
-        self.graphs: CudaGraphBuffer = CudaGraphBuffer(continuous_batching_config.max_cached_graphs)
+        self.graphs: CudaGraphBuffer = CudaGraphBuffer()
         self._read_trash_index = cache.read_trash_index
         self._write_trash_index = cache.write_trash_index
         # Setup static tensors and compute stream
@@ -546,13 +546,12 @@ class ContinuousBatchingIOs:
         # Keys for varlen path
         return (self.num_q_tokens, self.max_kv_read, *self.max_seqlen_k.values())
 
-    def get_graph(self) -> torch.cuda.CUDAGraph | None:
+    def get_graph(self, prefix: str = "") -> torch.cuda.CUDAGraph | None:
         key = self._get_graph_key()
         graph = self.graphs.get_graph(key)
         # If this point is reached, it means the next step will be a new graph capture
         if graph is None:
-            self.graphs.plan_for_new_graph()
-            logger.info(f"Creating graph for {key = }")
+            logger.info(f"{prefix}Creating graph for {key = }")
         return graph
 
     def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
@@ -781,7 +780,8 @@ class ContinuousBatchingAsyncIOs:
         return self.io_pairs[self.current_pair].device_io.output_ids
 
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
-        return self.io_pairs[self.current_pair].device_io.get_graph()
+        prefix = f"(IO {self.current_pair})"
+        return self.io_pairs[self.current_pair].device_io.get_graph(prefix=prefix)
 
     def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
         self.io_pairs[self.current_pair].device_io.set_graph(graph)

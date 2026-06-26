@@ -277,7 +277,6 @@ cb_config = ContinuousBatchingConfig(
     use_cuda_graph=True,
     q_padding_interval_size=64,
     kv_padding_interval_size=16384,
-    max_cached_graphs=32,
 )
 ```
 

@@ -60,7 +60,6 @@ memory and time to create, we use an LRU cache with a fixed size to limit memory
 - Q: 64 tokens gives ~4 graphs for max_batch_tokens=256, which is a good balance
 - KV: 8192 tokens (256 blocks at block_size=32) gives reasonable granularity for large caches
 
-The maximum number of cached graphs is controlled by max_cached_graphs (default 32), which uses LRU eviction.
 All defaults are stored in ContinuousBatchingConfig.resolve_sentinel_values().
 """
 
