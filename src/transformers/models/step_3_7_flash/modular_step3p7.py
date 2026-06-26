@@ -304,6 +304,7 @@ class Step3p7VisionModel(nn.Module):
 # Text model
 class Step3p7PreTrainedModel(PreTrainedModel):
     config_class = Step3p7Config
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
@@ -537,6 +538,12 @@ class Step3p7Model(DeepseekOcr2Model):
 
 class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
     config: Step3p7Config
+
+    def get_input_embeddings(self):
+        return self.model.language_model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.language_model.embed_tokens = value
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
