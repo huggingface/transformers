@@ -1064,9 +1064,7 @@ class Gemma4UnifiedModel(Gemma4Model):
                 f" {image_features.shape[0]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(
-                image_mask.to(inputs_embeds.device), image_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_features)
 
         if pixel_values_videos is not None:
             video_features = self.get_video_features(
@@ -1083,9 +1081,7 @@ class Gemma4UnifiedModel(Gemma4Model):
                 f" {video_features.shape[0]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(
-                video_mask.to(inputs_embeds.device), video_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_features)
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
