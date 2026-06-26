@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch DeepSeekV3.2 model."""
 
 import unittest
+import tempfile
 
 import pytest
 from parameterized import parameterized
@@ -250,6 +251,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         model = DeepseekV32ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map="auto",
+            offload_folder=tempfile.mkdtemp(),
             dtype=torch.bfloat16,
         )
 
@@ -268,6 +270,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         model = DeepseekV32ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map="auto",
+            offload_folder=tempfile.mkdtemp(),
             dtype=torch.bfloat16,
             attn_implementation="eager",
         )
@@ -288,6 +291,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         model = DeepseekV32ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map="auto",
+            offload_folder=tempfile.mkdtemp(),
             dtype=torch.bfloat16,
             attn_implementation="eager",
         )
@@ -328,6 +332,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         model = DeepseekV32ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map="auto",
+            offload_folder=tempfile.mkdtemp(),
             dtype=torch.bfloat16,
             attn_implementation="eager",
         )
