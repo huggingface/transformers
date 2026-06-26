@@ -556,6 +556,7 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
         "hidden_states": Lfm2MoeDecoderLayer,
         "attentions": Lfm2MoeAttention,
     }
+    _is_stateful = True
 
     @torch.no_grad()
     def _init_weights(self, module):
