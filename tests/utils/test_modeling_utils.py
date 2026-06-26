@@ -3606,7 +3606,7 @@ class DisableMmapLoadingTest(unittest.TestCase):
 
 
 @require_torch
-class RemoteCodeModelTests(unittest.TestCase):
+class RemoteAndCustomCodeModelTests(unittest.TestCase):
     def test_remote_code_registration(self):
         """
         Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
@@ -3667,4 +3667,20 @@ class RemoteCodeModelTests(unittest.TestCase):
         # Check config as well
         self.assertTrue(native_model.config.__class__.__module__.startswith("transformers."))
 
-    # def test_custom_code_is_detected(self):
+    def test_custom_code_is_detected(self):
+        """Test that classes defined in the current context (user module, notebook, ...) will be detected as custom code"""
+
+        class MyNewModel(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.foo = nn.Linear(2, 2)
+                self.post_init()
+
+            def forward(self, x):
+                return self.foo(x)
+
+        # This is a type created in the current session - it should be custom code, but not remote code
+        model = MyNewModel(PreTrainedConfig())
+
+        self.assertTrue(model.is_custom_code())
+        self.assertFalse(model.is_remote_code())
