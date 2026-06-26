@@ -37,7 +37,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/tipsv2_architecture.jpg"
 alt="tipsv2 architecture overview" width="600"/>
 
-This model was contributed by [Ternuraz](https://huggingface.co/Ternuraz).
+This model was contributed by [Ternuraz](https://huggingface.co/Ternuraz) and [guarin](https://huggingface.co/guarin).
 The original code can be found [here](https://github.com/google-deepmind/tips).
 
 You can find all the original TIPSv2 checkpoints under the [TIPSv2](https://huggingface.co/collections/google/tipsv2) collection.
