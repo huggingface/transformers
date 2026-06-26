@@ -71,6 +71,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "LagunaConfig": ["moe_apply_router_weight_on_input"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
+    "Lfm2BidirectionalConfig": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
     "BambaConfig": ["attn_layer_indices"],
     "Dots1Config": ["max_window_layers", "n_routed_experts"],
