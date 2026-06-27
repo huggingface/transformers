@@ -369,7 +369,9 @@ class Gemma4AudioSubSampleConvProjectionLayer(nn.Module):
             mask = mask.to(device=hidden_states.device)
             hidden_states = hidden_states * mask[:, None, :, None]
 
-        hidden_states = self.conv(hidden_states.to(self.conv.weight.dtype))
+        if (target_dtype := self.conv.weight.dtype).is_floating_point:
+            hidden_states = hidden_states.to(target_dtype)
+        hidden_states = self.conv(hidden_states)
         hidden_states = self.act(self.norm(hidden_states.permute(0, 2, 3, 1)).permute(0, 3, 1, 2).contiguous())
 
         if mask is not None:
@@ -610,7 +612,9 @@ class Gemma4VisionPatchEmbedder(nn.Module):
     ) -> torch.Tensor:
         # Gemma4 applies no normalization and instead scales in model code
         pixel_values = 2 * (pixel_values - 0.5)
-        hidden_states = self.input_proj(pixel_values.to(self.input_proj.weight.dtype))
+        if (target_dtype := self.input_proj.weight.dtype).is_floating_point:
+            pixel_values = pixel_values.to(target_dtype)
+        hidden_states = self.input_proj(pixel_values)
         position_embeddings = self._position_embeddings(pixel_position_ids, padding_positions)
         return hidden_states + position_embeddings
 
