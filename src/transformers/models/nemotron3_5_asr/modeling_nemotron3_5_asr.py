@@ -230,10 +230,6 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
         prompt_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        if prompt_ids is None:
-            # During generation the language is fixed per utterance/stream and stashed by `generate`.
-            prompt_ids = getattr(self, "_prompt_ids", None)
-
         encoder_outputs = self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,

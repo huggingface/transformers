@@ -306,9 +306,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
             expected = json.load(f)
 
         samples = self._load_datasamples(1)
-        model = Nemotron3_5AsrForRNNT.from_pretrained(
-            self.checkpoint_name, dtype=self.dtype, device_map="auto"
-        )
+        model = Nemotron3_5AsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         # `expected["results"]` maps each prompting mode -> {"transcriptions", "token_ids"}: `"en-US"` forces
         # the language via the prompt, `"auto"` lets the model detect it (it emits the `<en-US>` tag itself).
@@ -343,9 +341,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
             expected = json.load(f)
 
         samples = self._load_datasamples(5)
-        model = Nemotron3_5AsrForRNNT.from_pretrained(
-            self.checkpoint_name, dtype=self.dtype, device_map="auto"
-        )
+        model = Nemotron3_5AsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         # `expected["results"]` maps each prompting mode -> {"transcriptions", "token_ids"}: `"en-US"` forces
         # the language via the prompt, `"auto"` lets the model detect it (it emits the `<en-US>` tag itself).
@@ -405,9 +401,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3",
             sampling_rate=sampling_rate,
         )
-        model = Nemotron3_5AsrForRNNT.from_pretrained(
-            self.checkpoint_name, dtype=self.dtype, device_map="auto"
-        )
+        model = Nemotron3_5AsrForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         # Select the streaming right attention context (lookahead, in subsampled encoder frames). This sizes
         # the audio/mel chunks the processor emits and must reach `generate` so the forward matches; it travels

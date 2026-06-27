@@ -235,7 +235,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         sampling_rate: int | None = None,
         is_streaming: bool = False,
         is_first_audio_chunk: bool | None = True,
-        language: str | list[str] | None = None,
+        language: str | list[str] = "auto",
         **kwargs: Unpack[Nemotron3_5AsrProcessorKwargs],
     ):
         r"""
@@ -249,12 +249,11 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
             Whether the current audio is the first chunk of a streaming session. Controls `center` in the
             feature extractor so per-chunk STFT reproduces a single full-utterance pass. Must be `True`
             when `is_streaming=False`.
-        language (`str` or `list[str]`, *optional*):
-            Target language(s) for prompt conditioning (Whisper-style `language` argument). Either a
+        language (`str` or `list[str]`, *optional*, defaults to `"auto"`):
+            Target language(s) for prompt conditioning. Either a
             single language string applied to the whole batch, or one string per audio. Accepts locales
             (`"en-US"`, `"de-DE"`, ...), bare codes (`"de"`), or `"auto"` for automatic language
-            detection. Resolved via `prompt_dictionary` into the `prompt_ids` model input. Defaults to
-            `"auto"` with a warning.
+            detection. Resolved via `prompt_dictionary` into the `prompt_ids` model input.
 
         Returns:
             [`BatchFeature`]: the [`NemotronAsrStreamingProcessor`] outputs, augmented with:
@@ -466,14 +465,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
             self.num_mel_frames_per_audio_chunk * self.feature_extractor.hop_length + self.feature_extractor.win_length
         )
 
-    def _resolve_prompt_ids(self, language: "str | list[str] | None", batch_size: int) -> torch.LongTensor:
-        if language is None:
-            logger.warning_once(
-                "`language` was not provided. Falling back to automatic language detection "
-                "(`language='auto'`). Pass `language` explicitly (e.g. 'en-US', 'de-DE') to "
-                "condition the model on a known language, which is more accurate and stable."
-            )
-            language = "auto"
+    def _resolve_prompt_ids(self, language: "str | list[str]", batch_size: int) -> torch.LongTensor:
         if isinstance(language, str):
             language = [language] * batch_size
         if len(language) != batch_size:
