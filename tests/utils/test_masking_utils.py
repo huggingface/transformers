@@ -29,6 +29,7 @@ if is_torch_available():
     from transformers import DynamicCache, LlamaConfig
     from transformers.cache_utils import DynamicSlidingWindowLayer
     from transformers.masking_utils import (
+        _ignore_causal_mask_sdpa,
         create_bidirectional_mask,
         create_causal_mask,
         create_chunked_causal_mask,
@@ -396,4 +397,79 @@ class MaskTest(unittest.TestCase):
         # `None` (no padding) is deferred too.
         self.assertIsNone(
             create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, past_key_values=None)
+        )
+
+
+@unittest.skipUnless(is_torch_available(), "torch is required")
+class TestIgnoreCausalMaskSdpa(unittest.TestCase):
+    def test_skip_when_no_padding_and_single_query(self):
+        padding_mask = None
+        self.assertTrue(
+            _ignore_causal_mask_sdpa(
+                padding_mask=padding_mask,
+                query_length=1,
+                kv_length=5,
+                kv_offset=0,
+                local_attention_size=None,
+            )
+        )
+
+    def test_skip_when_no_padding_and_equal_lengths(self):
+        padding_mask = None
+        self.assertTrue(
+            _ignore_causal_mask_sdpa(
+                padding_mask=padding_mask,
+                query_length=8,
+                kv_length=8,
+                kv_offset=0,
+                local_attention_size=None,
+            )
+        )
+
+    def test_no_skip_when_padding_exists(self):
+        padding_mask = torch.tensor([[True, True, True, False, False]])
+        self.assertFalse(
+            _ignore_causal_mask_sdpa(
+                padding_mask=padding_mask,
+                query_length=1,
+                kv_length=5,
+                kv_offset=0,
+                local_attention_size=None,
+            )
+        )
+
+    def test_no_skip_when_kv_gt_query_no_padding(self):
+        padding_mask = None
+        self.assertFalse(
+            _ignore_causal_mask_sdpa(
+                padding_mask=padding_mask,
+                query_length=4,
+                kv_length=9,
+                kv_offset=0,
+                local_attention_size=None,
+            )
+        )
+
+    def test_no_skip_when_local_window_active_and_kv_exceeds(self):
+        padding_mask = None
+        self.assertFalse(
+            _ignore_causal_mask_sdpa(
+                padding_mask=padding_mask,
+                query_length=1,
+                kv_length=10,
+                kv_offset=0,
+                local_attention_size=4,
+            )
+        )
+
+    def test_skip_when_kv_within_local_window(self):
+        padding_mask = None
+        self.assertTrue(
+            _ignore_causal_mask_sdpa(
+                padding_mask=padding_mask,
+                query_length=1,
+                kv_length=3,
+                kv_offset=0,
+                local_attention_size=4,
+            )
         )
