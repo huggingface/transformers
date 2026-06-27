@@ -30,7 +30,6 @@ else:
     # Register a fake type to avoid crashing for annotations and `isinstance` checks
     BlockMask = torch.Tensor
 
-_is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 _is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 
@@ -554,11 +553,6 @@ def sdpa_mask(
             "The vmap functionality for mask creation is only supported from torch>=2.6. "
             "Please update your torch version or use `use_vmap=False` with index-based masks."
         )
-
-    # Due to a bug in versions of torch<2.5, we need to update the mask in case a query is not attending to any
-    # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
-    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
-        attention_mask = attention_mask | torch.all(~attention_mask, dim=-1, keepdim=True)
 
     return attention_mask
 
