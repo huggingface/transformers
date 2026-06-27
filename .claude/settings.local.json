@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python:*)"
-    ],
-    "deny": [],
-    "ask": []
-  }
-}
