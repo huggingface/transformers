@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    require_torch_greater_or_equal,
     slow,
     torch_device,
 )
@@ -323,7 +324,8 @@ class NemotronHModelTester:
         Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
         to check whether multi-token cached input is properly handled.
 
-        Runs on an accelerator only: NemotronH's MoE layers use grouped_mm, which has no CPU kernel.
+        The CPU variant requires torch >= 2.11: NemotronH's MoE experts dispatch through
+        `integrations.moe` to `torch._grouped_mm`, which only gained a CPU kernel in 2.11.
         """
         model = NemotronHModel(config=config)
         model.to(device)
@@ -455,6 +457,11 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         torch.use_deterministic_algorithms(self._original_deterministic)
         torch.backends.cudnn.deterministic = self._original_cudnn_deterministic
         torch.backends.cudnn.benchmark = self._original_cudnn_benchmark
+
+    @require_torch_greater_or_equal("2.11")
+    def test_nemotron_h_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_nemotron_h_chunked_prefill(*config_and_inputs, device="cpu")
 
     @require_torch_accelerator
     def test_nemotron_h_chunked_prefill_torch_device(self):
