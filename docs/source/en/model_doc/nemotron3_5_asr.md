@@ -67,7 +67,7 @@ output = model.generate(**inputs, return_dict_in_generate=True)
 print(processor.decode(output.sequences, skip_special_tokens=True))
 
 # ... or let the model detect it and keep the emitted <xx-XX> language tag.
-inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate, language="auto")
+inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate) # equiv to ..., language="auto"
 inputs.to(model.device, dtype=model.dtype)
 output = model.generate(**inputs, return_dict_in_generate=True)
 print(processor.decode(output.sequences, skip_special_tokens=False))
