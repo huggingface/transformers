@@ -25,6 +25,7 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     TorchActivation1d,
 )
 from ..voxtral_realtime.modeling_voxtral_realtime import VoxtralRealtimeCausalConv1d
+from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecVectorQuantization
 from .configuration_qwen3_tts_tokenizer_single_codebook import (
     Qwen3TTSTokenizerSingleCodebookConfig,
     Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig,
@@ -138,8 +139,8 @@ def _v1_sinusoids(length, channels, max_timescale=10000):
 #  VQ core classes (inference-only port of core_vq.py)
 
 
-class Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(nn.Module):
-    """Codebook with Euclidean distance (inference subset)."""
+class Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(XcodecEuclideanCodebook):
+    """Codebook with Euclidean distance."""
 
     def __init__(
         self,
@@ -151,39 +152,20 @@ class Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(nn.Module):
         epsilon=1e-5,
         threshold_ema_dead_code=2.0,
     ):
-        super().__init__()
-        self.decay = decay
+        nn.Module.__init__(self)
+        embed = torch.zeros(codebook_size, dim)
         self.codebook_size = codebook_size
+        self.register_buffer("inited", torch.Tensor([not kmeans_init]))
+        self.register_buffer("cluster_size", torch.zeros(codebook_size))
+        self.register_buffer("embed", embed)
+        self.register_buffer("embed_avg", embed.clone())
+        self.decay = decay
         self.kmeans_iters = kmeans_iters
         self.epsilon = epsilon
         self.threshold_ema_dead_code = threshold_ema_dead_code
-        # buffers are held by DistributedResidualVectorQuantization and passed at call-time
-        self.inited = None
-        self.cluster_size = None
-        self.embed = None
-        self.embed_avg = None
-
-    def quantize(self, x):
-        embed = self.embed.t()
-        dist = -(x.pow(2).sum(1, keepdim=True) - 2 * x @ embed + embed.pow(2).sum(0, keepdim=True))
-        return dist.max(dim=-1).indices
-
-    def dequantize(self, embed_ind):
-        return F.embedding(embed_ind, self.embed)
-
-    def encode(self, x, buffers):
-        self.inited, self.cluster_size, self.embed, self.embed_avg = buffers
-        shape = x.shape
-        x = x.reshape(-1, x.shape[-1])
-        embed_ind = self.quantize(x)
-        return embed_ind.view(*shape[:-1])
-
-    def decode(self, embed_ind, buffers):
-        self.inited, self.cluster_size, self.embed, self.embed_avg = buffers
-        return self.dequantize(embed_ind)
 
 
-class Qwen3TTSTokenizerSingleCodebookVectorQuantization(nn.Module):
+class Qwen3TTSTokenizerSingleCodebookVectorQuantization(XcodecVectorQuantization):
     def __init__(
         self,
         dim,
@@ -196,12 +178,12 @@ class Qwen3TTSTokenizerSingleCodebookVectorQuantization(nn.Module):
         threshold_ema_dead_code=2.0,
         commitment_weight=1.0,
     ):
-        super().__init__()
+        nn.Module.__init__(self)
         _codebook_dim = codebook_dim if codebook_dim is not None else dim
         requires_projection = _codebook_dim != dim
         self.project_in = nn.Linear(dim, _codebook_dim) if requires_projection else nn.Identity()
         self.project_out = nn.Linear(_codebook_dim, dim) if requires_projection else nn.Identity()
-        self._codebook = Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(
+        self.codebook = Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(
             dim=_codebook_dim,
             codebook_size=codebook_size,
             kmeans_init=kmeans_init,
@@ -212,52 +194,38 @@ class Qwen3TTSTokenizerSingleCodebookVectorQuantization(nn.Module):
         )
         self.codebook_size = codebook_size
 
-    def encode(self, x, buffers):
+    def encode(self, x):
         x = self.project_in(x)
-        return self._codebook.encode(x, buffers)
+        return self.codebook.encode(x)
 
-    def decode(self, embed_ind, buffers):
-        quantize = self._codebook.decode(embed_ind, buffers)
+    def decode(self, embed_ind):
+        quantize = self.codebook.decode(embed_ind)
         return self.project_out(quantize)
 
 
 class Qwen3TTSTokenizerSingleCodebookDistributedRVQ(nn.Module):
-    """Distributed residual VQ (inference subset of DistributedResidualVectorQuantization)."""
+    """Residual VQ with one codebook per quantizer."""
 
     def __init__(self, *, num_quantizers, quantize_dropout=False, rand_num_quant=None, **kwargs):
         super().__init__()
-        codebook_size = kwargs["codebook_size"]
-        codebook_dim = kwargs.get("codebook_dim") or kwargs["dim"]
-        kmeans_init = kwargs["kmeans_init"]
-
-        if isinstance(kmeans_init, bool):
-            if not kmeans_init:
-                embed = torch.empty(num_quantizers, codebook_size, codebook_dim)
-                nn.init.kaiming_uniform_(embed)
-                inited = True
-            else:
-                embed = torch.zeros(num_quantizers, codebook_size, codebook_dim)
-                inited = False
-        else:
+        if not isinstance(kwargs["kmeans_init"], bool):
             raise TypeError("kmeans_init should be bool")
-
-        self.register_buffer("inited", torch.Tensor([[inited]] * num_quantizers))
-        self.register_buffer("cluster_size", torch.zeros(num_quantizers, codebook_size))
-        self.register_buffer("embed", embed)
-        self.register_buffer("embed_avg", embed.clone())
 
         self.layers = nn.ModuleList(
             [Qwen3TTSTokenizerSingleCodebookVectorQuantization(**kwargs) for _ in range(num_quantizers)]
         )
+        if not kwargs["kmeans_init"]:
+            for layer in self.layers:
+                nn.init.kaiming_uniform_(layer.codebook.embed)
+                layer.codebook.embed_avg.copy_(layer.codebook.embed)
 
     def encode(self, x, n_q=None):
         residual = x
         all_indices = []
         n_q = n_q or len(self.layers)
-        for i, layer in enumerate(self.layers[:n_q]):
-            buffers = [self.inited[i], self.cluster_size[i], self.embed[i], self.embed_avg[i]]
-            indices = layer.encode(residual, buffers)
-            quantized = layer.decode(indices, buffers)
+        for layer in self.layers[:n_q]:
+            indices = layer.encode(residual)
+            quantized = layer.decode(indices)
             residual = residual - quantized
             all_indices.append(indices)
         return torch.stack(all_indices)
@@ -265,8 +233,7 @@ class Qwen3TTSTokenizerSingleCodebookDistributedRVQ(nn.Module):
     def decode(self, q_indices):
         quantized_out = torch.tensor(0.0, device=q_indices.device)
         for i, indices in enumerate(q_indices):
-            buffers = [self.inited[i], self.cluster_size[i], self.embed[i], self.embed_avg[i]]
-            quantized_out = quantized_out + self.layers[i].decode(indices, buffers)
+            quantized_out = quantized_out + self.layers[i].decode(indices)
         return quantized_out
 
 
@@ -915,9 +882,8 @@ class Qwen3TTSTokenizerSingleCodebookModel(Qwen3TTSTokenizerSingleCodebookPreTra
 class CausalConv1d(VoxtralRealtimeCausalConv1d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, bias=True):
         # Non-streaming use: cache_key is unused (padding_cache is always None in forward).
-        super().__init__(
-            in_channels, out_channels, kernel_size, cache_key="", stride=stride, dilation=dilation, bias=bias
-        )
+        nn.Conv1d.__init__(self, in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, bias=bias)
+        self.cache_key = ""
 
 
 class Qwen3TTSTokenizerSingleCodebookAMPBlock(AMPBlock):
