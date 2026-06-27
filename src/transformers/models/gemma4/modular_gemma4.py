@@ -584,7 +584,9 @@ class Gemma4VisionPatchEmbedder(nn.Module):
     ) -> torch.Tensor:
         # Gemma4 applies no normalization and instead scales in model code
         pixel_values = 2 * (pixel_values - 0.5)
-        hidden_states = self.input_proj(pixel_values.to(self.input_proj.weight.dtype))
+        if (target_dtype := self.input_proj.weight.dtype).is_floating_point:
+            pixel_values = pixel_values.to(target_dtype)
+        hidden_states = self.input_proj(pixel_values)
         position_embeddings = self._position_embeddings(pixel_position_ids, padding_positions)
         return hidden_states + position_embeddings
 
