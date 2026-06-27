@@ -408,26 +408,26 @@ class NemotronHMamba2Mixer(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
 
         use_precomputed_state = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        if use_precomputed_state:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
 
         # Convolution sequence transformation
         if use_precomputed_state and seq_len == 1:
-            conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
-            hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
+            conv_states = cache_params.update_conv_state(hidden_states, self.layer_idx)
+            hidden_states = torch.sum(conv_states * self.conv1d.weight[:, 0, :], dim=-1)
             if self.use_conv_bias:
                 hidden_states += self.conv1d.bias
             hidden_states = self.act(hidden_states).to(dtype)[:, None, ...]         # [batch, 1, intermediate_size] : decoding
         else:
             if use_precomputed_state:
                 # chunked prefill / speculative verify: prepend cached left context to the conv input
-                hidden_states = torch.cat(
-                    [cache_params.layers[self.layer_idx].conv_states, hidden_states], dim=-1
-                )
+                hidden_states = torch.cat([conv_state, hidden_states], dim=-1)
             if cache_params is not None:
-                conv_state = nn.functional.pad(
+                conv_states = nn.functional.pad(
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
-                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
+                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)
 
             hidden_states = self.act(self.conv1d(hidden_states)[..., :hidden_states.shape[-1]].transpose(1, 2))
             if use_precomputed_state:

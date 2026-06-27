@@ -493,6 +493,9 @@ class FalconH1Mixer(nn.Module):
         groups_time_state_size = self.n_groups * self.ssm_state_size
 
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
 
         # getting projected states from cache if it exists
         if use_precomputed_states and seq_len == 1:
@@ -505,7 +508,7 @@ class FalconH1Mixer(nn.Module):
             # 2. Convolution sequence transformation
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
-                cache_params.layers[self.layer_idx].conv_states,
+                conv_state,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 self.activation,
@@ -527,7 +530,7 @@ class FalconH1Mixer(nn.Module):
             C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
             hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             hidden_states = selective_state_update(
-                cache_params.layers[self.layer_idx].recurrent_states,
+                recurrent_state,
                 hidden_states_reshaped,
                 dt,
                 A,
@@ -599,9 +602,7 @@ class FalconH1Mixer(nn.Module):
                 if use_precomputed_states:
                     # chunked prefill / speculative verify: prepend the cached conv left-context so the
                     # causal conv sees the correct history instead of zero-padding; dropped after the conv.
-                    hidden_states_B_C = torch.cat(
-                        [cache_params.layers[self.layer_idx].conv_states, hidden_states_B_C], dim=-1
-                    )
+                    hidden_states_B_C = torch.cat([conv_state, hidden_states_B_C], dim=-1)
                 if cache_params is not None:
                     conv_states = F.pad(
                         hidden_states_B_C,
@@ -652,9 +653,7 @@ class FalconH1Mixer(nn.Module):
                         z=None,
                         seq_idx=None,
                         return_final_states=True,
-                        initial_states=cache_params.layers[self.layer_idx].recurrent_states
-                        if use_precomputed_states
-                        else None,
+                        initial_states=recurrent_state if use_precomputed_states else None,
                         **dt_limit_kwargs,
                     )
                 if ssm_state is not None and cache_params is not None:
@@ -690,6 +689,8 @@ class FalconH1Mixer(nn.Module):
         hidden_states_B_C = hidden_states_B_C.transpose(1,2)
 
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
 
         # 2. Convolution sequence transformation
         if use_precomputed_states and seq_len == 1:
@@ -705,9 +706,7 @@ class FalconH1Mixer(nn.Module):
             hidden_states_B_C = self.act(hidden_states_B_C)
         else:
             if use_precomputed_states:
-                hidden_states_B_C = torch.cat(
-                    [cache_params.layers[self.layer_idx].conv_states, hidden_states_B_C], dim=-1
-                )
+                hidden_states_B_C = torch.cat([conv_state, hidden_states_B_C], dim=-1)
             if cache_params is not None:
                 conv_states = nn.functional.pad(
                     hidden_states_B_C, (self.conv_kernel_size - hidden_states_B_C.shape[-1], 0)
