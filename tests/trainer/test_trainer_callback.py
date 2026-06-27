@@ -42,7 +42,7 @@ from transformers import (
     TrainingArguments,
     is_torch_available,
 )
-from transformers.integrations.integration_utils import KubeflowCallback, SwanLabCallback
+from transformers.integrations.integration_utils import KubeflowCallback, SwanLabCallback, TrackioCallback
 from transformers.testing_utils import require_ipython, require_torch
 from transformers.trainer_callback import CallbackHandler, ExportableState, TrainerControl
 
@@ -806,6 +806,64 @@ class SwanLabCallbackTest(unittest.TestCase):
         init_kwargs = fake_swanlab.init.call_args.kwargs
         self.assertEqual(init_kwargs["id"], "run-123")
         self.assertEqual(init_kwargs["resume"], "must")
+
+
+class TrackioCallbackTest(unittest.TestCase):
+    """Tests for TrackioCallback functionality."""
+
+    def _create_callback(self, fake_trackio):
+        """Create a TrackioCallback with a mocked trackio module."""
+        with patch(
+            "transformers.integrations.integration_utils.TrackioCallback.__init__",
+            lambda self: None,
+        ):
+            callback = TrackioCallback()
+            callback._trackio = fake_trackio
+            callback._initialized = False
+            callback._space_id = None
+            callback._static_space_id = None
+        return callback
+
+    @staticmethod
+    def _create_args():
+        class Args(SimpleNamespace):
+            def to_dict(self):
+                return {}
+
+        return Args(
+            project="test-project",
+            run_name="test-run",
+            trackio_space_id=None,
+            trackio_bucket_id=None,
+            trackio_static_space_id=False,
+            hub_private_repo=False,
+        )
+
+    @staticmethod
+    def _create_state(is_world_process_zero=True, global_step=0):
+        return SimpleNamespace(is_world_process_zero=is_world_process_zero, global_step=global_step)
+
+    @staticmethod
+    def _create_model():
+        return SimpleNamespace(config=None, peft_config=None)
+
+    def test_on_log_after_train_end_reinitializes_trackio(self):
+        fake_trackio = Mock()
+        fake_trackio.config = Mock()
+        fake_trackio.context_vars.current_space_id.get.return_value = None
+        callback = self._create_callback(fake_trackio)
+        args = self._create_args()
+        state = self._create_state(global_step=5)
+        control = Mock()
+        model = self._create_model()
+
+        callback.setup(args, state, model)
+        callback.on_train_end(args, state, control, model=model)
+        callback.on_log(args, state, control, model=model, logs={"eval_loss": 0.5})
+
+        self.assertEqual(fake_trackio.init.call_count, 2)
+        fake_trackio.finish.assert_called_once()
+        fake_trackio.log.assert_called_once_with({"eval/loss": 0.5, "train/global_step": 5})
 
 
 class KubeflowCallbackTest(unittest.TestCase):
