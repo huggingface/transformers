@@ -43,6 +43,7 @@ from ...test_modeling_common import (
 
 if is_torch_available():
     from transformers import Glm5NextForCausalLM, Glm5NextModel
+    from transformers.models.glm5_next.modeling_glm5_next import Glm5NextIndexer
 
 
 class Glm5NextModelTester(CausalLMModelTester):
@@ -113,6 +114,112 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(layer.keys.shape, expected_key_shape)
             self.assertEqual(layer.values.shape, expected_value_shape)
 
+    def get_kpool_config(self, **kwargs):
+        values = {
+            "vocab_size": 32,
+            "pad_token_id": 0,
+            "hidden_size": 4,
+            "intermediate_size": 8,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 1,
+            "num_key_value_heads": 1,
+            "q_lora_rank": 2,
+            "kv_lora_rank": 2,
+            "qk_nope_head_dim": 2,
+            "qk_rope_head_dim": 0,
+            "v_head_dim": 2,
+            "index_head_dim": 2,
+            "index_n_heads": 1,
+            "index_topk": 2,
+            "index_kpool": 2,
+            "index_kpool_compress": True,
+            "index_kpool_always_select_tail": True,
+            "index_dsa_use_layernorm": False,
+            "indexer_types": ["full"],
+            "linear_attn_config": {
+                "full_attn_layers": [0],
+                "kda_layers": [],
+                "head_dim": 2,
+                "num_heads": 1,
+                "short_conv_kernel_size": 2,
+            },
+            "mlp_layer_types": ["dense"],
+        }
+        values.update(kwargs)
+        return Glm5NextConfig(**values)
+
+    def test_kpool_parameters_affect_forward_selection(self):
+        indexer = Glm5NextIndexer(self.get_kpool_config(), layer_idx=0).eval()
+        hidden_states = torch.tensor(
+            [[[10.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], [20.0, 0.0, 0.0, 0.0]]]
+        )
+        q_resid = torch.tensor([[[1.0, 0.0]]]).expand(1, 4, 2)
+        cos = torch.empty(1, 4, 0)
+        sin = torch.empty(1, 4, 0)
+        causal_mask = torch.triu(torch.full((1, 1, 4, 4), float("-inf")), diagonal=1)
+
+        with torch.no_grad():
+            indexer.wk.weight.copy_(torch.tensor([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]]))
+            indexer.wq_b.weight.copy_(torch.tensor([[1.0, 0.0], [0.0, 0.0]]))
+            indexer.weights_proj.weight.copy_(torch.tensor([[1.0, 0.0, 0.0, 0.0]]))
+            indexer.index_kpool_compress_gate.zero_()
+            indexer.index_kpool_compress_ape.copy_(torch.tensor([[8.0, 0.0], [-8.0, 0.0]]))
+            select_slot_zero, _ = indexer(
+                hidden_states,
+                q_resid,
+                (cos, sin),
+                causal_mask,
+            )
+            indexer.index_kpool_compress_ape.copy_(torch.tensor([[-8.0, 0.0], [8.0, 0.0]]))
+            select_slot_one, _ = indexer(
+                hidden_states,
+                q_resid,
+                (cos, sin),
+                causal_mask,
+            )
+
+        self.assertFalse(torch.equal(select_slot_zero[:, -1], select_slot_one[:, -1]))
+
+    def test_kpool_cache_matches_full_context(self):
+        config = self.get_kpool_config()
+        config._attn_implementation = "eager"
+        model = Glm5NextForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.tensor([[2, 3, 5, 7, 11, 13]], device=torch_device)
+
+        with torch.no_grad():
+            full_outputs = model(input_ids, use_cache=True)
+            prefix_outputs = model(input_ids[:, :4], use_cache=True)
+            cached_outputs = model(
+                input_ids[:, 4:],
+                past_key_values=prefix_outputs.past_key_values,
+                use_cache=True,
+            )
+
+        torch.testing.assert_close(
+            cached_outputs.logits,
+            full_outputs.logits[:, 4:],
+            rtol=1e-4,
+            atol=1e-4,
+        )
+        cache_layer = cached_outputs.past_key_values.layers[0]
+        self.assertEqual(cache_layer.indexer_keys.shape[1], input_ids.shape[1])
+        self.assertEqual(cache_layer.indexer_gate_scores.shape[1], input_ids.shape[1])
+
+    def test_kpool_cache_reorders_indexer_state(self):
+        model = Glm5NextForCausalLM(self.get_kpool_config()).to(torch_device).eval()
+        input_ids = torch.tensor([[2, 3, 5, 7], [11, 13, 17, 19]], device=torch_device)
+
+        with torch.no_grad():
+            cache = model(input_ids, use_cache=True).past_key_values
+
+        layer = cache.layers[0]
+        expected_keys = layer.indexer_keys[[1, 0]].clone()
+        expected_gate_scores = layer.indexer_gate_scores[[1, 0]].clone()
+        cache.reorder_cache(torch.tensor([1, 0], device=torch_device))
+
+        torch.testing.assert_close(layer.indexer_keys, expected_keys)
+        torch.testing.assert_close(layer.indexer_gate_scores, expected_gate_scores)
+
     def test_default_mlp_layer_types(self):
         config = Glm5NextConfig(
             num_hidden_layers=8,
@@ -145,6 +252,21 @@ class Glm5NextModelTest(CausalLMModelTest, unittest.TestCase):
                 "full_attention",
             ],
         )
+
+    def test_kpool_config_roundtrip_and_defaults(self):
+        default_config = Glm5NextConfig()
+        self.assertFalse(default_config.index_kpool_always_select_tail)
+
+        config = Glm5NextConfig(
+            index_kpool=16,
+            index_kpool_compress=True,
+            index_kpool_always_select_tail=True,
+        )
+        restored = Glm5NextConfig.from_dict(config.to_dict())
+
+        self.assertEqual(restored.index_kpool, 16)
+        self.assertTrue(restored.index_kpool_compress)
+        self.assertTrue(restored.index_kpool_always_select_tail)
 
     @parameterized.expand(["linear", "dynamic", "yarn"])
     def test_model_rope_scaling_from_config(self, scaling_type):

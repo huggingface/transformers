@@ -56,6 +56,8 @@ class Glm5NextConfig(PreTrainedConfig):
         checkpoint-compatible index-pool compression parameters.
     index_kpool_compress (`bool`, *optional*, defaults to `False`):
         Whether DSA index-pool compression parameters are present.
+    index_kpool_always_select_tail (`bool`, *optional*, defaults to `False`):
+        Whether the incomplete KPool tail is always included in sparse attention.
     indexer_rope_interleave (`bool`, *optional*, defaults to `False`):
         Whether DSA indexer RoPE uses interleaved pairs instead of NeoX half rotation.
     index_dsa_use_layernorm (`bool`, *optional*):
@@ -139,6 +141,7 @@ class Glm5NextConfig(PreTrainedConfig):
     index_topk: int | None = 2048
     index_kpool: int = 1
     index_kpool_compress: bool = False
+    index_kpool_always_select_tail: bool = False
     indexer_rope_interleave: bool = False
     index_dsa_use_layernorm: bool | None = None
     index_skip_topk_offset: int | None = 1
@@ -210,6 +213,16 @@ class Glm5NextConfig(PreTrainedConfig):
                 f"num_attention_heads ({self.num_attention_heads}) must be divisible by "
                 f"num_key_value_heads ({self.num_key_value_heads})."
             )
+
+        if self.index_kpool < 1:
+            raise ValueError(f"index_kpool must be positive, got {self.index_kpool}.")
+        if self.index_kpool > 1 and self.index_kpool_compress:
+            if self.index_topk is None or self.index_topk <= 0:
+                raise ValueError("Active KPool requires index_topk to be a positive integer.")
+            if self.index_topk % self.index_kpool != 0:
+                raise ValueError(
+                    f"index_topk ({self.index_topk}) must be divisible by index_kpool ({self.index_kpool})."
+                )
 
 
 __all__ = ["Glm5NextConfig"]

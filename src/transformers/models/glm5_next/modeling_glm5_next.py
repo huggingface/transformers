@@ -25,7 +25,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...cache_utils import Cache, DynamicCache, LinearAttentionLayer
+from ...cache_utils import Cache, DynamicCache, DynamicLayer, LinearAttentionLayer
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
@@ -222,6 +222,28 @@ class Glm5NextKdaSequential(nn.Module):
         return o, h if output_final_state else None
 
 
+class Glm5NextAttentionCacheLayer(DynamicLayer):
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for attribute_name in ("indexer_keys", "indexer_gate_scores"):
+            state = getattr(self, attribute_name, None)
+            if state is not None:
+                setattr(
+                    self,
+                    attribute_name,
+                    state.index_select(0, beam_idx.to(state.device)),
+                )
+
+    def crop(self, max_length: int) -> None:
+        if max_length < 0:
+            max_length = self.get_seq_length() - abs(max_length)
+        super().crop(max_length)
+        for attribute_name in ("indexer_keys", "indexer_gate_scores"):
+            state = getattr(self, attribute_name, None)
+            if state is not None:
+                setattr(self, attribute_name, state[:, :max_length])
+
+
 class Glm5NextLinearAttentionCacheLayer(LinearAttentionLayer):
     def update_conv_state(
         self, conv_states: torch.Tensor, conv_kernel_size: int | None = None, **kwargs
@@ -241,6 +263,8 @@ class Glm5NextDynamicCache(DynamicCache):
             for layer_idx, layer_type in enumerate(config.layer_types):
                 if layer_type == "linear_attention":
                     self.layers[layer_idx] = Glm5NextLinearAttentionCacheLayer(config)
+                else:
+                    self.layers[layer_idx] = Glm5NextAttentionCacheLayer(config)
 
 
 class Glm5NextLinearAttention(nn.Module):
@@ -468,8 +492,10 @@ class Glm5NextIndexer(nn.Module):
         self.index_kpool: int = config.index_kpool
         self.index_kpool_compress: bool = config.index_kpool_compress
         self.indexer_rope_interleave: bool = config.indexer_rope_interleave
+        self.kpool_enabled = self.index_kpool > 1 and self.index_kpool_compress
+        self.index_kpool_always_select_tail: bool = config.index_kpool_always_select_tail
 
-        if self.index_kpool > 1 and self.index_kpool_compress:
+        if self.kpool_enabled:
             self.index_kpool_compress_ape = nn.Parameter(torch.zeros(self.index_kpool, self.head_dim))
             self.index_kpool_compress_gate = nn.Parameter(torch.zeros(self.head_dim, self.hidden_size))
         else:
@@ -481,6 +507,20 @@ class Glm5NextIndexer(nn.Module):
         self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6) if config.index_dsa_use_layernorm else nn.Identity()
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
+
+    def _compress_kpool_keys(self, keys: torch.Tensor, gate_scores: torch.Tensor) -> torch.Tensor:
+        num_complete_pools = keys.shape[1] // self.index_kpool
+        if num_complete_pools == 0:
+            return keys.new_empty(keys.shape[0], 0, self.head_dim)
+
+        pooled_length = num_complete_pools * self.index_kpool
+        grouped_keys = keys[:, :pooled_length].reshape(
+            keys.shape[0], num_complete_pools, self.index_kpool, self.head_dim
+        )
+        grouped_gate_scores = gate_scores[:, :pooled_length].reshape_as(grouped_keys)
+        compression_logits = grouped_gate_scores.float() + self.index_kpool_compress_ape.float()[None, None]
+        probabilities = compression_logits.softmax(dim=2).to(grouped_keys.dtype)
+        return (probabilities * grouped_keys).sum(dim=2)
 
     def _update_key_cache(self, k: torch.Tensor, past_key_values: Cache | None) -> torch.Tensor:
         if past_key_values is None:
@@ -495,6 +535,39 @@ class Glm5NextIndexer(nn.Module):
         cache_layer.indexer_keys = k_cached
         return k_cached
 
+    def _update_kpool_cache(
+        self,
+        keys: torch.Tensor,
+        gate_scores: torch.Tensor,
+        past_key_values: Cache | None,
+        total_len: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if past_key_values is None:
+            return keys, gate_scores
+
+        cache_layer = past_key_values.layers[self.layer_idx]
+        cached_keys = getattr(cache_layer, "indexer_keys", None)
+        cached_gate_scores = getattr(cache_layer, "indexer_gate_scores", None)
+        prefix_len = total_len - keys.shape[1]
+        can_append = (
+            cached_keys is not None
+            and cached_gate_scores is not None
+            and cached_keys.shape[0] == keys.shape[0]
+            and cached_keys.shape[1] == prefix_len
+            and cached_gate_scores.shape[:2] == cached_keys.shape[:2]
+        )
+        if can_append:
+            assert cached_keys is not None and cached_gate_scores is not None
+            keys = torch.cat((cached_keys.to(keys.device), keys), dim=1)
+            gate_scores = torch.cat(
+                (cached_gate_scores.to(gate_scores.device), gate_scores),
+                dim=1,
+            )
+
+        cache_layer.indexer_keys = keys
+        cache_layer.indexer_gate_scores = gate_scores
+        return keys, gate_scores
+
     def _indexer_score_mask(self, attention_mask: torch.Tensor | None, total_len: int) -> torch.Tensor | None:
         if attention_mask is None:
             return None
@@ -503,6 +576,68 @@ class Glm5NextIndexer(nn.Module):
         if attention_mask.dim() == 2:
             return attention_mask[:, None, :total_len]
         return attention_mask[..., :total_len]
+
+    def _expand_kpool_topk(
+        self,
+        pool_scores: torch.Tensor,
+        visible_lengths: torch.Tensor,
+    ) -> torch.LongTensor:
+        batch_size, query_length, num_pools = pool_scores.shape
+        complete_pools = torch.div(visible_lengths, self.index_kpool, rounding_mode="floor")
+        group_topk = min(self.index_topk // self.index_kpool, num_pools)
+
+        if group_topk > 0:
+            pool_ids = torch.arange(num_pools, device=pool_scores.device)
+            pool_valid = pool_ids.view(1, 1, -1) < complete_pools.unsqueeze(-1)
+            masked_scores = pool_scores.masked_fill(~pool_valid, torch.finfo(pool_scores.dtype).min)
+            selected_groups = masked_scores.topk(group_topk, dim=-1).indices
+            selected_valid = pool_valid.gather(-1, selected_groups)
+            offsets = torch.arange(self.index_kpool, device=pool_scores.device)
+            expanded = (selected_groups.unsqueeze(-1) * self.index_kpool + offsets).flatten(-2)
+            expanded_valid = selected_valid.unsqueeze(-1).expand(
+                batch_size,
+                query_length,
+                group_topk,
+                self.index_kpool,
+            )
+            expanded = expanded.masked_fill(~expanded_valid.flatten(-2), -1)
+        else:
+            expanded = torch.empty(
+                batch_size,
+                query_length,
+                0,
+                dtype=torch.long,
+                device=pool_scores.device,
+            )
+
+        expanded = F.pad(expanded, (0, self.index_topk - expanded.shape[-1]), value=-1)
+        if not self.index_kpool_always_select_tail:
+            return expanded
+
+        output_width = self.index_topk + self.index_kpool - 1
+        output_positions = torch.arange(output_width, device=pool_scores.device).view(1, 1, -1)
+        history_length = (complete_pools * self.index_kpool).clamp(max=self.index_topk)
+        history_indices = output_positions.clamp(max=self.index_topk - 1).expand(
+            batch_size,
+            query_length,
+            -1,
+        )
+        history_values = expanded.gather(-1, history_indices)
+        is_history = output_positions < history_length.unsqueeze(-1)
+
+        tail_offset = output_positions - history_length.unsqueeze(-1)
+        tail_count = visible_lengths.remainder(self.index_kpool)
+        is_tail = tail_offset.ge(0) & tail_offset.lt(tail_count.unsqueeze(-1))
+        tail_values = complete_pools.unsqueeze(-1) * self.index_kpool + tail_offset
+
+        result = torch.full(
+            (batch_size, query_length, output_width),
+            -1,
+            dtype=torch.long,
+            device=pool_scores.device,
+        )
+        result = torch.where(is_history, history_values, result)
+        return torch.where(is_tail, tail_values, result)
 
     def build_attention_mask(
         self,
@@ -514,14 +649,16 @@ class Glm5NextIndexer(nn.Module):
         dtype: torch.dtype,
         device: torch.device,
     ) -> torch.Tensor:
-        index_mask = torch.full(
+        valid_indices = topk_indices.ge(0) & topk_indices.lt(total_len)
+        safe_indices = topk_indices.clamp(min=0, max=total_len - 1)
+        selected_counts = torch.zeros(
             (batch_size, seq_length, total_len),
-            float("-inf"),
+            dtype=torch.int32,
             device=device,
-            dtype=dtype,
         )
-        index_mask.scatter_(-1, topk_indices, 0.0)
-        index_mask = index_mask.unsqueeze(1)
+        selected_counts.scatter_add_(-1, safe_indices, valid_indices.to(torch.int32))
+        index_mask = torch.zeros_like(selected_counts, dtype=dtype)
+        index_mask = index_mask.masked_fill(selected_counts.eq(0), float("-inf")).unsqueeze(1)
         if attention_mask is not None and attention_mask.dim() == 4:
             return index_mask + attention_mask[..., :total_len]
         if attention_mask is not None:
@@ -560,19 +697,42 @@ class Glm5NextIndexer(nn.Module):
                 k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2, interleaved=self.indexer_rope_interleave
             ).squeeze(2)
             k = torch.cat([k_pe, k_nope], dim=-1)
-            k_cached = self._update_key_cache(k, past_key_values)
+            if self.kpool_enabled:
+                gate_scores = F.linear(hidden_states, self.index_kpool_compress_gate)
+                k_cached, gate_scores = self._update_kpool_cache(
+                    k,
+                    gate_scores,
+                    past_key_values,
+                    total_len,
+                )
+            else:
+                k_cached = self._update_key_cache(k, past_key_values)
 
             weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)
-            scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
-            scores = F.relu(scores)
-            index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
-
-            score_mask = self._indexer_score_mask(attention_mask, index_scores.shape[-1])
-            if score_mask is not None:
-                index_scores = index_scores + score_mask
-
-            topk = min(self.index_topk, index_scores.shape[-1])
-            topk_indices = index_scores.topk(topk, dim=-1).indices
+            if self.kpool_enabled:
+                pooled_keys = self._compress_kpool_keys(k_cached, gate_scores)
+                scores = torch.einsum("bshd,bpd->bshp", q.float(), pooled_keys.float()) * self.softmax_scale
+                pool_scores = torch.einsum("bshp,bsh->bsp", F.relu(scores), weights)
+                score_mask = self._indexer_score_mask(attention_mask, total_len)
+                if score_mask is None:
+                    prefix_len = total_len - seq_len
+                    visible_lengths = prefix_len + torch.arange(
+                        1,
+                        seq_len + 1,
+                        device=hidden_states.device,
+                    )
+                    visible_lengths = visible_lengths.unsqueeze(0).expand(batch_size, -1)
+                else:
+                    visible_lengths = score_mask.eq(0).sum(dim=-1)
+                topk_indices = self._expand_kpool_topk(pool_scores, visible_lengths)
+            else:
+                scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
+                index_scores = torch.einsum("bsht,bsh->bst", F.relu(scores), weights)
+                score_mask = self._indexer_score_mask(attention_mask, index_scores.shape[-1])
+                if score_mask is not None:
+                    index_scores = index_scores + score_mask
+                topk = min(self.index_topk, index_scores.shape[-1])
+                topk_indices = index_scores.topk(topk, dim=-1).indices
 
         attention_mask = self.build_attention_mask(
             topk_indices,
@@ -1233,8 +1393,8 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
 class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_allgather"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
