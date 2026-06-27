@@ -16,12 +16,10 @@ import io
 import json
 import os
 import pathlib
-import subprocess
 import sys
 import tempfile
 import warnings
 from copy import deepcopy
-from datetime import datetime
 
 import httpx
 import numpy as np
@@ -588,41 +586,30 @@ class ImageProcessingTestMixin:
         if not self.image_processing_classes:
             self.skipTest("No image processing class defined")
 
-        def _is_old_model_by_commit_date(model_type, date_cutoff=(2025, 9, 1)):
-            try:
-                # Convert model_type to directory name and construct file path
-                model_dir = model_type.replace("-", "_")
-                slow_processor_file = f"src/transformers/models/{model_dir}"
-                # Check if the file exists otherwise skip the test
-                if not os.path.exists(slow_processor_file):
-                    return None
-                # Get the first commit date of the slow processor file
-                result = subprocess.run(
-                    ["git", "log", "--reverse", "--pretty=format:%ad", "--date=iso", slow_processor_file],
-                    capture_output=True,
-                    text=True,
-                    cwd=os.getcwd(),
-                )
-                if result.returncode != 0 or not result.stdout.strip():
-                    return None
-                # Parse the first line (earliest commit)
-                first_line = result.stdout.strip().split("\n")[0]
-                date_part = first_line.split(" ")[0]  # Extract just the date part
-                commit_date = datetime.strptime(date_part, "%Y-%m-%d")
-                # Check if committed before the cutoff date
-                cutoff_date = datetime(*date_cutoff)
-                return commit_date <= cutoff_date
-
-            except Exception:
-                # If any error occurs, skip the test
-                return None
+        # Old models are those whose image processing file was first committed before 2025-09-01.
+        # fmt: off
+        _OLD_MODELS = {
+            "aria", "beit", "bit", "blip", "bridgetower", "chameleon", "chinese_clip",
+            "clip", "cohere2_vision", "conditional_detr", "convnext", "deepseek_vl",
+            "deepseek_vl_hybrid", "deformable_detr", "deit", "depth_pro", "detr",
+            "dinov3_vit", "donut", "dpt", "efficientloftr", "efficientnet", "eomt",
+            "flava", "fuyu", "gemma3", "glm4v", "glpn", "got_ocr2", "grounding_dino",
+            "idefics", "idefics2", "idefics3", "imagegpt", "janus", "kosmos2_5",
+            "layoutlmv2", "layoutlmv3", "levit", "superglue", "lightglue", "llama4",
+            "llava", "llava_next", "llava_onevision", "mask2former", "maskformer",
+            "mllama", "mobilenet_v1", "mobilenet_v2", "mobilevit", "nougat",
+            "oneformer", "ovis2", "owlv2", "owlvit", "perceiver", "perception_lm",
+            "phi4_multimodal", "pix2struct", "pixtral", "poolformer",
+            "prompt_depth_anything", "pvt", "qwen2_vl", "rt_detr", "sam", "sam2",
+            "segformer", "seggpt", "siglip", "siglip2", "smolvlm", "superpoint",
+            "swin2sr", "textnet", "tvp", "videomae", "vilt", "vit", "vitmatte",
+            "vitpose", "vivit", "yolos", "zoedepth",
+        }
+        # fmt: on
 
         test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
         model_type = test_file_path.parent.name
-        # Check if this is a new model (added after 2024-01-01) based on git history
-        is_old_model = _is_old_model_by_commit_date(model_type)
-        if is_old_model is None:
-            self.skipTest(f"Could not determine if {model_type} is new based on git history")
+        is_old_model = model_type in _OLD_MODELS
         # New models must support torchvision backend
         self.assertTrue(
             is_old_model,
