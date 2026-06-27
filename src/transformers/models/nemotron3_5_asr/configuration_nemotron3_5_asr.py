@@ -37,9 +37,6 @@ class Nemotron3_5AsrConfig(PreTrainedConfig):
         since the encoder is identical to [`NemotronAsrStreaming`]'s.
     blank_token_id (`int`, *optional*, defaults to 13087):
         Blank token id for RNN-T decoding.
-    durations (`list[int]`, *optional*, defaults to `()`):
-        Pinned to the empty tuple for RNN-T: no token durations are predicted, so the joint head outputs
-        only `vocab_size` logits.
     num_prompts (`int`, *optional*, defaults to 128):
         Number of language-prompt slots. The target language is encoded as a one-hot vector of this
         size, broadcast across the encoder time axis and concatenated with the encoder output before
@@ -74,7 +71,6 @@ class Nemotron3_5AsrConfig(PreTrainedConfig):
     pad_token_id: int = 0
     blank_token_id: int = 13087
     is_encoder_decoder: bool = True
-    durations: list[int] | tuple[int, ...] = ()
     num_prompts: int = 128
     prompt_intermediate_size: int = 2048
     default_prompt_id: int = 101
