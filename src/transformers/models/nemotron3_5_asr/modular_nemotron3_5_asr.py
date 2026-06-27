@@ -14,16 +14,13 @@
 
 from dataclasses import dataclass
 
-import torch
-from torch import nn
-
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
 from ..nemotron_asr_streaming.modeling_nemotron_asr_streaming import (
     NemotronAsrStreamingForRNNT,
     NemotronAsrStreamingPreTrainedModel,
@@ -34,6 +31,11 @@ from ..nemotron_asr_streaming.processing_nemotron_asr_streaming import (
 )
 from .configuration_nemotron3_5_asr import Nemotron3_5AsrConfig
 from .generation_nemotron3_5_asr import Nemotron3_5AsrGenerationMixin, Nemotron3_5AsrRNNTDecoderCache
+
+
+if is_torch_available():
+    import torch
+    from torch import nn
 
 
 logger = logging.get_logger(__name__)
@@ -212,7 +214,7 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
             default_num_lookahead_tokens=default_num_lookahead_tokens,
         )
 
-    def _resolve_prompt_ids(self, language: "str | list[str]", batch_size: int) -> torch.LongTensor:
+    def _resolve_prompt_ids(self, language: "str | list[str]", batch_size: int) -> "torch.LongTensor":
         if isinstance(language, str):
             language = [language] * batch_size
         if len(language) != batch_size:

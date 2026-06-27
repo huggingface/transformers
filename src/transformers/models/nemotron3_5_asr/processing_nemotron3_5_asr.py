@@ -19,13 +19,16 @@
 # limitations under the License.
 
 
-import torch
 from tokenizers.decoders import DecodeStream
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -465,7 +468,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
             self.num_mel_frames_per_audio_chunk * self.feature_extractor.hop_length + self.feature_extractor.win_length
         )
 
-    def _resolve_prompt_ids(self, language: "str | list[str]", batch_size: int) -> torch.LongTensor:
+    def _resolve_prompt_ids(self, language: "str | list[str]", batch_size: int) -> "torch.LongTensor":
         if isinstance(language, str):
             language = [language] * batch_size
         if len(language) != batch_size:

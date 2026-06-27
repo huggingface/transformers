@@ -329,7 +329,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
             token_ids = reference["token_ids"][0]
             self.assertListEqual(
                 output.sequences[0].tolist(),
-                [model.config.decoder_start_token_id] + token_ids,
+                [model.generation_config.decoder_start_token_id] + token_ids,
                 msg=f"token mismatch ({language})",
             )
 
@@ -366,7 +366,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
                 blank_padding = [model.config.blank_token_id] * (len(row) - 1 - len(token_ids))
                 self.assertListEqual(
                     row,
-                    [model.config.decoder_start_token_id] + token_ids + blank_padding,
+                    [model.generation_config.decoder_start_token_id] + token_ids + blank_padding,
                     msg=f"token mismatch (sample {i}, {language})",
                 )
 
