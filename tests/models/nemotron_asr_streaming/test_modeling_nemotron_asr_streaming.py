@@ -195,9 +195,8 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cls.checkpoint_name = "nvidia/nemotron-speech-streaming-en-0.6b"
-        cls.revision = "refs/pr/17"
         cls.dtype = torch.float32
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -245,7 +244,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
         model = NemotronAsrStreamingForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+            self.checkpoint_name, dtype=self.dtype, device_map="auto"
         )
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
@@ -264,7 +263,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
         model = NemotronAsrStreamingForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+            self.checkpoint_name, dtype=self.dtype, device_map="auto"
         )
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
@@ -299,7 +298,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
             sampling_rate=sampling_rate,
         )
         model = NemotronAsrStreamingForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+            self.checkpoint_name, dtype=self.dtype, device_map="auto"
         )
 
         # Select the streaming right attention context (lookahead, in subsampled encoder frames). This sizes
