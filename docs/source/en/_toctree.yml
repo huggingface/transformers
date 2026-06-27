@@ -1127,7 +1127,6 @@
         title: Nemotron ASR Streaming
       - local: model_doc/nemotron3_5_asr
         title: Nemotron 3.5 ASR
-        title: Nemotron ASR Streaming
       - local: model_doc/parakeet
         title: Parakeet
       - local: model_doc/pe_audio
