@@ -20,7 +20,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 import torch
 from torch import nn
@@ -35,12 +34,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ..auto import AutoModel
 from .configuration_nemotron3_5_asr import Nemotron3_5AsrConfig
 from .generation_nemotron3_5_asr import Nemotron3_5AsrGenerationMixin, Nemotron3_5AsrRNNTDecoderCache
-
-
-if TYPE_CHECKING:
-    from ..nemotron_asr_streaming.modeling_nemotron_asr_streaming import (
-        NemotronAsrStreamingEncoderCausalConvPaddingCache,
-    )
 
 
 logger = logging.get_logger(__name__)
@@ -75,7 +68,8 @@ class Nemotron3_5AsrPreTrainedModel(PreTrainedModel):
     _no_split_modules = None
     _supports_flat_attention_mask = True
     _supports_sdpa = True
-    _supports_flex_attn = True
+    # flex attention is incompatible as this model uses a float attention mask (relative position bias) across the board
+    _supports_flex_attn = False
 
     # TODO: @eustlb, add support when flash attention supports custom attention bias
     _supports_flash_attn = False

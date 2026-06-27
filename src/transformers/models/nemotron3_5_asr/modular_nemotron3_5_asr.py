@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 import torch
 from torch import nn
@@ -35,12 +34,6 @@ from ..nemotron_asr_streaming.processing_nemotron_asr_streaming import (
 )
 from .configuration_nemotron3_5_asr import Nemotron3_5AsrConfig
 from .generation_nemotron3_5_asr import Nemotron3_5AsrGenerationMixin, Nemotron3_5AsrRNNTDecoderCache
-
-
-if TYPE_CHECKING:
-    from ..nemotron_asr_streaming.modeling_nemotron_asr_streaming import (
-        NemotronAsrStreamingEncoderCausalConvPaddingCache,
-    )
 
 
 logger = logging.get_logger(__name__)
