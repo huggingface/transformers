@@ -326,7 +326,7 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
     decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
 
     encoder_past_key_values: Cache | None = None
-    padding_cache: "NemotronAsrStreamingEncoderCausalConvPaddingCache | None" = None
+    padding_cache: "NemotronAsrStreamingEncoderCausalConvPaddingCache | None" = None  # noqa: F821
 
 
 class Nemotron3_5AsrPreTrainedModel(NemotronAsrStreamingPreTrainedModel):
