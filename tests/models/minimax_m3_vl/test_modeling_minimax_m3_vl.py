@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch MiniMax-M3-VL model."""
 
 import copy
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -486,6 +487,7 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
             self.model_id,
             dtype=torch.bfloat16,
             device_map="auto",
+            offload_folder=tempfile.mkdtemp(),
         )
         model.eval()
         return model
