@@ -19,7 +19,7 @@ from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache, StaticReferenceSlidingWindowLayer
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -646,41 +646,14 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
             }
             # The static cache ([`StaticReferenceSlidingWindowLayer`]) keeps the prefill at the front of its
             # buffer (slots `[0, prefill_length)`) followed by the most recent `sliding_window` generated tokens
-            # (slots `[prefill_length, prefill_length + sliding_window)`) and an empty tail. The valid region is
-            # therefore the contiguous prefix `[0, prefill_length + sliding_window)`: causal already hides the
-            # not-yet-written window slots while the window fills, and a constant `kv_idx < window_end` cap hides
-            # the empty tail. The dynamic cache evicts old tokens from its (compact) buffer instead, so the plain
-            # causal mask built without the cap is already correct for it.
-            reference_window_mask_function = None
-            if past_key_values is not None:
-                static_reference_layer = next(
-                    (
-                        layer
-                        for layer in past_key_values.layers
-                        if isinstance(layer, StaticReferenceSlidingWindowLayer)
-                    ),
-                    None,
-                )
-                if static_reference_layer is not None:
-                    prefill_length = static_reference_layer.prefill_length
-                    if prefill_length is None and inputs_embeds.shape[1] == 1:
-                        # First decode step: `prefill_length` is pinned during this step's cache update, which
-                        # runs after the mask is built, so derive it here -- every token seen so far is prefill.
-                        prefill_length = static_reference_layer.cumulative_length_int
-                    if prefill_length is not None:
-                        # `window_end` is constant for the whole generation, so the cap does not trigger
-                        # per-step recompiles. Prefill (`prefill_length is None`, more than one query token)
-                        # keeps `reference_window_mask_function=None` and so stays plain causal.
-                        window_end = prefill_length + self.config.sliding_window
-
-                        def reference_window_mask_function(batch_idx, head_idx, q_idx, kv_idx):
-                            return kv_idx < window_end
-
+            # (slots `[prefill_length, prefill_length + sliding_window)`). The buffer is sized to exactly
+            # `prefill_length + sliding_window` (no empty tail), so a plain causal mask is already correct: it
+            # hides the not-yet-written window slots while the window fills, and there is no tail left to cap. The
+            # dynamic cache evicts old tokens from its (compact) buffer instead, so plain causal is correct there
+            # too.
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "reference_sliding_attention": create_causal_mask(
-                    **mask_kwargs, and_mask_function=reference_window_mask_function
-                ),
+                "reference_sliding_attention": create_causal_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

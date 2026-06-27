@@ -687,17 +687,21 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
     """Static counterpart of [`DynamicReferenceSlidingWindowLayer`], used when generating with
     ``cache_implementation="static"``.
 
-    The backing buffer has the full, fixed ``max_cache_len`` length and is split in three regions: slots
-    ``[0, prefill_length)`` hold the image/prompt prefill (written once, at the front, and never evicted),
-    slots ``[prefill_length, prefill_length + sliding_window)`` are a ring for the generated tokens, and the
-    trailing slots ``[prefill_length + sliding_window, max_cache_len)`` are an unused empty tail (the caller
-    must size ``max_cache_len >= prefill_length + sliding_window``). Exactly like [`StaticSlidingWindowLayer`]
-    the oldest generated token is rolled out and replaced by the newest once the ring is full, the only
-    difference being that the roll is restricted to that window so the prefill region stays untouched. Because
-    the buffer length is constant on every decode step, the key/value tensors keep a constant shape and the
-    SDPA backend (cuDNN included) reuses a single kernel plan instead of re-planning on each new sequence
-    length. The not-yet-written window slots and the empty tail are hidden by the decode mask built by the
-    model (e.g. ``UnlimitedOcrTextModel.forward``).
+    The backing buffer is split in two regions: slots ``[0, prefill_length)`` hold the image/prompt prefill
+    (written once, at the front, and never evicted) and slots ``[prefill_length, prefill_length + sliding_window)``
+    are a ring for the generated tokens. Exactly like [`StaticSlidingWindowLayer`] the oldest generated token is
+    rolled out and replaced by the newest once the ring is full, the only difference being that the roll is
+    restricted to that window so the prefill region stays untouched.
+
+    The physical buffer is sized to ``prefill_length + sliding_window`` rather than the full ``max_cache_len``
+    budget that ``generate`` passes (which is ``prefill_length + max_new_tokens``): the trailing
+    ``max_new_tokens - sliding_window`` slots would never be written, so reserving them is pure waste -- large for
+    long generations. ``prefill_length`` is only known at runtime, but the buffer is allocated lazily during the
+    eager prefill pass (and grown there for chunked prefill), which always runs *before* the first compiled/
+    cudagraph decode step; from the first decode step onward the shape and data pointer are constant, so cudagraph
+    capture is unaffected and the SDPA backend (cuDNN included) reuses a single kernel plan. The not-yet-written
+    window slots are hidden by the (plain causal) decode mask built by the model (e.g.
+    ``UnlimitedOcrTextModel.forward``); there is no empty tail left to hide.
     """
 
     layer_type = "reference_sliding_attention"
@@ -705,12 +709,50 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
     def __init__(self, max_cache_len: int, sliding_window: int):
         super().__init__(max_cache_len=max_cache_len, sliding_window=sliding_window)
         # `StaticSlidingWindowLayer` shrinks its buffer to `sliding_window` and rolls the whole thing. Here the
-        # buffer must also hold the pinned prefill, so keep the full `max_cache_len` length and track the real
-        # window separately; the roll below only touches the `sliding_window` slots right after the prefill
+        # buffer must also hold the pinned prefill. We keep `max_cache_len` only as the *logical* budget (for
+        # length bookkeeping) and size the *physical* buffer to `prefill_length + sliding_window`, tracking the
+        # real window separately; the roll below only touches the `sliding_window` slots right after the prefill
         # (i.e. `[prefill_length, prefill_length + sliding_window)`).
         self.max_cache_len = max_cache_len
         self.sliding_window = sliding_window
         self.prefill_length: int | None = None
+
+    def _set_buffers(self, physical_length: int, copy_existing: bool = False) -> None:
+        """(Re)allocate the static key/value buffers to `physical_length` slots and (re)tag the static address.
+
+        Only ever called from the eager prefill pass (initial allocation or chunked-prefill growth), never from a
+        compiled decode step, so reallocating here is safe for cudagraphs.
+        """
+        new_keys = torch.zeros(
+            (self.batch_size, self.num_heads, physical_length, self.k_head_dim), dtype=self.dtype, device=self.device
+        )
+        new_values = torch.zeros(
+            (self.batch_size, self.num_heads, physical_length, self.v_head_dim), dtype=self.dtype, device=self.device
+        )
+        if copy_existing:
+            old_length = self.keys.shape[-2]
+            new_keys[:, :, :old_length, :] = self.keys
+            new_values[:, :, :old_length, :] = self.values
+        self.keys = new_keys
+        self.values = new_values
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.keys)
+            torch._dynamo.mark_static_address(self.values)
+
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        self.dtype, self.device = key_states.dtype, key_states.device
+        self.batch_size, self.num_heads = key_states.shape[:2]
+        self.v_head_dim = value_states.shape[-1]
+        self.k_head_dim = key_states.shape[-1]
+        self.cumulative_length = self.cumulative_length.to(self.device)
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cumulative_length)
+        # Size the physical buffer from the prefill instead of the full `max_cache_len` budget (see class
+        # docstring). A multi-token first call is prefill; a single-token first call is an empty-prompt decode
+        # (`prefill_length == 0`), so only the window is needed.
+        prefill_seen = key_states.shape[-2] if key_states.shape[-2] > 1 else 0
+        self._set_buffers(min(self.max_cache_len, prefill_seen + self.sliding_window))
+        self.is_initialized = True
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -726,6 +768,11 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         # *not* pin `prefill_length` here, so chunked prefill (a prompt fed in more than one chunk) keeps
         # extending the pinned region instead of having the later chunks slid out of the window.
         if self.prefill_length is None and kv_length > 1:
+            # Chunked prefill: the buffer was sized for the first chunk only, so grow it (eagerly, before any
+            # compiled decode step) to hold all prefill seen so far plus this chunk plus the reserved window.
+            required_length = min(self.max_cache_len, self.cumulative_length_int + kv_length + self.sliding_window)
+            if self.keys.shape[-2] < required_length:
+                self._set_buffers(required_length, copy_existing=True)
             # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
             # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten
             cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
@@ -826,9 +873,17 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         return self.keys, self.values
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
-        # The buffer always spans the full `max_cache_len`.
-        # The decode mask hides the unwritten slots.
-        return self.max_cache_len, 0
+        # `kv_length` must match the length of the tensor `update` will return for this step. The buffer is sized
+        # to `prefill_length + sliding_window`, so anticipate the size `update` will (re)allocate it to:
+        if not self.is_initialized:
+            # First forward: `lazy_initialization` will allocate from this query length.
+            prefill_seen = query_length if query_length > 1 else 0
+            return min(self.max_cache_len, prefill_seen + self.sliding_window), 0
+        if self.prefill_length is None and query_length > 1:
+            # Additional prefill chunk: `update` will grow the buffer to fit all prefill so far plus the window.
+            return min(self.max_cache_len, self.cumulative_length_int + query_length + self.sliding_window), 0
+        # Decode (including the first decode step): the buffer is already at its final size.
+        return self.keys.shape[-2], 0
 
     def reset(self) -> None:
         super().reset()
