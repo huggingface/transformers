@@ -769,6 +769,8 @@ class NemotronAsrStreamingEncoderBlock(ParakeetEncoderBlock):
 @auto_docstring
 class NemotronAsrStreamingPreTrainedModel(ParakeetPreTrainedModel):
     config: NemotronAsrStreamingConfig
+    # flex attention is incompatible as this model uses a float attention mask (relative position bias) across the board
+    _supports_flex_attn = False
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = getattr(self.config, "encoder_config", self.config)
@@ -1020,9 +1022,8 @@ class NemotronAsrStreamingForRNNT(
         >>> from datasets import load_dataset, Audio
 
         >>> model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
-        >>> revision = "refs/pr/17"
-        >>> processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-        >>> model = NemotronAsrStreamingForRNNT.from_pretrained(model_id, revision=revision)
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = NemotronAsrStreamingForRNNT.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))

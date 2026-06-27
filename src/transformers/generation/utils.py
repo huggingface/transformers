@@ -1830,15 +1830,15 @@ class GenerationMixin(ContinuousMixin):
         need_new_cache = (
             cache_to_check is None
             or cache_to_check.offloading != offload_cache
-            or cache_to_check.max_batch_size != batch_size
-            or cache_to_check.max_cache_len < max_cache_len
+            or cache_to_check.batch_size != batch_size
+            or cache_to_check.get_max_length() < max_cache_len
         )
 
         encoder_decoder_cache = getattr(self, "_cache", None)
         if isinstance(encoder_decoder_cache, EncoderDecoderCache):
             need_new_cache = (
                 need_new_cache
-                or encoder_decoder_cache.cross_attention_cache.max_cache_len
+                or encoder_decoder_cache.cross_attention_cache.get_max_length()
                 != model_kwargs["encoder_outputs"][0].shape[1]
             )
 
@@ -2310,7 +2310,8 @@ class GenerationMixin(ContinuousMixin):
                 - `str` (Hugging Face Hub repository name): runs the custom `generate` function defined at
                   `custom_generate/generate.py` in that repository instead of the standard `generate` method. The
                   repository fully replaces the generation logic, and the return type may differ.
-                - `str` (local repository path): same as above but from a local path, `trust_remote_code` not required.
+                - `str` (local repository path): same as above but from a local path. Local directories also
+                  require `trust_remote_code=True` because the local `custom_generate/generate.py` is executed.
                 - `Callable`: `generate` will perform the usual input preparation steps, then call the provided callable to
                   run the decoding loop.
                 For more information, see [the docs](../../generation_strategies#custom-generation-methods).

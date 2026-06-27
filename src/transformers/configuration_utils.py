@@ -149,6 +149,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
       naming of attributes.
     - **base_model_tp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
       parallel plan applied to the sub-module when `model.tensor_parallel` is called.
+    - **base_model_fsdp_plan** (`dict[Any, str]`) -- A dict that maps sub-modules of a base model to an FSDP2
+      sharding strategy (e.g. `"free_full_weight"` / `"keep_full_weight"`). Keys can be wildcard module paths
+      (e.g. `"layers.*"`) or tuples of paths (grouped into a single `fully_shard` call).
     - **base_model_pp_plan** (`dict[str, tuple[list[str]]]`) -- A dict that maps child-modules of a base model to a
       pipeline parallel plan that enables users to place the child-module on the appropriate device.
 
@@ -220,6 +223,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     keys_to_ignore_at_inference: ClassVar[list[str]] = []
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
+    base_model_fsdp_plan: ClassVar[dict[Any, str] | None] = None
     base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     _auto_class: ClassVar[str | None] = None
@@ -259,7 +263,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Our configs prev wouldn't save `id2label` for 2 labels because it is the default. In all other
         # cases we expect the config dict to have an `id2label` field if it's a clf model, or not otherwise
         if self.id2label is None:
-            self.num_labels = kwargs.get("num_labels", 2)
+            self.num_labels = kwargs.get("num_labels", self.num_labels if self.num_labels is not None else 2)
         else:
             if kwargs.get("num_labels") is not None and len(self.id2label) != kwargs.get("num_labels"):
                 logger.warning(
@@ -1021,6 +1025,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         # Pop "kwargs" since they are unpacked and set in the post init
         output.pop("kwargs", None)
+
+        if "distributed_config" in output and hasattr(output["distributed_config"], "to_dict"):
+            output["distributed_config"] = output["distributed_config"].to_dict()
 
         def to_list(value):
             if isinstance(value, tuple):
