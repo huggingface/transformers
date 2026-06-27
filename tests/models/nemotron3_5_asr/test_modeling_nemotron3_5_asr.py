@@ -279,9 +279,8 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cls.checkpoint_name = "nvidia/nemotron-3.5-asr-streaming-0.6b"
-        cls.revision = "refs/pr/20"
         cls.dtype = torch.float32
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -308,7 +307,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
 
         samples = self._load_datasamples(1)
         model = Nemotron3_5AsrForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+            self.checkpoint_name, dtype=self.dtype, device_map="auto"
         )
 
         # `expected["results"]` maps each prompting mode -> {"transcriptions", "token_ids"}: `"en-US"` forces
@@ -345,7 +344,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
 
         samples = self._load_datasamples(5)
         model = Nemotron3_5AsrForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+            self.checkpoint_name, dtype=self.dtype, device_map="auto"
         )
 
         # `expected["results"]` maps each prompting mode -> {"transcriptions", "token_ids"}: `"en-US"` forces
@@ -407,7 +406,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
             sampling_rate=sampling_rate,
         )
         model = Nemotron3_5AsrForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
+            self.checkpoint_name, dtype=self.dtype, device_map="auto"
         )
 
         # Select the streaming right attention context (lookahead, in subsampled encoder frames). This sizes
