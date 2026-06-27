@@ -1255,6 +1255,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # models, this attribute is currently defined in respective model code. For base models, it comes from
     # `config.base_model_pp_plan` during `post_init`.
     _pp_plan: dict[str, tuple[str, str]] = None
+    # FSDP2 sharding plan of the form `{"layers.*": "free_full_weight"}`. For top-level models, this attribute is
+    # defined on the head class (e.g. `*ForCausalLM`). For base models, it comes from `config.base_model_fsdp_plan`
+    # during `post_init`.
+    _fsdp_plan: dict[str, str] = None
 
     # Advanced functionalities support
     supports_gradient_checkpointing: bool = False
@@ -1395,13 +1399,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         correctly in the case of composite models (that is, the top level model should know about those properties from its children).
         """
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
-        # easily available
-        self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
+        # easily available.
+        self._tp_plan, self._ep_plan, self._pp_plan, self._fsdp_plan = {}, {}, {}, {}
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
             self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
+            self._fsdp_plan = (
+                self.config.base_model_fsdp_plan.copy() if self.config.base_model_fsdp_plan is not None else {}
+            )
         # Current submodel should register its tied weights
         self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=False)
         # Current submodel should register its `_keep_in_fp32_modules`
@@ -1425,6 +1432,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_fsdp_plan", None):
+                self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             # Always attach the keys of the children (if the children's config says to NOT tie, then it's empty)
             if tied_keys := getattr(module, "all_tied_weights_keys", None):
                 self.all_tied_weights_keys.update({f"{name}.{k}": f"{name}.{v}" for k, v in tied_keys.copy().items()})
@@ -1458,8 +1467,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         The full tp plan for the model's modules
         """
         if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
+            if not self._ep_plan:
+                raise ValueError(
+                    f"Expert parallelism was requested (`enable_expert_parallel=True`), but "
+                    f"`{self.__class__.__name__}` does not define an expert-parallel plan. Add a "
+                    f"`base_model_ep_plan` to its config, or disable expert parallelism."
+                )
             return self._ep_plan
         return self._tp_plan
+
+    @property
+    def fsdp_plan(self) -> dict[str, str]:
+        return self._fsdp_plan
 
     @property
     def pp_plan(self) -> dict[str, tuple[str, str]]:
@@ -2690,9 +2709,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # Both are already present -> it means the config is wrong and do not reflect the actual
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
+                    source_param = self.get_parameter(source_param_name)
+                    target_param = self.get_parameter(target_param_name)
+
+                    # Skip check if both are disk offloaded. Tied tensors always
+                    # share the same offload device as per `infer_auto_device_map`
+                    if source_param.device.type == "meta" and target_param.device.type == "meta":
+                        continue
+
                     # If both are present, check if the weights are exactly similar, and only tie in this case
                     # This check is important, as torch `.bin` checkpoints always contain both keys, referencing the same storage
-                    if not torch.equal(self.get_parameter(source_param_name), self.get_parameter(target_param_name)):
+                    if not torch.equal(source_param, target_param):
                         logger.warning(
                             f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
                             f"{target_param_name}, but both are present in the checkpoints with different values, so we will NOT "
@@ -4318,8 +4345,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
-            if len(devices := list(device_map.values())) == 1 and devices[0] == "disk":
-                raise ValueError("Trying to load everything on `disk` which means the model doesn't fit in memory.")
 
         # Finalize model weight initialization
         load_config = LoadStateDictConfig(
@@ -4357,8 +4382,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 **kwargs,
             )
 
-        # If the device_map has more than 1 device: dispatch model with hooks on all devices
-        if device_map is not None and len(set(device_map.values())) > 1:
+        # If the device_map has more than 1 device or disk offloading: dispatch model with hooks
+        if device_map is not None and (len(set(device_map.values())) > 1 or "disk" in set(device_map.values())):
             accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, disk_offload_index, offload_buffers)
 
         if hf_quantizer is not None:
@@ -4413,7 +4438,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 checkpoint_files,
                 load_config.device_map,
                 load_config.sharded_metadata,
-                load_config.dtype,
                 load_config.weight_mapping,
             )
 
@@ -4676,7 +4700,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         if value:
-            kernelize(self)
+            self.set_use_kernels(True)
         else:
             if getattr(self, "_use_kernels", False):
                 logger.warning_once(

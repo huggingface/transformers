@@ -827,6 +827,7 @@ class ModelTesterMixin:
             "Gemma3nVision2TextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
+            "Wav2Vec2BertModelTest": 4,
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 
@@ -3338,6 +3339,12 @@ class ModelTesterMixin:
                 # Some VLMs require image_sizes alongside pixel_values, e.g. lighton_ocr, llava_onevision
                 if "image_sizes" in inputs_dict:
                     first_inputs["image_sizes"] = inputs_dict["image_sizes"][:1]
+
+                # Add additional model inputs if there is any
+                for key in getattr(self, "additional_model_inputs", []):
+                    if key in inputs_dict:
+                        first_inputs[key] = inputs_dict[key][:1]
+
                 if model.config.is_encoder_decoder:
                     decoder_input_ids = inputs_dict.get("decoder_input_ids", first_inputs.get("input_ids"))
                     if decoder_input_ids is not None:
