@@ -34,8 +34,8 @@ if is_torch_available():
     import torch
 
     from transformers import CohereAsrForConditionalGeneration
-    from transformers.modeling_outputs import BaseModelOutput
     from transformers.models.cohere_asr.modeling_cohere_asr import CohereAsrModel
+    from transformers.models.parakeet.modeling_parakeet import ParakeetEncoderModelOutput
 
 
 class CohereAsrModelTester:
@@ -188,7 +188,10 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         torch.manual_seed(0)
         bsz, enc_len, dec_len = 2, 10, 6
         enc_hidden = torch.randn(bsz, enc_len, config.hidden_size, device=torch_device)
-        encoder_outputs = BaseModelOutput(last_hidden_state=enc_hidden)
+        encoder_outputs = ParakeetEncoderModelOutput(
+            last_hidden_state=enc_hidden,
+            attention_mask=torch.ones(bsz, enc_len, device=torch_device),
+        )
         labels = torch.randint(3, vocab_size, (bsz, dec_len), device=torch_device)
         padded = labels.clone()
         padded[0, -1] = -100
