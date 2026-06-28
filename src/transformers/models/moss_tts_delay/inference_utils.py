@@ -27,21 +27,6 @@ def apply_top_k(logits, top_k):
     return filtered_logits
 
 
-def apply_top_p(logits, top_p):
-    probs = F.softmax(logits, dim=-1)
-    sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)
-    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
-    sorted_indices_to_remove = cumulative_probs > top_p
-    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-    sorted_indices_to_remove[..., 0] = False
-    batch_size = logits.shape[0]
-    filtered_logits = logits.clone()
-    for i in range(batch_size):
-        indices_to_remove = sorted_indices[i][sorted_indices_to_remove[i]]
-        filtered_logits[i, indices_to_remove] = float("-inf")
-    return filtered_logits
-
-
 def apply_top_p_optimized(logits, top_p):
     probs = F.softmax(logits, dim=-1)
     sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)
