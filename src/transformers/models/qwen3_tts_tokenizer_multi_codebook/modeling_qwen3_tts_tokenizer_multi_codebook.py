@@ -43,7 +43,7 @@ from ...modeling_flash_attention_utils import (
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedAudioTokenizerBase, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import maybe_autocast
@@ -2354,7 +2354,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoderModel(Qwen3TTSTokenizerMultiCodebookP
 
 
 @auto_docstring
-class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrainedModel):
+class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrainedModel, PreTrainedAudioTokenizerBase):
     config_class = Qwen3TTSTokenizerMultiCodebookConfig
     main_input_name = "input_values"
 
