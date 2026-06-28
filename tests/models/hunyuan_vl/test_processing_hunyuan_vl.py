@@ -14,19 +14,41 @@
 
 import unittest
 
-from PIL import Image
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import Whitespace
 
 from transformers import PreTrainedTokenizerFast
-from transformers.models.hunyuan_vl.image_processing_hunyuan_vl import HunYuanVLImageProcessor
-from transformers.models.hunyuan_vl.processing_hunyuan_vl import HunYuanVLProcessor
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
-class HunYuanVLProcessorTest(unittest.TestCase):
-    def get_tokenizer(self):
+HunYuanVLImageProcessor = None
+HunYuanVLProcessor = None
+
+if is_vision_available():
+    from PIL import Image
+
+    from transformers.models.hunyuan_vl.processing_hunyuan_vl import HunYuanVLProcessor
+
+    if is_torchvision_available():
+        from transformers.models.hunyuan_vl.image_processing_hunyuan_vl import HunYuanVLImageProcessor
+
+
+@require_vision
+@require_torch
+@require_torchvision
+class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = HunYuanVLProcessor
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.image_token
+
+    @classmethod
+    def _setup_tokenizer(cls):
         vocab = {
             "<unk>": 0,
             "<pad>": 1,
@@ -37,6 +59,15 @@ class HunYuanVLProcessorTest(unittest.TestCase):
             "<image_end>": 6,
             "hello": 7,
             "<placeholder>": 8,
+            "<new_tail>": 9,
+            "lower": 10,
+            "newer": 11,
+            "upper": 12,
+            "older": 13,
+            "longer": 14,
+            "string": 15,
+            "Describe": 16,
+            "this.": 17,
         }
         tokenizer = Tokenizer(WordLevel(vocab=vocab, unk_token="<unk>"))
         tokenizer.pre_tokenizer = Whitespace()
@@ -46,24 +77,33 @@ class HunYuanVLProcessorTest(unittest.TestCase):
             pad_token="<pad>",
             bos_token="<bos>",
             eos_token="<eos>",
-            additional_special_tokens=["<image_start>", "<image>", "<image_end>", "<placeholder>"],
+            extra_special_tokens={
+                "image_start_token": "<image_start>",
+                "image_token": "<image>",
+                "image_end_token": "<image_end>",
+            },
         )
-        fast_tokenizer.image_start_token = "<image_start>"
-        fast_tokenizer.image_token = "<image>"
-        fast_tokenizer.image_end_token = "<image_end>"
+        fast_tokenizer.chat_template = (
+            "{% for message in messages %}"
+            "{% for content in message['content'] %}"
+            "{% if content['type'] == 'image' %}<image_start><image><image_end>"
+            "{% elif content['type'] == 'text' %}{{ content['text'] }}"
+            "{% endif %}"
+            "{% endfor %}"
+            "{% endfor %}"
+        )
         return fast_tokenizer
 
-    def get_processor(self):
-        image_processor = HunYuanVLImageProcessor(
+    @classmethod
+    def _setup_image_processor(cls):
+        return HunYuanVLImageProcessor(
             min_pixels=32 * 32,
             max_pixels=32 * 32,
             patch_size=16,
             temporal_patch_size=1,
             merge_size=1,
         )
-        return HunYuanVLProcessor(image_processor=image_processor, tokenizer=self.get_tokenizer())
 
-    @require_torch
     def test_processor_outputs_image_only_inputs(self):
         processor = self.get_processor()
         image = Image.new("RGB", (32, 32), color="white")
@@ -72,9 +112,8 @@ class HunYuanVLProcessorTest(unittest.TestCase):
 
         self.assertSetEqual(
             set(inputs.keys()),
-            {"input_ids", "attention_mask", "position_ids", "imgs_pos", "pixel_values", "image_grid_thw"},
+            {"input_ids", "attention_mask", "pixel_values", "image_grid_thw"},
         )
-        self.assertEqual(inputs["position_ids"].shape[1], 4)
         self.assertGreater(inputs["pixel_values"].shape[0], 0)
         self.assertEqual(inputs["image_grid_thw"].shape[-1], 3)
 
@@ -86,9 +125,64 @@ class HunYuanVLProcessorTest(unittest.TestCase):
         self.assertEqual(len(output["num_image_patches"]), 1)
         self.assertGreater(output["num_image_tokens"][0], 0)
 
+    def test_processor_uses_named_special_token_ids(self):
+        processor = self.get_processor()
+        image = Image.new("RGB", (32, 32), color="white")
+
+        inputs = processor(text=["<image> hello"], images=[image], padding=True, return_tensors="pt")
+
+        input_ids = inputs["input_ids"][0].tolist()
+        self.assertEqual(processor.image_token_id, processor.tokenizer.image_token_id)
+        self.assertEqual(processor.image_start_token_id, processor.tokenizer.image_start_token_id)
+        self.assertEqual(processor.image_end_token_id, processor.tokenizer.image_end_token_id)
+        self.assertIn(processor.image_token_id, input_ids)
+        self.assertNotIn(processor.tokenizer.convert_tokens_to_ids("<new_tail>"), input_ids)
+
+    def test_processor_expands_bare_and_wrapped_image_tokens(self):
+        processor = self.get_processor()
+        image = Image.new("RGB", (32, 32), color="white")
+
+        for prompt in ["<image> hello", "<image_start><image><image_end> hello"]:
+            inputs = processor(text=[prompt], images=[image], padding=True, return_tensors="pt")
+            input_ids = inputs["input_ids"][0].tolist()
+            _, grid_h, grid_w = (int(value) for value in inputs["image_grid_thw"][0])
+            _, _, expected_image_tokens = processor._get_image_token_count(grid_h, grid_w)
+
+            self.assertEqual(input_ids.count(processor.image_start_token_id), 1)
+            self.assertEqual(input_ids.count(processor.image_token_id), expected_image_tokens)
+            self.assertEqual(input_ids.count(processor.image_end_token_id), 1)
+
+    def test_apply_chat_template_keeps_wrapped_image_tokens_single_wrapped(self):
+        processor = self.get_processor()
+        image = Image.new("RGB", (32, 32), color="white")
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": "hello"},
+                ],
+            }
+        ]
+
+        inputs = processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"padding": True},
+        )
+        input_ids = inputs["input_ids"][0].tolist()
+        _, grid_h, grid_w = (int(value) for value in inputs["image_grid_thw"][0])
+        _, _, expected_image_tokens = processor._get_image_token_count(grid_h, grid_w)
+
+        self.assertEqual(input_ids.count(processor.image_start_token_id), 1)
+        self.assertEqual(input_ids.count(processor.image_token_id), expected_image_tokens)
+        self.assertEqual(input_ids.count(processor.image_end_token_id), 1)
+
     def test_model_input_names(self):
         processor = self.get_processor()
         self.assertSetEqual(
             set(processor.model_input_names),
-            {"input_ids", "attention_mask", "pixel_values", "image_grid_thw", "position_ids", "imgs_pos"},
+            {"input_ids", "attention_mask", "pixel_values", "image_grid_thw"},
         )

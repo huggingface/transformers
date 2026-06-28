@@ -13,7 +13,6 @@
 # limitations under the License.
 """Tests for [`HunYuanVLConfig`] and its sub-configs."""
 
-import tempfile
 import unittest
 
 from transformers.models.hunyuan_vl.configuration_hunyuan_vl import (
@@ -21,6 +20,8 @@ from transformers.models.hunyuan_vl.configuration_hunyuan_vl import (
     HunYuanVLTextConfig,
     HunYuanVLVisionConfig,
 )
+
+from ...test_configuration_common import ConfigTester
 
 
 LEGACY_XDROPE_SCALING = {
@@ -37,7 +38,7 @@ LEGACY_XDROPE_SCALING = {
 
 class HunYuanVLTextConfigTest(unittest.TestCase):
     def test_legacy_text_aliases_are_normalized(self):
-        """Legacy ``rope_scaling`` / ``pad_id`` / ``attention_head_dim`` aliases must round-trip into canonical fields."""
+        """Legacy ``rope_scaling`` / ``pad_id`` / ``attention_head_dim`` aliases must load into canonical fields."""
         config = HunYuanVLTextConfig(
             pad_token_id=-1,
             pad_id=7,
@@ -48,11 +49,49 @@ class HunYuanVLTextConfigTest(unittest.TestCase):
 
         self.assertEqual(config.pad_token_id, 7)
         self.assertEqual(config.head_dim, 128)
-        self.assertEqual(config.rope_theta, 10000.0)
         self.assertEqual(config.rope_parameters["type"], "dynamic")
         self.assertEqual(config.rope_parameters["rope_type"], "dynamic")
         self.assertEqual(config.rope_parameters["rope_theta"], 10000.0)
-        self.assertEqual(config.rope_scaling["xdrope_section"], [16, 16, 16, 16])
+        self.assertEqual(config.rope_parameters["xdrope_section"], [16, 16, 16, 16])
+
+    def test_attribute_map_redirects_legacy_aliases_when_both_present_and_equal(self):
+        """When legacy and canonical names are both written with the same value, ``attribute_map`` keeps the canonical."""
+        config = HunYuanVLTextConfig(
+            head_dim=128,
+            attention_head_dim=128,
+            vocab_size=290943,
+            org_vocab_size=290943,
+            pad_token_id=7,
+            pad_id=7,
+        )
+
+        self.assertEqual(config.head_dim, 128)
+        self.assertEqual(config.vocab_size, 290943)
+        self.assertEqual(config.pad_token_id, 7)
+        # Legacy names stay readable via the ``__getattribute__`` transparency provided by ``attribute_map``.
+        self.assertEqual(config.attention_head_dim, 128)
+        self.assertEqual(config.org_vocab_size, 290943)
+        self.assertEqual(config.pad_id, 7)
+
+    def test_attribute_map_recovers_from_legacy_only_checkpoint(self):
+        """A checkpoint that only carries the legacy name must still populate the canonical field."""
+        config = HunYuanVLTextConfig(attention_head_dim=64, org_vocab_size=1000, pad_id=9)
+
+        self.assertEqual(config.head_dim, 64)
+        self.assertEqual(config.vocab_size, 1000)
+        self.assertEqual(config.pad_token_id, 9)
+
+    def test_legacy_alias_keys_are_not_serialized(self):
+        """``to_dict`` must only keep canonical names, never the legacy aliases."""
+        config = HunYuanVLTextConfig(attention_head_dim=64, org_vocab_size=1000, pad_id=9)
+        serialized = config.to_dict()
+
+        self.assertIn("head_dim", serialized)
+        self.assertIn("vocab_size", serialized)
+        self.assertIn("pad_token_id", serialized)
+        self.assertNotIn("attention_head_dim", serialized)
+        self.assertNotIn("org_vocab_size", serialized)
+        self.assertNotIn("pad_id", serialized)
 
     def test_minimal_text_config_does_not_invent_rope_parameters(self):
         """When no rope payload is provided we must not fabricate one."""
@@ -72,32 +111,43 @@ class HunYuanVLVisionConfigTest(unittest.TestCase):
 
 
 class HunYuanVLConfigTest(unittest.TestCase):
-    def test_hunyuan_vl_reload(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config = HunYuanVLConfig()
-            config.save_pretrained(tmp_dir)
+    class HunYuanVLConfigTester:
+        def get_config(self):
+            return HunYuanVLConfig(
+                text_config={
+                    "vocab_size": 1000,
+                    "hidden_size": 128,
+                    "intermediate_size": 256,
+                    "num_hidden_layers": 2,
+                    "num_attention_heads": 8,
+                    "head_dim": 16,
+                },
+                vision_config={
+                    "hidden_size": 64,
+                    "intermediate_size": 128,
+                    "num_hidden_layers": 2,
+                    "num_attention_heads": 4,
+                },
+            )
 
-            reloaded = HunYuanVLConfig.from_pretrained(tmp_dir)
-            self.assertDictEqual(config.to_dict(), reloaded.to_dict())
+    def setUp(self):
+        self.model_tester = self.HunYuanVLConfigTester()
 
-    def test_top_level_token_ids_are_propagated_from_text_config(self):
+    def test_config(self):
+        self.config_tester = ConfigTester(self, config_class=HunYuanVLConfig, has_text_modality=False)
+        self.config_tester.run_common_tests()
+
+    def test_text_side_token_ids_live_only_on_text_config(self):
+        """Text-side token ids must be reachable via ``get_text_config()`` and not duplicated at the top level."""
         text_config = HunYuanVLTextConfig(pad_token_id=11, bos_token_id=22, eos_token_id=33)
         config = HunYuanVLConfig(text_config=text_config)
 
-        self.assertEqual(config.pad_token_id, 11)
-        self.assertEqual(config.bos_token_id, 22)
-        self.assertEqual(config.eos_token_id, 33)
-
-    def test_explicit_text_config_instance_is_preserved(self):
-        text_config = HunYuanVLTextConfig(hidden_size=111)
-        config = HunYuanVLConfig(text_config=text_config)
-        self.assertEqual(config.text_config.hidden_size, 111)
-
-    def test_dict_text_config_is_constructed(self):
-        config = HunYuanVLConfig(text_config={"hidden_size": 222, "head_dim": 16, "num_attention_heads": 8})
-        self.assertEqual(config.text_config.hidden_size, 222)
-        self.assertEqual(config.text_config.head_dim, 16)
-        self.assertEqual(config.text_config.num_attention_heads, 8)
+        # Generic utilities reach these via get_text_config(); the top-level config must not carry a
+        # divergent copy as a second source of truth.
+        self.assertIs(config.get_text_config(decoder=True), config.text_config)
+        self.assertEqual(config.text_config.pad_token_id, 11)
+        self.assertEqual(config.text_config.bos_token_id, 22)
+        self.assertEqual(config.text_config.eos_token_id, 33)
 
     def test_vision_text_hidden_size_is_synced_with_text_config(self):
         text_config = HunYuanVLTextConfig(hidden_size=111)
