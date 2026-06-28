@@ -944,6 +944,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("gemma4_unified", "Gemma4UnifiedAudioFeatureExtractor"),
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
+        ("moss-audio-tokenizer", "MossAudioTokenizerFeatureExtractor"),
         ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
         ("pe_audio", "PeAudioFeatureExtractor"),
         ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),

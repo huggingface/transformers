@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 [MOSS-TTS-v1.5](https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5) is a multilingual text-to-speech model from
 OpenMOSS. The model uses a Qwen3 language backbone and predicts delayed audio codebook tokens for speech generation.
 
-## Usage
+## Text-to-Speech
 
 ```python
 from scipy.io.wavfile import write
@@ -34,12 +34,76 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, dtype="auto", device_map="auto")
 
 message = processor.build_user_message(text="Hello from MOSS-TTS.", language="English")
-inputs = processor([message]).to(model.device)
+inputs = processor([message], mode="generation").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=1024)
 
 messages = processor.decode(outputs)
 audio_values = messages[0].audio_codes_list[0]
 write("moss_tts.wav", processor.model_config.sampling_rate, audio_values.cpu().numpy())
+```
+
+## Language and Pause Control
+
+Set `language` when the input language is known. Inline pause markers such as `[pause 1.5s]` can be used to request
+an explicit pause in the generated speech.
+
+```python
+message = processor.build_user_message(
+    text="Bonjour, je voudrais essayer une voix francaise naturelle. [pause 1.5s] Merci.",
+    language="French",
+)
+inputs = processor([message], mode="generation").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=1024)
+messages = processor.decode(outputs)
+```
+
+## Duration Control
+
+Use `tokens` to request a shorter or longer generated audio segment.
+
+```python
+short_message = processor.build_user_message(
+    text="Transformers makes text-to-speech easy.",
+    language="English",
+    tokens=200,
+)
+long_message = processor.build_user_message(
+    text="Transformers makes text-to-speech easy.",
+    language="English",
+    tokens=450,
+)
+
+inputs = processor([short_message, long_message], mode="generation").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=1024)
+messages = processor.decode(outputs)
+```
+
+## Voice Cloning
+
+Pass one or more reference audio paths to `reference`. The processor loads the files, encodes them with the MOSS audio
+tokenizer, and inserts the resulting audio codes into the prompt.
+
+```python
+message = processor.build_user_message(
+    text="Please read this sentence with the reference speaker voice.",
+    reference=["reference_speaker.wav"],
+    language="English",
+)
+inputs = processor([message], mode="generation").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=1024)
+messages = processor.decode(outputs)
+```
+
+## Batch generation
+
+```python
+messages = [
+    processor.build_user_message(text="Hello from MOSS-TTS.", language="English"),
+    processor.build_user_message(text="Transformers supports batched speech generation.", language="English"),
+]
+inputs = processor(messages, mode="generation").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=1024)
+messages = processor.decode(outputs)
 ```
 
 ## MossTTSDelayConfig

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from types import SimpleNamespace
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
@@ -23,7 +24,10 @@ if is_torch_available():
 
     from transformers import (
         MossAudioTokenizerConfig,
+        MossAudioTokenizerDecoderConfig,
+        MossAudioTokenizerEncoderConfig,
         MossAudioTokenizerModel,
+        MossAudioTokenizerQuantizerConfig,
         MossTTSDelayConfig,
         MossTTSDelayProcessor,
         PreTrainedTokenizerBase,
@@ -95,17 +99,16 @@ if is_torch_available():
                 MossAudioTokenizerConfig(
                     sampling_rate=16000,
                     downsample_rate=4,
-                    encoder_kwargs=[{"module_type": "PatchedPretransform", "patch_size": 4}],
-                    decoder_kwargs=[{"module_type": "PatchedPretransform", "patch_size": 4}],
-                    quantizer_kwargs={
-                        "input_dim": 4,
-                        "rvq_dim": 4,
-                        "output_dim": 4,
-                        "num_quantizers": 2,
-                        "codebook_size": 16,
-                        "codebook_dim": 2,
-                        "quantizer_type": "rlfq",
-                    },
+                    encoder_config=MossAudioTokenizerEncoderConfig(patch_sizes=[4], input_dimensions=[]),
+                    decoder_config=MossAudioTokenizerDecoderConfig(patch_sizes=[4], input_dimensions=[]),
+                    quantizer_config=MossAudioTokenizerQuantizerConfig(
+                        input_dim=4,
+                        rvq_dim=4,
+                        output_dim=4,
+                        num_quantizers=2,
+                        codebook_size=16,
+                        codebook_dim=2,
+                    ),
                 )
             )
             self.name_or_path = "fake-moss-audio-tokenizer"
@@ -207,3 +210,38 @@ class MossTTSDelayProcessorTest(unittest.TestCase):
         processor = self.get_processor(audio_tokenizer=FakeMossAudioTokenizer())
 
         self.assertIsNotNone(processor.audio_tokenizer)
+
+    def test_encode_audios_from_wav_uses_feature_extractor_padding(self):
+        class RecordingAudioTokenizer(FakeMossAudioTokenizer):
+            def encode(self, input_values, padding_mask=None, num_quantizers=None, return_dict=None):
+                self.seen_input_values_shape = tuple(input_values.shape)
+                self.seen_padding_mask = padding_mask.detach().cpu()
+
+                downsample_rate = int(self.config.downsample_rate)
+                num_quantizers = num_quantizers if num_quantizers is not None else int(self.config.num_quantizers)
+                max_length = input_values.shape[-1] // downsample_rate
+                audio_codes_lengths = (padding_mask.sum(dim=-1).long() + downsample_rate - 1) // downsample_rate
+                audio_codes = torch.zeros(
+                    input_values.shape[0],
+                    num_quantizers,
+                    max_length,
+                    device=input_values.device,
+                    dtype=torch.long,
+                )
+                return SimpleNamespace(audio_codes=audio_codes, audio_codes_lengths=audio_codes_lengths)
+
+        audio_tokenizer = RecordingAudioTokenizer()
+        processor = self.get_processor(audio_tokenizer=audio_tokenizer)
+
+        codes = processor.encode_audios_from_wav(
+            [torch.ones(1, 5, device=torch_device), torch.ones(1, 8, device=torch_device)],
+            sampling_rate=int(processor.model_config.sampling_rate),
+            n_vq=2,
+        )
+
+        self.assertEqual(audio_tokenizer.seen_input_values_shape, (2, 1, 8))
+        self.assertEqual(
+            audio_tokenizer.seen_padding_mask.tolist(),
+            [[True, True, True, True, True, False, False, False], [True, True, True, True, True, True, True, True]],
+        )
+        self.assertEqual([tuple(code.shape) for code in codes], [(2, 2), (2, 2)])

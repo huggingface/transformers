@@ -20,24 +20,83 @@ rendered properly in your Markdown viewer.
 [MOSS-Audio-Tokenizer](https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer) is the neural audio codec used by
 MOSS-TTS. It encodes waveforms into discrete audio codebook tokens and decodes those tokens back into waveform audio.
 
-## Usage
+## Single audio
 
 ```python
 import torch
-
-from transformers import MossAudioTokenizerModel
+from datasets import Audio, load_dataset
+from scipy.io.wavfile import write
+from transformers import AutoFeatureExtractor, AutoModelForAudioTokenization
 
 
 model_id = "OpenMOSS-Team/MOSS-Audio-Tokenizer"
-model = MossAudioTokenizerModel.from_pretrained(model_id, device_map="auto")
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+model = AutoModelForAudioTokenization.from_pretrained(model_id, dtype="auto", device_map="auto")
 
-audio = torch.randn(1, 1, 24000, device=model.device)
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+audio = dataset[0]["audio"]["array"]
+inputs = feature_extractor(audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(model.device)
 
-encoded = model.encode(audio, return_dict=True)
-audio_codes = encoded.audio_codes
+encoded = model.encode(**inputs, return_dict=True)
+codes_mask = torch.arange(encoded.audio_codes.shape[-1], device=model.device)[None, :] < encoded.audio_codes_lengths[
+    :, None
+]
+decoded = model.decode(encoded.audio_codes, padding_mask=codes_mask, return_dict=True)
 
-decoded = model.decode(audio_codes, return_dict=True)
-audio_values = decoded.audio
+audio_length = int(decoded.audio_lengths[0])
+audio_values = decoded.audio[0, 0, :audio_length].float().cpu().numpy()
+write("moss_audio_tokenizer_reconstruction.wav", feature_extractor.sampling_rate, audio_values)
+```
+
+## Batch audio
+
+```python
+audios = [dataset[i]["audio"]["array"] for i in range(2)]
+inputs = feature_extractor(audios, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(model.device)
+
+encoded = model.encode(**inputs, return_dict=True)
+codes_mask = torch.arange(encoded.audio_codes.shape[-1], device=model.device)[None, :] < encoded.audio_codes_lengths[
+    :, None
+]
+decoded = model.decode(encoded.audio_codes, padding_mask=codes_mask, return_dict=True)
+
+first_length = int(decoded.audio_lengths[0])
+second_length = int(decoded.audio_lengths[1])
+first_reconstruction = decoded.audio[0, 0, :first_length]
+second_reconstruction = decoded.audio[1, 0, :second_length]
+```
+
+## Fewer Quantizers
+
+Decode with fewer residual quantizers to trade reconstruction quality for a lower bitrate.
+
+```python
+encoded = model.encode(**inputs, num_quantizers=8, return_dict=True)
+codes_mask = torch.arange(encoded.audio_codes.shape[-1], device=model.device)[None, :] < encoded.audio_codes_lengths[
+    :, None
+]
+decoded = model.decode(encoded.audio_codes, padding_mask=codes_mask, return_dict=True)
+```
+
+## Streaming Chunks
+
+`chunk_duration` is expressed in seconds. It must be no longer than
+`config.causal_transformer_context_duration`, and `chunk_duration * config.sampling_rate` must be divisible by
+`config.downsample_rate`.
+
+```python
+single_inputs = feature_extractor(
+    audio,
+    sampling_rate=feature_extractor.sampling_rate,
+    return_tensors="pt",
+).to(model.device)
+
+encoded = model.encode(**single_inputs, chunk_duration=0.08, return_dict=True)
+codes_mask = torch.arange(encoded.audio_codes.shape[-1], device=model.device)[None, :] < encoded.audio_codes_lengths[
+    :, None
+]
+decoded = model.decode(encoded.audio_codes, padding_mask=codes_mask, chunk_duration=0.08, return_dict=True)
 ```
 
 ## MossAudioTokenizerConfig
@@ -56,11 +115,13 @@ audio_values = decoded.audio
 
 [[autodoc]] MossAudioTokenizerQuantizerConfig
 
+## MossAudioTokenizerFeatureExtractor
+
+[[autodoc]] MossAudioTokenizerFeatureExtractor
+
 ## MossAudioTokenizerModel
 
 [[autodoc]] MossAudioTokenizerModel
     - encode
     - decode
-    - batch_encode
-    - batch_decode
     - forward

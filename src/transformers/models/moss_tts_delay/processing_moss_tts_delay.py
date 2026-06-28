@@ -23,6 +23,7 @@ from ... import (
     AutoConfig,
     AutoTokenizer,
     BatchFeature,
+    MossAudioTokenizerFeatureExtractor,
     PreTrainedTokenizerBase,
     ProcessorMixin,
 )
@@ -333,9 +334,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
                 if not isinstance(content, str):
                     content = str(content)
 
-                # Batch-encode all path-based references in one call when possible.
-                # This ensures we actually exercise audio_tokenizer.batch_encode for multi-reference prompts,
-                # instead of repeatedly calling it with batch=1.
+                # Batch-encode all path-based references in one tokenizer call when possible.
                 raw_audio_items = message.get("audio_codes_list", [])
 
                 audio_codes_list: list[torch.Tensor] = []
@@ -786,30 +785,25 @@ class MossTTSDelayProcessor(ProcessorMixin):
                     new_freq=self.model_config.sampling_rate,
                 )
             wav = wav.to(device)
-            wav_list_.append(self.loudness_normalize(wav.squeeze(0)))
+            wav_list_.append(self.loudness_normalize(wav.squeeze(0)).detach().cpu().numpy())
 
-        # New MossAudioTokenizerModel API: prefer batch_encode(list[wav])
-        if hasattr(audio_tokenizer, "batch_encode"):
-            enc = audio_tokenizer.batch_encode(wav_list_, num_quantizers=n_vq)
-            audio_codes = enc.audio_codes  # (NQ, B, T)
-            audio_codes_lengths = enc.audio_codes_lengths  # (B,)
-        else:
-            # Fallback: use encode() with explicit padding.
-            max_len = max(int(wav.shape[-1]) for wav in wav_list_)
-            input_values = torch.zeros(len(wav_list_), 1, max_len, device=device, dtype=torch.float32)
-            padding_mask = torch.zeros(len(wav_list_), max_len, device=device, dtype=torch.bool)
-            for i, wav in enumerate(wav_list_):
-                this_len = int(wav.shape[-1])
-                input_values[i, 0, :this_len] = wav
-                padding_mask[i, :this_len] = True
-            enc = audio_tokenizer.encode(
-                input_values,
-                padding_mask=padding_mask,
-                num_quantizers=n_vq,
-                return_dict=True,
-            )
-            audio_codes = enc.audio_codes
-            audio_codes_lengths = enc.audio_codes_lengths
+        feature_extractor = MossAudioTokenizerFeatureExtractor(
+            sampling_rate=int(self.model_config.sampling_rate),
+            hop_length=int(audio_tokenizer.config.downsample_rate),
+        )
+        audio_inputs = feature_extractor(
+            wav_list_,
+            sampling_rate=int(self.model_config.sampling_rate),
+            return_tensors="pt",
+        ).to(device)
+        enc = audio_tokenizer.encode(
+            audio_inputs["input_values"],
+            padding_mask=audio_inputs["padding_mask"].to(torch.bool),
+            num_quantizers=n_vq,
+            return_dict=True,
+        )
+        audio_codes = enc.audio_codes
+        audio_codes_lengths = enc.audio_codes_lengths
 
         if audio_codes is None or audio_codes_lengths is None:
             raise RuntimeError("audio_tokenizer.encode() returned empty outputs (audio_codes/audio_codes_lengths).")
@@ -817,9 +811,9 @@ class MossTTSDelayProcessor(ProcessorMixin):
         # Keep processor's historical contract: list[Tensor] with shape (T, NQ)
         # and on CPU (so downstream text/audio packing remains device-agnostic).
         codes_list: list[torch.Tensor] = []
-        for i in range(int(audio_codes.shape[1])):
+        for i in range(int(audio_codes.shape[0])):
             length_i = int(audio_codes_lengths[i].item())
-            codes_i = audio_codes[:, i, :length_i].transpose(0, 1).contiguous().to(torch.long).cpu()
+            codes_i = audio_codes[i, :, :length_i].transpose(0, 1).contiguous().to(torch.long).cpu()
             codes_list.append(codes_i)
         return codes_list
 
@@ -830,9 +824,7 @@ class MossTTSDelayProcessor(ProcessorMixin):
         if len(wav_path_list) == 0:
             raise ValueError("Empty wav_path_list")
 
-        # Load + (if needed) resample each wav independently, so callers can
-        # pass a heterogeneous batch of files while still benefiting from
-        # audio_tokenizer.batch_encode.
+        # Load + (if needed) resample each wav independently so callers can pass a heterogeneous batch of files.
         target_sr = int(self.model_config.sampling_rate)
         wav_list: list[torch.Tensor] = []
         for wav_path in wav_path_list:
@@ -860,19 +852,18 @@ class MossTTSDelayProcessor(ProcessorMixin):
 
         device = self._get_audio_tokenizer_device()
 
-        # Processor uses (T, NQ); MossAudioTokenizer expects (NQ, T) (or (NQ, B, T)).
+        # Processor uses (T, NQ); MossAudioTokenizer expects batch-first (B, NQ, T).
         codes_list = [
             codes.transpose(0, 1).contiguous().to(device=device, dtype=torch.long) for codes in audio_tokens_list
         ]
 
-        # Fallback: pad to (NQ, B, T) + mask, then decode.
         nq = int(codes_list[0].shape[0])
         max_t = max(int(c.shape[1]) for c in codes_list)
-        audio_codes = torch.zeros(nq, len(codes_list), max_t, device=device, dtype=torch.long)
+        audio_codes = torch.zeros(len(codes_list), nq, max_t, device=device, dtype=torch.long)
         padding_mask = torch.zeros(len(codes_list), max_t, device=device, dtype=torch.bool)
         for i, c in enumerate(codes_list):
             t = int(c.shape[1])
-            audio_codes[:, i, :t] = c
+            audio_codes[i, :, :t] = c
             padding_mask[i, :t] = True
         dec = audio_tokenizer.decode(audio_codes, padding_mask=padding_mask, return_dict=True, chunk_duration=8)
         audio = dec.audio

@@ -53,10 +53,6 @@ import re
 import unicodedata
 
 
-# ---------------------------
-# Base constants and regular expressions
-# ---------------------------
-
 # Scripts that do not rely on whitespace tokenization: Chinese characters and Japanese kana.
 _CJK_CHARS = r"\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff"
 _CJK = f"[{_CJK_CHARS}]"
@@ -91,11 +87,6 @@ _LATINISH = rf"(?:{_PROT}|(?=[A-Za-z0-9._/+:-]*[A-Za-z])[A-Za-z0-9][A-Za-z0-9._/
 _ZERO_WIDTH_RE = re.compile(r"[\u200b-\u200d\ufeff]")
 
 
-# ---------------------------
-# Public entry point
-# ---------------------------
-
-
 def normalize_tts_text(text: str) -> str:
     """Apply robust normalization to TTS input text."""
     text = _base_cleanup(text)
@@ -109,11 +100,6 @@ def normalize_tts_text(text: str) -> str:
 
     text = _restore_spans(text, protected)
     return text.strip()
-
-
-# ---------------------------
-# Normalization rules
-# ---------------------------
 
 
 def _base_cleanup(text: str) -> str:
