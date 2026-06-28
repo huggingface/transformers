@@ -103,6 +103,10 @@ decoded = model.decode(encoded.audio_codes, padding_mask=codes_mask, chunk_durat
 
 [[autodoc]] MossAudioTokenizerConfig
 
+## MossAudioTokenizerBackboneConfig
+
+[[autodoc]] MossAudioTokenizerBackboneConfig
+
 ## MossAudioTokenizerEncoderConfig
 
 [[autodoc]] MossAudioTokenizerEncoderConfig

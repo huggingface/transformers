@@ -382,6 +382,7 @@ class MossAudioTokenizerConfig(PreTrainedConfig):
 
 
 __all__ = [
+    "MossAudioTokenizerBackboneConfig",
     "MossAudioTokenizerConfig",
     "MossAudioTokenizerDecoderConfig",
     "MossAudioTokenizerEncoderConfig",
