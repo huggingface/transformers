@@ -1337,24 +1337,19 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
         return_dict: bool | None = None,
         chunk_duration: float | None = None,
     ):
-        """
-        Encodes the input audio waveform into discrete codes.
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+            Float values of the input audio waveform.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to indicate valid audio samples.
+        num_quantizers (`int`, *optional*):
+            Number of quantizers to use. By default, all quantizers are used.
+        chunk_duration (`float`, *optional*):
+            If provided, encode the input waveform in successive chunks of `chunk_duration` seconds while keeping a
+            streaming KV cache for the causal transformers.
 
-        Args:
-            input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
-                Float values of the input audio waveform.
-            padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to indicate valid audio samples.
-            num_quantizers (`int`, *optional*):
-                Number of quantizers to use. By default, all quantizers are used.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            chunk_duration (`float`, *optional*):
-                If provided, encode the input waveform in successive chunks of `chunk_duration` seconds while keeping a
-                streaming KV cache for the causal transformers.
-
-                `chunk_duration` must be <= `config.causal_transformer_context_duration`, and
-                `chunk_duration * config.sampling_rate` must be divisible by `config.downsample_rate`.
+            `chunk_duration` must be <= `config.causal_transformer_context_duration`, and
+            `chunk_duration * config.sampling_rate` must be divisible by `config.downsample_rate`.
 
         Returns:
             `MossAudioTokenizerEncoderOutput` or tuple containing audio codes and lengths.
@@ -1453,25 +1448,19 @@ class MossAudioTokenizerModel(MossAudioTokenizerPreTrainedModel):
         chunk_duration: float | None = None,
         num_quantizers: int | None = None,
     ):
-        """
-        Decodes the given codes into an output audio waveform.
+        r"""
+        audio_codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, sequence_length)`):
+            Discrete code embeddings computed using `model.encode`.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to indicate valid code positions.
+        chunk_duration (`float`, *optional*):
+            If provided, decode the input codes in successive chunks of `chunk_duration` seconds while keeping a
+            streaming KV cache for the causal transformers.
+        num_quantizers (`int`, *optional*):
+            Number of quantizers to use. By default, all quantizers in `audio_codes` are used.
 
-        Args:
-            audio_codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, sequence_length)`):
-                Discrete code embeddings computed using `model.encode`.
-            padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to indicate valid code positions.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            chunk_duration (`float`, *optional*):
-                If provided, decode the input codes in successive chunks of `chunk_duration` seconds while keeping a
-                streaming KV cache for the causal transformers.
-
-            num_quantizers (`int`, *optional*):
-                Number of quantizers to use. By default, all quantizers in `audio_codes` are used.
-
-                `chunk_duration` must be <= `config.causal_transformer_context_duration`, and
-                `chunk_duration * config.sampling_rate` must be divisible by `config.downsample_rate`.
+            `chunk_duration` must be <= `config.causal_transformer_context_duration`, and
+            `chunk_duration * config.sampling_rate` must be divisible by `config.downsample_rate`.
 
         Returns:
             `MossAudioTokenizerDecoderOutput` or tuple containing decoded audio.

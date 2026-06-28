@@ -55,8 +55,6 @@ def _expand_stage_value(value: Any, default: Any, num_stages: int, field_name: s
 @strict
 class MossAudioTokenizerBackboneConfig(PreTrainedConfig):
     r"""
-    Shared configuration for the MossAudioTokenizer encoder or decoder stack.
-
     patch_sizes (`List[int]`, *optional*):
         Patch sizes used by each downsampling or upsampling patch module.
     transformer_first (`bool`, *optional*, defaults to `False`):
@@ -285,8 +283,6 @@ class MossAudioTokenizerDecoderConfig(MossAudioTokenizerBackboneConfig):
 @strict
 class MossAudioTokenizerQuantizerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class for the MossAudioTokenizer residual LFQ quantizer.
-
     input_dim (`int`, *optional*, defaults to 768):
         Input hidden size of the quantizer projection.
     rvq_dim (`int`, *optional*, defaults to 512):
@@ -316,9 +312,6 @@ class MossAudioTokenizerQuantizerConfig(PreTrainedConfig):
 @strict
 class MossAudioTokenizerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MossAudioTokenizerModel`]. It is used to
-    instantiate a MossAudioTokenizer model according to the specified arguments, defining the model architecture.
-
     sampling_rate (`int`, *optional*, defaults to 24000):
         The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
     downsample_rate (`int`, *optional*, defaults to 1920):
