@@ -198,9 +198,9 @@ def build_resized_image(
     resized = resized.permute(0, 2, 3, 1).unsqueeze(1)
     # The per-patch index grid depends only on the (shared) shape, so it is built once.
     crop_patch_h = crop_patch_w = base_image_input_size // image_patch_size
-    resize_idx = torch.arange(
-        crop_patch_w * crop_patch_h, dtype=torch.int32, device=images_nchw.device
-    ).reshape(crop_patch_h, crop_patch_w)
+    resize_idx = torch.arange(crop_patch_w * crop_patch_h, dtype=torch.int32, device=images_nchw.device).reshape(
+        crop_patch_h, crop_patch_w
+    )
     return resized, resize_idx
 
 
