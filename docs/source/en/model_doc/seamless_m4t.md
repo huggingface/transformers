@@ -124,7 +124,7 @@ You have the possibility to change the speaker used for speech synthesis with th
 
 #### 3. Change the generation strategy
 
-You can use different [generation strategies](./generation_strategies) for speech and text generation, e.g `.generate(input_ids=input_ids, text_num_beams=4, speech_do_sample=True)` which will successively perform beam-search decoding on the text model, and multinomial sampling on the speech model.
+You can use different [generation strategies](../generation_strategies) for speech and text generation, e.g `.generate(input_ids=input_ids, text_num_beams=4, speech_do_sample=True)` which will successively perform beam-search decoding on the text model, and multinomial sampling on the speech model.
 
 #### 4. Generate speech and text at the same time
 

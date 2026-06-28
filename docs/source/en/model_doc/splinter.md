@@ -55,7 +55,7 @@ This model was contributed by [yuvalkirstain](https://huggingface.co/yuvalkirsta
 
 ## Resources
 
-- [Question answering task guide](../tasks/question-answering)
+- [Question answering task guide](../tasks/question_answering)
 
 ## SplinterConfig
 
