@@ -1032,7 +1032,11 @@ class Molmo2Model(Molmo2PreTrainedModel):
         image_features: torch.FloatTensor | None = None
         if images is not None:
             image_features = self.vision_backbone(images, token_pooling)
+            # `get_placeholder_mask` returns a [batch, seq, 1] mask; Molmo2 *adds* the image features onto
+            # the placeholder-token embeddings (residual), which means we index `inputs_embeds` directly.
+            # Boolean indexing does not broadcast, so the mask must be expanded to the hidden dim first.
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(
                 special_image_mask,
                 inputs_embeds[special_image_mask] + image_features.reshape(-1),
