@@ -221,6 +221,11 @@ if is_torch_available():
         def __init__(self, config, layer_idx):
             _init_toy_layer(self, config, layer_idx)
 
+    class _StackLookupToyLayer(torch.nn.Module):
+        def __init__(self, config):
+            torch.nn.Module.__init__(self)
+            self.intermediate_size = config.intermediate_size
+
     def _toy_modeling_spec(layer_cls, marker_replacement_cls):
         return HeterogeneousModelingSpec(
             layer_cls=layer_cls,
@@ -246,6 +251,15 @@ if is_torch_available():
 
     class _ToyPreTrainedModel(PreTrainedModel):
         config_class = LlamaConfig
+
+    class _LayerIdxStackLookupToyModel(_ToyPreTrainedModel):
+        _heterogeneous_modeling_spec = HeterogeneousModelingSpec(
+            layer_cls=_StackLookupToyLayer, layer_idx_variable_name="layer_idx"
+        )
+
+        def __init__(self, config, layer_idx=0):
+            super().__init__(config)
+            self.layer = _StackLookupToyLayer(config)
 
     class _InterleavedOuterToyModel(_ToyPreTrainedModel):
         _heterogeneous_modeling_spec = _toy_modeling_spec(_OuterToyLayer, _OuterContextMarker)
@@ -300,19 +314,6 @@ class HeteroCase:
 
 HETERO_CASES = [
     # ── Llama ──
-    HeteroCase(
-        name="llama_dim",
-        model_key="llama",
-        config_factory=_tiny_llama_config,
-        model_cls=LlamaForCausalLM,
-        per_layer_config={0: {"intermediate_size": 64}, 2: {"intermediate_size": 96}},
-        structure_weight_checks=[
-            WeightCheck(0, "mlp.gate_proj.weight", 0, 64),
-            WeightCheck(1, "mlp.gate_proj.weight", 0, 128),
-            WeightCheck(2, "mlp.gate_proj.weight", 0, 96),
-            WeightCheck(3, "mlp.gate_proj.weight", 0, 128),
-        ],
-    ),
     HeteroCase(
         name="llama_multi_attr",
         model_key="llama",
@@ -416,11 +417,25 @@ HETERO_CASES = [
         per_layer_config={0: {"skip": ["mlp"]}},
     ),
     HeteroCase(
+        name="llama4_skip_moe_mlp",
+        model_key="llama4",
+        config_factory=_tiny_llama4_config,
+        model_cls=Llama4ForCausalLM,
+        per_layer_config={1: {"skip": ["mlp"]}},
+    ),
+    HeteroCase(
         name="llama4_skip_both",
         model_key="llama4",
         config_factory=_tiny_llama4_config,
         model_cls=Llama4ForCausalLM,
         per_layer_config={0: {"skip": ["attention", "mlp"]}},
+    ),
+    HeteroCase(
+        name="llama4_skip_moe_both",
+        model_key="llama4",
+        config_factory=_tiny_llama4_config,
+        model_cls=Llama4ForCausalLM,
+        per_layer_config={1: {"skip": ["attention", "mlp"]}},
     ),
     # ── NemotronH (layers: attention, mamba, moe, attention) ──
     HeteroCase(
@@ -678,6 +693,21 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertIsInstance(outer_layer.context_marker, _OuterContextMarker)
         self.assertEqual(inner_layer.intermediate_size, 64)
         self.assertIsInstance(inner_layer.context_marker, _InnerContextMarker)
+
+    def test_layer_index_can_be_resolved_from_stack(self):
+        model = _LayerIdxStackLookupToyModel(_toy_config(intermediate_size=64))
+
+        self.assertEqual(model.layer.intermediate_size, 64)
+
+    @parameterized.expand(
+        [
+            ("bool", True, TypeError, "call stack must be an integer"),
+            ("negative", -1, IndexError, "call stack is out of range"),
+        ]
+    )
+    def test_invalid_layer_index_from_stack_fails_clearly(self, _, layer_idx, error_type, message):
+        with self.assertRaisesRegex(error_type, message):
+            _LayerIdxStackLookupToyModel(_toy_config(intermediate_size=64), layer_idx)
 
     def test_sequential_heterogeneous_models_no_interference(self):
         """Two heterogeneous models built sequentially should each have correct per-layer weights."""

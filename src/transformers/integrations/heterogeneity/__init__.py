@@ -17,7 +17,7 @@ from .configuration_utils import AmbiguousGlobalPerLayerAttributeError, Heteroge
 from .heterogeneous_modeling_spec import HeterogeneousModelingSpec, SkipDescriptor, get_heterogeneous_modeling_spec
 from .modeling_utils import (
     apply_heterogeneous_modeling,
-    clean_up_post_heterogeneous_modeling,
+    wrap_model_init_with_heterogeneous_cleanup,
 )
 from .skip_utils import ReturnEntry, get_skip_replacement
 
@@ -29,7 +29,7 @@ __all__ = [
     "ReturnEntry",
     "SkipDescriptor",
     "apply_heterogeneous_modeling",
-    "clean_up_post_heterogeneous_modeling",
     "get_heterogeneous_modeling_spec",
     "get_skip_replacement",
+    "wrap_model_init_with_heterogeneous_cleanup",
 ]

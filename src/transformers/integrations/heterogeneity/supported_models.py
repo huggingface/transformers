@@ -125,7 +125,7 @@ def llama4() -> HeterogeneousModelingSpec:
                     Llama4TextMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
                 ),
                 ("feed_forward", Llama4TextMoe): get_skip_replacement(
-                    Llama4TextMoe, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+                    Llama4TextMoe, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
                 ),
             },
         },

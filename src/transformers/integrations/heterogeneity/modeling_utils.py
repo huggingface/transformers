@@ -78,8 +78,7 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
        method is patched to select the mask matching that layer's configured
        mask key.
 
-    After model construction, ``clean_up_post_heterogeneous_modeling``
-    resets the ``ContextVar``.
+    After model construction, the ``ContextVar`` is reset.
 
     The resolved ``HeterogeneousModelingSpec`` contains:
         ``layer_cls``: The layer class to patch, e.g. ``LlamaDecoderLayer``.
@@ -110,7 +109,23 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
     _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
 
 
-def clean_up_post_heterogeneous_modeling(model: PreTrainedModel) -> None:
+def wrap_model_init_with_heterogeneous_cleanup(orig_init: Callable[..., None]) -> Callable[..., None]:
+    """Wrap a model initializer so heterogeneous layer context is always cleaned up."""
+    if getattr(orig_init, "_wrapped_by_heterogeneous_modeling_cleanup", False):
+        return orig_init
+
+    @wraps(orig_init)
+    def _patched_init(self, *args, **kwargs):
+        try:
+            orig_init(self, *args, **kwargs)
+        finally:
+            _clean_up_post_heterogeneous_modeling(self)
+
+    _patched_init._wrapped_by_heterogeneous_modeling_cleanup = True
+    return _patched_init
+
+
+def _clean_up_post_heterogeneous_modeling(model: PreTrainedModel) -> None:
     if not hasattr(model, "_layer_init_context_token"):
         return
 
@@ -135,17 +150,25 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
 
             # --- Resolve layer index ---
             layer_idx_possible_names = [ctx.layer_idx_variable_name]
+            layer_idx_source = "constructor arguments"
             layer_idx = _get_variable_from_passed_arguments(
                 func=orig_layer_init, args=(self, config, *args), kwargs=kwargs, names=layer_idx_possible_names
             )
             if layer_idx is None:
+                layer_idx_source = "call stack"
                 layer_idx = _get_variable_from_stack(layer_idx_possible_names)
 
             if layer_idx is None:
                 raise RuntimeError(
-                    "Could not determine layer index for heterogeneous model initialization. "
-                    "Ensure layer_idx is passed as an argument or available in the call stack."
+                    f"Could not determine layer index `{ctx.layer_idx_variable_name}` for heterogeneous model "
+                    "initialization. Ensure it is passed as a constructor argument or available in the call stack."
                 )
+            _validate_layer_idx(
+                layer_idx,
+                variable_name=ctx.layer_idx_variable_name,
+                source=layer_idx_source,
+                num_layers=config.num_hidden_layers,
+            )
 
             # --- Apply per-layer config ---
             layer_config = config.per_layer_config[layer_idx]
@@ -205,6 +228,9 @@ def _apply_skip_descriptor(
     skip_descriptor: SkipDescriptor,
     layer_idx: int,
 ):
+    generic_replacements = {}
+    class_specific_replacements = {}
+
     for key, replacement_module in skip_descriptor.items():
         if isinstance(key, tuple):
             member_name, cls = key
@@ -217,7 +243,25 @@ def _apply_skip_descriptor(
                 f"Layer {layer_idx} in class {layer.__class__.__name__} has no attribute {member_name}"
             )
 
-        if cls is None or isinstance(getattr(layer, member_name), cls):
+        if cls is None:
+            generic_replacements[member_name] = replacement_module
+            continue
+
+        if not isinstance(getattr(layer, member_name), cls):
+            continue
+
+        if member_name in class_specific_replacements:
+            raise ValueError(
+                f"Multiple class-specific skip replacements match layer {layer_idx} "
+                f"attribute {member_name} in class {layer.__class__.__name__}"
+            )
+        class_specific_replacements[member_name] = replacement_module
+
+    for member_name, replacement_module in class_specific_replacements.items():
+        setattr(layer, member_name, replacement_module())
+
+    for member_name, replacement_module in generic_replacements.items():
+        if member_name not in class_specific_replacements:
             setattr(layer, member_name, replacement_module())
 
 
@@ -235,11 +279,29 @@ def _get_variable_from_passed_arguments(*, func: Callable, args: tuple, kwargs: 
     return None
 
 
-def _get_variable_from_stack(names: list[str]) -> Any:
-    f = inspect.currentframe().f_back
+def _get_variable_from_stack(names: list[str]) -> Any | None:
+    f = inspect.currentframe()
+    if f is None or f.f_back is None:
+        return None
+
+    f = f.f_back.f_back
+
     while f:
         for name in names:
             if name in f.f_locals:
                 return f.f_locals[name]
         f = f.f_back
     return None
+
+
+def _validate_layer_idx(layer_idx: Any, *, variable_name: str, source: str, num_layers: int) -> None:
+    if isinstance(layer_idx, bool) or not isinstance(layer_idx, int):
+        raise TypeError(
+            f"Layer index `{variable_name}` resolved from the {source} must be an integer, "
+            f"but got {layer_idx!r} ({type(layer_idx).__name__})."
+        )
+    if not 0 <= layer_idx < num_layers:
+        raise IndexError(
+            f"Layer index `{variable_name}` resolved from the {source} is out of range for "
+            f"a model with {num_layers} layers: {layer_idx}."
+        )
