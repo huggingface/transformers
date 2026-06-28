@@ -1042,6 +1042,9 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
     @capture_outputs
     @auto_docstring
     def forward(
+        # `original_sizes` is used by the processor for post-processing and is not a valid model kwarg.
+        kwargs.pop("original_sizes", None)
+
         self,
         pixel_values: torch.FloatTensor | None = None,
         input_points: torch.FloatTensor | None = None,
@@ -1054,6 +1057,9 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         target_embedding: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EdgeTamImageSegmentationOutput:
+        # `original_sizes` is used by the processor for post-processing and is not a valid model kwarg.
+        kwargs.pop("original_sizes", None)
+
         r"""
         input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
