@@ -38,9 +38,9 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bamba.modeling_bamba import apply_mask_to_padding_states
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
+    DeepseekV3Experts,
     DeepseekV3MLP,
     DeepseekV3MoE,
-    DeepseekV3NaiveMoe,
     DeepseekV3RMSNorm,
     DeepseekV3TopkRouter,
     rotate_half,
@@ -111,12 +111,10 @@ class BailingMoeV2_5MLP(DeepseekV3MLP):
 
 
 class BailingMoeV2_5TopkRouter(DeepseekV3TopkRouter):
-    def __init__(self, config):
-        super().__init__(config)
-        self.n_routed_experts = config.num_experts
+    pass
 
 
-class BailingMoeV2_5Experts(DeepseekV3NaiveMoe):
+class BailingMoeV2_5Experts(DeepseekV3Experts):
     pass
 
 
@@ -126,15 +124,10 @@ class BailingMoeV2_5MoE(DeepseekV3MoE):
         self.config = config
         self.experts = BailingMoeV2_5Experts(config)
         self.gate = BailingMoeV2_5TopkRouter(config)
+        # BailingMoeV2_5 sizes the shared expert with its own intermediate size and shared-expert count.
         self.shared_experts = BailingMoeV2_5MLP(
             config=config, intermediate_size=config.moe_shared_expert_intermediate_size * config.num_shared_experts
         )
-        self.n_routed_experts = config.num_experts
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.top_k = config.num_experts_per_tok
 
 
 class BailingMoeV2_5GroupRMSNorm(nn.Module):

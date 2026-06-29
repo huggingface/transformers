@@ -42,11 +42,20 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    # EP related refactor that also relies on correct naming for FP8/4 conventions
+    "DeepseekV3Config": ["n_routed_experts"],
+    "Glm4MoeConfig": ["n_routed_experts"],
+    "Glm4MoeLiteConfig": ["n_routed_experts"],
+    "Glm4vMoeTextConfig": ["n_routed_experts"],
+    "Mistral4Config": ["n_routed_experts"],
+    "SolarOpenConfig": ["n_routed_experts"],
+    "NemotronAsrStreamingEncoderConfig": ["num_mel_bins"],  # Used via the `subsampling_out_hidden_size` property
     "Gemma4UnifiedAudioConfig": ["audio_embed_dim"],  # Used as meta data for other attributes/properties
     "Gemma4UnifiedVisionConfig": [
         "patch_size",
         "pooling_kernel_size",
     ],  # Used as meta data for other attributes/properties
+    "MiniCPM3Config": ["dim_model_base"],  # Used by the logits_scaling property
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
@@ -67,7 +76,7 @@ SPECIAL_CASES_TO_ALLOW = {
     # `layer_group_size` builds `layer_types` and `first_k_dense_replace` builds `mlp_layer_types` in __post_init__
     # (the former also drives weight conversion), so neither is read directly by the modeling file.
     "BailingMoeV2_5Config": ["layer_group_size", "first_k_dense_replace"],
-    "Dots1Config": ["max_window_layers"],
+    "Dots1Config": ["max_window_layers", "n_routed_experts"],
     "JambaConfig": ["attn_layer_offset", "attn_layer_period", "expert_layer_offset", "expert_layer_period"],
     "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
@@ -136,8 +145,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_nextn_predict_layers",
         "router_jitter_noise",
     ],
-    "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace"],
-    "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace"],
+    "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
+    "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "SeamlessM4TConfig": True,

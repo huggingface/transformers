@@ -662,6 +662,96 @@ class ImageProcessingTestMixin:
 
         self.assertIsNone(getattr(reloaded, test_attr), f"Explicit None for {test_attr} was lost after reload")
 
+    def test_post_process_test_mixin_inheritance(self):
+        """
+        Ensures that we have the post-process tester mixin if the processor implements the corresponding method.
+        The test will fail otherwise, forcing the mixin to be added -- and ensuring proper test coverage.
+        """
+        METHOD_TO_MIXIN = {
+            "post_process_semantic_segmentation": PostProcessSemanticSegmentationTestMixin,
+        }
+        for method_name, mixin_class in METHOD_TO_MIXIN.items():
+            implements_method = any(
+                hasattr(image_processing_class, method_name)
+                for image_processing_class in self.image_processing_classes.values()
+            )
+            if implements_method:
+                self.assertTrue(
+                    issubclass(self.__class__, mixin_class),
+                    msg=(
+                        f"This processor implements `{method_name}`, so the tester must inherit from "
+                        f"`{mixin_class.__name__}` to run the corresponding tests. Either add the inheritance "
+                        f"or, if the processor only partially supports `{method_name}`, overwrite the test."
+                    ),
+                )
+            else:
+                self.assertFalse(
+                    issubclass(self.__class__, mixin_class),
+                    msg=(
+                        f"This processor does not implement `{method_name}`, so the tester must not inherit from "
+                        f"`{mixin_class.__name__}`. If the processor was recently updated to support "
+                        f"`{method_name}`, add the `{mixin_class.__name__}` inheritance instead."
+                    ),
+                )
+
+
+class PostProcessSemanticSegmentationTestMixin:
+    @require_torch
+    def test_post_process_semantic_segmentation(self):
+        for image_processing_class in self.image_processing_classes.values():
+            with self.subTest(image_processing_class):
+                image_processor = image_processing_class(**self.image_processor_dict)
+                inputs, expected_shape = (
+                    self.image_processor_tester.prepare_post_process_semantic_segmentation_inputs()
+                )
+
+                segmentation = image_processor.post_process_semantic_segmentation(**inputs)
+
+                self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
+                self.assertEqual(segmentation[0].shape, (expected_shape["height"], expected_shape["width"]))
+
+                # return_segmentation_scores=True: returns list of SemanticSegmentationPostProcessorOutput
+                segmentation_output = image_processor.post_process_semantic_segmentation(
+                    **inputs, return_segmentation_scores=True
+                )
+                self.assertEqual(len(segmentation_output), self.image_processor_tester.batch_size)
+                self.assertTrue(torch.equal(segmentation_output[0].segmentation, segmentation[0]))
+                self.assertEqual(
+                    segmentation_output[0].segmentation_scores.shape,
+                    (expected_shape["num_labels"], expected_shape["height"], expected_shape["width"]),
+                )
+
+    @require_torch
+    def test_post_process_semantic_segmentation_target_sizes(self):
+        inputs, expected_shape = self.image_processor_tester.prepare_post_process_semantic_segmentation_inputs()
+
+        if "target_sizes" in inputs:
+            self.skipTest(reason="target_sizes already in required inputs")
+
+        for image_processing_class in self.image_processing_classes.values():
+            with self.subTest(image_processing_class):
+                image_processor = image_processing_class(**self.image_processor_dict)
+
+                target_sizes = [(1, 4) for _ in range(self.image_processor_tester.batch_size)]
+                segmentation_resized = image_processor.post_process_semantic_segmentation(
+                    **inputs, target_sizes=target_sizes
+                )
+                self.assertEqual(segmentation_resized[0].shape, target_sizes[0])
+
+                # return_segmentation_scores=True with target_sizes
+                segmentation_output_resized = image_processor.post_process_semantic_segmentation(
+                    **inputs, target_sizes=target_sizes, return_segmentation_scores=True
+                )
+                self.assertTrue(torch.equal(segmentation_output_resized[0].segmentation, segmentation_resized[0]))
+                self.assertEqual(
+                    segmentation_output_resized[0].segmentation_scores.shape,
+                    (expected_shape["num_labels"],) + target_sizes[0],
+                )
+
+                # raise ValueError if target_sizes has wrong length
+                with pytest.raises(ValueError):
+                    image_processor.post_process_semantic_segmentation(**inputs, target_sizes=target_sizes + [(1, 4)])
+
 
 class AnnotationFormatTestMixin:
     def test_processor_can_use_legacy_annotation_format(self):

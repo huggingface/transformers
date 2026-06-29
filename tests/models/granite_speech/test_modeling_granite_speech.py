@@ -154,10 +154,8 @@ class GraniteSpeechForConditionalGenerationModelTest(ALMModelTest, unittest.Test
             with torch.no_grad():
                 model(**inputs)
 
-    @pytest.mark.generate
-    @slow
-    @unittest.skip(reason="Granite Speech doesn't support SDPA for all backbones")
-    def test_eager_matches_sdpa_generate(self):
+    @unittest.skip(reason="ConformerAttention block forces MATH backend")
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
 
