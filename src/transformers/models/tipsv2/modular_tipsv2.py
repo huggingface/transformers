@@ -95,7 +95,6 @@ class Tipsv2Tokenizer(TokenizersBackend):
             BPE(
                 vocab=self._vocab,
                 merges=self._merges,
-                unk_token=str(unk_token),
                 fuse_unk=True,
                 byte_fallback=False,
                 dropout=None,
