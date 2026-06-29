@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput, make_list_of_audio, make_list_of_audio_chat_template
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
@@ -325,19 +325,13 @@ class FunAsrNanoProcessor(ProcessorMixin):
             [`FunAsrNanoForConditionalGeneration.generate`].
         """
 
-        if isinstance(audio, str):
-            audio_items = [audio]
-        elif isinstance(audio, (list, tuple)) and all(isinstance(item, str) for item in audio):
-            audio_items = list(audio)
-        else:
-            audio_items = list(make_list_of_audio(audio))
-            if is_torch_available():
-                import torch as torch_module
+        audio_items = list(make_list_of_audio_chat_template(audio))
+        if is_torch_available():
+            import torch as torch_module
 
-                audio_items = [
-                    item.detach().cpu().numpy() if isinstance(item, torch_module.Tensor) else item
-                    for item in audio_items
-                ]
+            audio_items = [
+                item.detach().cpu().numpy() if isinstance(item, torch_module.Tensor) else item for item in audio_items
+            ]
 
         batch_size = len(audio_items)
         if batch_size == 0:
