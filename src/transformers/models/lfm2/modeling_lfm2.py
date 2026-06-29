@@ -476,6 +476,7 @@ class Lfm2PreTrainedModel(PreTrainedModel):
         "hidden_states": Lfm2DecoderLayer,
         "attentions": Lfm2Attention,
     }
+    _is_stateful = True
 
 
 @auto_docstring
