@@ -257,12 +257,13 @@ class BambaMixer(nn.Module):
         batch_size, seq_len, _ = hidden_states.shape
         groups_time_state_size = self.n_groups * self.ssm_state_size
 
-        use_precomputed_states = (
-            cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
-        )
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
 
         # getting projected states from cache if it exists
-        if use_precomputed_states:
+        if use_precomputed_states and seq_len == 1:
             gate, hidden_states_B_C, dt = projected_states.squeeze(1).split(
                 [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
             )
@@ -270,7 +271,7 @@ class BambaMixer(nn.Module):
             # 2. Convolution sequence transformation
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
-                cache_params.layers[self.layer_idx].conv_states,
+                conv_state,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 self.activation,
@@ -292,7 +293,7 @@ class BambaMixer(nn.Module):
             C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
             hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             hidden_states = selective_state_update(
-                cache_params.layers[self.layer_idx].recurrent_states,
+                recurrent_state,
                 hidden_states_reshaped,
                 dt,
                 A,
@@ -342,30 +343,31 @@ class BambaMixer(nn.Module):
                 )
 
                 # 2. Convolution sequence transformation
-                # Init cache
+                hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
+                if use_precomputed_states:
+                    # chunked prefill / speculative verify: prepend the cached conv left-context so the
+                    # causal conv sees the correct history instead of zero-padding; dropped after the conv.
+                    hidden_states_B_C = torch.cat([conv_state, hidden_states_B_C], dim=-1)
                 if cache_params is not None:
-                    # storing the states
-                    # If we just take xBC[:, :, -self.d_conv :], it will error if seqlen < self.d_conv
-                    # Instead F.pad will pad with zeros if seqlen < self.d_conv, and truncate otherwise.
-                    hidden_states_B_C_transposed = hidden_states_B_C.transpose(1, 2)
                     conv_states = nn.functional.pad(
-                        hidden_states_B_C_transposed,
-                        (self.conv_kernel_size - hidden_states_B_C_transposed.shape[-1], 0),
+                        hidden_states_B_C,
+                        (self.conv_kernel_size - hidden_states_B_C.shape[-1], 0),
                     )
-                    conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)
+                    cache_params.update_conv_state(conv_states, self.layer_idx)
 
                 if self.activation not in ["silu", "swish"]:
-                    hidden_states_B_C = self.act(
-                        self.conv1d(hidden_states_B_C.transpose(1, 2))[..., :seq_len].transpose(1, 2)
-                    )
+                    hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C)[..., : hidden_states_B_C.shape[-1]])
                 else:
                     hidden_states_B_C = causal_conv1d_fn(
-                        x=hidden_states_B_C.transpose(1, 2),
+                        x=hidden_states_B_C,
                         weight=self.conv1d.weight.squeeze(1),
                         bias=self.conv1d.bias,
                         activation=self.activation,
                         seq_idx=seq_idx,
-                    ).transpose(1, 2)
+                    )
+                if use_precomputed_states:
+                    hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
+                hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
 
                 hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
                 hidden_states, B, C = torch.split(
@@ -388,6 +390,7 @@ class BambaMixer(nn.Module):
                     return_final_states=True,
                     dt_bias=self.dt_bias,
                     dt_softplus=True,
+                    initial_states=recurrent_state if use_precomputed_states else None,
                     **dt_limit_kwargs,
                 )
 
@@ -421,10 +424,12 @@ class BambaMixer(nn.Module):
         )
         hidden_states_B_C = hidden_states_B_C.transpose(1,2)
 
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
 
         # 2. Convolution sequence transformation
-        if use_precomputed_states:
+        if use_precomputed_states and seq_len == 1:
             conv_states = cache_params.update_conv_state(hidden_states_B_C, self.layer_idx)
 
             hidden_states_B_C = torch.sum(
@@ -434,14 +439,18 @@ class BambaMixer(nn.Module):
                 hidden_states_B_C = hidden_states_B_C + self.conv1d.bias
             hidden_states_B_C = self.act(hidden_states_B_C)
         else:
-            # Init cache
+            if use_precomputed_states:
+                hidden_states_B_C = torch.cat([conv_state, hidden_states_B_C], dim=-1)
             if cache_params is not None:
                 conv_states = nn.functional.pad(
                     hidden_states_B_C, (self.conv_kernel_size - hidden_states_B_C.shape[-1], 0)
                 )
-                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)
+                cache_params.update_conv_state(conv_states, self.layer_idx)
 
-            hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C)[..., :seq_len].transpose(1, 2))
+            hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C)[..., : hidden_states_B_C.shape[-1]])
+            if use_precomputed_states:
+                hidden_states_B_C = hidden_states_B_C[..., -seq_len:]
+            hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
 
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
         hidden_states, B, C = torch.split(
@@ -452,7 +461,7 @@ class BambaMixer(nn.Module):
 
         # 3. SSM transformation
         A = -torch.exp(self.A_log.float())                            # [num_heads]
-        if use_precomputed_states:
+        if use_precomputed_states and seq_len == 1:
             # We need to guarantee that anything regarding the cache is on the same device
             cache_device = cache_params.layers[self.layer_idx].recurrent_states.device
 
@@ -555,7 +564,11 @@ class BambaMixer(nn.Module):
 
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
-            previous_states = torch.zeros_like(states[:, :1])
+            previous_states = (
+                cache_params.layers[self.layer_idx].recurrent_states[:, None].to(dtype=states.dtype, device=states.device)
+                if use_precomputed_states
+                else torch.zeros_like(states[:, :1])
+            )
             states = torch.cat([previous_states, states], dim=1)
             decay_chunk = torch.exp(segment_sum(nn.functional.pad(A_cumsum[:, :, :, -1], (1, 0))))
             decay_chunk = decay_chunk.transpose(1, 3)

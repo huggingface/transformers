@@ -29,7 +29,6 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -38,13 +37,13 @@ from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
+from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
 from ..olmo3.modeling_olmo3 import (
     Olmo3Attention,
     Olmo3DecoderLayer,
     Olmo3ForCausalLM,
     Olmo3MLP,
     Olmo3RMSNorm,
-    Olmo3RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -424,13 +423,11 @@ class OlmoHybridAttention(Olmo3Attention):
         return attn_output, attn_weights
 
 
-class OlmoHybridRotaryEmbedding(Olmo3RotaryEmbedding):
+class OlmoHybridRotaryEmbedding(Olmo2RotaryEmbedding):
     """
     RoPE for OLMo Hybrid that returns float32 cos/sin to match OLMo-core.
     """
 
-    @torch.no_grad()
-    @dynamic_rope_update
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -719,6 +716,7 @@ class OlmoHybridModel(Qwen3NextModel):
                 for layer_idx in range(config.num_hidden_layers)
             ]
         )
+        # Released ckpt don't use any ROPE and have  it set to `None`
         self.rotary_emb = (
             OlmoHybridRotaryEmbedding(config=config)
             if getattr(config, "rope_parameters", None) is not None

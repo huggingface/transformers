@@ -466,7 +466,7 @@ class OlmoHybridRotaryEmbedding(nn.Module):
         return inv_freq, attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -959,6 +959,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             ]
         )
         self.norm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # Released ckpt don't use any ROPE and have  it set to `None`
         self.rotary_emb = (
             OlmoHybridRotaryEmbedding(config=config)
             if getattr(config, "rope_parameters", None) is not None
