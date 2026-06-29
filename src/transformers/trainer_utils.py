@@ -120,6 +120,7 @@ def validate_quantization_for_training(model):
     _is_model_quantized_and_qat_trainable = getattr(model, "hf_quantizer", None) is not None and getattr(
         model.hf_quantizer, "is_qat_trainable", False
     )
+    _is_peft = _is_peft_model(model)
 
     # Filter out quantized + compiled models
     if _is_quantized_and_base_model and hasattr(model, "_orig_mod"):
@@ -128,13 +129,13 @@ def validate_quantization_for_training(model):
         )
 
     # At this stage the model is already loaded
-    if _is_quantized_and_base_model and not _is_peft_model(model) and not _is_model_quantized_and_qat_trainable:
+    if _is_quantized_and_base_model and not _is_peft and not _is_model_quantized_and_qat_trainable:
         raise ValueError(
             "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
             " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
             " for more details"
         )
-    elif _is_quantized_and_base_model and not _quantization_method_supports_training:
+    elif _is_quantized_and_base_model and not _is_peft and not _quantization_method_supports_training:
         raise ValueError(
             f"The model you are trying to fine-tune is quantized with {model.hf_quantizer.quantization_config.quant_method}"
             " but that quantization method do not support training. Please open an issue on GitHub: https://github.com/huggingface/transformers"

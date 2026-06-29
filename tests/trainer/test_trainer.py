@@ -21,6 +21,7 @@ import math
 import os
 import tempfile
 from functools import partial
+from types import SimpleNamespace
 
 import datasets
 import numpy as np
@@ -69,6 +70,8 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.trainer_utils import validate_quantization_for_training
+from transformers.utils.quantization_config import QuantizationMethod
 
 from .trainer_test_utils import (
     ATOL,
@@ -914,6 +917,41 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.args.seed = 314
             trainer.train()
             self.check_trained_model(trainer.model, alternate_seed=True)
+
+
+# ---------------------------------------------------------------------------
+# Quantized training validation tests
+# ---------------------------------------------------------------------------
+
+
+@require_torch
+class TrainerQuantizationValidationTest(TestCasePlus):
+    def test_non_peft_quantized_model_with_non_trainable_quantizer_raises(self):
+        model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=32, vocab_size=100))
+        model.is_quantized = True
+        model.hf_quantizer = SimpleNamespace(
+            is_trainable=False,
+            is_qat_trainable=False,
+            quantization_config=SimpleNamespace(quant_method=QuantizationMethod.FP8),
+        )
+
+        with self.assertRaises(ValueError):
+            validate_quantization_for_training(model)
+
+    @require_peft
+    def test_peft_quantized_model_with_non_trainable_quantizer_is_allowed(self):
+        from peft import LoraConfig, get_peft_model
+
+        model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=32, vocab_size=100))
+        model.is_quantized = True
+        model.hf_quantizer = SimpleNamespace(
+            is_trainable=False,
+            is_qat_trainable=False,
+            quantization_config=SimpleNamespace(quant_method=QuantizationMethod.FP8),
+        )
+        model = get_peft_model(model, LoraConfig(target_modules=["c_attn"], task_type="CAUSAL_LM"))
+
+        validate_quantization_for_training(model)
 
 
 # ---------------------------------------------------------------------------
