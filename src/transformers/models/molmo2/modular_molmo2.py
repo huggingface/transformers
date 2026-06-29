@@ -1607,9 +1607,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
             video_token_pooling=video_token_pooling,
         )
 
-        if images is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both images and inputs_embeds at the same time.")
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -1660,7 +1657,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
 
 class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = []  # Weights are not tied
+    # Molmo2 keeps a separate `lm_head` and a custom `Molmo2Embedding`, so no weights are tied.
+    # `None` is the flag the base test/`get_expanded_tied_weights_keys` expect (an empty list breaks
+    # the dict-based tied-weights handling); it makes `test_tied_weights_keys` pass without a skip.
+    _tied_weights_keys = None
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Molmo2Config

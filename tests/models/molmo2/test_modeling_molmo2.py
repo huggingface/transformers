@@ -17,6 +17,7 @@ import copy
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     Molmo2Config,
@@ -320,9 +321,8 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     def test_generate_compile_1_end_to_end(self):
         pass
 
-    @unittest.skip(reason="Molmo2 weights are not tied.")
-    def test_tied_weights_keys(self):
-        pass
+    # `test_tied_weights_keys` is inherited: Molmo2 sets `_tied_weights_keys = None` (it ties no weights),
+    # so the base test passes without a skip (molbap: prefer the flag over skipping).
 
     def test_model_get_set_embeddings(self):
         # Molmo2's input embedding is a custom `Molmo2Embedding` (concatenated base + extra-vocab
@@ -340,19 +340,27 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
             output_embeds = model.get_output_embeddings()
             self.assertTrue(output_embeds is None or isinstance(output_embeds, torch.nn.Linear))
 
-    @unittest.skip(reason="Molmo2 uses a custom Molmo2Embedding class that does not support standard resize")
+    # Resize is intentionally not supported: `Molmo2Embedding` stores the vocab as two tables,
+    # `embedding` [vocab_size, h] and `new_embedding` [additional_vocab_size, h], and looks tokens up in
+    # their concatenation. The special tokens (image_patch/start/end/col) have FIXED absolute ids that sit
+    # in the `new_embedding` range (>= vocab_size). Growing/shrinking `embedding` shifts where that range
+    # begins, so the fixed special-token ids would silently point at the wrong rows -- standard resize is
+    # ill-defined here. (Kept as explicit skips rather than `test_resize_embeddings = False` so the related
+    # `test_resize_embeddings_untied_no_reinit_on_post_init`, which does pass, still runs.)
+    @unittest.skip(
+        reason="Molmo2Embedding uses two tables with fixed special-token ids; standard resize is ill-defined"
+    )
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Molmo2 uses a custom Molmo2Embedding class that does not support standard resize")
+    @unittest.skip(
+        reason="Molmo2Embedding uses two tables with fixed special-token ids; standard resize is ill-defined"
+    )
     def test_resize_embeddings_untied(self):
         pass
 
-    @unittest.skip(
-        reason="Molmo2 interleaves visual features in text hidden states, causing shape mismatches in equivalence checks"
-    )
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
+    # `test_model_outputs_equivalence` is inherited and now passes: the earlier "shape mismatch" was the
+    # image-merge bug (placeholder mask not expanded); with that fixed there is nothing to skip.
 
     @unittest.skip(
         reason="Supported only for text-only inputs (otherwise dynamic control flows for multimodal inputs)"
@@ -360,13 +368,47 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     def test_generate_compile_model_forward(self):
         pass
 
-    @unittest.skip("Molmo2 builds vision-aware embeddings; text-only get_input_embeddings bypasses image placement.")
-    def test_generate_from_inputs_embeds_0_greedy(self):
-        pass
-
-    @unittest.skip("Molmo2 builds vision-aware embeddings; text-only get_input_embeddings bypasses image placement.")
+    # `test_generate_from_inputs_embeds_0_greedy` is inherited and passes: Molmo2 now merges image features
+    # into a provided `inputs_embeds` (instead of forbidding it), so the multimodal greedy path runs.
+    @unittest.skip(
+        reason="Multimodal beam search from inputs_embeds would need the flat-concatenated image crops and "
+        "their pooling offsets expanded by beam width; greedy multimodal and text-only beam both work."
+    )
     def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
+
+    @parameterized.expand([("greedy", 1), ("beam_search", 2)])
+    def test_generate_from_inputs_embeds_textonly(self, _, num_beams):
+        """Pure-LLM path: drop the image inputs so generation runs from plain text `inputs_embeds`."""
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            config.is_decoder = True
+            model = model_class(config).to(torch_device).eval()
+            input_ids = inputs_dict.pop("input_ids")
+            for key in (
+                "pixel_values",
+                "image_token_pooling",
+                "image_grids",
+                "image_num_crops",
+                "pixel_values_videos",
+                "video_token_pooling",
+                "video_grids",
+            ):
+                inputs_dict.pop(key, None)
+            gen_kwargs = {
+                "return_dict_in_generate": True,
+                "output_scores": True,
+                "num_beams": num_beams,
+                "do_sample": False,
+                "max_new_tokens": 5,
+                "min_new_tokens": 5,
+                "use_cache": True,
+            }
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+            out = model.generate(inputs_embeds=inputs_embeds, **gen_kwargs, **inputs_dict)
+            # inputs_embeds-only generation returns only the newly generated tokens
+            self.assertEqual(out.sequences.shape[0], input_ids.shape[0])
+            self.assertEqual(out.sequences.shape[1], 5)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
