@@ -188,5 +188,38 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without an image input.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
+        max_size_per_side = images_kwargs["size"]["max_height"] if "size" in images_kwargs else self.size["max_height"]
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+
+        (resized_height, resized_width), (pad_height, pad_width) = navit_resize(
+            height,
+            width,
+            patch_size=patch_size,
+            merge_kernel_size=merge_size,
+            max_patches=max_patches,
+            max_size_per_side=max_size_per_side,
+        )
+        grid_h, grid_w = pad_height // patch_size, pad_width // patch_size
+        return grid_h * grid_w
+
 
 __all__ = ["Kimi_K25ImageProcessor"]

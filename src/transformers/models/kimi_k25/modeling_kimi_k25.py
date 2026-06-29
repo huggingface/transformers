@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -42,18 +41,19 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_kimi_k25 import Kimi_K25Config, Kimi_K25VisionConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Kimi_K25 outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Kimi_K25ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -69,12 +69,12 @@ class Kimi_K25ModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Kimi_K25 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Kimi_K25CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -108,6 +108,8 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(
             torch.randn(config.pos_emb_height, config.pos_emb_width, config.hidden_size)
         )
+
+        # Time-axis pos_emb are an additive sinusoidal table, i.e. add pos to hiddens rather than rotating
         time_position_embeddings = self.compute_pos_embed()
         self.register_buffer("time_position_embeddings", time_position_embeddings, persistent=False)
 
@@ -323,6 +325,7 @@ class Kimi_K25VisionAttention(nn.Module):
         self.k_proj = nn.Linear(self.dim, self.dim, bias=True)
         self.v_proj = nn.Linear(self.dim, self.dim, bias=True)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -401,18 +404,17 @@ class Kimi_K25VisionEncoderLayer(GradientCheckpointingLayer):
         self.attn = Kimi_K25VisionAttention(config=config)
         self.mlp = Kimi_K25VisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
 
+    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
-            rotary_pos_emb=rotary_pos_emb,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -427,7 +429,7 @@ class Kimi_K25PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kimi_K25VisionEncoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -491,17 +493,17 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         kernel_height, kernel_width = self.merge_kernel_size
 
         outputs = []
-        pre_sum = 0
+        running_length = 0
         for t, h, w in grid_thw.tolist():
             # Get the current sequence
-            seq = hidden_states[pre_sum : pre_sum + t * h * w]
+            seq = hidden_states[running_length : running_length + t * h * w]
             # Reshape along self.merge_kernel_size and concat to the last dimension
             new_height, new_width = h // kernel_height, w // kernel_width
             reshaped_seq = seq.view(t, new_height, kernel_height, new_width, kernel_width, hidden_dim)
             reshaped_seq = reshaped_seq.permute(0, 1, 3, 2, 4, 5).contiguous().mean(dim=0)  # temporal pooling
             padded_seq = reshaped_seq.view(new_height * new_width, kernel_height * kernel_width, -1)
             outputs.append(padded_seq)
-            pre_sum += t * h * w
+            running_length += t * h * w
 
         return torch.cat(outputs, dim=0)
 
@@ -721,12 +723,6 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
     @auto_docstring
     def get_video_features(
         self,
@@ -740,9 +736,7 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        return self.model.get_video_features(
-            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
-        )
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(
@@ -757,8 +751,9 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
+    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -792,8 +787,8 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
         ```python
         >>> from transformers import AutoProcessor, Kimi_K25ForConditionalGeneration
 
-        >>> model = Kimi_K25ForConditionalGeneration.from_pretrained("TODO")
-        >>> processor = AutoProcessor.from_pretrained("TODO")
+        >>> model = Kimi_K25ForConditionalGeneration.from_pretrained("moonshotai/Kimi-K2.6")
+        >>> processor = AutoProcessor.from_pretrained("moonshotai/Kimi-K2.6")
 
         >>> messages = [
             {
@@ -813,7 +808,7 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
             tokenize=True,
             add_generation_prompt=True,
             return_dict=True,
-            return_tensors="pt"
+            return_tensors="pt",
         )
 
         >>> # Generate

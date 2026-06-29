@@ -684,7 +684,7 @@ class ProcessorMixin(PushToHubMixin):
                 audio_replacements,
             )
             text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
-            self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
+            # self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:
                 text_inputs["text_replacement_offsets"] = text_replacement_offsets

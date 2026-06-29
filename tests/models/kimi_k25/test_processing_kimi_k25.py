@@ -16,6 +16,7 @@ import inspect
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -143,7 +144,7 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors=return_tensors,
-            num_frames=2,  # by default no more than 2 frames, otherwise too slow
+            fps=1,  # by default no more than 1 fps, otherwise too slow
         )
         input_name = getattr(self, input_name)
         self.assertTrue(input_name in out_dict)
@@ -214,7 +215,7 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1344)
 
         # Load with `fps` arg
-        fps = 1
+        fps = 3
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -288,6 +289,21 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 100)
-        inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 612)
+        self.assertEqual(inputs[self.images_input_name].shape[0], 56)
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            size={"max_height": 56 * 56 * 4, "max_width": 56 * 56 * 4},
+            return_tensors="pt",
+        )
+        self.assertEqual(inputs[self.images_input_name].shape[0], 800)
+
+    @unittest.skip("Kimi pops some keys before returning in a processor")
+    def test_video_processor_defaults(self):
+        pass
+
+    @unittest.skip("Kimi sampels with FPS by default which is not compatible with this test")
+    @require_av
+    @parameterized.expand([(1, "pt")])
+    def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
+        pass

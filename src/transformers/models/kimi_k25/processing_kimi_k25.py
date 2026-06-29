@@ -17,15 +17,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import time
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+import numpy as np
+
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
-from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -43,6 +40,8 @@ class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Kimi_K25Processor(ProcessorMixin):
+    valid_processor_kwargs = Kimi_K25ProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -61,115 +60,46 @@ class Kimi_K25Processor(ProcessorMixin):
             if getattr(tokenizer, "image_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.image_token)
         )
-        self.video_token_id = self.image_token_id
-
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[Kimi_K25ProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
-            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            Kimi_K25ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
         )
 
-        image_inputs = videos_inputs = {}
-        if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        merge_length = self.image_processor.merge_size**2
+        num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
+        return self.image_token * num_image_tokens
 
-        if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            num_chunks_per_video = videos_inputs.pop("num_chunks_per_video")
-            video_grid_thw = []
-            start = 0
-            for num in num_chunks_per_video:
-                video_grid_thw.append(videos_inputs["video_grid_thw"][start : start + num])
-                start += num
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        merge_length = self.video_processor.merge_size**2
+        temporal_patch_size = self.video_processor.temporal_patch_size
 
-            # If user has not requested video metadata, pop it
-            if not kwargs.get("return_metadata"):
-                video_metadata = videos_inputs.pop("video_metadata")
-            else:
-                video_metadata = videos_inputs["video_metadata"]
+        num_chunks = video_inputs["num_chunks_per_video"][video_idx]
+        start = 0 if video_idx == 0 else np.cumsum(video_inputs["num_chunks_per_video"])[video_idx - 1]
+        video_grid_thw = video_inputs["video_grid_thw"][start : start + num_chunks]
+        video_structure = ""
 
-        if not isinstance(text, list):
-            text = [text]
+        metadata = video_inputs["video_metadata"][video_idx]
+        if metadata.fps is None:
+            logger.warning_once(
+                "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+            )
+        metadata.fps = 24 if metadata.fps is None else metadata.fps
 
-        text = text.copy()  # below lines change text in-place
-
-        if images is not None:
-            merge_length = self.image_processor.merge_size**2
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    num_image_tokens = image_grid_thw[index].prod() // merge_length
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
-        if videos is not None:
-            merge_length = self.video_processor.merge_size**2
-            temporal_patch_size = self.video_processor.temporal_patch_size
-            index = 0
-            for i in range(len(text)):
-                while self.video_token in text[i]:
-                    num_chunks = num_chunks_per_video[index]
-                    video_structure = ""
-
-                    metadata = video_metadata[index]
-                    if metadata.fps is None:
-                        logger.warning_once(
-                            "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
-                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
-                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
-                        )
-                    metadata.fps = 24 if metadata.fps is None else metadata.fps
-
-                    for chunk_id in range(num_chunks):
-                        current_chunk = metadata.timestamps[
-                            (chunk_id * temporal_patch_size) : (chunk_id + 1) * temporal_patch_size
-                        ]
-                        timestamp = float(current_chunk[0])
-                        current_chunk = metadata.timestamps[chunk_id : chunk_id + temporal_patch_size]
-                        timestamp_str = (
-                            time.strftime("%H:%M:%S", time.gmtime(timestamp)) + f".{int(timestamp % 1 * 1000):03d}"
-                        )
-                        num_frame_tokens = video_grid_thw[index][chunk_id][1:].prod() // merge_length
-                        video_tokens = num_frame_tokens * "<|placeholder|>"  # * len(current_chunk)
-                        video_structure += (
-                            f"{timestamp_str}<|media_begin|>video<|media_content|>{video_tokens}<|media_end|>"
-                        )
-
-                    text[i] = text[i].replace(self.video_token, video_structure, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+        for chunk_id in range(num_chunks):
+            current_chunk = metadata.timestamps[
+                (chunk_id * temporal_patch_size) : (chunk_id + 1) * temporal_patch_size
+            ]
+            timestamp = float(current_chunk[0])
+            current_chunk = metadata.timestamps[chunk_id : chunk_id + temporal_patch_size]
+            timestamp_str = time.strftime("%H:%M:%S", time.gmtime(timestamp)) + f".{int(timestamp % 1 * 1000):03d}"
+            num_frame_tokens = video_grid_thw[chunk_id][1:].prod() // merge_length
+            video_tokens = num_frame_tokens * self.image_token
+            video_structure += f"{timestamp_str}<|media_begin|>video<|media_content|>{video_tokens}<|media_end|>"
+        return video_structure
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
@@ -238,7 +168,11 @@ class Kimi_K25Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        raise [name for name in ProcessorMixin.model_input_names if name not in "num_chunks_per_video"]
+        return super().model_input_names()
+
+    @property
+    def unused_input_names(self):
+        return ["num_chunks_per_video"]
 
 
 __all__ = ["Kimi_K25Processor"]
