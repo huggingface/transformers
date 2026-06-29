@@ -79,6 +79,8 @@ class FineGrainedFP8:
     matmul: Callable
     batched_matmul: Callable
     grouped_matmul: Callable
+    moe_fused_grouped: Callable
+    moe_fused_batched: Callable
 
 
 @functools.cache
@@ -107,6 +109,8 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     matmul = getattr(kernel, "matmul_2d", None)
     batched_matmul = getattr(kernel, "matmul_batched", None)
     grouped_matmul = getattr(kernel, "matmul_grouped", None)
+    moe_fused_grouped = getattr(kernel, "moe_fused_grouped", None)
+    moe_fused_batched = getattr(kernel, "moe_fused_batched", None)
 
     missing = [
         name
@@ -114,6 +118,8 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             ("matmul_2d", matmul),
             ("matmul_batched", batched_matmul),
             ("matmul_grouped", grouped_matmul),
+            ("moe_fused_grouped", moe_fused_grouped),
+            ("moe_fused_batched", moe_fused_batched),
         ]
         if attr is None
     ]
@@ -128,6 +134,8 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
         matmul=matmul,
         batched_matmul=batched_matmul,
         grouped_matmul=grouped_matmul,
+        moe_fused_grouped=moe_fused_grouped,
+        moe_fused_batched=moe_fused_batched,
     )
 
 
@@ -570,6 +578,74 @@ def fp8_grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
+_FUSED_ACT_FNS = {"silu": "silu", "swish": "silu", "gelu": "gelu", "relu": "relu"}
+
+
+def _fp8_fused_mm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    *,
+    op_name: str,
+) -> torch.Tensor:
+    if self.activation_scheme == "static":
+        raise NotImplementedError(
+            f"{op_name} experts dispatch does not support activation_scheme='static'; "
+            "use the default eager dispatch or activation_scheme='dynamic'."
+        )
+    if not self.has_gate:
+        raise NotImplementedError(
+            f"{op_name} experts dispatch requires gated experts (a combined gate_up projection)."
+        )
+    if self.swiglu_alpha is not None or self.swiglu_limit is not None or self.limit is not None:
+        raise NotImplementedError(
+            f"{op_name} experts dispatch does not implement clamped SwiGLU (swiglu_alpha/"
+            "swiglu_limit); use grouped_mm or batched_mm for those models."
+        )
+
+    act_name = _first_attr(self.config, "hidden_activation", "hidden_act")
+    act_fn = _FUSED_ACT_FNS.get(act_name)
+    if act_fn is None:
+        raise NotImplementedError(
+            f"{op_name} experts dispatch supports act_fn in {{silu, gelu, relu}}, got {act_name!r}."
+        )
+
+    finegrained_fp8 = load_finegrained_fp8_kernel()
+    fused_op = getattr(finegrained_fp8, op_name)
+    out = fused_op(
+        hidden_states,
+        top_k_index,
+        top_k_weights,
+        to_local(self.gate_up_proj),
+        to_local(self.down_proj),
+        to_local(self.gate_up_proj_scale_inv),
+        to_local(self.down_proj_scale_inv),
+        self.block_size,
+        act_fn=act_fn,
+        simulate_unfused=True,
+    )
+    return out.to(hidden_states.dtype)
+
+
+def fp8_fused_grouped_mm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    return _fp8_fused_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights, op_name="moe_fused_grouped")
+
+
+def fp8_fused_batched_mm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    return _fp8_fused_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights, op_name="moe_fused_batched")
+
+
 class FP8Experts(nn.Module):
     # Per-`_experts_implementation` rewrite of parallel-layer kinds in the TP/EP plan.
     # The plan dicts store `{module-path-pattern: parallel-layer-kind}`; this maps an
@@ -737,6 +813,8 @@ class FP8ExpertsInterface(ExpertsInterface):
         "batched_mm": fp8_batched_mm_experts_forward,
         "grouped_mm": fp8_grouped_mm_experts_forward,
         "deepgemm": deepgemm_fp8_fp4_experts_forward,
+        "fused_grouped_mm": fp8_fused_grouped_mm_experts_forward,
+        "fused_batched_mm": fp8_fused_batched_mm_experts_forward,
         "deepgemm_megamoe": deepgemm_fp8_fp4_megamoe_experts_forward,
     }
 

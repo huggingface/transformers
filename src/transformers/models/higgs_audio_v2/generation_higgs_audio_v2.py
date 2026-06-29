@@ -309,7 +309,7 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
                 model_inputs = self.prepare_inputs_for_generation(
                     input_ids, next_sequence_length=next_sequence_length, **model_kwargs
                 )
-                with self._optimize_model_for_decode():
+                with self._optimize_model_for_decode(input_ids.shape[0]):
                     outputs = model_forward(**model_inputs, return_dict=True)
             prefill_consumed = True
             model_kwargs = self._update_model_kwargs_for_generation(
