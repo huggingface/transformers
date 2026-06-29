@@ -258,7 +258,7 @@ class Xcodec2Attention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = False
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -975,10 +975,6 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         self.quantizer = Xcodec2Quantizer(config)
         self.acoustic_decoder = Xcodec2Decoder(config)
 
-        # Get semantic encoder dtype for casting input features to avoid dtype mismatch
-        semantic_param = next(iter(self.semantic_encoder.parameters()), None)
-        self.semantic_dtype = semantic_param.dtype if semantic_param is not None else torch.float32
-
         self.post_init()
 
     @auto_docstring
@@ -1007,10 +1003,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
 
         # Semantic embedding
         with torch.no_grad():
-            semantic_output = self.semantic_encoder(
-                input_features.to(self.semantic_dtype), attention_mask=input_features_mask
-            )
-        semantic_hidden_states = semantic_output.last_hidden_state.to(input_values.dtype).transpose(1, 2)
+            semantic_output = self.semantic_encoder(input_features, attention_mask=input_features_mask)
+        semantic_hidden_states = semantic_output.last_hidden_state.transpose(1, 2)
         semantic_hidden_states = self.semantic_adapter(semantic_hidden_states)
 
         # Acoustic embedding and concatenate

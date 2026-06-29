@@ -193,6 +193,10 @@ class Xcodec2MLP(CLIPMLP):
 
 
 class Xcodec2Attention(LlamaAttention):
+    def __init__(self, config: Xcodec2Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.is_causal = False
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -635,10 +639,6 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         self.quantizer = Xcodec2Quantizer(config)
         self.acoustic_decoder = Xcodec2Decoder(config)
 
-        # Get semantic encoder dtype for casting input features to avoid dtype mismatch
-        semantic_param = next(iter(self.semantic_encoder.parameters()), None)
-        self.semantic_dtype = semantic_param.dtype if semantic_param is not None else torch.float32
-
         self.post_init()
 
     @auto_docstring
@@ -667,10 +667,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
 
         # Semantic embedding
         with torch.no_grad():
-            semantic_output = self.semantic_encoder(
-                input_features.to(self.semantic_dtype), attention_mask=input_features_mask
-            )
-        semantic_hidden_states = semantic_output.last_hidden_state.to(input_values.dtype).transpose(1, 2)
+            semantic_output = self.semantic_encoder(input_features, attention_mask=input_features_mask)
+        semantic_hidden_states = semantic_output.last_hidden_state.transpose(1, 2)
         semantic_hidden_states = self.semantic_adapter(semantic_hidden_states)
 
         # Acoustic embedding and concatenate
