@@ -414,7 +414,7 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
 
         # 2. Self-Attention layer
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weigts = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             relative_position_embeddings=relative_position_embeddings,
@@ -435,7 +435,7 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states * 0.5 + residual
         hidden_states = self.final_layer_norm(hidden_states)
 
-        return hidden_states, attn_weigts
+        return hidden_states
 
 
 class Wav2Vec2ConformerEncoder(nn.Module):
@@ -490,13 +490,12 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             skip_the_layer = self.training and dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                layer_outputs = layer(
+                hidden_states = layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     relative_position_embeddings=relative_position_embeddings,
                     **kwargs,
                 )
-                hidden_states = layer_outputs[0]
 
         hidden_states = self.layer_norm(hidden_states)
         return BaseModelOutput(

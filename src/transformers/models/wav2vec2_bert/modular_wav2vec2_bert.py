@@ -346,7 +346,7 @@ class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
 
         # 2. Self-Attention layer
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weigts = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             relative_position_embeddings=relative_position_embeddings,
@@ -367,7 +367,7 @@ class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states * 0.5 + residual
         hidden_states = self.final_layer_norm(hidden_states)
 
-        return hidden_states, attn_weigts
+        return hidden_states
 
 
 class Wav2Vec2BertEncoder(nn.Module):
@@ -422,14 +422,13 @@ class Wav2Vec2BertEncoder(nn.Module):
             skip_the_layer = self.training and dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                layer_outputs = layer(
+                hidden_states = layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     relative_position_embeddings=relative_position_embeddings,
                     conv_attention_mask=conv_attention_mask,
                     **kwargs,
                 )
-                hidden_states = layer_outputs[0]
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
@@ -458,7 +457,7 @@ class Wav2Vec2BertAdapter(nn.Module):
         seq_lens = ((seq_lens + 2 * pad - self.kernel_size) / self.stride) + 1
         return seq_lens.floor()
 
-    def forward(self, hidden_states, attention_mask=None):
+    def forward(self, hidden_states, attention_mask=None, **kwargs):
         # down project hidden_states if necessary
         if self.proj is not None and self.proj_layer_norm is not None:
             hidden_states = self.proj(hidden_states)
@@ -473,7 +472,7 @@ class Wav2Vec2BertAdapter(nn.Module):
             sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(sub_sampled_lengths)
             if not self.training or (layerdrop_prob > self.layerdrop):
                 hidden_states = layer(
-                    hidden_states, attention_mask=attention_mask, sub_sampled_lengths=sub_sampled_lengths
+                    hidden_states, attention_mask=attention_mask, sub_sampled_lengths=sub_sampled_lengths, **kwargs
                 )
 
         return hidden_states
@@ -522,6 +521,7 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
         hidden_states,
         attention_mask: torch.Tensor | None = None,
         sub_sampled_lengths: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         residual = self.residual_layer_norm(hidden_states)
 
@@ -553,9 +553,10 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
 
         # The rest of the computation is identical to a vanilla Transformer
         # encoder layer.
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
+            **kwargs,
         )
         hidden_states = self.self_attn_dropout(hidden_states)
         hidden_states = hidden_states + residual
@@ -716,7 +717,7 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
             hidden_states = hidden_states + 0.5 * expanded_hidden_states
 
         if self.adapter is not None:
-            hidden_states = self.adapter(hidden_states, attention_mask=attention_mask)
+            hidden_states = self.adapter(hidden_states, attention_mask=attention_mask, **kwargs)
 
         return Wav2Vec2BertBaseModelOutput(
             last_hidden_state=hidden_states,

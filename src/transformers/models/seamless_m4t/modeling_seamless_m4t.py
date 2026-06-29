@@ -474,7 +474,7 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer._apply_relative_position_encoding with Wav2Vec2->SeamlessM4T
+# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer._apply_relative_position_encoding
 def _apply_relative_position_encoding(module, query, key, attention_mask, relative_position_embeddings):
     if relative_position_embeddings is None:
         raise ValueError(
@@ -1444,6 +1444,7 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
     def forward(
@@ -1547,6 +1548,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
     def forward(
@@ -1556,28 +1558,6 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        r"""
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-        """
         if input_ids is not None and self.is_t2u_encoder:
             raise ValueError(
                 "You cannot pass input_ids to the encoder of the text_to_units model. Pass inputs_embeds instead."
@@ -1698,9 +1678,9 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1806,6 +1786,7 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

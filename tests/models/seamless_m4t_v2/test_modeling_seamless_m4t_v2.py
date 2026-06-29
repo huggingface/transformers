@@ -17,6 +17,7 @@ import copy
 import tempfile
 import unittest
 from functools import cached_property
+from unittest.mock import patch
 
 import pytest
 from parameterized import parameterized
@@ -29,6 +30,7 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
+    _test_eager_matches_sdpa_inference,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -394,8 +396,15 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    def test_eager_matches_sdpa_inference(self, *args):
-        self.skipTest("The generic SDPA equivalence helper does not handle SeamlessM4Tv2's dynamic modality switch.")
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        # `SeamlessM4Tv2Model` defaults to text and switches its `main_input_name` to `input_features` only at
+        # generation. Pin it to speech so the generic helper feeds the speech encoder for every model class here.
+        with patch.object(SeamlessM4Tv2Model, "main_input_name", "input_features"):
+            _test_eager_matches_sdpa_inference(
+                self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+            )
 
     @unittest.skip(
         reason="Conformer speech encoder uses relative positional embeddings producing dense attention biases incompatible with flash attention"

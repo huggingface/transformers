@@ -1225,7 +1225,7 @@ class SeamlessM4Tv2TextToUnitDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             **kwargs,
