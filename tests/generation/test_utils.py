@@ -2804,7 +2804,11 @@ class UtilsFunctionsTest(unittest.TestCase):
             ]
         )
         validated_none, n_none = _speculative_sampling(
-            candidate_input_ids, candidate_logits, candidate_length, new_logits, False,
+            candidate_input_ids,
+            candidate_logits,
+            candidate_length,
+            new_logits,
+            False,
             assistant_ensemble_weight=None,
         )
         # Matches the parent test exactly (i.e. backward compatible with w=None)
@@ -2832,12 +2836,20 @@ class UtilsFunctionsTest(unittest.TestCase):
         fixed_rand = torch.tensor([0.60])
         with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
             _, n_standard = _speculative_sampling(
-                candidate_input_ids, candidate_logits, candidate_length, new_logits, False,
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+                False,
                 assistant_ensemble_weight=None,
             )
         with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
             _, n_ensemble = _speculative_sampling(
-                candidate_input_ids, candidate_logits, candidate_length, new_logits, False,
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+                False,
                 assistant_ensemble_weight=0.7,
             )
 
@@ -2866,7 +2878,11 @@ class UtilsFunctionsTest(unittest.TestCase):
         with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
             with patch("transformers.generation.utils.torch.multinomial", side_effect=capture_multinomial):
                 _speculative_sampling(
-                    candidate_input_ids, candidate_logits, candidate_length, new_logits, False,
+                    candidate_input_ids,
+                    candidate_logits,
+                    candidate_length,
+                    new_logits,
+                    False,
                     assistant_ensemble_weight=0.7,
                 )
 
@@ -2899,7 +2915,11 @@ class UtilsFunctionsTest(unittest.TestCase):
         with patch("transformers.generation.utils.torch.rand_like", return_value=fixed_rand):
             with patch("transformers.generation.utils.torch.multinomial", side_effect=capture_multinomial):
                 _speculative_sampling(
-                    candidate_input_ids, candidate_logits, candidate_length, new_logits, False,
+                    candidate_input_ids,
+                    candidate_logits,
+                    candidate_length,
+                    new_logits,
+                    False,
                     assistant_ensemble_weight=0.5,
                 )
 
