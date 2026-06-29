@@ -74,6 +74,7 @@ from transformers.testing_utils import (
     require_non_hpu,
     require_torch,
     require_torch_accelerator,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -91,6 +92,7 @@ from transformers.utils.import_utils import (
     is_flash_attn_4_available,
     is_kernels_available,
     is_torch_npu_available,
+    is_torch_xpu_available,
 )
 
 from ..test_modeling_common import compare_state_dicts
@@ -2914,6 +2916,27 @@ class TestAttentionImplementation(unittest.TestCase):
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
             )
         self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
+
+    @require_torch_greater_or_equal("2.5")
+    def test_use_gqa_in_sdpa_skips_large_head_dim(self):
+        # SDPA's mem-efficient (and flash) kernels do not support the `enable_gqa` broadcast at head_dim > 256:
+        # passing `enable_gqa=True` there silently falls back to the math kernel (O(S^2) memory). `use_gqa_in_sdpa`
+        # must return False so we take the `repeat_kv` (MHA) path instead, which the mem-efficient kernel does
+        # support at large head_dim (e.g. Gemma4's head_dim=512 full-attention layers).
+        from transformers.integrations.sdpa_attention import use_gqa_in_sdpa
+
+        if is_torch_xpu_available():
+            self.skipTest(reason="The head_dim guard only applies to the CUDA/NPU/CPU dispatch path, not XPU")
+
+        key_small = torch.empty(1, 2, 4, 256)  # head_dim == 256
+        key_large = torch.empty(1, 2, 4, 512)  # head_dim == 512
+
+        # The fix: large head_dim never opts into GQA-in-SDPA, regardless of the mask.
+        self.assertFalse(use_gqa_in_sdpa(None, key_large))
+        # Unchanged: small head_dim still uses GQA-in-SDPA when no mask is passed (torch>=2.5 ensured by the decorator).
+        self.assertTrue(use_gqa_in_sdpa(None, key_small))
+        # Unchanged: an explicit mask always disables GQA-in-SDPA (it would otherwise fall back to the math kernel).
+        self.assertFalse(use_gqa_in_sdpa(torch.empty(1, 1, 4, 4), key_small))
 
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
