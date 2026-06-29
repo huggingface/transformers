@@ -304,7 +304,6 @@ class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
     def __init__(self, config: PreTrainedConfig | None = None, sliding_window: int | None = None):
         super().__init__(config=config, sliding_window=sliding_window)
         self.prefill_length: int | None = None
-        self.ring_position = 0
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -313,65 +312,46 @@ class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
-        sequence_length = key_states.shape[-2]
-        self.cumulative_length += sequence_length
+        kv_length = key_states.shape[-2]
+        self.cumulative_length += kv_length
 
-        # Prefill with prompt context
-        if self.prefill_length is None and sequence_length > 1:
-            self.keys = torch.cat([self.keys, key_states], dim=-2)
-            self.values = torch.cat([self.values, value_states], dim=-2)
+        # Compute the full states
+        full_key_states = torch.cat([self.keys, key_states], dim=-2)
+        full_value_states = torch.cat([self.values, value_states], dim=-2)
+
+        # Prefill
+        if self.prefill_length is None and kv_length > 1:
+            self.keys = full_key_states
+            self.values = full_value_states
             return self.keys, self.values
 
-        # First decode step
-        # Handle generation with empty prompt
+        # First decode step (or an empty prompt that skipped prefill above): mark prefill as complete
         if self.prefill_length is None:
             self.prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
 
-        # Append while window grows
-        generated_length = self.keys.shape[-2] - self.prefill_length if self.keys.dim() > 1 else 0
-        append_length = min(sequence_length, max(0, self.sliding_window - generated_length))
-        if append_length > 0:
-            self.keys = torch.cat([self.keys, key_states[..., :append_length, :]], dim=-2)
-            self.values = torch.cat([self.values, value_states[..., :append_length, :]], dim=-2)
+        generated_length = full_key_states.shape[-2] - self.prefill_length
+        if generated_length <= self.sliding_window:
+            # Append while window grows
+            self.keys = full_key_states
+            self.values = full_value_states
+        else:
+            # Overwrite
+            self.keys[:, :, -self.sliding_window :, :].copy_(full_key_states[:, :, -self.sliding_window :, :])
+            self.values[:, :, -self.sliding_window :, :].copy_(full_value_states[:, :, -self.sliding_window :, :])
 
-        # Overwrite if window size is reached
-        overwrite_length = sequence_length - append_length
-        if overwrite_length > 0:
-            # Only the most recent `sliding_window` overwrites survive
-            write_length = min(overwrite_length, self.sliding_window)
-            start = self.ring_position + overwrite_length - write_length
-            offsets = torch.arange(write_length, device=key_states.device)
-            slots = self.prefill_length + (start + offsets) % self.sliding_window
-            self.keys[..., slots, :] = key_states[..., sequence_length - write_length :, :]
-            self.values[..., slots, :] = value_states[..., sequence_length - write_length :, :]
-            self.ring_position = (self.ring_position + overwrite_length) % self.sliding_window
-
+        # TODO: Add multi-token decode support. This requires a custom create_causal_mask implementation.
         return self.keys, self.values
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
-        # Full visibility, no sliding offset: every query attends to all cached keys (all prefill plus the
-        # generated tokens currently held in the ring), so the prefill is never masked out.
+        """Return the length and offset of the cache, used to generate the attention mask"""
+        kv_offset = 0
         if self.prefill_length is None:
-            return self.cumulative_length + query_length, 0
-        return self.decode_kv_length(query_length), 0
-
-    def decode_kv_length(self, query_length: int = 1) -> int | None:
-        """Physical length of the cached buffer after the upcoming `update` of `query_length` tokens.
-
-        Returns `None` before the layer is initialized. Used to size the all-visible decode mask, whose
-        width must match the key/value tensors returned by `update`.
-        """
-        if not self.is_initialized:
-            return None
-        if self.prefill_length is not None:
-            prefill_length = self.prefill_length
-            generated_before = self.keys.shape[-2] - prefill_length if self.keys.dim() > 1 else 0
+            # Before the first decode step the whole buffer is prefill
+            kv_length = self.cumulative_length + query_length
         else:
-            # Before the first decode step the whole buffer is prefill.
-            prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
-            generated_before = 0
-        generated_after = min(generated_before + query_length, self.sliding_window)
-        return prefill_length + generated_after
+            generated_length = self.keys.shape[-2] - self.prefill_length
+            kv_length = self.prefill_length + min(generated_length + query_length, self.sliding_window)
+        return kv_length, kv_offset
 
 
 class DynamicIndexedLayer(DynamicLayer):
@@ -829,8 +809,7 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         self.values[:, :, window_start : window_start + self.sliding_window, :].copy_(
             full_value_states[:, :, -self.sliding_window :, :]
         )
-        # TODO: Multi-token decode is not supported yet as it would require a custom
-        # create_causal_mask implementation to create correct masks.
+        # TODO: Add multi-token decode support. This requires a custom create_causal_mask implementation.
         return self.keys, self.values
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
