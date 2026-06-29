@@ -126,13 +126,13 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
     enc_conf = cfg.get("audio_encoder_conf", {})
     audio_encoder_config = FunAsrNanoEncoderConfig(
         input_size=enc_conf.get("input_layer_size", 560),  # 80 * 7 (lfr_m)
-        output_size=enc_conf.get("output_size", 512),
-        attention_heads=enc_conf.get("attention_heads", 4),
-        linear_units=enc_conf.get("linear_units", 2048),
-        num_blocks=enc_conf.get("num_blocks", 50),
+        output_dim=enc_conf.get("output_size", 512),
+        num_attention_heads=enc_conf.get("attention_heads", 4),
+        intermediate_size=enc_conf.get("linear_units", 2048),
+        encoder_layers=enc_conf.get("num_blocks", 50),
         tp_blocks=enc_conf.get("tp_blocks", 20),
-        dropout_rate=enc_conf.get("dropout_rate", 0.1),
-        attention_dropout_rate=enc_conf.get("attention_dropout_rate", 0.0),
+        dropout=enc_conf.get("dropout_rate", 0.1),
+        attention_dropout=enc_conf.get("attention_dropout_rate", 0.0),
         kernel_size=enc_conf.get("kernel_size", 11),
         sanm_shift=enc_conf.get("sanm_shfit", 0),
     )
@@ -149,10 +149,10 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
         audio_encoder_config=audio_encoder_config,
         text_config=text_config,
         adaptor_downsample_rate=adp_conf.get("downsample_rate", 1),
-        adaptor_ffn_dim=adp_conf.get("ffn_dim", 2048),
-        adaptor_num_layers=adp_conf.get("n_layer", 2),
-        adaptor_attention_heads=8,
-        adaptor_dropout_rate=0.0,
+        adaptor_intermediate_size=adp_conf.get("ffn_dim", 2048),
+        adaptor_num_hidden_layers=adp_conf.get("n_layer", 2),
+        adaptor_num_attention_heads=8,
+        adaptor_dropout=0.0,
     )
 
     return config

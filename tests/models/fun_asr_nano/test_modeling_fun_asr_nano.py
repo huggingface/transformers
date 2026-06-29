@@ -58,42 +58,19 @@ class FunAsrNanoModelTester(ALMModelTester):
 
         # Small encoder config.
         kwargs.setdefault("input_size", 80)
-        kwargs.setdefault("output_size", 32)
-        kwargs.setdefault("attention_heads", 4)
-        kwargs.setdefault("linear_units", 64)
-        kwargs.setdefault("num_blocks", 2)
+        kwargs.setdefault("output_dim", 32)
+        kwargs.setdefault("num_attention_heads", 4)
+        kwargs.setdefault("intermediate_size", 64)
+        kwargs.setdefault("encoder_layers", 2)
         kwargs.setdefault("tp_blocks", 1)
         kwargs.setdefault("kernel_size", 5)
         kwargs.setdefault("sanm_shift", 0)
-        kwargs.setdefault("dropout_rate", 0.0)
-
-        # Small auxiliary configs; otherwise defaults create a >1M parameter model.
-        kwargs.setdefault(
-            "adaptor_config",
-            {
-                "downsample_rate": 1,
-                "encoder_dim": 32,
-                "llm_dim": 32,
-                "ffn_dim": 64,
-                "num_layers": 1,
-                "attention_heads": 4,
-                "dropout_rate": 0.0,
-                "use_low_frame_rate": True,
-            },
-        )
-        kwargs.setdefault(
-            "ctc_config",
-            {
-                "vocab_size": 100,
-                "encoder_dim": 32,
-                "decoder_dim": 32,
-                "ffn_dim": 64,
-                "num_layers": 1,
-                "downsample_rate": 1,
-                "blank_id": 99,
-                "dropout_rate": 0.0,
-            },
-        )
+        kwargs.setdefault("dropout", 0.0)
+        kwargs.setdefault("attention_dropout", 0.0)
+        kwargs.setdefault("adaptor_intermediate_size", 64)
+        kwargs.setdefault("adaptor_num_hidden_layers", 1)
+        kwargs.setdefault("adaptor_num_attention_heads", 4)
+        kwargs.setdefault("adaptor_dropout", 0.0)
 
         super().__init__(parent, **kwargs)
 
