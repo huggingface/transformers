@@ -736,7 +736,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        text_outputs: BaseModelOutputWithPooling = self.text_model(
+        return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -744,7 +744,6 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
             return_dict=True,
             **kwargs,
         )
-        return text_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -759,13 +758,12 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
         """
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
+        return self.vision_model(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
             return_dict=True,
             **kwargs,
         )
-        return vision_outputs
 
     @can_return_tuple
     @auto_docstring
