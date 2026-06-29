@@ -431,7 +431,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
-        self.layer_type = "linear_attention"
+        self.layer_type = config.layer_types[layer_idx]
 
         self.in_proj_qkv = nn.Linear(self.hidden_size, self.key_dim * 2 + self.value_dim, bias=False)
         self.in_proj_z = nn.Linear(self.hidden_size, self.value_dim, bias=False)

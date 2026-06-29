@@ -206,21 +206,13 @@ def lambda_init_fn(layer_idx):
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class DiffLlamaAttention(nn.Module):
-    """Multi-headed differential attention (https://arxiv.org/abs/2410.05258).
+    """Multi-headed differential attention (https://huggingface.co/papers/2410.05258).
 
-    Computes ``(softmax(Q1 K1ᵀ) - λ · softmax(Q2 K2ᵀ)) · V`` as **two standard attention calls**
-    that share Q and K but use the two halves of V (concatenated outputs along the last dim
-    reconstruct the per-head ``2 * head_dim`` the paper calls for; the head-axis chunk-and-subtract
-    then realises the differential combination).
-
-    The natural "shortcut" of packing V along ``head_dim`` to do a single attention call with
-    ``V`` of shape ``(B, H, S, 2D)`` is *slower* in practice. Asymmetric V trips PyTorch's SDPA
-    backend selector — it can't use Flash or cuDNN with ``head_dim_v != head_dim_q`` and falls
-    back to the memory-efficient / math kernel. Benchmarks at production shapes (prefill, long
-    context, training-sized batches) show the two-call version is **~30 % faster** than the
-    V-doubling version even though it issues an extra kernel launch — the gain from picking the
-    fast Flash/cuDNN kernel dominates the launch overhead. Flash Attention 2 also requires
-    ``head_dim_v == head_dim_q``, which only the two-call structure satisfies.
+    Computes ``(softmax(Q1 K1ᵀ) - λ · softmax(Q2 K2ᵀ)) · V`` as two standard attention calls
+    sharing Q and K over the two halves of V. The two-call structure is ~30% faster than the
+    V-doubling shortcut at production shapes, since asymmetric V (``head_dim_v != head_dim_q``)
+    forces SDPA off Flash/cuDNN onto the memory-efficient/math kernel; Flash Attention 2 also
+    requires ``head_dim_v == head_dim_q``.
     """
 
     def __init__(self, config: DiffLlamaConfig, layer_idx: int | None = None):
@@ -280,8 +272,7 @@ class DiffLlamaAttention(nn.Module):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        # Both calls share Q and K, so their attention weights are mathematically identical —
-        # return just the first call's; concatenating would double the key dim incorrectly.
+        # return just the first call's attention weights
         attn_output1, attn_weights = attention_interface(
             self,
             query_states,

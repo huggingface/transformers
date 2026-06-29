@@ -474,7 +474,7 @@ class FalconH1Mixer(nn.Module):
         self.zxbcdt_multipliers = config.ssm_multipliers
         self.ssm_in_multiplier = config.ssm_in_multiplier
 
-        self.layer_type = "linear_attention"
+        self.layer_type = config.layer_types[layer_idx]
 
     def cuda_kernels_forward(
         self,

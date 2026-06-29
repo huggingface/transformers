@@ -364,7 +364,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         else:
             logger.warning_once("The fast path for GraniteMoeHybrid will be used when running the model on a GPU")
 
-        self.layer_type = "linear_attention"
+        self.layer_type = config.layer_types[layer_idx]
 
     def cuda_kernels_forward(
         self,
@@ -1001,7 +1001,9 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],

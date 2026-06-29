@@ -537,7 +537,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 "https://github.com/fla-org/flash-linear-attention#installation"
             )
 
-        self.layer_type = "linear_attention"
+        self.layer_type = config.layer_types[layer_idx]
 
     def forward(
         self,

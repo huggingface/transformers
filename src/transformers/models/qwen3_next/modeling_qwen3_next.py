@@ -562,7 +562,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
-        self.layer_type = "linear_attention"
+        self.layer_type = config.layer_types[layer_idx]
 
     def fix_query_key_value_ordering(self, mixed_qkvz, mixed_ba):
         """

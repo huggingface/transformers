@@ -212,7 +212,7 @@ class MiniMaxLightningAttention(nn.Module):
         self.register_buffer("key_decay", key_decay)
         self.register_buffer("diagonal_decay", diagonal_decay)
 
-        self.layer_type = "linear_attention"
+        self.layer_type = config.layer_types[layer_idx]
 
     def get_slope_rate(self):
         base = 1 / (2 ** (8 / self.num_attention_heads))

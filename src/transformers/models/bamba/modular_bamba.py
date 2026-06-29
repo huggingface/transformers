@@ -240,7 +240,7 @@ class BambaMixer(nn.Module):
         else:
             logger.warning_once("The fast path for Bamba will be used when running the model on a GPU")
 
-        self.layer_type = "linear_attention"
+        self.layer_type = config.layer_types[layer_idx]
 
     def cuda_kernels_forward(
         self,

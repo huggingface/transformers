@@ -1029,6 +1029,7 @@ LAYER_TYPE_CACHE_MAPPING.update(
         "sliding_attention": DynamicSlidingWindowLayer,
         "chunked_attention": DynamicSlidingWindowLayer,
         # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
+        # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state.
         "conv": LinearAttentionLayer,
         "moe": LinearAttentionLayer,
         "linear_attention": LinearAttentionLayer,
