@@ -934,7 +934,8 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         return ImageClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=vision_model_outputs.last_hidden_state,
+            hidden_states=vision_model_outputs.hidden_states,
+            attentions=vision_model_outputs.attentions,
         )
 
 
