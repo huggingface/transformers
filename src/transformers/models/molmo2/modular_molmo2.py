@@ -1463,11 +1463,17 @@ def token_type_ids_mask_function(token_type_ids: torch.Tensor | None = None) -> 
     if token_type_ids is None:
         return None
 
+    seq_len = token_type_ids.shape[1]
+
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        safe_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
-        token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_idx]
-        token_type_ids_at_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], token_type_ids_at_kv_idx, 0)
-        return (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids_at_kv_idx == 1)
+        # `q_idx`/`kv_idx` can run past `mm_token_type_ids` (which only covers the original prompt) when
+        # generation verifies several new tokens at once (e.g. assisted decoding). Those positions are
+        # always newly generated text, never image patches, so clamp the lookup and treat them as type 0.
+        safe_kv = torch.where(kv_idx < seq_len, kv_idx, 0)
+        kv_is_image = torch.where(kv_idx < seq_len, token_type_ids[batch_idx, safe_kv], 0) == 1
+        safe_q = torch.where(q_idx < seq_len, q_idx, 0)
+        q_is_image = torch.where(q_idx < seq_len, token_type_ids[batch_idx, safe_q], 0) == 1
+        return q_is_image & kv_is_image
 
     return inner_mask
 
