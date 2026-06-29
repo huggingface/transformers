@@ -14,14 +14,16 @@
 """Feature extractor for Fun-ASR-Nano (Kaldi mel-filterbank with Low Frame Rate stacking)."""
 
 import numpy as np
-import torch
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, is_torchaudio_available, logging
-from ...utils.import_utils import requires
+from ...utils.import_utils import is_torch_available, requires
 
+
+if is_torch_available():
+    import torch
 
 if is_torchaudio_available():
     import torchaudio
@@ -107,7 +109,7 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         self.window = window
         self.preemphasis = preemphasis
 
-    def _extract_fbank_features(self, waveform: torch.Tensor) -> torch.Tensor:
+    def _extract_fbank_features(self, waveform: "torch.Tensor") -> "torch.Tensor":
         """Extract Kaldi mel-filterbank features `(num_frames, feature_size)` from a single 1D waveform tensor."""
         fbank = torchaudio.compliance.kaldi.fbank(
             waveform.unsqueeze(0),
@@ -119,7 +121,7 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         )
         return fbank
 
-    def _apply_lfr(self, features: torch.Tensor) -> torch.Tensor:
+    def _apply_lfr(self, features: "torch.Tensor") -> "torch.Tensor":
         """Apply Low Frame Rate (LFR) by stacking `lfr_m` frames and subsampling with stride `lfr_n`.
 
         `features` has shape `(num_frames, feature_size)`; the output has shape `(num_lfr_frames, feature_size * lfr_m)`.
