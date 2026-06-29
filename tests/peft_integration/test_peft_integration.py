@@ -752,7 +752,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         peft_model_id = "peft-internal-testing/tiny-opt-lora-revision"
 
         # This should not work
-        with self.assertRaises(OSError):
+        # Transformers cannot identify the model and raises a ValueError
+        with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(peft_model_id)
 
         # This should work
