@@ -127,9 +127,6 @@ class Tipsv2Tokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        if self.pad_token_id != 0:
-            raise ValueError(f"Expected the padding token to have id 0, but got {self.pad_token_id}.")
-
 
 @auto_docstring
 class Tipsv2ImageProcessor(TorchvisionBackend):
