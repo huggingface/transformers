@@ -77,7 +77,7 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
     ```
     """
 
-    model_input_names = ["input_features", "feature_lengths"]
+    model_input_names = ["input_features", "attention_mask", "feature_lengths"]
 
     def __init__(
         self,
@@ -161,6 +161,7 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         max_length: int | None = None,
         truncation: bool = False,
         pad_to_multiple_of: int | None = None,
+        return_attention_mask: bool | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -181,11 +182,14 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
                 Whether to truncate sequences longer than `max_length`.
             pad_to_multiple_of (`int`, *optional*):
                 If set, pads the LFR sequence length to a multiple of this value.
+            return_attention_mask (`bool`, *optional*):
+                Whether to return the padding mask. Defaults to `self.return_attention_mask`.
 
         Returns:
-            [`BatchFeature`] with `input_features` of shape `(batch, max_lfr_frames, feature_size * lfr_m)` and the
-            per-sample `feature_lengths`.
+            [`BatchFeature`] with `input_features` of shape `(batch, max_lfr_frames, feature_size * lfr_m)`, the
+            frame-level `attention_mask`, and the per-sample `feature_lengths`.
         """
+        output_attention_mask = self.return_attention_mask if return_attention_mask is None else return_attention_mask
         if sampling_rate is not None and sampling_rate != self.sampling_rate:
             raise ValueError(
                 f"Expected sampling rate {self.sampling_rate}, got {sampling_rate}. "
@@ -212,13 +216,15 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
             return_tensors=return_tensors or "np",
         )
 
-        # `pad` returns the per-frame attention mask; collapse it to a single length per sample.
-        attention_mask = padded_inputs.pop("attention_mask")
+        # `pad` returns the per-frame attention mask; also collapse it to a single length per sample.
+        attention_mask = padded_inputs["attention_mask"]
         if isinstance(attention_mask, torch.Tensor):
             feature_lengths = attention_mask.sum(-1).to(torch.long)
         else:
             feature_lengths = np.asarray(attention_mask).sum(-1).astype(np.int64)
         padded_inputs["feature_lengths"] = feature_lengths
+        if not output_attention_mask:
+            padded_inputs.pop("attention_mask")
 
         return BatchFeature(padded_inputs, tensor_type=return_tensors)
 

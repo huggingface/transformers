@@ -1,4 +1,4 @@
-<!--Copyright 2025 Alibaba DAMO Academy and the HuggingFace Inc. team. All rights reserved.
+<!--Copyright 2026 Alibaba DAMO Academy and the HuggingFace Inc. team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in
 compliance with the License. You may obtain a copy of the License at
@@ -43,26 +43,14 @@ Fun-ASR-Nano consists of four components:
 
 ```python
 import torch
-import librosa
-from transformers import AutoProcessor, FunAsrNanoForConditionalGeneration
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
-audio, _ = librosa.load("audio.wav", sr=16000)
-
-conversation = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "Transcribe the audio:"},
-            {"type": "audio"},
-        ],
-    },
-]
-text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-inputs = processor(text=text, audio=audio, sampling_rate=16000, return_tensors="pt").to(model.device)
+audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
+inputs = processor.apply_transcription_request(audio=audio_url, return_tensors="pt").to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=200)
 generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
@@ -73,23 +61,19 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 
 ```python
 import torch
-import librosa
-from transformers import AutoProcessor, FunAsrNanoForConditionalGeneration
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 processor.tokenizer.padding_side = "left"
-model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
-audio_zh, _ = librosa.load("zh.wav", sr=16000)
-audio_en, _ = librosa.load("en.wav", sr=16000)
-
-conversations = [
-    [{"role": "user", "content": [{"type": "text", "text": "语音转写成中文："}, {"type": "audio"}]}],
-    [{"role": "user", "content": [{"type": "text", "text": "Transcribe the audio:"}, {"type": "audio"}]}],
+audio_urls = [
+    "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/zh.mp3",
+    "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3",
 ]
-texts = [processor.apply_chat_template(c, add_generation_prompt=True, tokenize=False) for c in conversations]
-inputs = processor(text=texts, audio=[audio_zh, audio_en], sampling_rate=16000, return_tensors="pt").to(model.device)
+prompts = ["语音转写成中文：", "Transcribe the audio:"]
+inputs = processor.apply_transcription_request(audio=audio_urls, prompt=prompts, return_tensors="pt").to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=200)
 generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
@@ -101,11 +85,11 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True))
 ```python
 import torch
 import librosa
-from transformers import AutoProcessor, FunAsrNanoForConditionalGeneration
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 model.train()
 
 audio, _ = librosa.load("audio.wav", sr=16000)
@@ -126,18 +110,15 @@ loss.backward()
 
 ```python
 import torch
-import librosa
-from transformers import AutoProcessor, FunAsrNanoForConditionalGeneration
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 model.forward = torch.compile(model.forward)
 
-audio, _ = librosa.load("audio.wav", sr=16000)
-conversation = [{"role": "user", "content": [{"type": "text", "text": "Transcribe the audio:"}, {"type": "audio"}]}]
-text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-inputs = processor(text=text, audio=audio, sampling_rate=16000, return_tensors="pt").to(model.device)
+audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
+inputs = processor.apply_transcription_request(audio=audio_url, return_tensors="pt").to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=200)
 generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
@@ -161,6 +142,7 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 
 [[autodoc]] FunAsrNanoProcessor
     - __call__
+    - apply_transcription_request
 
 ## FunAsrNanoEncoder
 

@@ -12,7 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Fun-ASR-Nano checkpoint to HuggingFace Transformers format."""
+"""Convert Fun-ASR-Nano checkpoint to HuggingFace Transformers format.
+
+Example commands:
+
+```bash
+python -m transformers.models.fun_asr_nano.convert_fun_asr_nano_to_hf \
+    --model_path /path/to/Fun-ASR-Nano-2512 \
+    --output_path /tmp/fun-asr-nano-hf
+
+python -m transformers.models.fun_asr_nano.convert_fun_asr_nano_to_hf \
+    --model_path /path/to/Fun-ASR-Nano-2512 \
+    --output_path /tmp/fun-asr-nano-hf \
+    --push_to_hub --hub_model_id FunAudioLLM/Fun-ASR-Nano-2512-hf
+```
+"""
 
 import argparse
 import json
@@ -31,6 +45,17 @@ from .configuration_fun_asr_nano import (
     FunAsrNanoEncoderConfig,
 )
 from .modeling_fun_asr_nano import FunAsrNanoForConditionalGeneration
+
+
+KEY_PREFIX_MAPPING = (
+    ("audio_encoder.", "model.audio_encoder."),
+    ("audio_adaptor.", "model.audio_adaptor."),
+    # Keep lm_head.weight explicitly. Although tie_word_embeddings=True, this model load path
+    # does not retie lm_head from the embeddings, and the source already stores lm_head == embeddings.
+    # safetensors deduplicates the shared storage, so this adds no extra disk over the embeddings.
+    ("llm.lm_head.", "lm_head."),
+    ("llm.model.", "model.language_model."),
+)
 
 
 # Chat template stored in the checkpoint so that `processor.apply_chat_template` works without any
@@ -86,17 +111,9 @@ def convert_key(key: str) -> str | None:
 
     Returns `None` for keys that are not used by the generation path (e.g. the CTC / timestamp branch).
     """
-    if key.startswith("audio_encoder."):
-        return "model." + key
-    if key.startswith("audio_adaptor."):
-        return "model." + key
-    if key.startswith("llm.lm_head."):
-        # Keep lm_head.weight explicitly. Although tie_word_embeddings=True, this model load path
-        # does not retie lm_head from the embeddings, and the source already stores lm_head == embeddings.
-        # safetensors deduplicates the shared storage, so this adds no extra disk over the embeddings.
-        return "lm_head." + key[len("llm.lm_head.") :]
-    if key.startswith("llm.model."):
-        return "model.language_model." + key[len("llm.model.") :]
+    for original_prefix, converted_prefix in KEY_PREFIX_MAPPING:
+        if key.startswith(original_prefix):
+            return converted_prefix + key[len(original_prefix) :]
     return None
 
 
