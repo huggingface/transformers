@@ -21,7 +21,7 @@
 from dataclasses import dataclass
 
 import torch
-from torch import nn
+from torch import Tensor, nn
 from typing_extensions import Unpack
 
 from ... import initialization as init
@@ -92,6 +92,18 @@ class Tipsv2DptNormalEstimatorOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
+class Tipsv2DptReadoutProjectLayer(nn.Module):
+    def __init__(self, in_dim: int, out_dim: int, activation: nn.Module) -> None:
+        super().__init__()
+        self.layers = nn.ModuleList([nn.Linear(in_dim, out_dim), activation])
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = input
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+        return hidden_state
+
+
 def _get_backbone_hidden_size(config):
     if config.backbone_config is not None and hasattr(config.backbone_config, "hidden_size"):
         return config.backbone_config.hidden_size
@@ -141,9 +153,10 @@ class Tipsv2DptReassembleStage(nn.Module):
         self.num_register_tokens = config.backbone_config.num_register_tokens
         self.readout_projects = nn.ModuleList(
             [
-                nn.Sequential(
-                    nn.Linear(2 * config.backbone_config.hidden_size, config.backbone_config.hidden_size),
-                    ACT2FN[config.readout_activation],
+                Tipsv2DptReadoutProjectLayer(
+                    in_dim=2 * config.backbone_config.hidden_size,
+                    out_dim=config.backbone_config.hidden_size,
+                    activation=ACT2FN[config.readout_activation],
                 )
                 for _ in config.neck_hidden_sizes
             ]

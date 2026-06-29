@@ -26,20 +26,17 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...modeling_outputs import DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, TensorType, TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoConfig
 from ..depth_anything.modeling_depth_anything import DepthAnythingNeck, DepthAnythingPreActResidualLayer
 from ..dpt.modeling_dpt import DPTReassembleLayer
-from ..sapiens2.modeling_sapiens2 import Sapiens2NormalEstimatorOutput
+from ..sapiens2.modeling_sapiens2 import Sapiens2NormalEstimatorOutput, Sapiens2PointmapFinalLayerBlock
 from ..tipsv2.image_processing_tipsv2 import Tipsv2ImageProcessor
 from ..zoedepth.modeling_zoedepth import (
     ZoeDepthFeatureFusionLayer,
     ZoeDepthFeatureFusionStage,
     ZoeDepthReassembleStage,
 )
-
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -273,6 +270,10 @@ class Tipsv2DptConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+class Tipsv2DptReadoutProjectLayer(Sapiens2PointmapFinalLayerBlock):
+    pass
+
+
 class Tipsv2DptReassembleLayer(DPTReassembleLayer):
     pass
 
@@ -297,9 +298,10 @@ class Tipsv2DptReassembleStage(ZoeDepthReassembleStage):
         self.num_register_tokens = config.backbone_config.num_register_tokens
         self.readout_projects = nn.ModuleList(
             [
-                nn.Sequential(
-                    nn.Linear(2 * config.backbone_config.hidden_size, config.backbone_config.hidden_size),
-                    ACT2FN[config.readout_activation],
+                Tipsv2DptReadoutProjectLayer(
+                    in_dim=2 * config.backbone_config.hidden_size,
+                    out_dim=config.backbone_config.hidden_size,
+                    activation=ACT2FN[config.readout_activation],
                 )
                 for _ in config.neck_hidden_sizes
             ]

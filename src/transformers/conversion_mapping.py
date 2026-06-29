@@ -1443,7 +1443,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("vision_encoder", "backbone"),
             WeightRenaming(
                 r"head\.reassemble\.readout_projects\.(\d+)",
-                r"neck.reassemble_stage.readout_projects.\1.0",
+                r"neck.reassemble_stage.readout_projects.\1.layers.0",
             ),
             WeightRenaming(
                 r"head\.reassemble\.out_projections\.(\d+)\.", r"neck.reassemble_stage.layers.\1.projection."
