@@ -85,6 +85,7 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True))
 ```python
 import torch
 import librosa
+from huggingface_hub import hf_hub_download
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
@@ -92,10 +93,14 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 model.train()
 
-audio, _ = librosa.load("audio.wav", sr=16000)
+audio_path = hf_hub_download("FunAudioLLM/Fun-ASR-Nano-2512", "example/en.mp3")
+audio, _ = librosa.load(audio_path, sr=16000)
 conversation = [
     {"role": "user", "content": [{"type": "text", "text": "Transcribe the audio:"}, {"type": "audio"}]},
-    {"role": "assistant", "content": "The transcription of the audio."},
+    {
+        "role": "assistant",
+        "content": "The tribal chieftain called for the boy, and presented him with fifty pieces of gold.",
+    },
 ]
 text = processor.apply_chat_template(conversation, tokenize=False)
 inputs = processor(text=text, audio=audio, sampling_rate=16000, return_tensors="pt").to(model.device)
