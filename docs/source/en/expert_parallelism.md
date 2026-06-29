@@ -39,9 +39,6 @@ model = AutoModelForCausalLM.from_pretrained(
 
 This argument switches to the `ep_plan` (expert parallel plan) defined in each MoE model's config file. The [`GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
 
-> [!NOTE]
-> Not every MoE model defines an expert parallel plan. Requesting `enable_expert_parallel=True` for a model without one raises a `ValueError`. Pick a model with an EP plan, or load without `enable_expert_parallel`.
-
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) and specify how many devices to use. The number of devices must evenly divide the total number of experts.
 
 ```zsh
