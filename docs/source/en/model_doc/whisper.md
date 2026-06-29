@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-12-06 and added to Hugging Face Transformers on 2022-10-05.*
+*This model was published in HF papers on 2022-12-06 and contributed to Hugging Face Transformers on 2022-10-05.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -25,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Whisper
 
-[Whisper](https://huggingface.co/papers/2212.04356) is a encoder-decoder (sequence-to-sequence) transformer pretrained on 680,000 hours of labeled audio data. This amount of pretraining data enables zero-shot performance on audio tasks in English and many other languages. The decoder allows Whisper to map the encoders learned speech representations to useful outputs, such as text, without additional fine-tuning. Whisper just works out of the box.
+[Whisper](https://huggingface.co/papers/2212.04356) is an encoder-decoder (sequence-to-sequence) transformer pretrained on 680,000 hours of labeled audio data. This amount of pretraining data enables zero-shot performance on audio tasks in English and many other languages. The decoder allows Whisper to map the encoders learned speech representations to useful outputs, such as text, without additional fine-tuning. Whisper just works out of the box.
 
 You can find all the original Whisper checkpoints under the [Whisper](https://huggingface.co/collections/openai/whisper-release-6501bba2cf999715fd953013) collection.
 
@@ -88,7 +87,7 @@ transcription[0]
 
 ## Notes
 
-- Whisper relies a custom [`generate`] for inference, make sure to check the docs below.
+- Whisper relies on a custom [`generate`] for inference, make sure to check the docs below.
 - The [`WhisperProcessor`] can be used for preparing audio and decoding predicted ids back into text.
 
 ## WhisperConfig

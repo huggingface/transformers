@@ -25,6 +25,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -107,12 +108,12 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, labels)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->Clap
 class ClapTextModelOutput(ModelOutput):
     r"""
@@ -177,31 +178,6 @@ class ClapOutput(ModelOutput):
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
-
-
-# Adapted from transformers.models.swin.modeling_swin.SwinDropPath
-class ClapDropPath(nn.Module):
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is a slightly
-    refactored version of the `SwinDropPath` implementation.
-    """
-
-    def __init__(self, drop_prob=None):
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states):
-        if self.drop_prob == 0.0 or not self.training:
-            return hidden_states
-
-        keep_prob = 1 - self.drop_prob
-        # work with diff dim tensors, not just 2D ConvNets
-        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
-
-        random_tensor = keep_prob + torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
-        random_tensor.floor_()  # binarize
-        output = hidden_states.div(keep_prob) * random_tensor
-        return output
 
 
 # Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/feature_fusion.py#L133
@@ -343,7 +319,7 @@ class ClapAudioPatchEmbed(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->ClapAudio
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->ClapAudio
 class ClapAudioSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
@@ -437,7 +413,7 @@ class ClapAudioSelfAttention(nn.Module):
         return relative_position_index
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->ClapAudio
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->ClapAudio
 class ClapAudioSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -451,7 +427,7 @@ class ClapAudioSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->ClapAudio
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->ClapAudio
 class ClapAudioAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
@@ -470,7 +446,7 @@ class ClapAudioAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->ClapAudio
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->ClapAudio
 class ClapAudioIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -486,7 +462,7 @@ class ClapAudioIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->ClapAudio
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->ClapAudio
 class ClapAudioOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -499,7 +475,32 @@ class ClapAudioOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinLayer with SwinDropPath->ClapDropPath, Swin->ClapAudio
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->ClapDropPath
+class ClapDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinLayer with Swin->ClapAudio
 class ClapAudioLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0):
         super().__init__()
@@ -622,7 +623,7 @@ class ClapAudioLayer(nn.Module):
         return layer_outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->ClapAudio
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->ClapAudio
 class ClapAudioStage(GradientCheckpointingLayer):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
@@ -644,7 +645,7 @@ class ClapAudioStage(GradientCheckpointingLayer):
 
         # patch merging layer
         if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm)
+            self.downsample = downsample(dim=dim)
         else:
             self.downsample = None
 
@@ -684,27 +685,19 @@ class ClapAudioPatchMerging(nn.Module):
     Patch Merging Layer.
 
     Args:
-        input_resolution (`tuple[int]`):
-            Resolution of input feature.
         dim (`int`):
             Number of input channels.
-        norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
-            Normalization layer class.
     """
 
-    def __init__(self, input_resolution: tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
+    def __init__(self, dim: int) -> None:
         super().__init__()
-        self.input_resolution = input_resolution
-        self.dim = dim
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
-        self.norm = norm_layer(4 * dim)
+        self.norm = nn.LayerNorm(4 * dim)
 
-    def maybe_pad(self, input_feature, height, width):
-        should_pad = (height % 2 == 1) or (width % 2 == 1)
-        if should_pad:
-            pad_values = (0, 0, 0, width % 2, 0, height % 2)
-            input_feature = nn.functional.pad(input_feature, pad_values)
-
+    def maybe_pad(self, input_feature: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """Pad input feature map to be divisible by 2 in both spatial dimensions if needed."""
+        if (height % 2 == 1) or (width % 2 == 1):
+            input_feature = nn.functional.pad(input_feature, (0, 0, 0, width % 2, 0, height % 2))
         return input_feature
 
     def forward(self, input_feature: torch.Tensor, input_dimensions: tuple[int, int]) -> torch.Tensor:
@@ -715,17 +708,11 @@ class ClapAudioPatchMerging(nn.Module):
         input_feature = input_feature.view(batch_size, height, width, num_channels)
         # pad input to be divisible by width and height, if needed
         input_feature = self.maybe_pad(input_feature, height, width)
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_0 = input_feature[:, 0::2, 0::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_1 = input_feature[:, 1::2, 0::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_2 = input_feature[:, 0::2, 1::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_3 = input_feature[:, 1::2, 1::2, :]
-        # batch_size height/2 width/2 4*num_channels
-        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
-        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
+        # Interleave rows and columns to produce [batch_size, height/2*width/2, 4*num_channels]
+        input_feature = torch.cat(
+            [input_feature[:, row::2, col::2, :] for col in range(2) for row in range(2)], dim=-1
+        )
+        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)
 
         input_feature = self.norm(input_feature)
         input_feature = self.reduction(input_feature)
@@ -990,7 +977,7 @@ class ClapTextEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
-                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
+                buffered_token_type_ids = self.token_type_ids.to(position_ids.device).expand(position_ids.shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
                 token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
             else:
@@ -1427,19 +1414,22 @@ class ClapTextModel(ClapPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             **kwargs,
         )
         sequence_output = encoder_outputs[0]

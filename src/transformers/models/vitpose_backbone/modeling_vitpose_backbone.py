@@ -125,7 +125,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->VitPoseBackbone
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VitPoseBackbone
 class VitPoseBackboneSelfAttention(nn.Module):
     def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
@@ -181,7 +181,7 @@ class VitPoseBackboneSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->VitPoseBackbone
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VitPoseBackbone
 class VitPoseBackboneSelfOutput(nn.Module):
     """
     The residual connection is defined in VitPoseBackboneLayer instead of here (as is the case with other models), due to the
@@ -199,7 +199,7 @@ class VitPoseBackboneSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VitPoseBackbone
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VitPoseBackbone
 class VitPoseBackboneAttention(nn.Module):
     def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
@@ -420,8 +420,6 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         >>> dataset_index = torch.tensor([1])
         >>> outputs = model(pixel_values, dataset_index)
         ```"""
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
-
         embedding_output = self.embeddings(pixel_values)
         outputs: BaseModelOutput = self.encoder(embedding_output, dataset_index=dataset_index, **kwargs)
         hidden_states = outputs.hidden_states

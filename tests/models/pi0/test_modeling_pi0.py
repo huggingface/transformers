@@ -401,6 +401,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.loss.shape, (1, 50, 32))
         self.assertAlmostEqual(outputs.loss.mean().item(), 2.5087, places=3)
 
+        inputs.pop("actions")  # test inference, not training anymore!
         with torch.no_grad():
             sampled = model.sample_actions(**inputs, num_steps=5)
         self.assertEqual(sampled.shape, (1, 50, 32))

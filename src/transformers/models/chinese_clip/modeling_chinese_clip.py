@@ -39,8 +39,8 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_chinese_clip import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class ChineseCLIPOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -517,7 +517,12 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
     config: ChineseCLIPConfig
     base_model_prefix = "chinese_clip"
     input_modalities = ("image", "text")
-    _no_split_modules = ["ChineseCLIPVisionEmbeddings", "ChineseCLIPTextEmbeddings", "ChineseCLIPVisionAttention"]
+    _no_split_modules = [
+        "ChineseCLIPVisionEmbeddings",
+        "ChineseCLIPTextEmbeddings",
+        "ChineseCLIPTextLayer",
+        "ChineseCLIPVisionLayer",
+    ]
 
     supports_gradient_checkpointing = True
     _supports_sdpa = True

@@ -38,7 +38,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config
 
 
@@ -76,13 +75,13 @@ SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS = r"""
 """
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the generated outputs from [`SeamlessM4Tv2Model`], [`SeamlessM4Tv2ForTextToText`],
     [`SeamlessM4Tv2ForTextToSpeech`], [`SeamlessM4Tv2ForSpeechToSpeech`] and [`SeamlessM4Tv2ForTextToSpeech`].
     """
 )
+@dataclass
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TGenerationOutput with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2GenerationOutput(ModelOutput):
     r"""
@@ -2446,7 +2445,6 @@ class SeamlessM4Tv2HifiGan(nn.Module):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def forward(self, inputs_embeds: torch.FloatTensor) -> torch.FloatTensor:
         r"""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch

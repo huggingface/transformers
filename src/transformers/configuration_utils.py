@@ -23,7 +23,6 @@ from dataclasses import MISSING, dataclass, fields
 from functools import wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
 
-from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
 from packaging import version
 from typing_extensions import dataclass_transform
@@ -39,6 +38,7 @@ from .utils import (
     cached_file,
     copy_func,
     extract_commit_hash,
+    hf_api,
     is_torch_available,
     logging,
 )
@@ -65,6 +65,7 @@ ALLOWED_LAYER_TYPES = (
     "chunked_attention",
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
+    "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
     "linear_attention",  # used in minimax
     "conv",  # used in LFMv2
     "mamba",
@@ -73,6 +74,7 @@ ALLOWED_LAYER_TYPES = (
     "dense",
     "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
+    "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
 )
 
 
@@ -147,6 +149,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
       naming of attributes.
     - **base_model_tp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
       parallel plan applied to the sub-module when `model.tensor_parallel` is called.
+    - **base_model_fsdp_plan** (`dict[Any, str]`) -- A dict that maps sub-modules of a base model to an FSDP2
+      sharding strategy (e.g. `"free_full_weight"` / `"keep_full_weight"`). Keys can be wildcard module paths
+      (e.g. `"layers.*"`) or tuples of paths (grouped into a single `fully_shard` call).
     - **base_model_pp_plan** (`dict[str, tuple[list[str]]]`) -- A dict that maps child-modules of a base model to a
       pipeline parallel plan that enables users to place the child-module on the appropriate device.
 
@@ -218,6 +223,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     keys_to_ignore_at_inference: ClassVar[list[str]] = []
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
+    base_model_fsdp_plan: ClassVar[dict[Any, str] | None] = None
     base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     _auto_class: ClassVar[str | None] = None
@@ -253,11 +259,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
             self.dtype = getattr(torch, self.dtype)
 
-        # Keep the default value of `num_labels=2` in case users have saved a classfier with 2 labels
+        # Keep the default value of `num_labels=2` in case users have saved a classifier with 2 labels
         # Our configs prev wouldn't save `id2label` for 2 labels because it is the default. In all other
         # cases we expect the config dict to have an `id2label` field if it's a clf model, or not otherwise
         if self.id2label is None:
-            self.num_labels = kwargs.get("num_labels", 2)
+            self.num_labels = kwargs.get("num_labels", self.num_labels if self.num_labels is not None else 2)
         else:
             if kwargs.get("num_labels") is not None and len(self.id2label) != kwargs.get("num_labels"):
                 logger.warning(
@@ -459,26 +465,29 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         vocab_size = getattr(text_config, "vocab_size", None)
         if vocab_size is not None:
             # Check for all special tokens, e..g. pad_token_id, image_token_id, audio_token_id
-            for value in text_config:
-                if value.endswith("_token_id") and isinstance(value, int) and not 0 <= value < vocab_size:
+            for name in text_config:
+                value = getattr(text_config, name)
+                if name.endswith("_token_id") and isinstance(value, int) and not 0 <= value < vocab_size:
                     # Can't be an exception until we can load configs that fail validation: several configs on the Hub
                     # store invalid special tokens, e.g. `pad_token_id=-1`
                     logger.warning_once(
-                        f"Model config: {value} must be `None` or an integer within the vocabulary (between 0 "
+                        f"Model config: {name} must be `None` or an integer within the vocabulary (between 0 "
                         f"and {vocab_size - 1}), got {value}. This may result in unexpected behavior."
                     )
 
     def validate_layer_type(self):
         """Check that `layer_types` is correctly defined."""
-        if not (getattr(self, "layer_types", None) is not None and hasattr(self, "num_hidden_layers")):
-            return
-        elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in self.layer_types):
-            raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES} but got {self.layer_types}")
-        elif self.num_hidden_layers is not None and self.num_hidden_layers != len(self.layer_types):
-            raise ValueError(
-                f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of layer types "
-                f"({len(self.layer_types)})"
-            )
+        for layer_types in ["layer_types", "mlp_layer_types"]:
+            layers = getattr(self, layer_types, None)
+            if not (layers is not None and hasattr(self, "num_hidden_layers")):
+                return
+            elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
+                raise ValueError(f"The `{layer_types}` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
+            elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
+                raise ValueError(
+                    f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of `{layer_types}` "
+                    f"({len(layers)})"
+                )
 
     @property
     def rope_scaling(self):
@@ -518,7 +527,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.
@@ -1017,6 +1026,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Pop "kwargs" since they are unpacked and set in the post init
         output.pop("kwargs", None)
 
+        if "distributed_config" in output and hasattr(output["distributed_config"], "to_dict"):
+            output["distributed_config"] = output["distributed_config"].to_dict()
+
         def to_list(value):
             if isinstance(value, tuple):
                 value = [to_list(item) for item in value]
@@ -1264,7 +1276,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             prefix_to_keep = "decoder" if decoder else "encoder"
             for key in config_to_return.to_dict():
                 # NOTE: We can't discard keys because:
-                # 1) we can't truly delete a cls attribte on a dataclass; 2) we can't set the value to `None` due to
+                # 1) we can't truly delete a cls attribute on a dataclass; 2) we can't set the value to `None` due to
                 # strict validation. So we just keep it as is, since there are only a couple old models falling in this condition
                 if key.startswith(prefix_to_keep):
                     # [encoder/decoder]_layers -> num_hidden_layers

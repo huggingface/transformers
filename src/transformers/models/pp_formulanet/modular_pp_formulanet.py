@@ -508,12 +508,6 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     def get_encoder(self):
         return self.model.get_encoder()
 
-    def get_input_embeddings(self):
-        raise AttributeError("The PPFormulaNetModel does not have an `input_embedding` attribute.")
-
-    def set_input_embeddings(self):
-        raise AttributeError("The PPFormulaNetModel does not have an `input_embedding` attribute.")
-
     def get_placeholder_mask(self):
         raise AttributeError("The PPFormulaNet does not need placeholder mask.")
 

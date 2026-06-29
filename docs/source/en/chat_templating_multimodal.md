@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Multimodal chat models accept inputs like images, audio or video, in addition to text. The `content` key in a multimodal chat history is a list containing multiple items of different types. This is unlike text-only chat models whose `content` key is a single string.
 
-In the same way the [Tokenizer](./fast_tokenizer) class handles chat templates and tokenization for text-only models,
+In the same way the [Tokenizer](./fast_tokenizers) class handles chat templates and tokenization for text-only models,
 the [Processor](./processors) class handles preprocessing, tokenization and chat templates for multimodal models. Their [`~ProcessorMixin.apply_chat_template`] methods are almost identical.
 
 This guide will show you how to chat with multimodal models with the high-level [`ImageTextToTextPipeline`] and at a lower level using the [`~ProcessorMixin.apply_chat_template`] and [`~GenerationMixin.generate`] methods.

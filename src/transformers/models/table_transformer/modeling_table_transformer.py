@@ -37,7 +37,6 @@ from .configuration_table_transformer import TableTransformerConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the TABLE_TRANSFORMER decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
@@ -45,13 +44,10 @@ logger = logging.get_logger(__name__)
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 # Copied from transformers.models.detr.modeling_detr.DetrDecoderOutput with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -60,7 +56,6 @@ class TableTransformerDecoderOutput(BaseModelOutputWithCrossAttentions):
     intermediate_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the TABLE_TRANSFORMER encoder-decoder model. This class adds one attribute to Seq2SeqModelOutput,
@@ -68,11 +63,10 @@ class TableTransformerDecoderOutput(BaseModelOutputWithCrossAttentions):
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
     """
 )
+@dataclass
 # Copied from transformers.models.detr.modeling_detr.DetrModelOutput with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerModelOutput(Seq2SeqModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, sequence_length, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -81,17 +75,17 @@ class TableTransformerModelOutput(Seq2SeqModelOutput):
     intermediate_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`TableTransformerForObjectDetection`].
     """
 )
+@dataclass
 # Copied from transformers.models.detr.modeling_detr.DetrObjectDetectionOutput with Detr->TableTransformer,DetrImageProcessor->DetrImageProcessor
 class TableTransformerObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):

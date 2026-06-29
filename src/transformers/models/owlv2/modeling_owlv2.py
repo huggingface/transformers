@@ -62,8 +62,8 @@ def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Owlv2Output(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -177,7 +177,7 @@ def generalized_box_iou(boxes1, boxes2):
 class Owlv2ObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -224,12 +224,12 @@ class Owlv2ObjectDetectionOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`Owlv2ForObjectDetection.image_guided_detection`].
     """
 )
+@dataclass
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTImageGuidedObjectDetectionOutput with OwlViT->Owlv2,OWL-ViT->OWLv2
 class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
     r"""

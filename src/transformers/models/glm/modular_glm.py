@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 
 from ...utils import logging
+from ...utils.generic import no_inherit_decorator
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
@@ -119,6 +120,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@no_inherit_decorator
 class GlmAttention(LlamaAttention):
     def __init__(self, config: GlmConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)

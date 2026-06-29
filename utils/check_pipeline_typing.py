@@ -6,7 +6,7 @@ from transformers.pipelines import SUPPORTED_TASKS, Pipeline
 CHECKER_CONFIG = {
     "name": "pipeline_typing",
     "label": "Pipeline type hints",
-    "file_globs": ["src/transformers/pipelines/__init__.py"],
+    "cache_globs": ["src/transformers/pipelines/__init__.py"],
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
 }

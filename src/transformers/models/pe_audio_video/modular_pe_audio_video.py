@@ -24,7 +24,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, eager_attention_forward
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
@@ -234,6 +234,7 @@ class PeAudioVideoEncoderEmbedder(nn.Module):
         return inputs_embeds, padding_mask, audio_output, video_output
 
 
+@no_inherit_decorator
 class PeAudioVideoEncoderAttention(Qwen3Attention):
     def __init__(self, config, layer_idx):
         super().__init__(config, layer_idx)
@@ -337,13 +338,22 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
             init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioVideoEncoder`].
     """
 )
+@dataclass
 class PeAudioVideoEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    audio_model_output (`BaseModelOutputWithPooling`, *optional*):
+        Output of the audio encoder, containing the last hidden state, pooled output, and optional hidden states
+        and attentions. See [`~modeling_outputs.BaseModelOutputWithPooling`] for details.
+    video_model_output (`BaseModelOutputWithPooling`, *optional*):
+        Output of the video encoder, containing the last hidden state, pooled output, and optional hidden states
+        and attentions. See [`~modeling_outputs.BaseModelOutputWithPooling`] for details.
+    """
+
     audio_model_output: BaseModelOutputWithPooling | None = None
     video_model_output: BaseModelOutputWithPooling | None = None
 
@@ -579,6 +589,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -634,6 +645,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -656,6 +668,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -676,7 +689,10 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         **kwargs,
     ) -> PeAudioVideoOutput:
         if sum([input_ids is not None, pixel_values_videos is not None, input_values is not None]) < 2:
-            raise ValueError("At least two of input_ids, pixel_values_videos, or input_values must be provided")
+            raise ValueError(
+                "At least two of input_ids, pixel_values_videos, or input_values must be provided. "
+                "For encoding individual modalities, get_*_embeds methods are available."
+            )
 
         if pixel_values_videos is None:
             outputs = self.audio_model(

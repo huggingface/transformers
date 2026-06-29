@@ -17,10 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_python import PreTokenizedInput, TextInput
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import TensorType, auto_docstring
 from ..auto import AutoTokenizer
 
@@ -64,6 +61,8 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class AriaProcessor(ProcessorMixin):
+    valid_processor_kwargs = AriaProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -86,56 +85,10 @@ class AriaProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    @auto_docstring
-    def __call__(
-        self,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
-        images: ImageInput | None = None,
-        **kwargs: Unpack[AriaProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-            `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-            `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_mask** -- Pixel mask to be fed to a model. Returned when `images` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            AriaProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
-        if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-            # expand the image_token according to the num_crops and tokens per image
-            tokens_per_image = self.size_conversion[image_inputs.pixel_values.shape[2]]
-            prompt_strings = []
-            num_crops = image_inputs.pop("num_crops") * tokens_per_image
-            for sample in text:
-                sample = sample.replace(self.tokenizer.image_token, self.tokenizer.image_token * num_crops)
-                prompt_strings.append(sample)
-
-        else:
-            image_inputs = {}
-            prompt_strings = text
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        tokens_per_image = self.size_conversion[image_inputs["pixel_values"].shape[2]]
+        num_image_tokens = image_inputs["num_crops"] * tokens_per_image
+        return self.image_token * num_image_tokens
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
@@ -164,14 +117,8 @@ class AriaProcessor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
     @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-
-        # Remove `num_crops`, it is popped and used only when processing. Make a copy of list when removing
-        # otherwise `self.image_processor.model_input_names` is also modified
-        image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+    def unused_input_names(self) -> list[str]:
+        return ["num_crops"]
 
 
 __all__ = ["AriaProcessor"]

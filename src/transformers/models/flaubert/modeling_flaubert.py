@@ -230,12 +230,12 @@ class FlaubertPredLayer(nn.Module):
         return outputs
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering models using a [`~modeling_utils.FlaubertSQuADHead`].
     """
 )
+@dataclass
 # Copied from transformers.models.xlm.modeling_xlm.XLMSquadHeadOutput with XLM->Flaubert
 class FlaubertSquadHeadOutput(ModelOutput):
     r"""
@@ -1354,12 +1354,12 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering models using a `SquadHead`.
     """
 )
+@dataclass
 # Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput with XLM->Flaubert
 class FlaubertForQuestionAnsweringOutput(ModelOutput):
     r"""

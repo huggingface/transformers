@@ -478,7 +478,7 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
-        # Unlike CLIP, this model doesn't handle bc for `self.eos_token_id`, even if ths EOS
+        # Unlike CLIP, this model doesn't handle bc for `self.eos_token_id`, even if the EOS
         # token is 2 (it is set to 2 in released weights)
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
@@ -487,7 +487,7 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             past_key_values=None,
         )
@@ -626,8 +626,8 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class MetaClip2Output(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):

@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -295,6 +295,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -465,7 +466,7 @@ class OlmoHybridRotaryEmbedding(nn.Module):
         return inv_freq, attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -509,6 +510,7 @@ def torch_chunk_gated_delta_rule(
     initial_state=None,
     output_final_state=False,
     use_qk_l2norm_in_kernel=False,
+    **kwargs,
 ):
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
@@ -704,7 +706,6 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             else FusedRMSNormGated(
                 self.head_v_dim,
                 eps=1e-5,
-                device=torch.cuda.current_device(),
                 dtype=config.dtype if config.dtype is not None else torch.get_default_dtype(),
             )
         )
@@ -915,7 +916,7 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OlmoHybridAttentionDecoderLayer", "OlmoHybridLinearAttentionDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
@@ -956,6 +957,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             ]
         )
         self.norm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # Released ckpt don't use any ROPE and have  it set to `None`
         self.rotary_emb = (
             OlmoHybridRotaryEmbedding(config=config)
             if getattr(config, "rope_parameters", None) is not None
@@ -994,7 +996,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,

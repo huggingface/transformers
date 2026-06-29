@@ -54,7 +54,7 @@ class HubertPositionalConvEmbedding(nn.Module):
         )
 
         self.batch_norm = None
-        if config.conv_pos_batch_norm:
+        if getattr(config, "conv_pos_batch_norm", False):
             self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         else:
             weight_norm = nn.utils.weight_norm

@@ -314,6 +314,8 @@ class ChineseCLIPVisionModelTester:
 @require_torch
 class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ChineseCLIPTextModel,) if is_torch_available() else ()
+    # ChineseCLIPTextModel has large embeddings relative to model size, so we need higher split percentages
+    model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

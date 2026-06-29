@@ -1484,7 +1484,7 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BigBirdPegasusEncoderLayer", "BigBirdPegasusDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _can_compile_fullgraph = True
 
     def _init_weights(self, module):
@@ -1565,6 +1565,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
         input_shape = inputs_embeds.size()[:-1]
         embed_pos = self.embed_positions(input_shape)
+        embed_pos = embed_pos.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1820,7 +1821,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         )
 
         # embed positions
-        positions = self.embed_positions(input, past_key_values_length, position_ids=position_ids)
+        positions = self.embed_positions(input_ids, past_key_values_length, position_ids=position_ids)
         positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions

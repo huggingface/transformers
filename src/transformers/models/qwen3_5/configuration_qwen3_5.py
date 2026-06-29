@@ -72,6 +72,7 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = None  # no Moe
 
     vocab_size: int = 248320
     hidden_size: int = 4096
@@ -174,6 +175,9 @@ class Qwen3_5Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
+            # old ckpt with incorrect model type -> override manually
+            if self.vision_config.get("model_type") == "qwen3_5":
+                self.vision_config["model_type"] = "qwen3_5_vision"
             self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
         elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
