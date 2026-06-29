@@ -520,7 +520,6 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             else FusedRMSNormGated(
                 self.head_v_dim,
                 eps=1e-5,
-                dtype=config.dtype if config.dtype is not None else torch.get_default_dtype(),
             )
         )
 
