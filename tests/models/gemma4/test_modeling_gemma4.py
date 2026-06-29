@@ -54,6 +54,7 @@ if is_torch_available():
         Gemma4Processor,
         Gemma4TextModel,
     )
+    from transformers.models.gemma4.modeling_gemma4 import create_masks_for_vision_model
 
 
 GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
@@ -602,8 +603,6 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
             self.assertEqual(counter["call_count"], 1)
 
     def test_attention_mask_composition(self):
-        from transformers.models.gemma4.modeling_gemma4 import create_masks_for_vision_model
-
         config = self.model_tester.get_config()
         config.text_config._attn_implementation = "eager"
 

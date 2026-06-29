@@ -62,6 +62,7 @@ if is_torch_available():
         Gemma3TextForSequenceClassification,
         Gemma3TextModel,
     )
+    from transformers.models.gemma3.modeling_gemma3 import create_masks_for_vision_model
     from transformers.pytorch_utils import is_torch_greater_or_equal
 
 
@@ -428,8 +429,6 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         self.flash_attn_from_config(attn_implementation="flash_attention_4", test_fwd_in_train=False)
 
     def test_attention_mask_composition(self):
-        from transformers.models.gemma3.modeling_gemma3 import create_masks_for_vision_model
-
         config = self.model_tester.get_config()
         config.text_config._attn_implementation = "eager"
 

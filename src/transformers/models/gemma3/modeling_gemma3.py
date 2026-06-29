@@ -32,10 +32,12 @@ from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import (
+    _preprocess_mask_arguments,
     blockwise_overlay,
     create_causal_mask,
     create_masks_for_generate,
     create_sliding_window_causal_mask,
+    maybe_pad_block_sequence_ids,
     sliding_window_overlay,
 )
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
@@ -739,12 +741,25 @@ def create_masks_for_vision_model(
     # Full attention: OR(causal, blockwise) — use block_sequence_ids directly
     full_mask = create_causal_mask(**mask_kwargs, block_sequence_ids=block_sequence_ids)
 
+    # We need to manually pad the sequence IDs for the sliding mask
+    # as it's passed as an `or_mask_function` which bypasses internal padding.
+    early_exit, _, _, _, kv_length, _, kv_offset = _preprocess_mask_arguments(
+        **mask_kwargs,
+        layer_idx=0,
+    )
+    if early_exit:
+        padded_block_sequence_ids = block_sequence_ids
+    else:
+        padded_block_sequence_ids = maybe_pad_block_sequence_ids(
+            block_sequence_ids, attention_mask, kv_length, kv_offset
+        )
+
     # Sliding attention: AND(sliding_window, OR(causal, blockwise))
     # Pass blockwise as or_mask_function (applied as step 2 in create_causal_mask)
     # Pass sliding_window as and_mask_function (applied as step 3, after OR)
     sliding_mask = create_causal_mask(
         **mask_kwargs,
-        or_mask_function=blockwise_overlay(block_sequence_ids),
+        or_mask_function=blockwise_overlay(padded_block_sequence_ids),
         and_mask_function=sliding_window_overlay(config.sliding_window),
     )
 
