@@ -163,7 +163,7 @@ class DtensorShardOperation:
             else:
                 slice_parts = []
                 for intervals in intervals_by_dim:
-                    start, end = intervals[0] if intervals else (0, 0)
+                    start, end = intervals[0] if len(intervals) > 0 else (0, 0)
                     slice_parts.append(slice(start, end))
 
                 return source[tuple(slice_parts)].to(device=device, dtype=dtype)
