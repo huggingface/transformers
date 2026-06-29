@@ -246,6 +246,13 @@ class DiffLlamaAttention(nn.Module):
                 "DiffLlama does not support `attention_dropout > 0`: the differential attention "
                 "mechanism has no paper-defined dropout semantics."
             )
+        # ``torch.chunk(value_states, 2, dim=1).repeat(1, 2, ...)`` below requires the KV-head axis
+        # to split evenly into the two halves of the differential combination.
+        if config.num_key_value_heads is None or config.num_key_value_heads % 2 != 0:
+            raise ValueError(
+                "DiffLlama requires `num_key_value_heads` to be even (and at least 2): the two-call "
+                f"differential attention splits the value tensor along KV heads, got {config.num_key_value_heads}."
+            )
         self.lambda_init = lambda_init_fn(layer_idx)
         self.lambda_q1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
         self.lambda_k1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
