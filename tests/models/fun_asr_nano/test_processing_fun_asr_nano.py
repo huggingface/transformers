@@ -54,6 +54,41 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
         self.assertTrue(captured["kwargs"]["add_generation_prompt"])
         self.assertTrue(captured["kwargs"]["return_dict"])
 
+    def test_apply_transcription_request_batch_paths_and_prompts(self):
+        processor, captured = self._make_processor()
+
+        self.assertEqual(
+            processor.apply_transcription_request(
+                audio=["zh.wav", "en.wav"],
+                prompt=["语音转写成中文：", "Transcribe the audio:"],
+            ),
+            {"ok": True},
+        )
+
+        self.assertEqual(
+            captured["conversations"],
+            [
+                [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "语音转写成中文："},
+                            {"type": "audio", "path": "zh.wav"},
+                        ],
+                    }
+                ],
+                [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Transcribe the audio:"},
+                            {"type": "audio", "path": "en.wav"},
+                        ],
+                    }
+                ],
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

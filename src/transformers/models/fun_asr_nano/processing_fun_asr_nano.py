@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput, make_list_of_audio, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -164,19 +164,13 @@ class FunAsrNanoProcessor(ProcessorMixin):
             [`FunAsrNanoForConditionalGeneration.generate`].
         """
 
-        if isinstance(audio, str):
-            audio_items = [audio]
-        elif isinstance(audio, (list, tuple)) and all(isinstance(item, str) for item in audio):
-            audio_items = list(audio)
-        else:
-            audio_items = list(make_list_of_audio(audio))
-            if is_torch_available():
-                import torch as torch_module
+        audio_items = list(make_list_of_audio_chat_template(audio))
+        if is_torch_available():
+            import torch as torch_module
 
-                audio_items = [
-                    item.detach().cpu().numpy() if isinstance(item, torch_module.Tensor) else item
-                    for item in audio_items
-                ]
+            audio_items = [
+                item.detach().cpu().numpy() if isinstance(item, torch_module.Tensor) else item for item in audio_items
+            ]
 
         batch_size = len(audio_items)
         if batch_size == 0:
