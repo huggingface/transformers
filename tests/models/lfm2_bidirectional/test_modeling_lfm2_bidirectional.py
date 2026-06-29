@@ -15,8 +15,8 @@
 
 import unittest
 
-from transformers import Lfm2BidirectionalConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers import AutoTokenizer, Lfm2BidirectionalConfig, is_torch_available
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -139,7 +139,58 @@ class Lfm2BidirectionalModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertListEqual(list(attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
 
 
-@require_torch
+@require_torch_accelerator
 @slow
 class Lfm2BidirectionalIntegrationTest(unittest.TestCase):
-    pass
+    # Two sentences of different length so the batch is padded, exercising the bidirectional mask and the
+    # non-causal short convolution on padded inputs.
+    input_texts = ["The quick brown fox jumps over the lazy dog.", "Short text."]
+
+    def _last_hidden_state(self, model_id):
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = (
+            Lfm2BidirectionalModel.from_pretrained(model_id, dtype=torch.float32, attn_implementation="eager")
+            .to(torch_device)
+            .eval()
+        )
+        inputs = tokenizer(self.input_texts, padding=True, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            return model(**inputs).last_hidden_state
+
+    def test_inference_embedding(self):
+        output = self._last_hidden_state("LiquidAI/LFM2.5-Embedding-350M")
+        self.assertEqual(output.shape, (2, 11, 1024))
+        expected_slice = torch.tensor(
+            [
+                [
+                    [-2.2936, -2.0918, 0.9680, -1.5736, 0.6017, 0.0170],
+                    [-3.9770, -2.1077, 2.3636, -0.1085, -1.2838, -0.6893],
+                    [-5.8508, -3.8911, 1.4226, 0.7559, 0.2201, -2.5005],
+                ],
+                [
+                    [0.9737, 0.5751, 0.4458, 1.0093, -2.1022, -1.6720],
+                    [1.7075, -1.8523, 2.4822, 4.1947, -4.2926, -1.6779],
+                    [3.2294, -0.3602, 3.0362, -0.0349, -3.3517, -1.6858],
+                ],
+            ]
+        )
+        torch.testing.assert_close(output[:, :3, :6].float().cpu(), expected_slice, rtol=1e-4, atol=1e-4)
+
+    def test_inference_colbert(self):
+        output = self._last_hidden_state("LiquidAI/LFM2.5-ColBERT-350M")
+        self.assertEqual(output.shape, (2, 11, 1024))
+        expected_slice = torch.tensor(
+            [
+                [
+                    [4.5788, 1.6224, -0.1130, 3.2138, 2.3550, -2.5246],
+                    [3.0194, -0.3476, 1.3503, 2.8736, -0.5010, -2.1888],
+                    [2.8702, 0.0073, 2.4513, 0.4712, -1.8173, -5.5409],
+                ],
+                [
+                    [6.1087, -0.6685, -1.7938, 3.6074, -0.8812, -2.8647],
+                    [3.3751, -0.5874, -0.7414, 0.1554, 0.6429, -4.9038],
+                    [1.6770, -2.0160, -0.4672, -1.2761, 2.0784, -4.3009],
+                ],
+            ]
+        )
+        torch.testing.assert_close(output[:, :3, :6].float().cpu(), expected_slice, rtol=1e-4, atol=1e-4)
