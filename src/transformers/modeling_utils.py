@@ -2079,8 +2079,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
-        """Detect whether the class supports setting its attention implementation dynamically. Inspects
-        the module source as a heuristic, which avoids maintaining yet another property flag.
+        """Detect whether the class supports setting its attention implementation dynamically. Inspects the module source as a
+        heuristic, which avoids maintaining yet another property flag.
         """
         # Skip dynamic wrappers like FSDP2's FSDP<ModelName>, whose __module__ is inside torch.*
         cls = next((k for k in cls.__mro__ if not k.__module__.startswith("torch.")), cls)
@@ -2100,8 +2100,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @classmethod
     def _can_set_experts_implementation(cls) -> bool:
-        """Detect whether the class supports setting its experts implementation dynamically. Inspects
-        the module source as a heuristic, which avoids maintaining yet another property flag.
+        """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source as a
+        heuristic, which avoids maintaining yet another property flag.
         """
         # Skip dynamic wrappers like FSDP2's FSDP<ModelName>, whose __module__ is inside torch.*
         cls = next((k for k in cls.__mro__ if not k.__module__.startswith("torch.")), cls)
