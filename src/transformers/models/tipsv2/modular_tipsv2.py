@@ -376,8 +376,6 @@ class Tipsv2VisionEncoder(Dinov2WithRegistersEncoder):
 
 
 class Tipsv2VisionModel(Dinov2WithRegistersModel):
-    _keys_to_ignore_on_load_unexpected = {"text_encoder"}
-
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
