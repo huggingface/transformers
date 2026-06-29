@@ -22,13 +22,11 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from ...utils.import_utils import requires
 
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
 
-@requires(backends=("sentencepiece",))
 class Tipsv2Tokenizer(TokenizersBackend):
     """Tipsv2 tokenizer backed by HuggingFace's *tokenizers* library, based on a BPE (SentencePiece) model."""
 
