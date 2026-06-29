@@ -17,6 +17,7 @@ import collections
 import contextlib
 import copy
 import doctest
+import errno
 import functools
 import gc
 import importlib
@@ -2762,6 +2763,41 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: float | None = 2):
         jitter=wait_before_retry is not None,
         exceptions=(httpx.HTTPError,),
     )
+
+
+def use_temp_cache_if_readonly(test_case):
+    """
+    Decorator for tests that call `from_pretrained` with a model not yet present in a shared,
+    read-only CI cache. On the first attempt the test runs normally; if a read-only filesystem
+    error is raised, the test is transparently retried inside a writable temporary directory.
+
+    The HuggingFace Hub cache constants (`HF_HUB_CACHE`, `HF_XET_CACHE`) are resolved at
+    import time, so they must be patched directly rather than via environment variables.
+
+    Usage::
+
+        @use_temp_cache_if_readonly
+        def test_my_new_model(self):
+            model = AutoModel.from_pretrained("org/new-model")
+    """
+
+    @functools.wraps(test_case)
+    def wrapper(*args, **kwargs):
+        try:
+            return test_case(*args, **kwargs)
+        except OSError as exc:
+            if exc.errno != errno.EROFS:
+                raise
+            import huggingface_hub.constants as hf_constants
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                with (
+                    mock.patch.object(hf_constants, "HF_HUB_CACHE", tmpdir),
+                    mock.patch.object(hf_constants, "HF_XET_CACHE", tmpdir),
+                ):
+                    return test_case(*args, **kwargs)
+
+    return wrapper
 
 
 def run_first(test_case):
