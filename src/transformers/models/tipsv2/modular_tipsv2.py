@@ -391,12 +391,12 @@ class Tipsv2VisionModel(Dinov2WithRegistersModel):
 
         ```python
         >>> import torch
-        >>> from transformers import AutoConfig, Tipsv2VisionModel, AutoImageProcessor
+        >>> from transformers import AutoConfig, AutoImageProcessor, AutoModel
         >>> from transformers.image_utils import load_image
 
         >>> model_id = "google/tipsv2-b14"
         >>> config = AutoConfig.from_pretrained(model_id)
-        >>> model = Tipsv2VisionModel.from_pretrained(model_id, config=config.vision_config, device_map="auto")
+        >>> model = AutoModel.from_pretrained(model_id, config=config.vision_config, device_map="auto")
         >>> image_processor = AutoImageProcessor.from_pretrained(model_id)
 
         >>> image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -410,7 +410,7 @@ class Tipsv2VisionModel(Dinov2WithRegistersModel):
         >>> cls_token_1 = sequence[:, 0]  # supervised by web alt-text captions
         >>> cls_token_2 = sequence[:, 1 : 1 + model.config.num_register_tokens]  # supervised by synthetic captions
         ```"""
-        return super().forward(pixel_values, bool_masked_pos=bool_masked_pos, **kwargs)
+        return super().forward(**kwargs)
 
 
 class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
