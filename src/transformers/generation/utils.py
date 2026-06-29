@@ -2019,6 +2019,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         kwargs_has_attention_mask: bool | None = None,
         device: torch.device | str | None = None,
+        batch_size: int | None = None,
     ):
         """
         Prepares the special tokens for generation, overwriting the generation config with their processed versions
@@ -2043,6 +2044,7 @@ class GenerationMixin(ContinuousMixin):
         eos_token_tensor = _tensor_or_none(generation_config.eos_token_id, device=device)
         pad_token_tensor = _tensor_or_none(generation_config.pad_token_id, device=device)
         decoder_start_token_tensor = _tensor_or_none(generation_config.decoder_start_token_id, device=device)
+        is_batched_sequence = batch_size is None or batch_size > 1
 
         # for BC we also try to get `decoder_start_token_id` or `bos_token_id` (#30892)
         if self.config.is_encoder_decoder:
@@ -2056,13 +2058,13 @@ class GenerationMixin(ContinuousMixin):
 
         # Set pad token if unset (and there are conditions to do so)
         if pad_token_tensor is None and eos_token_tensor is not None:
-            if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
+            # Only emits the warnings if batch_size>1, as batch_size==1 means no padding, thus no problems
+            if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask and is_batched_sequence:
                 logger.warning(
-                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
-                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+                    "The attention mask and the pad token id were not set, with a batched input. As a consequence, you may "
+                    "observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
             pad_token_tensor = eos_token_tensor[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
 
         # Sanity checks/warnings
         if self.config.is_encoder_decoder and decoder_start_token_tensor is None:
@@ -2070,10 +2072,11 @@ class GenerationMixin(ContinuousMixin):
                 "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
             )
         if eos_token_tensor is not None and torch.isin(eos_token_tensor, pad_token_tensor).any():
-            if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
+            # Only emits the warning if batch_size>1, as batch_size==1 means no padding, thus no problems
+            if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask and is_batched_sequence:
                 logger.warning_once(
-                    "The attention mask is not set and cannot be inferred from input because pad token is same as "
-                    "eos token. As a consequence, you may observe unexpected behavior. Please pass your input's "
+                    "The attention mask is not set with a batched input, and cannot be inferred from input because pad token "
+                    "is same as eos token. As a consequence, you may observe unexpected behavior. Please pass your input's "
                     "`attention_mask` to obtain reliable results."
                 )
         if eos_token_tensor is not None and (
@@ -2495,7 +2498,9 @@ class GenerationMixin(ContinuousMixin):
         batch_size = inputs_tensor.shape[0]
 
         device = inputs_tensor.device
-        self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)
+        self._prepare_special_tokens(
+            generation_config, kwargs_has_attention_mask, device=device, batch_size=batch_size
+        )
 
         # decoder-only models must use left-padding for batched generation.
         if not self.config.is_encoder_decoder:
