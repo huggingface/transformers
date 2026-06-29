@@ -3035,6 +3035,60 @@ class TestAttentionImplementation(unittest.TestCase):
         with self.assertRaisesRegex(KeyError, "`foobar` is not a valid experts implementation registered"):
             _ = experts_module(hidden_states, dummy_indices, dummy_scores)
 
+    def test_can_set_attn_returns_false_when_module_missing(self):
+        # Simulate the "module cleared from sys.modules" case (test cleanup, REPL).
+        from transformers.models.llama.modeling_llama import LlamaModel
+
+        original = sys.modules.pop(LlamaModel.__module__)
+        try:
+            self.assertFalse(LlamaModel._can_set_attn_implementation())
+            self.assertFalse(LlamaModel._can_set_experts_implementation())
+        finally:
+            sys.modules[LlamaModel.__module__] = original
+
+    def test_can_set_attn_skips_torch_dynamic_wrappers(self):
+        # Simulate FSDP2's `FSDP<ModelName>`: a dynamic subclass whose __module__ lives under torch.*
+        from transformers.models.llama.modeling_llama import LlamaModel
+
+        FSDPLlamaModel = type("FSDPLlamaModel", (LlamaModel,), {})
+        FSDPLlamaModel.__module__ = "torch.distributed.fsdp._fully_shard._fsdp_state"
+
+        # The MRO walk should skip past FSDPLlamaModel to LlamaModel and find the underlying answer.
+        self.assertTrue(FSDPLlamaModel._can_set_attn_implementation())
+
+    def test_can_set_attn_modern_vs_legacy(self):
+        # Modern interface model: True. Legacy model (T5 doesn't use ALL_ATTENTION_FUNCTIONS): False.
+        from transformers.models.llama.modeling_llama import LlamaModel
+        from transformers.models.t5.modeling_t5 import T5Model
+
+        self.assertTrue(LlamaModel._can_set_attn_implementation())
+        self.assertFalse(T5Model._can_set_attn_implementation())
+
+    def test_can_set_attn_legacy_edge_cases(self):
+        # FSMT: bare `class Attention(nn.Module):` -- tightened regex catches this case.
+        from transformers.models.fsmt.modeling_fsmt import FSMTModel
+
+        self.assertFalse(FSMTModel._can_set_attn_implementation())
+
+        # SLANet: `class SLANetAttentionGRUCell(nn.Module):` -- "Attention" not at end of class name.
+        from transformers.models.slanet.modeling_slanet import SLANetBackbone
+
+        self.assertFalse(SLANetBackbone._can_set_attn_implementation())
+
+        # ShieldGemma2: output dataclass with "Attention" in the name but no `nn.Module` parent.
+        # No actual Attention class -> assume True (multimodal model or inherits from elsewhere).
+        from transformers.models.shieldgemma2.modeling_shieldgemma2 import ShieldGemma2ForImageClassification
+
+        self.assertTrue(ShieldGemma2ForImageClassification._can_set_attn_implementation())
+
+    def test_can_set_experts_moe_vs_dense(self):
+        # MoE model with @use_experts_implementation: True. Non-MoE model: False.
+        from transformers.models.llama.modeling_llama import LlamaModel
+        from transformers.models.mixtral.modeling_mixtral import MixtralModel
+
+        self.assertTrue(MixtralModel._can_set_experts_implementation())
+        self.assertFalse(LlamaModel._can_set_experts_implementation())
+
 
 @require_torch
 class TestTensorSharing(TestCasePlus):
