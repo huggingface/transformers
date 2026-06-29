@@ -89,6 +89,10 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
             )
 
     @property
+    def model_input_names(self):
+        return super().model_input_names + ["num_delay_tokens"]
+
+    @property
     def mistral_common_audio_config(self):
         return self.tokenizer.tokenizer.instruct_tokenizer.audio_encoder.audio_config
 
