@@ -17,7 +17,11 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -50,6 +54,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
         chat_template=None,
         audio_token="<|object_ref_start|>",
         audio_downsample_rate=1,
+        default_transcription_prompt="Transcribe the audio:",
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
@@ -57,12 +62,15 @@ class FunAsrNanoProcessor(ProcessorMixin):
         audio_downsample_rate (`int`, *optional*, defaults to 1):
             Downsampling ratio applied by the audio adaptor, used to expand the audio placeholder token to the right
             number of audio tokens.
+        default_transcription_prompt (`str`, *optional*, defaults to `"Transcribe the audio:"`):
+            Default prompt to use for transcription tasks when applying transcription requests.
         """
         if tokenizer is not None and tokenizer.convert_tokens_to_ids(audio_token) is None:
             raise ValueError(f"Audio token {audio_token!r} is not present in the tokenizer vocabulary.")
 
         self.audio_token = audio_token
         self.audio_downsample_rate = audio_downsample_rate
+        self.default_transcription_prompt = default_transcription_prompt
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
@@ -99,6 +107,9 @@ class FunAsrNanoProcessor(ProcessorMixin):
                 sampling_rate=sampling_rate or audio_kwargs.get("sampling_rate"),
                 return_tensors=return_tensors,
             )
+            input_features_mask = audio_features.pop("attention_mask", None)
+            if input_features_mask is not None:
+                audio_features["input_features_mask"] = input_features_mask
 
             num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
             num_audios = len(audio)
@@ -131,6 +142,83 @@ class FunAsrNanoProcessor(ProcessorMixin):
 
         return BatchFeature(data=dict(text_inputs))
 
+    def apply_transcription_request(
+        self,
+        audio: str | list[str] | AudioInput,
+        prompt: str | list[str] | None = None,
+        **kwargs: Unpack[FunAsrNanoProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Prepare inputs for automatic speech recognition without manually writing the chat template.
+
+        Args:
+            audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                Audio to transcribe. Strings are interpreted as local paths or URLs and will be loaded automatically by
+                the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
+            prompt (`str` or `list[str]`, *optional*):
+                Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
+                each sample uses the processor's default transcription prompt.
+            **kwargs:
+                Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`] (for example
+                `text_kwargs`, `audio_kwargs`, ...).
+
+        Returns:
+            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`FunAsrNanoForConditionalGeneration.generate`].
+        """
+
+        if isinstance(audio, str):
+            audio_items = [audio]
+        elif isinstance(audio, (list, tuple)) and all(isinstance(item, str) for item in audio):
+            audio_items = list(audio)
+        else:
+            audio_items = list(make_list_of_audio(audio))
+            if is_torch_available():
+                audio_items = [
+                    item.detach().cpu().numpy() if isinstance(item, torch.Tensor) else item for item in audio_items
+                ]
+
+        batch_size = len(audio_items)
+        if batch_size == 0:
+            raise ValueError("`audio` must contain at least one sample.")
+
+        if prompt is None:
+            prompts = [self.default_transcription_prompt] * batch_size
+        elif isinstance(prompt, str):
+            prompts = [prompt] * batch_size
+        elif isinstance(prompt, (list, tuple)):
+            if len(prompt) != batch_size:
+                raise ValueError(
+                    f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
+                )
+            prompts = []
+            for item in prompt:
+                if item is None:
+                    prompts.append(self.default_transcription_prompt)
+                elif isinstance(item, str):
+                    prompts.append(item)
+                else:
+                    raise TypeError("Each prompt must be a string or `None`.")
+        else:
+            raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
+
+        conversations = []
+        for prompt_text, audio_item in zip(prompts, audio_items):
+            content = [{"type": "text", "text": prompt_text}]
+            if isinstance(audio_item, str):
+                content.append({"type": "audio", "path": audio_item})
+            else:
+                content.append({"type": "audio", "audio": audio_item})
+            conversations.append([{"role": "user", "content": content}])
+
+        return self.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            **kwargs,
+        )
+
     # `decode` and `batch_decode` are inherited from `ProcessorMixin` and forward to the tokenizer; the base `decode`
     # already handles batches, so no custom override is needed here.
 
@@ -138,7 +226,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
     def model_input_names(self):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         tokenizer_input_names = self.tokenizer.model_input_names
-        return list(dict.fromkeys(feature_extractor_input_names + tokenizer_input_names))
+        return list(dict.fromkeys(feature_extractor_input_names + tokenizer_input_names + ["input_features_mask"]))
 
 
 __all__ = ["FunAsrNanoProcessor"]
