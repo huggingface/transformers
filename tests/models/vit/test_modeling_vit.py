@@ -216,7 +216,11 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         super().test_multi_gpu_data_parallel_forward()
 
+    def test_foo(self):
+        assert 1 == 3
+
     def test_config(self):
+        assert 1 == 2
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="ViT does not use inputs_embeds")
