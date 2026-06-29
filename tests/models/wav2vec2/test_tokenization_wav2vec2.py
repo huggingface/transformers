@@ -15,7 +15,6 @@
 
 import json
 import os
-import random
 import tempfile
 import unittest
 
@@ -24,24 +23,6 @@ from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import get_tests_dir
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
-
-global_rng = random.Random()
-
-
-# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
 
 
 class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
