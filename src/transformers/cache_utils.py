@@ -930,10 +930,11 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
     def lazy_initialization(
         self, conv_states: torch.Tensor | None = None, recurrent_states: torch.Tensor | None = None
     ) -> None:
+        # Callers (`update_conv_state` / `update_recurrent_state`) already gate on the
+        # `is_..._initialized` flags, so each branch here runs at most once per layer.
         if conv_states is not None:
-            if not self.is_conv_states_initialized:
-                self.dtype, self.device = conv_states.dtype, conv_states.device
-                self.batch_size = conv_states.shape[0]
+            self.dtype, self.device = conv_states.dtype, conv_states.device
+            self.batch_size = conv_states.shape[0]
             # Even if prefill is larger/shorter than the conv_size, the tensor is always either padded or truncated
             self.conv_kernel_size = conv_states.shape[-1]
             # The shape is always static, so we init as such
@@ -942,6 +943,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             if not is_torchdynamo_compiling():
                 torch._dynamo.mark_static_address(self.conv_states)
             self.is_conv_states_initialized = True
+
         if recurrent_states is not None:
             # The shape is always static, so we init as such
             self.recurrent_states = torch.zeros_like(recurrent_states, dtype=self.dtype, device=self.device)

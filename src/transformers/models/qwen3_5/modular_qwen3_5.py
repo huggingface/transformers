@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_linear_attention_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
     GenericForTokenClassification,
@@ -543,7 +543,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention": create_linear_attention_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

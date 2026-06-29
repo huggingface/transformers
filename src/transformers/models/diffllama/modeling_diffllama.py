@@ -237,6 +237,15 @@ class DiffLlamaAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        # The Differential Transformer paper (https://huggingface.co/papers/2410.05258) does not
+        # specify how attention dropout should be applied to the differential combination, and our
+        # two-call implementation has no single softmax to share a dropout mask across. Refuse
+        # rather than pick semantics the paper doesn't define.
+        if config.attention_dropout > 0.0:
+            raise ValueError(
+                "DiffLlama does not support `attention_dropout > 0`: the differential attention "
+                "mechanism has no paper-defined dropout semantics."
+            )
         self.lambda_init = lambda_init_fn(layer_idx)
         self.lambda_q1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
         self.lambda_k1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
@@ -272,11 +281,9 @@ class DiffLlamaAttention(nn.Module):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        # Pass ``dropout=0.0`` to both calls so each backend's internal softmax-dropout is suppressed;
-        # a single Bernoulli mask is applied to the *differential* output below. This matches the
-        # one-dropout-per-layer semantics of the reference V-doubling implementation (two independent
-        # in-attention dropouts would perturb the differential by mismatched noise draws).
-        # The first call's weights are returned; the second's are mathematically identical (shared Q/K).
+        # The first call's weights are returned; the second's are mathematically identical
+        # (shared Q/K). ``config.attention_dropout > 0`` is rejected in ``__init__`` because the
+        # two calls cannot share a single softmax-dropout mask the way V-doubling did.
         attn_output1, attn_weights = attention_interface(
             self,
             query_states,
@@ -310,8 +317,6 @@ class DiffLlamaAttention(nn.Module):
         )
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
         attn_output = attn_output1 - lambda_full * attn_output2
-        if self.training and self.attention_dropout > 0.0:
-            attn_output = nn.functional.dropout(attn_output, p=self.attention_dropout, training=True)
         attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
         attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = self.o_proj(attn_output)

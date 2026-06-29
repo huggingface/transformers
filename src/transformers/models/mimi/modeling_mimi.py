@@ -676,6 +676,7 @@ class MimiAttention(nn.Module):
         self.head_dim = config.head_dim
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.max_position_embeddings = config.max_position_embeddings
         self.is_causal = True
         self.scaling = 1 / math.sqrt(config.head_dim)
 
@@ -695,7 +696,6 @@ class MimiAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
@@ -725,7 +725,6 @@ class MimiAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            position_ids=position_ids,
             sliding_window=self.sliding_window,
             **kwargs,
         )
@@ -752,7 +751,6 @@ class MimiTransformerLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = False,
@@ -767,7 +765,6 @@ class MimiTransformerLayer(GradientCheckpointingLayer):
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
@@ -804,7 +801,6 @@ class MimiTransformerModel(nn.Module):
         self.layers = nn.ModuleList(
             [MimiTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self._attn_implementation = config._attn_implementation
         self.rotary_emb = MimiRotaryEmbedding(config)
 
         self.gradient_checkpointing = False
