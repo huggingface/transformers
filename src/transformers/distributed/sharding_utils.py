@@ -291,9 +291,11 @@ class DtensorShardOperation:
                 start, end = dim_intervals[0]
                 base_slices.append(slice(start, end))
             else:
-                # TODO(3outeille): verify if this is correct.
                 if concat_dim is not None:
-                    raise ValueError("Shard-on-read only supports disjoint ranges on a single checkpoint dimension.")
+                    # NOTE(3outeille): not sure yet which scenario will have StridedShard placements on both row and column. Thus, delay implementing this for now.
+                    raise ValueError(
+                        "Current shard-on-read only supports disjoint ranges on a single checkpoint dimension."
+                    )
                 concat_dim = dim_idx
                 base_slices.append(slice(None))  # filled per piece below
 
