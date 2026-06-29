@@ -13,59 +13,19 @@
 # limitations under the License.
 import torch
 import torch.nn.functional as F
-from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
-from ..lfm2.configuration_lfm2 import Lfm2Config
+from ...utils import TransformersKwargs
 from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
     Lfm2DecoderLayer,
     Lfm2Model,
     Lfm2PreTrainedModel,
 )
-
-
-@auto_docstring(checkpoint="LiquidAI/LFM2.5-Embedding-350M")
-@strict
-class Lfm2BidirectionalConfig(Lfm2Config):
-    r"""
-    Configuration for the bidirectional (encoder) variant of LFM2, used for retrieval and embedding checkpoints such
-    as [LiquidAI/LFM2.5-Embedding-350M](https://huggingface.co/LiquidAI/LFM2.5-Embedding-350M) and
-    [LiquidAI/LFM2.5-ColBERT-350M](https://huggingface.co/LiquidAI/LFM2.5-ColBERT-350M). It shares all fields with
-    [`Lfm2Config`]; the model it points to applies bidirectional attention and a non-causal short convolution.
-
-    conv_bias (`bool`, *optional*, defaults to `False`):
-        Whether to use bias in the conv layers.
-    conv_L_cache (`int`, *optional*, defaults to 3):
-        L_cache dim in the conv layers.
-    block_multiple_of (`int`, *optional*, defaults to 256):
-        Multiple for the `intermediate_size`.
-    block_ffn_dim_multiplier (`float`, *optional*, defaults to 1.0):
-        Multiplier for the `intermediate_size`.
-    block_auto_adjust_ff_dim (`bool`, *optional*, defaults to `True`):
-        Whether to adjust the dim of the `intermediate_size`.
-    full_attn_idxs (`Optional`, *optional*):
-        Index of the layers which use attention.
-
-    ```python
-    >>> from transformers import Lfm2BidirectionalModel, Lfm2BidirectionalConfig
-
-    >>> # Initializing a bidirectional LFM2 model
-    >>> configuration = Lfm2BidirectionalConfig()
-
-    >>> # Initializing a model from the LFM2.5-Embedding-350M style configuration
-    >>> model = Lfm2BidirectionalModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
-    model_type = "lfm2_bidirectional"
+from .configuration_lfm2_bidirectional import Lfm2BidirectionalConfig
 
 
 class Lfm2BidirectionalShortConv(nn.Module):
@@ -188,4 +148,4 @@ class Lfm2BidirectionalModel(Lfm2Model):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
-__all__ = ["Lfm2BidirectionalConfig", "Lfm2BidirectionalModel", "Lfm2BidirectionalPreTrainedModel"]
+__all__ = ["Lfm2BidirectionalModel", "Lfm2BidirectionalPreTrainedModel"]
