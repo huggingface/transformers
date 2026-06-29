@@ -23,11 +23,6 @@ from ...utils import auto_docstring
 @strict
 class Lfm2BidirectionalConfig(PreTrainedConfig):
     r"""
-    Configuration for the bidirectional (encoder) variant of LFM2, used for retrieval and embedding checkpoints such
-    as [LiquidAI/LFM2.5-Embedding-350M](https://huggingface.co/LiquidAI/LFM2.5-Embedding-350M) and
-    [LiquidAI/LFM2.5-ColBERT-350M](https://huggingface.co/LiquidAI/LFM2.5-ColBERT-350M). It shares all fields with
-    [`Lfm2Config`]; the model it points to applies bidirectional attention and a non-causal short convolution.
-
     conv_bias (`bool`, *optional*, defaults to `False`):
         Whether to use bias in the conv layers.
     conv_L_cache (`int`, *optional*, defaults to 3):

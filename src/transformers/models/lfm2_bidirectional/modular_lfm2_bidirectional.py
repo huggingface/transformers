@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...masking_utils import create_bidirectional_mask
@@ -38,13 +37,14 @@ class Lfm2BidirectionalShortConv(nn.Module):
         self.L_cache = config.conv_L_cache
         self.bias = config.conv_bias
 
+        # centered (non-causal) padding so each position mixes its left and right neighbors
         self.conv = nn.Conv1d(
             in_channels=config.hidden_size,
             out_channels=config.hidden_size,
             kernel_size=self.L_cache,
             groups=config.hidden_size,
             bias=self.bias,
-            padding=self.L_cache - 1,
+            padding=self.L_cache // 2,
         )
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
@@ -55,10 +55,7 @@ class Lfm2BidirectionalShortConv(nn.Module):
         B, C, x = BCx.chunk(3, dim=-2)
         Bx = B * x
 
-        # centered conv (pad = kernel // 2 on each side) so each position mixes both neighbors
-        pad = self.conv.weight.shape[-1] // 2
-        conv_out = F.conv1d(Bx, self.conv.weight, self.conv.bias, stride=1, padding=pad, groups=Bx.shape[1])
-        conv_out = conv_out[..., :seqlen]
+        conv_out = self.conv(Bx)[..., :seqlen]
 
         y = C * conv_out
         y = y.transpose(-1, -2).contiguous()
