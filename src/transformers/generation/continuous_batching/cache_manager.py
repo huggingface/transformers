@@ -34,11 +34,11 @@ def reverse_enumerate(xs: list[T]) -> Iterator[tuple[int, T]]:
         index -= 1
 
 
-class Block:  # TODO: rename to ShareableBlock and update the docs
-    """A class to represent a block managed by the block manager. We say that a block is complete when the physical KV
-    cache it points to is fully computed. A block can have a parent, which is the block that came before in the
-    sequence. Once a block is complete, it is given a hash, which takes into account the tokens ids of the block, the
-    layer (group_id) it belong to and its parent's hash (if there is a parent)."""
+class ShareableBlock:
+    """A class to represent a block managed by the block manager that can be shared between requests. We say that a
+    block is complete when the physical KV cache it points to is fully computed. A block can have a parent, which is the
+    block that came before in the sequence. Once a block is complete, it is given a hash, which takes into account the
+    tokens ids of the block, the layer group it belongs to and its parent's hash (if there is a parent)."""
 
     def __init__(self, id_: int, parent_id: int | None, group_id: int) -> None:
         self.id: int = id_
@@ -83,7 +83,7 @@ class BlockManager:
         self._uninit_block_ids = deque(range(num_blocks))
         self._init_block_ids: dict[int, None] = {}  # effectively act as an ordered set
         self._hash_to_id: dict[int, int] = {}
-        self._id_to_block: dict[int, Block] = {}
+        self._id_to_block: dict[int, ShareableBlock] = {}
 
     @property
     def num_free_blocks(self) -> int:
@@ -122,7 +122,7 @@ class BlockManager:
         # If the block is shareable, we keep track of the allocated blocks as partial blocks
         if shareable:
             for block_id in allocated_block_ids:
-                block = Block(block_id, last_block_id, group_id)
+                block = ShareableBlock(block_id, last_block_id, group_id)
                 self._id_to_block[block_id] = block
                 last_block_id = block_id
         # In both cases, we return the allocated block ids
@@ -228,7 +228,7 @@ class BlockManager:
         of (prompt_ids) is used to compute the hash of the new block."""
         # Look for the first complete block, starting from the last block in the sequence
         parent_hash = None
-        incomplete_blocks: list[tuple[int, Block]] = []
+        incomplete_blocks: list[tuple[int, ShareableBlock]] = []
         for i, block_id in reverse_enumerate(allocated_blocks):
             block = self._id_to_block[block_id]
             if block.is_complete:
