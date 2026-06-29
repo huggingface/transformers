@@ -12,19 +12,45 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Fun-ASR-Nano checkpoint to HuggingFace Transformers format.
+"""Convert Fun-ASR-Nano checkpoint to Hugging Face Transformers format.
 
-Example commands:
+Usage:
+
+1) Download the original Fun-ASR-Nano checkpoint:
 
 ```bash
-python -m transformers.models.fun_asr_nano.convert_fun_asr_nano_to_hf \
-    --model_path /path/to/Fun-ASR-Nano-2512 \
-    --output_path /tmp/fun-asr-nano-hf
+huggingface-cli download FunAudioLLM/Fun-ASR-Nano-2512 \
+    --local-dir /path/to/Fun-ASR-Nano-2512
+```
 
-python -m transformers.models.fun_asr_nano.convert_fun_asr_nano_to_hf \
+2) Run the conversion script:
+
+```bash
+python src/transformers/models/fun_asr_nano/convert_fun_asr_nano_to_hf.py \
     --model_path /path/to/Fun-ASR-Nano-2512 \
-    --output_path /tmp/fun-asr-nano-hf \
-    --push_to_hub --hub_model_id FunAudioLLM/Fun-ASR-Nano-2512-hf
+    --output_path ./fun-asr-nano-hf
+```
+
+3) Verify the converted checkpoint can be loaded:
+
+```bash
+python - <<'PY'
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+
+model_id = "./fun-asr-nano-hf"
+AutoProcessor.from_pretrained(model_id)
+AutoModelForSpeechSeq2Seq.from_pretrained(model_id)
+PY
+```
+
+4) Optionally push the converted checkpoint to the Hub:
+
+```bash
+python src/transformers/models/fun_asr_nano/convert_fun_asr_nano_to_hf.py \
+    --model_path /path/to/Fun-ASR-Nano-2512 \
+    --output_path ./fun-asr-nano-hf \
+    --push_to_hub \
+    --hub_model_id your-username/Fun-ASR-Nano-2512-hf
 ```
 """
 
