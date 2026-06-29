@@ -125,13 +125,13 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_mamba_chunked_prefill_cpu(self):
+    def test_mamba2_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
 
     @require_torch_accelerator
     @require_kernels
-    def test_mamba_chunked_prefill_torch_device(self):
+    def test_mamba2_chunked_prefill_torch_device(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device=torch_device)
 

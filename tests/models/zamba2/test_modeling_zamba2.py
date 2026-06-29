@@ -400,13 +400,13 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    def test_zamba2_chunked_prefill_cpu(self):
+    def test_mamba2_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs, device="cpu")
 
     @require_torch_accelerator
     @require_kernels
-    def test_zamba2_chunked_prefill_torch_device(self):
+    def test_mamba2_chunked_prefill_torch_device(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs, device=torch_device)
 
