@@ -330,7 +330,7 @@ def register_quantizer(name: str):
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent):
     # TODO: ask moonshot to duplicate quantization-config at high level!
     pre_quantized = (
-        getattr(config, "quantization_config") is not None
+        getattr(config, "quantization_config", None) is not None
         or getattr(config.get_text_config(), "quantization_config", None) is not None
     )
     if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.text_config.quantization_config):
