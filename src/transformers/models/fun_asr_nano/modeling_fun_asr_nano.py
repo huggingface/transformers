@@ -643,7 +643,6 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
             ):
                 if feature_lengths is None and input_features_mask is not None:
                     feature_lengths = input_features_mask.sum(-1).to(torch.long)
-
                 audio_embeds, audio_embed_lens = self._get_audio_embeds(input_features, feature_lengths)
 
                 # Mask and scatter audio embeddings into token positions

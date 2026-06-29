@@ -608,6 +608,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         input_features: torch.FloatTensor | None = None,
         feature_lengths: torch.LongTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: tuple | None = None,
@@ -622,6 +623,8 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
             Audio features after LFR stacking.
         feature_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each audio feature sequence.
+        input_features_mask (`torch.Tensor` of shape `(batch_size, time)`, *optional*):
+            Padding mask for the audio feature sequence.
         """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -639,6 +642,8 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
                 and input_ids.shape[1] != 1
                 and special_audio_mask.any()
             ):
+                if feature_lengths is None and input_features_mask is not None:
+                    feature_lengths = input_features_mask.sum(-1).to(torch.long)
                 audio_embeds, audio_embed_lens = self._get_audio_embeds(input_features, feature_lengths)
 
                 # Mask and scatter audio embeddings into token positions
@@ -719,6 +724,7 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
         input_ids: torch.LongTensor | None = None,
         input_features: torch.FloatTensor | None = None,
         feature_lengths: torch.LongTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: tuple | None = None,
@@ -735,6 +741,8 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
             Audio features after LFR stacking.
         feature_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each audio feature sequence.
+        input_features_mask (`torch.Tensor` of shape `(batch_size, time)`, *optional*):
+            Padding mask for the audio feature sequence.
 
         Example:
 
@@ -749,6 +757,7 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
             input_ids=input_ids,
             input_features=input_features,
             feature_lengths=feature_lengths,
+            input_features_mask=input_features_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -781,12 +790,14 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
     def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
         input_features = kwargs.pop("input_features", None)
         feature_lengths = kwargs.pop("feature_lengths", None)
+        input_features_mask = kwargs.pop("input_features_mask", None)
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["input_features"] = input_features
             model_inputs["feature_lengths"] = feature_lengths
+            model_inputs["input_features_mask"] = input_features_mask
 
         return model_inputs
 
