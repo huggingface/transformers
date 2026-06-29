@@ -202,18 +202,29 @@ class DtensorShardOperation:
     def _apply_strided_shard(
         self, intervals: list[tuple[int, int]], rank: int, world_size: int, split_factor: int
     ) -> list[tuple[int, int]]:
-        narrowed = []
-        for start, end in intervals:
-            group_size = math.ceil((end - start) / split_factor)
+        local_intervals = []
+
+        for interval_start, interval_end in intervals:
+            # For each interval, we break it into split_factor consecutive groups.
+            group_width = math.ceil((interval_end - interval_start) / split_factor)
+
             for group_idx in range(split_factor):
-                group_start = start + group_idx * group_size
-                group_end = min(group_start + group_size, end)
-                if group_end <= group_start:
-                    continue
-                size, offset = Shard.local_shard_size_and_offset(group_end - group_start, world_size, rank)
-                if size > 0:
-                    narrowed.append((group_start + offset, group_start + offset + size))
-        return narrowed
+                # Compute this group's boundaries in source coordinates.
+                group_start = interval_start + group_idx * group_width
+                group_end = min(group_start + group_width, interval_end)
+                group_len = group_end - group_start
+
+                if group_len > 0:
+                    # Inside each group, we do a normal contiguous shard across world_size ranks.
+                    local_shard_size, local_shard_offset = Shard.local_shard_size_and_offset(
+                        group_len, world_size, rank
+                    )
+                    if local_shard_size > 0:
+                        # Convert group-local offset back to global source coordinates.
+                        shard_start = group_start + local_shard_offset
+                        local_intervals.append((shard_start, shard_start + local_shard_size))
+
+        return local_intervals
 
     def _apply_contiguous_shard(
         self, intervals: list[tuple[int, int]], rank: int, world_size: int
