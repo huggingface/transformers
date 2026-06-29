@@ -649,7 +649,7 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         self.assertLess(sliding_mask[0, 0, 11, 5].item(), -1000)
 
         # Verify that causal masking still applies correctly to text
-        # Token 12 (text) looking ahead to Token 11 (image) is masked
+        # Token 11 (image) looking ahead at Token 12 (text) -> MASKED
         self.assertLess(full_mask[0, 0, 11, 12].item(), -1000)
 
 
