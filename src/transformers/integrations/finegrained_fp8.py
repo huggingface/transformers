@@ -76,9 +76,9 @@ def _first_attr(obj, *names):
 class FineGrainedFP8:
     """Entry points exposed by the `kernels-community/finegrained-fp8` Triton kernel."""
 
-    matmul: Callable
-    batched_matmul: Callable
-    grouped_matmul: Callable
+    matmul_2d: Callable
+    matmul_batched: Callable
+    matmul_grouped: Callable
     moe_fused_grouped: Callable
     moe_fused_batched: Callable
 
@@ -106,18 +106,18 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             "has a build matching the current torch/CUDA."
         )
 
-    matmul = getattr(kernel, "matmul_2d", None)
-    batched_matmul = getattr(kernel, "matmul_batched", None)
-    grouped_matmul = getattr(kernel, "matmul_grouped", None)
+    matmul_2d = getattr(kernel, "matmul_2d", None)
+    matmul_batched = getattr(kernel, "matmul_batched", None)
+    matmul_grouped = getattr(kernel, "matmul_grouped", None)
     moe_fused_grouped = getattr(kernel, "moe_fused_grouped", None)
     moe_fused_batched = getattr(kernel, "moe_fused_batched", None)
 
     missing = [
         name
         for name, attr in [
-            ("matmul_2d", matmul),
-            ("matmul_batched", batched_matmul),
-            ("matmul_grouped", grouped_matmul),
+            ("matmul_2d", matmul_2d),
+            ("matmul_batched", matmul_batched),
+            ("matmul_grouped", matmul_grouped),
             ("moe_fused_grouped", moe_fused_grouped),
             ("moe_fused_batched", moe_fused_batched),
         ]
@@ -131,9 +131,9 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
         )
 
     return FineGrainedFP8(
-        matmul=matmul,
-        batched_matmul=batched_matmul,
-        grouped_matmul=grouped_matmul,
+        matmul_2d=matmul_2d,
+        matmul_batched=matmul_batched,
+        matmul_grouped=matmul_grouped,
         moe_fused_grouped=moe_fused_grouped,
         moe_fused_batched=moe_fused_batched,
     )
@@ -200,7 +200,7 @@ def finegrained_fp8_linear(
     dispatcher routes FP4 (``int8``-packed) weights automatically.
     """
     finegrained_fp8 = load_finegrained_fp8_kernel()
-    output = finegrained_fp8.matmul(
+    output = finegrained_fp8.matmul_2d(
         input,
         weight,
         weight_scale_inv,
@@ -396,7 +396,7 @@ class FP8GroupedLinear(FP8Linear):
         offsets = torch.arange(1, self.n_groups + 1, device=x.device, dtype=torch.int32) * tokens_per_group
 
         finegrained_fp8 = load_finegrained_fp8_kernel()
-        y = finegrained_fp8.grouped_matmul(
+        y = finegrained_fp8.matmul_grouped(
             x,
             w,
             scale_inv,
@@ -445,7 +445,7 @@ def fp8_batched_mm_experts_forward(
     weight_scale_down = to_local(self.down_proj_scale_inv)
 
     # --- Up projection per expert (FP8 batched) ---
-    proj_out = finegrained_fp8.batched_matmul(
+    proj_out = finegrained_fp8.matmul_batched(
         selected_hidden_states,
         weight_up,
         weight_scale_up,
@@ -462,7 +462,7 @@ def fp8_batched_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 batched) ---
-    proj_out = finegrained_fp8.batched_matmul(
+    proj_out = finegrained_fp8.matmul_batched(
         proj_out,
         weight_down,
         weight_scale_down,
@@ -533,7 +533,7 @@ def fp8_grouped_mm_experts_forward(
     weight_scale_down = to_local(self.down_proj_scale_inv)
 
     # --- Up projection per expert (FP8 grouped) ---
-    proj_out = finegrained_fp8.grouped_matmul(
+    proj_out = finegrained_fp8.matmul_grouped(
         selected_hidden_states_g,
         weight_up,
         weight_scale_up,
@@ -551,7 +551,7 @@ def fp8_grouped_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 grouped) ---
-    proj_out = finegrained_fp8.grouped_matmul(
+    proj_out = finegrained_fp8.matmul_grouped(
         proj_out,
         weight_down,
         weight_scale_down,
