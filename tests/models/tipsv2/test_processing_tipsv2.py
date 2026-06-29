@@ -25,7 +25,7 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class Tipsv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Tipsv2Processor
-    model_id = "guarin/tipsv2-b14"  # TODO: switch to google repo
+    model_id = "google/tipsv2-b14"
     image_text_kwargs_max_length = 64
     image_text_kwargs_override_max_length = 32
     image_unstructured_max_length = 48
