@@ -3603,3 +3603,84 @@ class DisableMmapLoadingTest(unittest.TestCase):
         self.assertEqual(set(loaded_mmap.keys()), set(loaded_no_mmap.keys()))
         for k in loaded_mmap:
             torch.testing.assert_close(loaded_mmap[k], loaded_no_mmap[k])
+
+
+@require_torch
+class RemoteAndCustomCodeModelTests(unittest.TestCase):
+    def test_remote_code_registration(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`
+        """
+        model = AutoModel.from_pretrained("hf-internal-testing/dummy_remote_code", trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(model.is_remote_code())
+        self.assertFalse(model.__class__.__module__.startswith("transformers."))
+
+    def test_remote_code_registration_with_model_type_collision(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`, even if the `model_type` registered in the custom model is the same as an existing one
+        in the library. In this case, we should also be able to load the native model if `trust_remote_code=False` after registration.
+        """
+
+        # This remote model uses "llama" as model_type, same to our llama inside the lib
+        model_name = "hf-internal-testing/dummy_remote_code_collision_model_type"
+        custom_model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(custom_model.is_remote_code())
+        self.assertFalse(custom_model.__class__.__module__.startswith("transformers."))
+        # Check the config as well
+        self.assertFalse(custom_model.config.__class__.__module__.startswith("transformers."))
+
+        # Check that if we do NOT use `trust_remote_code=True`, then the registration of the same model type before it will not force
+        # a model type of the wrong type, i.e. we use the native LlamaModel
+        native_model = AutoModel.from_pretrained("hf-internal-testing/tiny-llama")
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertFalse(native_model.is_remote_code())
+        self.assertTrue(native_model.__class__.__module__.startswith("transformers."))
+        # Check the config as well
+        self.assertTrue(native_model.config.__class__.__module__.startswith("transformers."))
+
+    def test_remote_code_registration_with_config_and_model_type_collision(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`, even if the config class AND the `model_type` used in the custom model are the same as an
+        existing model in the library. In this case, we should also be able to load the native model if `trust_remote_code=False`
+        after registration.
+        """
+
+        model_name = "hf-internal-testing/dummy_remote_code_collision_config_and_model_type"
+        custom_model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(custom_model.is_remote_code())
+        self.assertFalse(custom_model.__class__.__module__.startswith("transformers."))
+        # Here, the config class is the original llama config even with the remote model
+        self.assertTrue(custom_model.config.__class__.__module__.startswith("transformers."))
+
+        # Check that if we do NOT use `trust_remote_code=True`, then the registration of the same model type with the
+        # same name and same config class before it will not force a model type of the wrong type, i.e. we use the native LlamaModel
+        native_model = AutoModel.from_pretrained("hf-internal-testing/tiny-llama")
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertFalse(native_model.is_remote_code())
+        self.assertTrue(native_model.__class__.__module__.startswith("transformers."))
+        # Check config as well
+        self.assertTrue(native_model.config.__class__.__module__.startswith("transformers."))
+
+    def test_custom_code_is_detected(self):
+        """Test that classes defined in the current context (user module, notebook, ...) will be detected as custom code"""
+
+        class MyNewModel(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.foo = nn.Linear(2, 2)
+                self.post_init()
+
+            def forward(self, x):
+                return self.foo(x)
+
+        # This is a type created in the current session - it should be custom code, but not remote code
+        model = MyNewModel(PreTrainedConfig())
+
+        self.assertTrue(model.is_custom_code())
+        self.assertFalse(model.is_remote_code())
