@@ -487,6 +487,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         )
         if self._should_update_post_processor:
             self.update_post_processor()
+        else:
+            # Keep the baked post-processor, but make add_bos_token/add_eos_token reflect what it does.
+            self._set_bos_eos_from_post_processor()
 
     @property
     def is_fast(self) -> bool:
@@ -544,6 +547,29 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=single, pair=pair, special_tokens=special_tokens
         )
+
+    def _set_bos_eos_from_post_processor(self):
+        """
+        Read the loaded `TemplateProcessing` post-processor and set `add_bos_token` / `add_eos_token`
+        to reflect it, *without* rebuilding the post-processor (we only touch the private flags).
+        Only `TemplateProcessing` models bos/eos; other processors (Bert/Roberta/ByteLevel/Sequence)
+        are left untouched. ponytail: first/last `SpecialToken` only; a richer template isn't decoded.
+        """
+        pp = self._tokenizer.post_processor
+        if pp is None:
+            return
+        state = json.loads(pp.__getstate__())
+        if state.get("type") != "TemplateProcessing":
+            return
+        single = state.get("single") or []
+
+        def _special_id(elem):
+            return elem["SpecialToken"]["id"] if isinstance(elem, dict) and "SpecialToken" in elem else None
+
+        if self.bos_token is not None and single and _special_id(single[0]) == self.bos_token:
+            object.__setattr__(self, "_add_bos_token", True)
+        if self.eos_token is not None and single and _special_id(single[-1]) == self.eos_token:
+            object.__setattr__(self, "_add_eos_token", True)
 
     @property
     def add_eos_token(self):
