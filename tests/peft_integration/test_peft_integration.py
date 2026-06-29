@@ -253,6 +253,31 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                         f"(expected uniform {expected}, got first values {p.flatten()[:4].tolist()})",
                     )
 
+    def test_peft_load_adapter_applies_user_key_mapping(self):
+        """
+        Regression test for https://github.com/huggingface/transformers/pull/46766: a user ``key_mapping``
+        passed to ``from_pretrained`` must reach the PEFT adapter weights, not just the base model. The fixture
+        mirrors ``vidore/colpali`` (old ``language_model.model.layers`` layout).
+        """
+        from transformers import PaliGemmaModel
+
+        model_id = "hf-internal-testing/tiny-random-paligemma-lora-key-mapping"
+        sentinel_a, sentinel_b = 0.0234, 0.0567
+
+        model = PaliGemmaModel.from_pretrained(
+            model_id, key_mapping={r"language_model\.model\.": "language_model."}
+        ).to(torch_device)
+
+        lora_params = {n: p for n, p in model.named_parameters() if "lora_A" in n or "lora_B" in n}
+        self.assertTrue(lora_params, "no LoRA parameters found on reloaded model")
+        for name, p in lora_params.items():
+            expected = sentinel_a if "lora_A" in name else sentinel_b
+            self.assertTrue(
+                torch.allclose(p, torch.full_like(p, expected)),
+                f"adapter weight {name} was not restored via key_mapping "
+                f"(expected uniform {expected}, got first values {p.flatten()[:4].tolist()})",
+            )
+
     def test_peft_load_adapter_non_moe_conversion_mapped_model(self):
         """
         Regression test for a `KeyError` in `_convert_peft_config_moe` when the base model's `model_type`
