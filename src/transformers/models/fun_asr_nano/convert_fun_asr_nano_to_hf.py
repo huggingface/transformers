@@ -57,6 +57,7 @@ python src/transformers/models/fun_asr_nano/convert_fun_asr_nano_to_hf.py \
 import argparse
 import json
 import os
+import re
 
 import torch
 import yaml
@@ -73,15 +74,17 @@ from .configuration_fun_asr_nano import (
 from .modeling_fun_asr_nano import FunAsrNanoForConditionalGeneration
 
 
-KEY_PREFIX_MAPPING = (
-    ("audio_encoder.", "model.audio_encoder."),
-    ("audio_adaptor.", "model.audio_adaptor."),
+# fmt: off
+STATE_DICT_MAPPING = {
+    r"^audio_encoder\.": r"model.audio_encoder.",
+    r"^audio_adaptor\.": r"model.audio_adaptor.",
     # Keep lm_head.weight explicitly. Although tie_word_embeddings=True, this model load path
     # does not retie lm_head from the embeddings, and the source already stores lm_head == embeddings.
     # safetensors deduplicates the shared storage, so this adds no extra disk over the embeddings.
-    ("llm.lm_head.", "lm_head."),
-    ("llm.model.", "model.language_model."),
-)
+    r"^llm\.lm_head\.": r"lm_head.",
+    r"^llm\.model\.": r"model.language_model.",
+}
+# fmt: on
 
 
 # Chat template stored in the checkpoint so that `processor.apply_chat_template` works without any
@@ -137,9 +140,9 @@ def convert_key(key: str) -> str | None:
 
     Returns `None` for keys that are not used by the generation path (e.g. the CTC / timestamp branch).
     """
-    for original_prefix, converted_prefix in KEY_PREFIX_MAPPING:
-        if key.startswith(original_prefix):
-            return converted_prefix + key[len(original_prefix) :]
+    for pattern, replacement in STATE_DICT_MAPPING.items():
+        if re.match(pattern, key):
+            return re.sub(pattern, replacement, key)
     return None
 
 
