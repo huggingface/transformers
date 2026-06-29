@@ -134,7 +134,7 @@ class DtensorShardOperation:
         if tensor_idx is None:
             if not dim_placements:
                 return source[...].to(device=device, dtype=dtype)
-         
+
             # Determine for each tensor dimension, which type of sharding operations to apply (_StridedShard or Shard) and which rank to apply it to.
             # i.e: dim 0 -> [ Strided(rank0, size=2, sf=2), Shard(rank1, size=2) ]
             # i.e: dim 1 -> [ Shard(rank0, size=2)]
@@ -218,10 +218,9 @@ class DtensorShardOperation:
     def _apply_contiguous_shard(
         self, intervals: list[tuple[int, int]], rank: int, world_size: int
     ) -> list[tuple[int, int]]:
-        # We want to find the local intervals for this rank when the total length is partitioned across world_size ranks.
         # We apply contiguous sharding to a list of intervals. Two cases:
         # 1. The intervals is a single interval -> we return the local interval for this rank.
-        # 2. The intervals are disjoint (i.e: 2D TP + FSDP, same tensor dim (fused/interleaved TP = [StridedShard(d, sf=tp_size), Shard(d)]) 
+        # 2. The intervals are disjoint (i.e: 2D TP + FSDP, same tensor dim (fused/interleaved TP = [StridedShard(d, sf=tp_size), Shard(d)])
         # -> find overlapping local intervals across the disjoint intervals.
 
         # Compute rank's local length and start offset when the total length is partitioned across world_size ranks.
