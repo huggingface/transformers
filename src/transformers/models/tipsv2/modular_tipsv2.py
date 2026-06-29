@@ -415,11 +415,8 @@ class Tipsv2VisionModel(Dinov2WithRegistersModel):
 
 class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
     def __init__(self, config: "Tipsv2Config | Tipsv2VisionConfig"):
-        if isinstance(config, Tipsv2Config):  # for compatibility with AutoBackbone
-            config = config.vision_config
-            super().__init__(config)
-        else:
-            super().__init__(config)
+        # reassign config to vision_config for compatibility with AutoBackbone
+        super().__init__(config := config.vision_config if isinstance(config, Tipsv2Config) else config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = Tipsv2VisionEmbeddings(config)
         self.encoder = Tipsv2VisionEncoder(config)
