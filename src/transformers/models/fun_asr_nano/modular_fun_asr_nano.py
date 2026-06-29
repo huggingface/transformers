@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch Fun-ASR-Nano model."""
 
-import math
 from dataclasses import dataclass
 
 import torch
@@ -32,6 +31,7 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, is_torch_available, logging
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..qwen3_omni_moe.modeling_qwen3_omni_moe import SinusoidsPositionEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -435,21 +435,35 @@ class FunAsrNanoCausalLMOutput(ModelOutput):
     audio_hidden_states: torch.FloatTensor | None = None
 
 
-class FunAsrNanoSinusoidalPositionEncoder(nn.Module):
-    """Sinusoidal positional encoding generated on the fly."""
+class FunAsrNanoSinusoidalPositionEncoder(SinusoidsPositionEmbedding):
+    """Fun-ASR-Nano sinusoidal positional encoding.
+
+    The shared helper starts at position 0, while the original FunASR encoder starts at position 1.
+    """
+
+    def __init__(self, channels: int, length: int = 2049, max_timescale: int = 10000):
+        super().__init__(length, channels, max_timescale=max_timescale)
+
+    def _resize(self, length: int):
+        expanded = SinusoidsPositionEmbedding(length, self.channels, self.max_timescale)
+        self.length = length
+        self.register_buffer(
+            "positional_embedding",
+            expanded.positional_embedding.to(
+                device=self.positional_embedding.device, dtype=self.positional_embedding.dtype
+            ),
+            persistent=False,
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        batch_size, timesteps, input_dim = x.size()
-        positions = torch.arange(1, timesteps + 1, device=x.device, dtype=x.dtype).unsqueeze(0)
+        _, timesteps, input_dim = x.size()
+        if input_dim != self.channels:
+            raise ValueError(f"Expected input dimension {self.channels}, but received {input_dim}.")
+        if timesteps + 1 > self.length:
+            self._resize(timesteps + 1)
 
-        log_timescale_increment = math.log(10000.0) / (input_dim / 2 - 1)
-        inv_timescales = torch.exp(
-            torch.arange(0, input_dim // 2, device=x.device, dtype=x.dtype) * (-log_timescale_increment)
-        )
-        scaled_time = positions.unsqueeze(2) * inv_timescales.unsqueeze(0).unsqueeze(0)
-        encoding = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=2)
-
-        return x + encoding
+        encoding = self.positional_embedding[: timesteps + 1][1:].to(device=x.device, dtype=x.dtype)
+        return x + encoding.unsqueeze(0)
 
 
 class FunAsrNanoSANMAttention(nn.Module):
@@ -626,7 +640,7 @@ class FunAsrNanoEncoder(PreTrainedModel):
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__(config)
 
-        self.embed = FunAsrNanoSinusoidalPositionEncoder()
+        self.embed = FunAsrNanoSinusoidalPositionEncoder(config.input_size)
 
         self.encoders0 = nn.ModuleList(
             [
@@ -679,6 +693,17 @@ class FunAsrNanoEncoder(PreTrainedModel):
         self.tp_norm = FunAsrNanoLayerNorm(config.output_dim)
 
         self.post_init()
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, FunAsrNanoSinusoidalPositionEncoder):
+            expanded = SinusoidsPositionEmbedding(module.length, module.channels, module.max_timescale)
+            init.copy_(
+                module.positional_embedding,
+                expanded.positional_embedding.to(
+                    device=module.positional_embedding.device, dtype=module.positional_embedding.dtype
+                ),
+            )
 
     def forward(
         self,
