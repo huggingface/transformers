@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2024-09-05 and contributed to Hugging Face Transformers on 2026-06-29.*
+*This model was published in HF papers on 2024-09-05 and contributed to Hugging Face Transformers on 2026-06-22.*
 
 # MiniCPM3
 
