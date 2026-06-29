@@ -376,7 +376,6 @@ class FunAsrNanoProcessor(ProcessorMixin):
         return list(dict.fromkeys(feature_extractor_input_names + tokenizer_input_names + ["input_features_mask"]))
 
 
-
 @auto_docstring(
     custom_intro="""
     Base class for Fun-ASR-Nano outputs, with hidden states and attentions.
