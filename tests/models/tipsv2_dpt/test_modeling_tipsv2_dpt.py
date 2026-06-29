@@ -275,13 +275,11 @@ def prepare_img():
 class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        # TODO: switch to google repo before merge
-        return Tipsv2DptImageProcessor.from_pretrained("guarin/tipsv2-b14-dpt")
+        return Tipsv2DptImageProcessor.from_pretrained("google/tipsv2-b14-dpt")
 
     @slow
     def test_inference_model(self):
-        # TODO: switch to google repo before merge
-        model = Tipsv2DptForDensePrediction.from_pretrained("guarin/tipsv2-b14-dpt", device_map=torch_device).eval()
+        model = Tipsv2DptForDensePrediction.from_pretrained("google/tipsv2-b14-dpt", device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor

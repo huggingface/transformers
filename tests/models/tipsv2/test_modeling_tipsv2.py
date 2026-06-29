@@ -419,14 +419,12 @@ def prepare_img():
 class Tipsv2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        # TODO: switch to google repo before merge
-        return Tipsv2Processor.from_pretrained("guarin/tipsv2-b14")
+        return Tipsv2Processor.from_pretrained("google/tipsv2-b14")
 
     @slow
     @require_sentencepiece
     def test_inference(self):
-        # TODO: switch to google repo before merge
-        model = Tipsv2Model.from_pretrained("guarin/tipsv2-b14", device_map=torch_device).eval()
+        model = Tipsv2Model.from_pretrained("google/tipsv2-b14", device_map=torch_device).eval()
 
         text_queries = ["two cats on a sofa", "a cat lying down", "a dog on a couch", "an empty room"]
         processor = self.default_processor

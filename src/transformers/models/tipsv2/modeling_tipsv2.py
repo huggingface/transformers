@@ -33,7 +33,7 @@ from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, EmbeddingAccessMixin, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -491,7 +491,7 @@ class Tipsv2VisionEncoder(Tipsv2VisionPreTrainedModel):
 
 
 @auto_docstring
-class Tipsv2VisionModel(Tipsv2VisionPreTrainedModel, EmbeddingAccessMixin):
+class Tipsv2VisionModel(Tipsv2VisionPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = {"text_encoder"}
 
     def __init__(self, config: Tipsv2VisionConfig):
@@ -921,7 +921,7 @@ class Tipsv2TextPreTrainedModel(PreTrainedModel):
     The TIPSv2 text tower without any projection head on top.
     """
 )
-class Tipsv2TextModel(Tipsv2TextPreTrainedModel, EmbeddingAccessMixin):
+class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
     _input_embed_layer = "token_embedding"
 
     def __init__(self, config: Tipsv2TextConfig):
