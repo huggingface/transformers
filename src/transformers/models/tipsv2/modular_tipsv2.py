@@ -232,7 +232,7 @@ class Tipsv2TextConfig(Siglip2TextConfig):
     projection_size = AttributeError()
 
     def __post_init__(self, **kwargs):
-        PreTrainedConfig.__post_init__(self, **kwargs)
+        raise AttributeError("Not used")
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

@@ -131,9 +131,6 @@ class Tipsv2TextConfig(PreTrainedConfig):
     scale_sqrt_depth: bool = True
     pooling_epsilon: float = 1e-8
 
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         super().validate_architecture()
