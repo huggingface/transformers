@@ -223,6 +223,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         loss_tolerance,
         model_accepts_loss_kwargs=True,
         compute_loss_func=None,
+        label_smoothing_factor=0.0,
     ):
         """
         Train twice with the same effective batch (base_batch_size vs gas_batch_size * gas_steps)
@@ -230,6 +231,8 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         """
         model_name = self._ga_model_name
         args_kwargs = {"logging_steps": 1, "max_steps": 3, "learning_rate": 1e-4, "max_grad_norm": 0.0}
+        if label_smoothing_factor:
+            args_kwargs["label_smoothing_factor"] = label_smoothing_factor
         trainer_kwargs = {"train_dataset": self._ga_dataset, "data_collator": self._ga_data_collator}
         if compute_loss_func is not None:
             trainer_kwargs["compute_loss_func"] = compute_loss_func
@@ -311,6 +314,22 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             gas_steps=8,
             loss_tolerance=0.001,
             compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
+        )
+
+    def test_gradient_accumulation_grad_norm_with_label_smoothing(self):
+        """
+        With label_smoothing_factor > 0 the Trainer computes the loss through LabelSmoother
+        instead of the model. LabelSmoother must reduce over num_items_in_batch so grad norms
+        and losses match between a large-batch baseline and an equivalent GAS run. Before the
+        fix LabelSmoother mean-reduced over the current micro-batch only, so the GAS grad norm
+        was inflated by roughly gas_steps.
+        """
+        # Tight tolerance: num_items_in_batch properly averages the smoothed loss across micro-batches
+        self._check_gradient_accumulation(
+            base_batch_size=8, gas_batch_size=1, gas_steps=8, loss_tolerance=0.001, label_smoothing_factor=0.1
+        )
+        self._check_gradient_accumulation(
+            base_batch_size=8, gas_batch_size=4, gas_steps=2, loss_tolerance=0.001, label_smoothing_factor=0.1
         )
 
     @require_torch_non_multi_accelerator

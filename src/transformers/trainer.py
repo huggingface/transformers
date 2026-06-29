@@ -2007,9 +2007,9 @@ class Trainer:
                 else unwrapped_model._get_name()
             )
             if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
-                loss = self.label_smoother(outputs, labels, shift_labels=True)
+                loss = self.label_smoother(outputs, labels, shift_labels=True, num_items_in_batch=num_items_in_batch)
             else:
-                loss = self.label_smoother(outputs, labels)
+                loss = self.label_smoother(outputs, labels, num_items_in_batch=num_items_in_batch)
         else:
             if isinstance(outputs, dict) and "loss" not in outputs:
                 raise ValueError(
