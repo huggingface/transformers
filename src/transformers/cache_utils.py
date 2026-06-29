@@ -1399,10 +1399,13 @@ class Cache:
 
     @property
     def batch_size(self) -> int:
-        """Return the batch size of the cache"""
+        """Return the batch size of the cache, or ``-1`` if no layer has been initialized yet
+        (e.g. an all-linear-attention cache queried before the first forward)."""
         # ``LinearAttentionLayer`` sets ``batch_size`` lazily — skip layers that haven't been
         # initialized yet (``generate`` queries this on a fresh cache during cache-reuse checks).
         values = [layer.batch_size for layer in self.layers if hasattr(layer, "batch_size")]
+        if not values:
+            return -1
         if len(set(values)) > 1:
             raise ValueError(f"The batch size is not consistent across layers: {values}")
         return values[0]

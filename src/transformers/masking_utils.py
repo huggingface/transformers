@@ -20,7 +20,11 @@ from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
 from .utils.generic import GeneralInterface, is_flash_attention_requested
-from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_tracing
+from .utils.import_utils import (
+    is_torch_flex_attn_available,
+    is_torch_greater_or_equal,
+    is_tracing,
+)
 
 
 if is_torch_flex_attn_available():
@@ -1462,15 +1466,21 @@ def create_linear_attention_mask(
 ) -> torch.Tensor | None:
     """Return the 2D padding mask for mamba / linear-attention layers, sized to the local sequence.
 
-    Returns ``None`` when the input mask is missing, is already a custom 4D attention mask (no 2D
-    padding signal), or when the recurrent state already covers past tokens (cached forwards) —
-    in that case the consumer skips masking entirely. Otherwise we trim the mask to the trailing
-    ``inputs_embeds.shape[1]`` positions so it aligns with the current forward's local sequence
-    and the consumer can multiply directly without further slicing.
+    Returns ``None`` (so the consumer skips masking entirely) when any of:
+    - the input mask is missing or is already a custom 4D attention mask (no 2D padding signal);
+    - the recurrent state already covers past tokens (cached forwards);
+    - the mask is all-ones (un-padded batch — the masking multiply would be a no-op), skipped
+      only outside trace/compile so the graph specialisation stays stable.
+
+    Otherwise we trim the mask to the trailing ``inputs_embeds.shape[1]`` positions so it aligns
+    with the current forward's local sequence and the consumer can multiply directly without
+    further slicing.
     """
     if attention_mask is None or attention_mask.ndim != 2:
         return None
     if past_key_values is not None and past_key_values.has_previous_state():
+        return None
+    if not is_tracing(attention_mask) and torch.all(attention_mask == 1):
         return None
     # ``.contiguous()`` keeps the stride stable across decode steps so ``torch.compile`` doesn't recompile.
     return attention_mask[:, -inputs_embeds.shape[1] :].contiguous()

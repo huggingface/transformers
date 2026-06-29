@@ -516,7 +516,8 @@ class DonutSwinLayer(nn.Module):
                 torch.min(torch.tensor(input_resolution)) if torch.jit.is_tracing() else min(input_resolution)
             )
 
-    def get_attn_mask(self, height, width, dtype, device):
+    # Copied from transformers.models.swin.modeling_swin.SwinLayer.get_attn_mask
+    def get_attn_mask(self, height: int, width: int, dtype: torch.dtype, device: torch.device) -> torch.Tensor | None:
         """Build the cyclic-shift attention mask for shifted-window MSA; returns None when shift_size is 0.
 
         Each (h, w) position belongs to one of 9 cyclic-shift regions (3 along each axis), encoded
