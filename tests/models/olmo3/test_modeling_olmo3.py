@@ -13,10 +13,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch Olmo3 model."""
 
+import tempfile
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
@@ -24,13 +24,15 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    is_tensor_parallel_test,
     require_torch,
     slow,
     torch_device,
 )
+from transformers.utils import is_torchao_available
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import ids_tensor
+from ...test_tensor_parallel_mixin import _init_distributed, _test_tp_generation_quantized_impl
 
 
 if is_torch_available():
@@ -48,6 +50,17 @@ class Olmo3ModelTester(CausalLMModelTester):
         base_model_class = Olmo3Model
         sequence_classification_class = Olmo3ForSequenceClassification
 
+    def __init__(
+        self,
+        parent,
+        layer_types=[
+            "full_attention",
+            "sliding_attention",
+        ],  # we want to test both types
+        **kwargs,
+    ):
+        super().__init__(parent=parent, layer_types=layer_types, **kwargs)
+
 
 @require_torch
 class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
@@ -61,57 +74,51 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Olmo3ForCausalLM if is_torch_available() else None
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+    @is_tensor_parallel_test
+    def test_tp_generation_quantized(self):
+        # If model uses rope-theta 50k (default value), the test fails
+        # Override and set `theta=10K`
+        self._skip_if_not_supported()
 
-        # Rope only gets applied to full attention layers in Olmo3, so make all layers full attention.
-        config.layer_types = ["full_attention"] * len(config.layer_types)
+        if not is_torchao_available():
+            self.skipTest("Test requires torchao")
 
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        config = self.model_tester.get_config()
+        config.rope_parameters["full_attention"]["rope_theta"] = 10_000.0
+        config.rope_parameters["sliding_attention"]["rope_theta"] = 10_000.0
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = self.model_tester_class.base_model_class(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
+        model_class = self._get_tp_model_class()
+        max_new_tokens = 25
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_parameters = {"rope_type": scaling_type, "factor": 10.0, "rope_theta": 10_000.0}
-        scaled_model = self.model_tester_class.base_model_class(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model = model_class(config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
 
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
+                tmp_dir, model_class, max_new_tokens
+            )
 
 
+@slow
 @require_torch
-class Olmo3IntegrationTest(unittest.TestCase):
-    def setUp(self):
+class Olmo3InternalIntegrationTest(unittest.TestCase):
+    # Uses someone's personal repo, keeping it to have extensive testing
+    model = None
+    processor = None
+
+    @classmethod
+    def setUpClass(cls):
         cleanup(torch_device, gc_collect=True)
+        cls.model = Olmo3ForCausalLM.from_pretrained("shanearora/2025-sep-a-base-model", device_map="auto")
+        cls.tokenizer = AutoTokenizer.from_pretrained("allenai/dolma2-tokenizer")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo3ForCausalLM.from_pretrained("shanearora/2025-sep-a-base-model").to(
-            torch_device, dtype=torch.bfloat16
-        )
-        out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
+        out = self.model(torch.tensor(input_ids, device=torch_device)).logits.float()
         # Expected mean on dim = -1
         expectations = Expectations(
             {
@@ -129,39 +136,37 @@ class Olmo3IntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
-    @slow
     def test_model_7b_greedy_generation(self):
-        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2) the speed of light is the same for all observers. The first part of the theory is called the principle of relativity, and the second part is called the principle of the constancy of the speed of light. The theory of rel"""
+        expectations = Expectations(
+            {
+                ("cuda", None): """Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2) the speed of light is the same for all observers. The first part of the theory is called the principle of relativity, and the second part is called the principle of the constancy of the speed of light. The theory of rel""",
+            }
+        )  # fmt: skip
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("allenai/dolma2-tokenizer", device_map="auto")
-        model = Olmo3ForCausalLM.from_pretrained("shanearora/2025-sep-a-base-model", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
+        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(self.model.device)
 
         # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        generated_ids = self.model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(expectations.get_expectation(), text)
 
     @pytest.mark.torch_export_test
-    @slow
     def test_export_static_cache(self):
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
         )
 
-        olmo3_model = "shanearora/2025-sep-a-base-model"
-
-        tokenizer = AutoTokenizer.from_pretrained(olmo3_model, pad_token="</s>", padding_side="right")
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers, and 2",
         ]
-        max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
+        max_generation_length = self.tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
 
-        # Load model
-        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
+        # Load model on CPU, dont use `self.model` on `torch_device`
+        # TODO (Ilyas / export experts): should be on `torch_device`, but causes GPU OOM
+        device = "cpu"
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"
@@ -176,7 +181,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
             },
         )
         model = Olmo3ForCausalLM.from_pretrained(
-            olmo3_model,
+            "shanearora/2025-sep-a-base-model",
             device_map=device,
             dtype=dtype,
             attn_implementation=attn_implementation,
@@ -184,7 +189,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
         )
 
         prompts = ["Simply put, the theory of relativity states that "]
-        prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+        prompt_tokens = self.tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
         prompt_token_ids = prompt_tokens["input_ids"]
         max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
@@ -192,7 +197,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
         eager_generated_ids = model.generate(
             **prompt_tokens, max_new_tokens=max_new_tokens, do_sample=False, cache_implementation=cache_implementation
         )
-        eager_generated_text = tokenizer.batch_decode(eager_generated_ids, skip_special_tokens=True)
+        eager_generated_text = self.tokenizer.batch_decode(eager_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, eager_generated_text)
 
         # Static Cache + export
@@ -200,5 +205,85 @@ class Olmo3IntegrationTest(unittest.TestCase):
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )
-        ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
+        ep_generated_text = self.tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+
+
+@slow
+@require_torch
+class Olmo3IntegrationTest(unittest.TestCase):
+    model_id = "allenai/Olmo-3-7B-Instruct"
+    model = None
+    processor = None
+
+    @classmethod
+    def setUpClass(cls):
+        cleanup(torch_device, gc_collect=True)
+        cls.model = Olmo3ForCausalLM.from_pretrained(cls.model_id, device_map="auto")
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_real_model_7b_greedy_generation(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): 'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nWho would win in a fight - a dinosaur or a cow named Moo Moo?\nassistant\nThis is a fun and imaginative question! Let’s break it down:\n\n### 1. **A Dinosaur (General Case)**\nDinosaurs were a huge and diverse group, spanning from tiny feathered raptors to massive sauropods like *Brachiosaurus* or *Tyrannosaurus rex',
+            }
+        )  # fmt: skip
+
+        message = [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}]
+        inputs = self.tokenizer.apply_chat_template(
+            message, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(self.model.device)
+
+        generated_ids = self.model.generate(**inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(expectations.get_expectation(), text)
+
+    def test_real_model_7b_greedy_generation_batched(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): [
+                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nWho would win in a fight - a dinosaur or a cow named Moo Moo?\nassistant\nThis is a fun and imaginative question! Let’s break it down:\n\n### 1. **A Dinosaur (General Case)**\nDinosaurs were a huge and diverse group, spanning from tiny feathered raptors to massive sauropods like *Brachiosaurus* or *Tyrannosaurus rex',
+                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nSimply put, the theory of relativity\nassistant\nSure! In simple terms, **the theory of relativity** is Einstein’s explanation of how space, time, and gravity work. It has two main parts:\n\n1. **Special Relativity (1905):**  \n   This says that the laws of physics are the same for everyone moving at a constant speed (',
+                ],
+            }
+        )  # fmt: skip
+
+        message = [
+            [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}],
+            [{"role": "user", "content": "Simply put, the theory of relativity"}],
+        ]
+        inputs = self.tokenizer.apply_chat_template(
+            message, add_generation_prompt=True, padding=True, return_tensors="pt", return_dict=True
+        ).to(self.model.device)
+
+        generated_ids = self.model.generate(**inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        texts = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertListEqual(expectations.get_expectation(), texts)
+
+    def test_generate_beyond_sliding_window(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): """It looks like you've pasted a very lengthy and repetitive list of "This is a nice place""",
+            }
+        )  # fmt: skip
+
+        # This is larger than 4096 tokens
+        message = [
+            {
+                "role": "user",
+                "content": "This is a nice place. " * 800 + "I really enjoy the scenery,",
+            }
+        ]
+        inputs = self.tokenizer.apply_chat_template(
+            message, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(self.model.device)
+
+        input_size = inputs.input_ids.shape[-1]
+        self.assertTrue(input_size > self.model.config.sliding_window)
+
+        generated_ids = self.model.generate(**inputs, max_new_tokens=20, top_p=None, temperature=1, do_sample=False)
+        text = self.tokenizer.decode(generated_ids[0, input_size:], skip_special_tokens=True)
+        self.assertEqual(expectations.get_expectation(), text)

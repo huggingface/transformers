@@ -283,8 +283,8 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_get_image_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no image in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_output(self, return_dict: bool | None):
         pass
 
@@ -296,8 +296,8 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_get_video_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no videos in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
@@ -505,8 +505,8 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_get_audio_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no audios in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_output(self, return_dict: bool | None):
         pass
 
@@ -518,8 +518,8 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_get_video_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no videos in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
