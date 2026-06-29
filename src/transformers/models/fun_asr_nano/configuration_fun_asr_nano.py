@@ -35,19 +35,19 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
 
     input_size (`int`, *optional*, defaults to 560):
         Input feature dimension (after LFR: 80 mel bins * 7 frames = 560).
-    output_size (`int`, *optional*, defaults to 512):
+    output_dim (`int`, *optional*, defaults to 512):
         Hidden size of the encoder layers.
-    attention_heads (`int`, *optional*, defaults to 4):
+    num_attention_heads (`int`, *optional*, defaults to 4):
         Number of attention heads in each SANM layer.
-    linear_units (`int`, *optional*, defaults to 2048):
+    intermediate_size (`int`, *optional*, defaults to 2048):
         Dimension of the feedforward layer.
-    num_blocks (`int`, *optional*, defaults to 50):
+    encoder_layers (`int`, *optional*, defaults to 50):
         Number of main encoder blocks.
     tp_blocks (`int`, *optional*, defaults to 20):
         Number of timestamp prediction encoder blocks.
-    dropout_rate (`float`, *optional*, defaults to 0.1):
+    dropout (`float`, *optional*, defaults to 0.1):
         Dropout rate.
-    attention_dropout_rate (`float`, *optional*, defaults to 0.0):
+    attention_dropout (`float`, *optional*, defaults to 0.0):
         Attention dropout rate.
     kernel_size (`int`, *optional*, defaults to 11):
         Kernel size for the FSMN convolution.
@@ -68,15 +68,23 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
     """
 
     model_type = "fun_asr_nano_encoder"
+    attribute_map = {
+        "output_size": "output_dim",
+        "attention_heads": "num_attention_heads",
+        "linear_units": "intermediate_size",
+        "num_blocks": "encoder_layers",
+        "dropout_rate": "dropout",
+        "attention_dropout_rate": "attention_dropout",
+    }
 
     input_size: int = 560
-    output_size: int = 512
-    attention_heads: int = 4
-    linear_units: int = 2048
-    num_blocks: int = 50
+    output_dim: int = 512
+    num_attention_heads: int = 4
+    intermediate_size: int = 2048
+    encoder_layers: int = 50
     tp_blocks: int = 20
-    dropout_rate: float = 0.1
-    attention_dropout_rate: float = 0.0
+    dropout: float = 0.1
+    attention_dropout: float = 0.0
     kernel_size: int = 11
     sanm_shift: int = 0
     initializer_range: float = 0.02
@@ -100,13 +108,13 @@ class FunAsrNanoConfig(PreTrainedConfig):
         Token ID used as placeholder for audio features.
     adaptor_downsample_rate (`int`, *optional*, defaults to 1):
         Downsampling factor applied to the encoder sequence before projecting to the language model.
-    adaptor_ffn_dim (`int`, *optional*, defaults to 2048):
+    adaptor_intermediate_size (`int`, *optional*, defaults to 2048):
         Hidden size of the adaptor feed-forward projection.
-    adaptor_num_layers (`int`, *optional*, defaults to 2):
+    adaptor_num_hidden_layers (`int`, *optional*, defaults to 2):
         Number of adaptor transformer layers.
-    adaptor_attention_heads (`int`, *optional*, defaults to 8):
+    adaptor_num_attention_heads (`int`, *optional*, defaults to 8):
         Number of attention heads in the adaptor transformer layers.
-    adaptor_dropout_rate (`float`, *optional*, defaults to 0.0):
+    adaptor_dropout (`float`, *optional*, defaults to 0.0):
         Dropout probability used in the adaptor.
     initializer_range (`float`, *optional*, defaults to 0.02):
         Standard deviation for weight initialization.
@@ -123,7 +131,13 @@ class FunAsrNanoConfig(PreTrainedConfig):
     """
 
     model_type = "fun_asr_nano"
-    attribute_map = {"audio_token_id": "audio_token_index"}
+    attribute_map = {
+        "audio_token_id": "audio_token_index",
+        "adaptor_ffn_dim": "adaptor_intermediate_size",
+        "adaptor_num_layers": "adaptor_num_hidden_layers",
+        "adaptor_attention_heads": "adaptor_num_attention_heads",
+        "adaptor_dropout_rate": "adaptor_dropout",
+    }
     sub_configs = {
         "text_config": AutoConfig,
         "audio_encoder_config": FunAsrNanoEncoderConfig,
@@ -133,10 +147,10 @@ class FunAsrNanoConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     audio_token_index: int = 151646
     adaptor_downsample_rate: int = 1
-    adaptor_ffn_dim: int = 2048
-    adaptor_num_layers: int = 2
-    adaptor_attention_heads: int = 8
-    adaptor_dropout_rate: float = 0.0
+    adaptor_intermediate_size: int = 2048
+    adaptor_num_hidden_layers: int = 2
+    adaptor_num_attention_heads: int = 8
+    adaptor_dropout: float = 0.0
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
 

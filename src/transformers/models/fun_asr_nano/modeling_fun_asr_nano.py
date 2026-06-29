@@ -276,11 +276,11 @@ class FunAsrNanoEncoder(PreTrainedModel):
             [
                 FunAsrNanoEncoderLayer(
                     in_size=config.input_size,
-                    hidden_size=config.output_size,
-                    num_heads=config.attention_heads,
-                    linear_units=config.linear_units,
-                    dropout_rate=config.dropout_rate,
-                    attention_dropout_rate=config.attention_dropout_rate,
+                    hidden_size=config.output_dim,
+                    num_heads=config.num_attention_heads,
+                    linear_units=config.intermediate_size,
+                    dropout_rate=config.dropout,
+                    attention_dropout_rate=config.attention_dropout,
                     kernel_size=config.kernel_size,
                     sanm_shift=config.sanm_shift,
                 )
@@ -290,28 +290,28 @@ class FunAsrNanoEncoder(PreTrainedModel):
         self.encoders = nn.ModuleList(
             [
                 FunAsrNanoEncoderLayer(
-                    in_size=config.output_size,
-                    hidden_size=config.output_size,
-                    num_heads=config.attention_heads,
-                    linear_units=config.linear_units,
-                    dropout_rate=config.dropout_rate,
-                    attention_dropout_rate=config.attention_dropout_rate,
+                    in_size=config.output_dim,
+                    hidden_size=config.output_dim,
+                    num_heads=config.num_attention_heads,
+                    linear_units=config.intermediate_size,
+                    dropout_rate=config.dropout,
+                    attention_dropout_rate=config.attention_dropout,
                     kernel_size=config.kernel_size,
                     sanm_shift=config.sanm_shift,
                 )
-                for _ in range(config.num_blocks - 1)
+                for _ in range(config.encoder_layers - 1)
             ]
         )
 
         self.tp_encoders = nn.ModuleList(
             [
                 FunAsrNanoEncoderLayer(
-                    in_size=config.output_size,
-                    hidden_size=config.output_size,
-                    num_heads=config.attention_heads,
-                    linear_units=config.linear_units,
-                    dropout_rate=config.dropout_rate,
-                    attention_dropout_rate=config.attention_dropout_rate,
+                    in_size=config.output_dim,
+                    hidden_size=config.output_dim,
+                    num_heads=config.num_attention_heads,
+                    linear_units=config.intermediate_size,
+                    dropout_rate=config.dropout,
+                    attention_dropout_rate=config.attention_dropout,
                     kernel_size=config.kernel_size,
                     sanm_shift=config.sanm_shift,
                 )
@@ -319,8 +319,8 @@ class FunAsrNanoEncoder(PreTrainedModel):
             ]
         )
 
-        self.after_norm = FunAsrNanoLayerNorm(config.output_size)
-        self.tp_norm = FunAsrNanoLayerNorm(config.output_size)
+        self.after_norm = FunAsrNanoLayerNorm(config.output_dim)
+        self.tp_norm = FunAsrNanoLayerNorm(config.output_dim)
 
         self.post_init()
 
@@ -341,7 +341,7 @@ class FunAsrNanoEncoder(PreTrainedModel):
         else:
             mask = None
 
-        hidden_states = hidden_states * (self.config.output_size**0.5)
+        hidden_states = hidden_states * (self.config.output_dim**0.5)
         hidden_states = self.embed(hidden_states)
 
         all_hidden_states = () if output_hidden_states else None
@@ -440,22 +440,22 @@ class FunAsrNanoAdaptor(nn.Module):
         self.config = config
         self.downsample_rate = config.adaptor_downsample_rate
 
-        encoder_dim = config.audio_encoder_config.output_size
+        encoder_dim = config.audio_encoder_config.output_dim
         llm_dim = config.text_config.hidden_size
 
-        self.linear1 = nn.Linear(encoder_dim * config.adaptor_downsample_rate, config.adaptor_ffn_dim)
+        self.linear1 = nn.Linear(encoder_dim * config.adaptor_downsample_rate, config.adaptor_intermediate_size)
         self.relu = nn.ReLU()
-        self.linear2 = nn.Linear(config.adaptor_ffn_dim, llm_dim)
+        self.linear2 = nn.Linear(config.adaptor_intermediate_size, llm_dim)
 
-        if config.adaptor_num_layers > 0:
+        if config.adaptor_num_hidden_layers > 0:
             self.blocks = nn.ModuleList(
                 [
                     FunAsrNanoAdaptorLayer(
                         hidden_size=llm_dim,
-                        num_heads=config.adaptor_attention_heads,
-                        dropout_rate=config.adaptor_dropout_rate,
+                        num_heads=config.adaptor_num_attention_heads,
+                        dropout_rate=config.adaptor_dropout,
                     )
-                    for _ in range(config.adaptor_num_layers)
+                    for _ in range(config.adaptor_num_hidden_layers)
                 ]
             )
         else:
