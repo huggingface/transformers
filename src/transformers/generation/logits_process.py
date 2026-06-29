@@ -615,6 +615,9 @@ class TopHLogitsWarper(LogitsProcessor):
         filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
 
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
+            Minimum number of highest probability tokens that will be kept.
+
     Example:
 
     ```python
@@ -631,12 +634,14 @@ class TopHLogitsWarper(LogitsProcessor):
     ```
     """
 
-    def __init__(self, top_h: float, filter_value: float = -float("Inf")):
+    def __init__(self, top_h: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         super().__init__()
 
         # input checks
         if not (0 < top_h <= 1):
             raise ValueError("`top_h` must be in the range (0, 1].")
+        if not isinstance(min_tokens_to_keep, int) or min_tokens_to_keep < 1:
+            raise ValueError(f"`min_tokens_to_keep` has to be a positive integer, but is {min_tokens_to_keep}")
 
         # Maximum number of top tokens to consider before applying the entropy-based filter.
         # Acts as a cap for efficiency and numerical stability — increasing this allows more
@@ -645,6 +650,7 @@ class TopHLogitsWarper(LogitsProcessor):
 
         self.top_h = top_h
         self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         """
@@ -663,7 +669,7 @@ class TopHLogitsWarper(LogitsProcessor):
         batch_size, vocab_size = scores.shape
         device = scores.device
         keep_mask = torch.zeros((batch_size, vocab_size), dtype=torch.bool, device=device)
-        top_n = min(self.top_n, vocab_size)
+        top_n = min(max(self.top_n, self.min_tokens_to_keep), vocab_size)
 
         # 1. Get top-k logits and indices for the whole batch
         top_logits, top_idx = torch.topk(scores, top_n, dim=-1, largest=True, sorted=True)
@@ -688,7 +694,7 @@ class TopHLogitsWarper(LogitsProcessor):
         # exceeds the threshold τ = H(p) * top_h. This ensures diversity (via entropy) while
         # guaranteeing at least the most probable token is always included.
         selection_mask = cumulative_entropy <= tau
-        selection_mask[:, 0] = True
+        selection_mask[:, : min(self.min_tokens_to_keep, top_n)] = True
 
         # 6. Update the final keep_mask for the entire batch in one operation
         # The scatter_ operation efficiently updates the keep_mask at the indices
