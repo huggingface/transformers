@@ -163,13 +163,13 @@ Use [`Tipsv2VisionModel`] if you only need access to the vision features. In par
 
 ```python
 import torch
-from transformers import AutoConfig, Tipsv2VisionModel, AutoImageProcessor
+from transformers import AutoConfig, AutoImageProcessor, AutoModel
 from transformers.image_utils import load_image
 
 
 model_id = "google/tipsv2-b14"
 config = AutoConfig.from_pretrained(model_id)
-model = Tipsv2VisionModel.from_pretrained(model_id, config=config.vision_config, device_map="auto")
+model = AutoModel.from_pretrained(model_id, config=config.vision_config, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_id)
 
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
