@@ -771,7 +771,7 @@ class FalconModel(FalconPreTrainedModel):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             # Force mask creation for alibi
-            and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+            and_mask_function=(lambda *args: torch.tensor(True, dtype=torch.bool)) if self.use_alibi else None,
         )
         if alibi is not None and causal_mask is not None and causal_mask.ndim == 4:
             min_dtype = torch.finfo(inputs_embeds.dtype).min
