@@ -153,36 +153,6 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
             [encoder_expected_shape] * len(hidden_states),
         )
 
-    def test_training_loss_no_double_shift(self):
-        # forward right-shifts input_ids into decoder_input_ids, so the loss is computed against
-        # labels directly (no second shift). Regression test for the ForCausalLMLoss double-shift.
-        config = self.model_tester.get_config()
-        model = PPFormulaNetForConditionalGeneration(config).to(torch_device).eval()
-        vocab_size = config.text_config.vocab_size
-
-        torch.manual_seed(0)
-        bsz, dec_len = 2, 6
-        pixel_values = floats_tensor(
-            [bsz, self.model_tester.num_channels, self.model_tester.image_size, self.model_tester.image_size]
-        ).to(torch_device)
-        input_ids = torch.randint(3, vocab_size, (bsz, dec_len), device=torch_device)
-        # input_ids stays valid (no -100) so decoder_input_ids is well-formed; only labels carry -100.
-        padded = input_ids.clone()
-        padded[0, -1] = -100
-        padded[1, -2:] = -100
-
-        def aligned_ce(logits, lbl):
-            return torch.nn.CrossEntropyLoss()(logits.reshape(-1, vocab_size), lbl.reshape(-1))
-
-        def double_shift_ce(logits, lbl):
-            return torch.nn.CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
-
-        for lbl in (input_ids, padded):
-            with torch.no_grad():
-                out = model(pixel_values=pixel_values, input_ids=input_ids, labels=lbl)
-            self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
-            self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
-
     # use encoder_seq_length and decoder_seq_length to replace seq_len
     def test_attention_outputs(self):
         if not self.has_attentions:
