@@ -608,12 +608,12 @@ class PaddleOCRVisionEmbeddings(nn.Module):
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        batch_size, squence_len, channel, height, width = pixel_values.shape
+        batch_size, sequence_len, channel, height, width = pixel_values.shape
         target_dtype = self.patch_embedding.weight.dtype
-        pixel_values = pixel_values.reshape(batch_size * squence_len, channel, height, width)
+        pixel_values = pixel_values.reshape(batch_size * sequence_len, channel, height, width)
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
-        embeddings = embeddings.reshape(batch_size, squence_len, -1)
+        embeddings = embeddings.reshape(batch_size, sequence_len, -1)
 
         start = 0
         embeddings = embeddings.squeeze(0)
@@ -1044,19 +1044,13 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        # Add `start_position` after arange for compile
         position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
-        position_width = torch.arange(llm_grid_w, device=device) + start_position
         position_height = torch.arange(llm_grid_h, device=device) + start_position
+        position_width = torch.arange(llm_grid_w, device=device) + start_position
 
-        # Repeat the positions per each grid and per video frame. Repeat patterns are important
-        # do not modify without checking values!
-        position_width = position_width.repeat(llm_grid_h * llm_grid_t)
-        position_height = position_height.repeat_interleave(llm_grid_w).repeat(llm_grid_t)
-        # Important: add `start_positions` after applying `time_interval`, order matters
-        position_temporal = position_temporal.repeat_interleave(llm_grid_h * llm_grid_w) + start_position
-        vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
-
+        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
+        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
+        vision_position_ids[0] += start_position  # must be after time_interval multiply
         return vision_position_ids
 
     def get_rope_index(

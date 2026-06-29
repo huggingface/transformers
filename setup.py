@@ -89,9 +89,8 @@ _deps = [
     "huggingface-hub>=1.5.0,<2.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
-    "jmespath>=1.0.1",
     "kenlm",
-    "kernels>=0.12.0,<0.13",
+    "kernels>=0.15.2,<0.16",
     "librosa",
     "mistral-common[image]>=1.10.0",
     "nltk<=3.8.1",
@@ -133,7 +132,7 @@ _deps = [
     # `Trainer` tests (see references to `run_translation.py`).
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.4.3",
+    "safetensors>=0.8.0",
     "sagemaker>=2.31.0",
     "schedulefree>=1.2.6",
     "scikit-learn",
@@ -190,7 +189,7 @@ extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[image]")
-extras["chat_template"] = deps_list("jinja2", "jmespath")
+extras["chat_template"] = deps_list("jinja2")
 extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
 extras["retrieval"] = deps_list("faiss-cpu", "datasets")

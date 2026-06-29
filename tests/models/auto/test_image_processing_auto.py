@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import transformers
 from transformers import (
@@ -350,6 +351,45 @@ class AutoImageProcessorTest(unittest.TestCase):
 
             image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
             self.assertIsInstance(image_processor, ViTImageProcessorPil)
+
+    def test_unavailable_backend_error_mentions_missing_dependency(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            with open(processor_tmpfile, "w") as fp:
+                json.dump({"image_processor_type": "CustomImageProcessor"}, fp)
+
+            with (
+                patch(
+                    "transformers.models.auto.image_processing_auto._find_mapping_for_image_processor",
+                    return_value={"torchvision": "CustomImageProcessor"},
+                ),
+                patch(
+                    "transformers.models.auto.image_processing_auto.get_image_processor_class_from_name",
+                    return_value=None,
+                ),
+                patch("transformers.models.auto.image_processing_auto.is_torchvision_available", return_value=False),
+            ):
+                with self.assertRaisesRegex(ValueError, "Missing optional dependencies: torchvision"):
+                    AutoImageProcessor.from_pretrained(tmpdirname, backend="torchvision")
+
+    def test_unrecognized_image_processor_error_when_no_backend_mapping_exists(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            with open(processor_tmpfile, "w") as fp:
+                json.dump({"image_processor_type": "CustomImageProcessor"}, fp)
+
+            with (
+                patch(
+                    "transformers.models.auto.image_processing_auto._find_mapping_for_image_processor",
+                    return_value=None,
+                ),
+                patch(
+                    "transformers.models.auto.image_processing_auto.get_image_processor_class_from_name",
+                    return_value=None,
+                ),
+            ):
+                with self.assertRaisesRegex(ValueError, "Unrecognized image processor"):
+                    AutoImageProcessor.from_pretrained(tmpdirname)
 
     @require_vision
     def test_register_with_image_processor_classes_dict(self):
