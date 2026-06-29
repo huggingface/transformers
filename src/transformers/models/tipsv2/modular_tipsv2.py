@@ -414,8 +414,6 @@ class Tipsv2VisionModel(Dinov2WithRegistersModel):
 
 
 class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
-    _keys_to_ignore_on_load_unexpected = {"text_encoder"}
-
     def __init__(self, config: "Tipsv2Config | Tipsv2VisionConfig"):
         if isinstance(config, Tipsv2Config):  # for compatibility with AutoBackbone
             config = config.vision_config
