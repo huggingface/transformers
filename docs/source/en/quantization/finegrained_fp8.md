@@ -80,3 +80,5 @@ For MoE experts, the DeepGEMM path is opt-in. Pass `experts_implementation="deep
 ## UE8M0 scale format
 
 DeepSeek V4-style checkpoints store FP8 weight scales in the packed `float8_e8m0fnu` format instead of `float32`. These checkpoints are pre-quantized and set `scale_fmt="ue8m0"` in their quantization config. Both the DeepGEMM and Triton kernels read UE8M0 scales, so these checkpoints run on either path.
+
+On Blackwell (SM100+), the DeepGEMM experts kernels only supports UE8M0 scales. A checkpoint with plain `float32` scales (`scale_fmt="float"`) raises a `ValueError`. Use a `scale_fmt="ue8m0"` checkpoint, or run the experts with `grouped_mm` or `batched_mm`, which support `float32` scales directly. Hopper (SM90+) supports `float32` scales on the DeepGEMM path without conversion. See the [Experts backends](../experts_interface) guide for the experts backend options.
