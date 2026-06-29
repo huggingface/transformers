@@ -708,6 +708,7 @@ class Tipsv2TextEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
+        # Additional scale compared to CLIP embeddings
         inputs_embeds = inputs_embeds * self.embed_scale
         position_embeddings = self.position_embedding(position_ids).to(dtype=inputs_embeds.dtype)
         return inputs_embeds + position_embeddings
