@@ -244,10 +244,9 @@ class DtensorShardOperation:
         idx = 0
         for source_start, source_end in intervals:
             interval_len = source_end - source_start
-            if interval_len <= 0:
-                continue
-            flat_segments.append((idx, idx + interval_len, source_start))
-            idx += interval_len
+            if interval_len > 0:
+                flat_segments.append((idx, idx + interval_len, source_start))
+                idx += interval_len
 
         # 2) Intersect this rank's flat span with each flat segment, then map overlap
         # back to source coordinates.
