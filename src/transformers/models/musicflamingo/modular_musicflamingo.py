@@ -170,7 +170,8 @@ def rotate_half(x):
 
 def apply_rotary_time_emb(hidden_states, cos, sin):
     original_dtype = hidden_states.dtype
-    hidden_states = hidden_states.to(torch.float64)
+    dtype = torch.float32 if hidden_states.device.type == "mps" else torch.float64
+    hidden_states = hidden_states.to(dtype)
     cos = cos.to(hidden_states)
     sin = sin.to(hidden_states)
     rot_dim = cos.shape[-1]
