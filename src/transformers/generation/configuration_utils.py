@@ -579,7 +579,7 @@ class GenerationConfig(PushToHubMixin):
     def _get_default_generation_params() -> dict[str, Any]:
         """
         Defaults to be applied when unset by the model OR by the user, such that `model.generate()` works with minimal
-        paremeterization.
+        parameterization.
 
         Pretrained checkpoints should set these as appropriate in their `generation_config.json`, to establish
         a better default baseline. Be mindful that tests will often use these values.
@@ -1702,7 +1702,7 @@ class ContinuousBatchingConfig:
             Deprecated in 5.11: please use default_compile_level instead.
     """
 
-    # Size of each KV cache block
+    # Size of each KV cache block. Must be at least 4 (and for an efficient cache, it should be well above that).
     block_size: int = 256
 
     # The number of blocks used in the KV cache and the maximum number of tokens in a batch. Once the block size is set,

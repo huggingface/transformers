@@ -166,6 +166,7 @@ from .import_utils import (
     is_liger_kernel_available,
     is_llm_awq_available,
     is_lomo_available,
+    is_mamba_2_ssm_available,
     is_matplotlib_available,
     is_mistral_common_available,
     is_mlx_available,

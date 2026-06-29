@@ -305,7 +305,7 @@ class BatchEncoding(UserDict, Generic[_V]):
     @property
     def is_fast(self) -> bool:
         """
-        TOOD: ita i will rm this `bool`: Whether or not this BatchEncoding was created by a fast tokenizer.
+        TODO: ita i will rm this `bool`: Whether or not this BatchEncoding was created by a fast tokenizer.
         """
         return self._encodings is not None
 
@@ -3085,6 +3085,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             tokenizer_kwargs = {}
 
         chat_template = self.get_chat_template(chat_template, tools)
+
+        if isinstance(conversation, (list, tuple)) and len(conversation) == 0:
+            raise ValueError("Cannot apply chat template to an empty conversation. Provide at least one message.")
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
