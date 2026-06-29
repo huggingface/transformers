@@ -70,6 +70,7 @@ from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
+from .integrations.heterogeneity import apply_heterogeneous_modeling, clean_up_post_heterogeneous_modeling
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
@@ -1344,6 +1345,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         elif full_annotation is not None:
             cls.config_class = full_annotation
 
+        # Make sure that clean up for heterogeneous modeling is called after the model is initialized
+        if "__init__" in cls.__dict__:
+            orig_init = cls.__init__
+
+            @wraps(orig_init)
+            def _patched_init(self, *args, **kwargs):
+                try:
+                    orig_init(self, *args, **kwargs)
+                finally:
+                    clean_up_post_heterogeneous_modeling(self)
+
+            cls.__init__ = _patched_init
+
     def __init__(self, config: PreTrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PreTrainedConfig):
@@ -1390,6 +1404,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.loss_type = loss_type
 
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
+
+        if self.config.is_heterogeneous:
+            apply_heterogeneous_modeling(self)
 
     def post_init(self):
         """
