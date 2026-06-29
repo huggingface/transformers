@@ -977,12 +977,9 @@ class GenerationMixin(ContinuousMixin):
                 logits_processor=logits_processor,
             )
         elif generation_config.prompt_lookup_num_tokens is not None:
-            if (
-                generation_config.assistant_ensemble_weight is not None
-                and generation_config.assistant_ensemble_weight < 1.0
-            ):
+            if generation_config.assistant_ensemble_weight is not None:
                 raise ValueError(
-                    "`assistant_ensemble_weight < 1.0` requires candidate logits from the assistant model. "
+                    "Setting `assistant_ensemble_weight` requires candidate logits from the assistant model. "
                     "It is not supported with prompt lookup decoding."
                 )
             candidate_generator = PromptLookupCandidateGenerator(
@@ -3654,11 +3651,7 @@ class GenerationMixin(ContinuousMixin):
                     selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
                 else:
                     # Greedy decoding: with ensemble weight, compare against argmax(v) instead of argmax(p)
-                    if (
-                        assistant_ensemble_weight is not None
-                        and assistant_ensemble_weight < 1.0
-                        and candidate_logits is not None
-                    ):
+                    if assistant_ensemble_weight is not None and candidate_logits is not None:
                         w = assistant_ensemble_weight
                         p_probs = new_logits[:, :candidate_length, :].softmax(dim=-1)
                         q_probs = candidate_logits.softmax(dim=-1)
@@ -3883,7 +3876,7 @@ def _speculative_sampling(
     candidate_length,
     new_logits,
     is_done_candidate,
-    assistant_ensemble_weight=None,
+    assistant_ensemble_weight: float | None = None,
 ):
     """
     Applies sampling as in the speculative decoding paper (https://huggingface.co/papers/2211.17192, algorithm 1). Returns
@@ -3904,7 +3897,7 @@ def _speculative_sampling(
     p_i = p[:, torch.arange(candidate_length), new_candidate_input_ids].squeeze(0, 1)
 
     # Compute acceptance ratio. With ensemble weight w < 1, use v(x)/q(x) = 1 - w + w*(p(x)/q(x))
-    if assistant_ensemble_weight is not None and assistant_ensemble_weight < 1.0:
+    if assistant_ensemble_weight is not None:
         w = assistant_ensemble_weight
         probability_ratio = 1.0 - w + w * (p_i / q_i)
     else:

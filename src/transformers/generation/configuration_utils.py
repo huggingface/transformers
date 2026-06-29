@@ -346,9 +346,9 @@ class GenerationConfig(PushToHubMixin):
         assistant_ensemble_weight (`float`, *optional*):
             Enables static ensemble verification in speculative decoding. If set to a value in `(0.0, 1.0)`,
             the verifier accepts tokens against the mixture `w * p_target + (1 - w) * q_draft` instead of
-            `p_target`, trading a controlled distributional bias for a higher acceptance rate. `None` or `1.0`
-            keeps decoding lossless. Requires the assistant model to return logits, so it is not compatible
-            with prompt lookup decoding.
+            `p_target`, trading a controlled distributional bias for a higher acceptance rate. Defaults
+            to `None`, which keeps decoding lossless. Requires the assistant model to return logits, so it
+            is not compatible with prompt lookup decoding.
 
         > Parameters related to performances and compilation
 
@@ -640,6 +640,11 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+        if self.assistant_ensemble_weight is not None and not (0.0 < self.assistant_ensemble_weight < 1.0):
+            raise ValueError(
+                f"`assistant_ensemble_weight` must be in the open interval `(0.0, 1.0)`, "
+                f"but is {self.assistant_ensemble_weight}. Use `None` for standard (lossless) speculative decoding."
+            )
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
