@@ -31,10 +31,18 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, is_torch_available, logging
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..llama.modeling_llama import eager_attention_forward
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import SinusoidsPositionEmbedding
 
 
 logger = logging.get_logger(__name__)
+
+
+def _prepare_4d_attention_mask(mask: torch.Tensor | None, dtype: torch.dtype) -> torch.Tensor | None:
+    if mask is None:
+        return None
+
+    return (1.0 - mask.unsqueeze(1).to(dtype=dtype)) * torch.finfo(dtype).min
 
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
@@ -474,6 +482,8 @@ class FunAsrNanoSANMAttention(nn.Module):
         self.d_k = hidden_size // num_heads
         self.num_heads = num_heads
         self.hidden_size = hidden_size
+        self.num_key_value_groups = 1
+        self.scaling = self.d_k**-0.5
 
         self.linear_q_k_v = nn.Linear(in_features, hidden_size * 3)
         self.linear_out = nn.Linear(hidden_size, hidden_size)
@@ -517,18 +527,17 @@ class FunAsrNanoSANMAttention(nn.Module):
         k = k.view(b, t, self.num_heads, self.d_k).transpose(1, 2)
         v_heads = v.view(b, t, self.num_heads, self.d_k).transpose(1, 2)
 
-        scores = torch.matmul(q, k.transpose(-2, -1)) * (self.d_k**-0.5)
-
-        if mask is not None:
-            mask_for_attn = mask.unsqueeze(1).eq(0)
-            scores = scores.masked_fill(mask_for_attn, float("-inf"))
-            attn_weights = torch.softmax(scores, dim=-1).masked_fill(mask_for_attn, 0.0)
-        else:
-            attn_weights = torch.softmax(scores, dim=-1)
-
-        attn_weights = self.dropout(attn_weights)
-        attn_output = torch.matmul(attn_weights, v_heads)
-        attn_output = attn_output.transpose(1, 2).contiguous().view(b, t, self.hidden_size)
+        attention_mask = _prepare_4d_attention_mask(mask, q.dtype)
+        attn_output, _ = eager_attention_forward(
+            self,
+            q,
+            k,
+            v_heads,
+            attention_mask,
+            scaling=self.scaling,
+            dropout=self.dropout.p if self.training else 0.0,
+        )
+        attn_output = attn_output.view(b, t, self.hidden_size)
         attn_output = self.linear_out(attn_output)
 
         return attn_output + fsmn_memory
@@ -744,6 +753,8 @@ class FunAsrNanoAdaptorAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
         self.hidden_size = hidden_size
+        self.num_key_value_groups = 1
+        self.scaling = self.head_dim**-0.5
 
         self.linear_q = nn.Linear(hidden_size, hidden_size)
         self.linear_k = nn.Linear(hidden_size, hidden_size)
@@ -758,18 +769,17 @@ class FunAsrNanoAdaptorAttention(nn.Module):
         k = self.linear_k(x).view(b, t, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.linear_v(x).view(b, t, self.num_heads, self.head_dim).transpose(1, 2)
 
-        scores = torch.matmul(q, k.transpose(-2, -1)) * (self.head_dim**-0.5)
-
-        if mask is not None:
-            # mask shape: (batch, 1, time)
-            mask_for_attn = (~mask.bool()).unsqueeze(1)  # (batch, 1, 1, time)
-            scores = scores.masked_fill(mask_for_attn, float("-inf"))
-
-        attn_weights = torch.softmax(scores, dim=-1)
-        attn_weights = self.dropout(attn_weights)
-
-        out = torch.matmul(attn_weights, v)
-        out = out.transpose(1, 2).contiguous().view(b, t, self.hidden_size)
+        attention_mask = _prepare_4d_attention_mask(mask, q.dtype)
+        out, _ = eager_attention_forward(
+            self,
+            q,
+            k,
+            v,
+            attention_mask,
+            scaling=self.scaling,
+            dropout=self.dropout.p if self.training else 0.0,
+        )
+        out = out.view(b, t, self.hidden_size)
         return self.linear_out(out)
 
 
