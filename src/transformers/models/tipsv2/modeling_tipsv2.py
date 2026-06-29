@@ -491,7 +491,7 @@ class Tipsv2VisionEncoder(Tipsv2VisionPreTrainedModel):
 
 
 @auto_docstring
-class Tipsv2VisionModel(Tipsv2VisionPreTrainedModel):
+class Tipsv2VisionModel(Tipsv2VisionPreTrainedModel, EmbeddingAccessMixin):
     _keys_to_ignore_on_load_unexpected = {"text_encoder"}
 
     def __init__(self, config: Tipsv2VisionConfig):
