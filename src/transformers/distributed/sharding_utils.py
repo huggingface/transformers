@@ -276,30 +276,43 @@ class DtensorShardOperation:
 
         return local_intervals
 
-    def _slice_and_cat(self, source, intervals, device, dtype):
-        multi_interval_dim: int | None = None
-        slices: list[slice] = []
-        for source_dim, pieces in enumerate(intervals):
-            if len(pieces) == 1:
-                start, end = pieces[0]
-                slices.append(slice(start, end))
-                continue
-            if multi_interval_dim is not None:
-                raise ValueError("Shard-on-read only supports disjoint ranges on a single checkpoint dimension.")
-            multi_interval_dim = source_dim
-            slices.append(slice(None))  # placeholder, filled per-piece below
+    def _slice_and_cat(
+        self,
+        source: torch.Tensor,
+        intervals: list[list[tuple[int, int]]],
+        device: torch.device | str | int | None,
+        dtype: torch.dtype | None,
+    ) -> torch.Tensor:
+        concat_dim: int | None = None
+        base_slices: list[slice] = []
+
+        for dim_idx, dim_intervals in enumerate(intervals):
+            if len(dim_intervals) == 1:
+                start, end = dim_intervals[0]
+                base_slices.append(slice(start, end))
+            else:
+                # TODO(3outeille): verify if this is correct.
+                if concat_dim is not None:
+                    raise ValueError("Shard-on-read only supports disjoint ranges on a single checkpoint dimension.")
+                concat_dim = dim_idx
+                base_slices.append(slice(None))  # filled per piece below
 
         # Fast path: every dim is one contiguous interval, read in a single slice.
-        if multi_interval_dim is None:
-            return source[tuple(slices)].to(device=device, dtype=dtype)
+        if concat_dim is None:
+            return source[tuple(base_slices)].to(device=device, dtype=dtype)
 
-        # Multi-interval dim: read each piece separately, then concatenate.
-        pieces_read = []
-        for start, end in intervals[multi_interval_dim]:
-            piece_slices = list(slices)
-            piece_slices[multi_interval_dim] = slice(start, end)
-            pieces_read.append(source[tuple(piece_slices)])
-        return torch.cat(pieces_read, dim=multi_interval_dim).to(device=device, dtype=dtype)
+        # Multi-interval dim: keep base slices fixed and vary concat_dim only.
+        base_slices_tuple: tuple[slice, ...] = tuple(base_slices)
+        pieces: list[torch.Tensor] = []
+        for piece_start, piece_end in intervals[concat_dim]:
+            piece_slices = (
+                *base_slices_tuple[:concat_dim],
+                slice(piece_start, piece_end),
+                *base_slices_tuple[concat_dim + 1 :],
+            )
+            pieces.append(source[piece_slices])
+
+        return torch.cat(pieces, dim=concat_dim).to(device=device, dtype=dtype)
 
     def _get_sub_mesh(self, mesh_dim: int):
         if self.device_mesh.ndim == 1:
