@@ -1582,6 +1582,9 @@ def get_checkpoint_conversion_mapping(model_type):
     return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type))
 
 
+USER_REGISTERED_MAPPINGS = set()
+
+
 def register_checkpoint_conversion_mapping(
     model_type_or_class_name: str,
     mapping: list[WeightConverter | WeightRenaming],
@@ -1603,6 +1606,8 @@ def register_checkpoint_conversion_mapping(
             f"Conversion mapping for '{model_type_or_class_name}' already exists. Pass overwrite=True to replace it."
         )
     _checkpoint_conversion_mapping_cache[model_type_or_class_name] = mapping
+    # Keep track of what was added manually by the user
+    USER_REGISTERED_MAPPINGS.add(model_type_or_class_name)
 
 
 def extract_weight_conversions_for_model(
@@ -1666,6 +1671,15 @@ def get_model_conversion_mapping(
 
         class_name = type(submodule).__name__
         model_type = submodule.config.model_type
+
+        # Skip it if it's custom code and it was NOT registered by the user directly: it may have the same `model_type`/ClassName
+        # as a native model inside the library, but it uses custom modeling so it should not share the conversions
+        if (
+            submodule.is_custom_code()
+            and class_name not in USER_REGISTERED_MAPPINGS
+            and model_type not in USER_REGISTERED_MAPPINGS
+        ):
+            continue
 
         # Skip if an ancestor already claimed this class (its unscoped transforms already cover this subtree).
         if any(seen == "" or module_name.startswith(seen + ".") for seen in seen_identifiers[class_name]):
