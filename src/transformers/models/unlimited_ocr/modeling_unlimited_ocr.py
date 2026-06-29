@@ -1388,13 +1388,6 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-            # The static cache ([`StaticReferenceSlidingWindowLayer`]) keeps the prefill at the front of its
-            # buffer (slots `[0, prefill_length)`) followed by the most recent `sliding_window` generated tokens
-            # (slots `[prefill_length, prefill_length + sliding_window)`). The buffer is sized to exactly
-            # `prefill_length + sliding_window` (no empty tail), so a plain causal mask is already correct: it
-            # hides the not-yet-written window slots while the window fills, and there is no tail left to cap. The
-            # dynamic cache evicts old tokens from its (compact) buffer instead, so plain causal is correct there
-            # too.
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "reference_sliding_attention": create_causal_mask(**mask_kwargs),

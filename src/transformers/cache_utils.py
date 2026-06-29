@@ -684,95 +684,58 @@ class StaticSlidingWindowLayer(StaticLayer):
 
 
 class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
-    """Static counterpart of [`DynamicReferenceSlidingWindowLayer`], used when generating with
-    ``cache_implementation="static"``.
+    """
+    A static cache layer that stores the key and value states as static tensors of shape
+    `[batch_size, num_heads, min(max_cache_len, prefill_size + sliding_window), head_dim]`.
+    It lazily allocates its full backing tensors, and then mutates them in-place.
+    Built for `torch.compile` support.
 
-    The backing buffer is split in two regions: slots ``[0, prefill_length)`` hold the image/prompt prefill
-    (written once, at the front, and never evicted) and slots ``[prefill_length, prefill_length + sliding_window)``
-    are a ring for the generated tokens. Exactly like [`StaticSlidingWindowLayer`] the oldest generated token is
-    rolled out and replaced by the newest once the ring is full, the only difference being that the roll is
-    restricted to that window so the prefill region stays untouched.
+    The backing buffer is split in two regions: slots ``[0, prefill_length)`` hold the prefill (reference) slots
+    that are never eviced from the cache. Slots ``[prefill_length, prefill_length + sliding_window)`` hold the
+    sliding window decode slots where the oldest entries are always replaced by the newest ones.
 
-    The physical buffer is sized to ``prefill_length + sliding_window`` rather than the full ``max_cache_len``
-    budget that ``generate`` passes (which is ``prefill_length + max_new_tokens``): the trailing
-    ``max_new_tokens - sliding_window`` slots would never be written, so reserving them is pure waste -- large for
-    long generations. ``prefill_length`` is only known at runtime, but the buffer is allocated lazily during the
-    eager prefill pass (and grown there for chunked prefill), which always runs *before* the first compiled/
-    cudagraph decode step; from the first decode step onward the shape and data pointer are constant, so cudagraph
-    capture is unaffected and the SDPA backend (cuDNN included) reuses a single kernel plan. The not-yet-written
-    window slots are hidden by the (plain causal) decode mask built by the model (e.g.
-    ``UnlimitedOcrTextModel.forward``); there is no empty tail left to hide.
+    Args:
+        max_cache_len (`int`):
+            Maximum number of tokens that can be stored, used for tensor preallocation.
+        sliding_window (`int`):
+            The size of the sliding window.
     """
 
     layer_type = "reference_sliding_attention"
 
     def __init__(self, max_cache_len: int, sliding_window: int):
         super().__init__(max_cache_len=max_cache_len, sliding_window=sliding_window)
-        # `StaticSlidingWindowLayer` shrinks its buffer to `sliding_window` and rolls the whole thing. Here the
-        # buffer must also hold the pinned prefill. We keep `max_cache_len` only as the *logical* budget (for
-        # length bookkeeping) and size the *physical* buffer to `prefill_length + sliding_window`, tracking the
-        # real window separately; the roll below only touches the `sliding_window` slots right after the prefill
-        # (i.e. `[prefill_length, prefill_length + sliding_window)`).
+        # Keep `max_cache_len` as max value for lenght bookkeeping.
+        # The phyiscal buffer doens't exceed `prefill_length + sliding_window`.
         self.max_cache_len = max_cache_len
         self.sliding_window = sliding_window
         self.prefill_length: int | None = None
 
-    def _set_buffers(self, physical_length: int, copy_existing: bool = False) -> None:
-        """(Re)allocate the static key/value buffers to `physical_length` slots and (re)tag the static address.
-
-        Only ever called from the eager prefill pass (initial allocation or chunked-prefill growth), never from a
-        compiled decode step, so reallocating here is safe for cudagraphs.
-        """
-        new_keys = torch.zeros(
-            (self.batch_size, self.num_heads, physical_length, self.k_head_dim), dtype=self.dtype, device=self.device
-        )
-        new_values = torch.zeros(
-            (self.batch_size, self.num_heads, physical_length, self.v_head_dim), dtype=self.dtype, device=self.device
-        )
-        if copy_existing:
-            old_length = self.keys.shape[-2]
-            new_keys[:, :, :old_length, :] = self.keys
-            new_values[:, :, :old_length, :] = self.values
-        self.keys = new_keys
-        self.values = new_values
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.keys)
-            torch._dynamo.mark_static_address(self.values)
-
-    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
-        self.dtype, self.device = key_states.dtype, key_states.device
-        self.batch_size, self.num_heads = key_states.shape[:2]
-        self.v_head_dim = value_states.shape[-1]
-        self.k_head_dim = key_states.shape[-1]
-        self.cumulative_length = self.cumulative_length.to(self.device)
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.cumulative_length)
-        # Size the physical buffer from the prefill instead of the full `max_cache_len` budget (see class
-        # docstring). A multi-token first call is prefill; a single-token first call is an empty-prompt decode
-        # (`prefill_length == 0`), so only the window is needed.
-        prefill_seen = key_states.shape[-2] if key_states.shape[-2] > 1 else 0
-        self._set_buffers(min(self.max_cache_len, prefill_seen + self.sliding_window))
-        self.is_initialized = True
-
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Update the key and value caches in-place, and return the necessary keys and value states.
+
+        Args:
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+
+        Returns:
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
+        """
         # Lazy initialization
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
         kv_length = key_states.shape[-2]
 
-        # Prefill. Mirror `DynamicReferenceSlidingWindowLayer`: every multi-token chunk fed before the first
-        # single-token (decode) step is prefill and stays pinned at the front of the buffer. Crucially we do
-        # *not* pin `prefill_length` here, so chunked prefill (a prompt fed in more than one chunk) keeps
-        # extending the pinned region instead of having the later chunks slid out of the window.
+        # Prefill
         if self.prefill_length is None and kv_length > 1:
-            # Chunked prefill: the buffer was sized for the first chunk only, so grow it (eagerly, before any
-            # compiled decode step) to hold all prefill seen so far plus this chunk plus the reserved window.
+            # Chunked prefill: the buffer was sized for the first chunk only, so grow it to hold all prefill seen so far plus this chunk plus the reserved window.
             required_length = min(self.max_cache_len, self.cumulative_length_int + kv_length + self.sliding_window)
             if self.keys.shape[-2] < required_length:
-                self._set_buffers(required_length, copy_existing=True)
+                self._allocate_key_value_buffers(required_length, copy_existing=True)
             # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
             # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten
             cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
@@ -791,8 +754,7 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             # Very important to return the `self` tensors here, as they have the static dynamo address
             return self.keys, self.values
 
-        # First single-token step (or an empty prompt that skipped prefill above): finalize the pinned prefill
-        # region so the trailing window below is measured relative to it.
+        # First decode step (or an empty prompt that skipped prefill above): mark prefill as complete
         if self.prefill_length is None:
             self.prefill_length = self.cumulative_length_int
 
@@ -823,7 +785,7 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
                 # Very important to return the `self` tensors here, as they have the static dynamo address
                 return self.keys, self.values
-            # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
+            # Already full but using more than 1 new token (e.g. chat continuation, etc...)
             else:
                 full_key_states = torch.cat(
                     (self.keys[:, :, window_start + 1 : window_start + self.sliding_window, :], key_states), dim=-2
@@ -844,8 +806,6 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         else:
             # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
             # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten.
-            # The window sits right after the prefill (`window_start == prefill_length`), so the decode tokens are
-            # written at their logical positions, which already start at `prefill_length`.
             cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
             try:
                 self.keys.index_copy_(2, cache_position, key_states)
@@ -862,32 +822,78 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             # Very important to return the `self` tensors here, as they have the static dynamo address
             return self.keys, self.values
 
-        # We only keep the last `sliding_window` tokens. Unlike `StaticSlidingWindowLayer` we return `self.keys/values`
-        # because `get_mask_sizes` is fixed to the full `max_cache_len`.
+        # We only cache the last `sliding_window` tokens
         self.keys[:, :, window_start : window_start + self.sliding_window, :].copy_(
             full_key_states[:, :, -self.sliding_window :, :]
         )
         self.values[:, :, window_start : window_start + self.sliding_window, :].copy_(
             full_value_states[:, :, -self.sliding_window :, :]
         )
+        # TODO: Multi-token decode is not supported yet as it would require a custom
+        # create_causal_mask implementation to create correct masks.
         return self.keys, self.values
 
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        self.dtype, self.device = key_states.dtype, key_states.device
+        self.batch_size, self.num_heads = key_states.shape[:2]
+        self.v_head_dim = value_states.shape[-1]
+        self.k_head_dim = key_states.shape[-1]
+
+        self.cumulative_length = self.cumulative_length.to(self.device)
+        # Note: `mark_static_address` is used to tag the tensors as a fixed data pointer, preventing compiled graph
+        # breaks or cudagraph skips due to inplace mutations when updating the cache. However, it is not supported when
+        # tracing the graph, so we skip it in this case. As prefill should never be compiled, this is not an issue and it
+        # will still be run (except when users compile prefill explicitly, but this should be avoided!)
+        # Without this, we cannot use cudagraphs!!
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cumulative_length)
+
+        prefill_seen = key_states.shape[-2] if key_states.shape[-2] > 1 else 0
+        self._allocate_key_value_buffers(min(self.max_cache_len, prefill_seen + self.sliding_window))
+
+        self.is_initialized = True
+
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
-        # `kv_length` must match the length of the tensor `update` will return for this step. The buffer is sized
-        # to `prefill_length + sliding_window`, so anticipate the size `update` will (re)allocate it to:
+        """Return the length and offset of the cache, used to generate the attention mask"""
+        kv_offset = 0
         if not self.is_initialized:
             # First forward: `lazy_initialization` will allocate from this query length.
             prefill_seen = query_length if query_length > 1 else 0
-            return min(self.max_cache_len, prefill_seen + self.sliding_window), 0
-        if self.prefill_length is None and query_length > 1:
+            kv_length = min(self.max_cache_len, prefill_seen + self.sliding_window)
+        elif self.prefill_length is None and query_length > 1:
             # Additional prefill chunk: `update` will grow the buffer to fit all prefill so far plus the window.
-            return min(self.max_cache_len, self.cumulative_length_int + query_length + self.sliding_window), 0
-        # Decode (including the first decode step): the buffer is already at its final size.
-        return self.keys.shape[-2], 0
+            kv_length = min(self.max_cache_len, self.cumulative_length_int + query_length + self.sliding_window)
+        else:
+            # Decode (including the first decode step): the buffer is already at its final size.
+            kv_length = self.keys.shape[-2]
+
+        return kv_length, kv_offset
 
     def reset(self) -> None:
         super().reset()
         self.prefill_length = None
+
+    def _allocate_key_value_buffers(self, physical_length: int, copy_existing: bool = False) -> None:
+        """(Re)allocate the static key/value buffers to `physical_length` slots and (re)tag the static address.
+
+        Only ever called from the eager prefill pass (initial allocation or chunked-prefill growth), never from a
+        compiled decode step, so reallocating here is safe for cudagraphs.
+        """
+        new_keys = torch.zeros(
+            (self.batch_size, self.num_heads, physical_length, self.k_head_dim), dtype=self.dtype, device=self.device
+        )
+        new_values = torch.zeros(
+            (self.batch_size, self.num_heads, physical_length, self.v_head_dim), dtype=self.dtype, device=self.device
+        )
+        if copy_existing:
+            old_length = self.keys.shape[-2]
+            new_keys[:, :, :old_length, :].copy_(self.keys)
+            new_values[:, :, :old_length, :].copy_(self.values)
+        self.keys = new_keys
+        self.values = new_values
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.keys)
+            torch._dynamo.mark_static_address(self.values)
 
 
 class StaticIndexedLayer(StaticLayer):
