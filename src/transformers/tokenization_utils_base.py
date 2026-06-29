@@ -1840,7 +1840,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
         for args_name, file_path in resolved_vocab_files.items():
-            if args_name not in init_kwargs or init_kwargs[args_name] is None:
+            # `init_kwargs` also carries the values loaded from the (untrusted) `tokenizer_config.json`,
+            # which `save_pretrained` never serializes for these vocab-file arguments. A value present
+            # here therefore originates from the config and would be opened verbatim, so it could point
+            # at an arbitrary location outside the repository (path traversal, CWE-22). Let the
+            # repo-resolved path take precedence; only an explicit caller-provided path (in `kwargs`)
+            # is allowed to override it.
+            if args_name not in kwargs or kwargs[args_name] is None:
                 init_kwargs[args_name] = file_path
         tokenizer_file = resolved_vocab_files.get("tokenizer_file", None)
 
