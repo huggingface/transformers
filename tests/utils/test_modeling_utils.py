@@ -3659,6 +3659,7 @@ class DisableMmapLoadingTest(unittest.TestCase):
             torch.testing.assert_close(loaded_mmap[k], loaded_no_mmap[k])
 
 
+@require_torch
 class RemoteAndCustomCodeModelTests(unittest.TestCase):
     def test_remote_code_registration(self):
         """
