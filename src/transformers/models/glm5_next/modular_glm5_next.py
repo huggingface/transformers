@@ -442,6 +442,7 @@ class Glm5NextIndexer(nn.Module):
         self.indexer_rope_interleave: bool = config.indexer_rope_interleave
         self.kpool_enabled = self.index_kpool > 1 and self.index_kpool_compress
         self.index_kpool_always_select_tail: bool = config.index_kpool_always_select_tail
+        self.skip_rope: bool = True
 
         if self.kpool_enabled:
             self.index_kpool_compress_ape = nn.Parameter(torch.zeros(self.index_kpool, self.head_dim))
@@ -532,20 +533,21 @@ class Glm5NextIndexer(nn.Module):
     ) -> torch.LongTensor:
         batch_size, query_length, num_pools = pool_scores.shape
         complete_pools = torch.div(visible_lengths, self.index_kpool, rounding_mode="floor")
-        group_topk = min(self.index_topk // self.index_kpool, num_pools)
+        group_budget = self.index_topk // self.index_kpool
+        select_k = min(group_budget, num_pools)
 
-        if group_topk > 0:
+        if select_k > 0:
             pool_ids = torch.arange(num_pools, device=pool_scores.device)
             pool_valid = pool_ids.view(1, 1, -1) < complete_pools.unsqueeze(-1)
             masked_scores = pool_scores.masked_fill(~pool_valid, torch.finfo(pool_scores.dtype).min)
-            selected_groups = masked_scores.topk(group_topk, dim=-1).indices
+            selected_groups = masked_scores.topk(select_k, dim=-1).indices
             selected_valid = pool_valid.gather(-1, selected_groups)
             offsets = torch.arange(self.index_kpool, device=pool_scores.device)
             expanded = (selected_groups.unsqueeze(-1) * self.index_kpool + offsets).flatten(-2)
             expanded_valid = selected_valid.unsqueeze(-1).expand(
                 batch_size,
                 query_length,
-                group_topk,
+                select_k,
                 self.index_kpool,
             )
             expanded = expanded.masked_fill(~expanded_valid.flatten(-2), -1)
@@ -634,16 +636,18 @@ class Glm5NextIndexer(nn.Module):
             q = self.wq_b(q_resid)
             q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)
             q_pe, q_nope = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-            q_pe = apply_rotary_pos_emb_to_single(
-                q_pe, cos, sin, unsqueeze_dim=2, interleaved=self.indexer_rope_interleave
-            )
+            if not self.skip_rope and self.qk_rope_head_dim > 0:
+                q_pe = apply_rotary_pos_emb_to_single(
+                    q_pe, cos, sin, unsqueeze_dim=2, interleaved=self.indexer_rope_interleave
+                )
             q = torch.cat([q_pe, q_nope], dim=-1)
 
             k = self.k_norm(self.wk(hidden_states))
             k_pe, k_nope = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-            k_pe = apply_rotary_pos_emb_to_single(
-                k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2, interleaved=self.indexer_rope_interleave
-            ).squeeze(2)
+            if not self.skip_rope and self.qk_rope_head_dim > 0:
+                k_pe = apply_rotary_pos_emb_to_single(
+                    k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2, interleaved=self.indexer_rope_interleave
+                ).squeeze(2)
             k = torch.cat([k_pe, k_nope], dim=-1)
             if self.kpool_enabled:
                 gate_scores = F.linear(hidden_states, self.index_kpool_compress_gate)
@@ -661,17 +665,13 @@ class Glm5NextIndexer(nn.Module):
                 pooled_keys = self._compress_kpool_keys(k_cached, gate_scores)
                 scores = torch.einsum("bshd,bpd->bshp", q.float(), pooled_keys.float()) * self.softmax_scale
                 pool_scores = torch.einsum("bshp,bsh->bsp", F.relu(scores), weights)
-                score_mask = self._indexer_score_mask(attention_mask, total_len)
-                if score_mask is None:
-                    prefix_len = total_len - seq_len
-                    visible_lengths = prefix_len + torch.arange(
-                        1,
-                        seq_len + 1,
-                        device=hidden_states.device,
-                    )
-                    visible_lengths = visible_lengths.unsqueeze(0).expand(batch_size, -1)
-                else:
-                    visible_lengths = score_mask.eq(0).sum(dim=-1)
+                prefix_len = total_len - seq_len
+                visible_lengths = prefix_len + torch.arange(
+                    1,
+                    seq_len + 1,
+                    device=hidden_states.device,
+                )
+                visible_lengths = visible_lengths.unsqueeze(0).expand(batch_size, -1)
                 topk_indices = self._expand_kpool_topk(pool_scores, visible_lengths)
             else:
                 scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
@@ -931,6 +931,12 @@ class Glm5NextNaiveMoe(nn.ModuleList):
 
 
 class Glm5NextMoE(DeepseekV3MoE):
+    def __init__(self, config):
+        super().__init__(config)
+        self.shared_experts = Glm5NextMLP(
+            config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
+
     def forward(self, hidden_states):
         residuals = hidden_states
         orig_shape = hidden_states.shape
