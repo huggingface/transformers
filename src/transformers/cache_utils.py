@@ -933,7 +933,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         if conv_states is not None:
             if not self.is_conv_states_initialized:
                 self.dtype, self.device = conv_states.dtype, conv_states.device
-                self.max_batch_size = conv_states.shape[0]
+                self.batch_size = conv_states.shape[0]
             # Even if prefill is larger/shorter than the conv_size, the tensor is always either padded or truncated
             self.conv_kernel_size = conv_states.shape[-1]
             # The shape is always static, so we init as such
@@ -1372,18 +1372,6 @@ class Cache:
 
         return self.layers[layer_idx].get_mask_sizes(query_length)
 
-    def get_max_cache_shape(self, layer_idx: int = 0) -> int:
-        """Returns the maximum sequence length of the cache. ``-1`` means no fixed maximum: a
-        DynamicLayer grows on demand, and recurrent layers (mamba / linear-attn) carry no sequence
-        length at all."""
-        # For DynamicCache, where the layers are created at runtime -> if it was not yet created, return -1
-        if layer_idx >= len(self.layers):
-            return -1
-        layer = self.layers[layer_idx]
-        if not hasattr(layer, "get_max_cache_shape"):
-            return -1
-        return layer.get_max_cache_shape()
-
     def reset(self):
         """Recursively reset all layers tensors"""
         for layer_idx in range(len(self.layers)):
@@ -1410,26 +1398,14 @@ class Cache:
             self.layers[layer_idx].batch_select_indices(indices)
 
     @property
-    def max_batch_size(self) -> int:
-        """Return the maximum batch size of the cache"""
-        # ``LinearAttentionLayer`` sets ``max_batch_size`` lazily — skip layers that haven't been
+    def batch_size(self) -> int:
+        """Return the batch size of the cache"""
+        # ``LinearAttentionLayer`` sets ``batch_size`` lazily — skip layers that haven't been
         # initialized yet (``generate`` queries this on a fresh cache during cache-reuse checks).
-        values = [layer.max_batch_size for layer in self.layers if hasattr(layer, "max_batch_size")]
+        values = [layer.batch_size for layer in self.layers if hasattr(layer, "batch_size")]
         if len(set(values)) > 1:
             raise ValueError(f"The batch size is not consistent across layers: {values}")
         return values[0]
-
-    @property
-    def max_cache_len(self) -> int:
-        """Returns the maximum cache length across all layers. ``-1`` means no layer reports a
-        fixed maximum: DynamicLayer grows on demand, and recurrent / linear-attention layers
-        carry no sequence length."""
-        # Layers without `max_cache_len` (recurrent, linear attention) are skipped so a hybrid
-        # cache still reports its attention layers' max.
-        values = [layer.max_cache_len for layer in self.layers if hasattr(layer, "max_cache_len")]
-        if not values:
-            return -1
-        return max(values)
 
     @property
     def is_compileable(self) -> bool:

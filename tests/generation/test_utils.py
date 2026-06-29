@@ -2493,13 +2493,13 @@ class GenerationTesterMixin:
                 model_input_length = prompt_length + generated_length
             if has_static_cache:
                 # Hybrid caches (e.g. Bamba: full_attention + linear_attention) have layers with no fixed
-                # max — `get_max_cache_shape()` returns -1 on those. Pick the first layer that reports a
+                # max — `get_max_length(i)` returns -1 on those. Pick the first layer that reports a
                 # real length; that's the one whose attention shape we're checking against.
                 query_length = next(
                     (
-                        decoder_past_key_values.get_max_cache_shape(i)
+                        decoder_past_key_values.get_max_length(i)
                         for i in range(len(decoder_past_key_values))
-                        if decoder_past_key_values.get_max_cache_shape(i) != -1
+                        if decoder_past_key_values.get_max_length(i) != -1
                     ),
                     prompt_length + generated_length,
                 )
