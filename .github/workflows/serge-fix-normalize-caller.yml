@@ -1,0 +1,36 @@
+name: Normalize Serge fix branches
+
+# Caller workflow — thin wrapper. When Serge pushes an automated fix branch
+# (serge/fix/**), delegate to the reusable serge-fix-normalize workflow in
+# transformers-ci, which runs this repo's own `make style` + `make fix-repo`
+# and commits the result back so the resulting PR satisfies repo-consistency.
+# All the logic lives in transformers-ci; this file only wires the trigger.
+#
+# Serge creates these branches with its GitHub App installation token, and
+# App-token pushes DO trigger workflows, so this fires automatically on the
+# first push and every follow-up commit.
+
+on:
+  push:
+    branches:
+      - "serge/fix/**"
+
+# Granted here and inherited by the reusable workflow's job token; the reusable
+# workflow pushes the normalization commit with this GITHUB_TOKEN (whose pushes
+# do not trigger new runs, so it never loops).
+permissions:
+  contents: write
+
+concurrency:
+  # Coalesce rapid follow-up pushes on the same branch; only normalize the tip.
+  group: serge-normalize-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  normalize:
+    # Skip the normalizer's own pushes (belt-and-suspenders; GITHUB_TOKEN
+    # pushes already don't re-trigger this workflow).
+    if: github.actor != 'github-actions[bot]'
+    uses: huggingface/transformers-ci/.github/workflows/serge-fix-normalize.yml@main
+    with:
+      ref: ${{ github.ref_name }}
