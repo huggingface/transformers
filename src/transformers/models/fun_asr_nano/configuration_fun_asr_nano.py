@@ -30,8 +30,7 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FunAsrNanoEncoder`]. It is used to instantiate a
     Fun-ASR-Nano audio encoder (a SenseVoice SAN-M encoder) according to the specified arguments, defining the model
-    architecture. Like [`ParakeetEncoderConfig`], this is a standalone encoder configuration since the encoder is a
-    standalone model registered in the auto mappings.
+    architecture.
 
     input_size (`int`, *optional*, defaults to 560):
         Input feature dimension (after LFR: 80 mel bins * 7 frames = 560).
@@ -53,9 +52,6 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
         Kernel size for the FSMN convolution.
     sanm_shift (`int`, *optional*, defaults to 0):
         Shift for asymmetric padding in FSMN.
-    initializer_range (`float`, *optional*, defaults to 0.02):
-        Standard deviation for weight initialization.
-
     Example:
 
     ```python
@@ -97,9 +93,6 @@ class FunAsrNanoConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`FunAsrNanoForConditionalGeneration`]. It is used
     to instantiate a Fun-ASR-Nano model according to the specified arguments, defining the model architecture.
 
-    The adaptor (audio projector) is *not* a standalone model, so following the [`VoxtralConfig`] pattern its
-    parameters live directly on this config rather than in a nested sub-config.
-
     audio_encoder_config (`dict` or `FunAsrNanoEncoderConfig`, *optional*):
         Configuration for the audio encoder.
     text_config (`dict` or `PreTrainedConfig`, *optional*):
@@ -116,9 +109,6 @@ class FunAsrNanoConfig(PreTrainedConfig):
         Number of attention heads in the adaptor transformer layers.
     adaptor_dropout (`float`, *optional*, defaults to 0.0):
         Dropout probability used in the adaptor.
-    initializer_range (`float`, *optional*, defaults to 0.02):
-        Standard deviation for weight initialization.
-
     Example:
 
     ```python
