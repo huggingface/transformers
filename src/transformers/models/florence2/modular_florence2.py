@@ -1580,7 +1580,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "A green car parked in front of a yellow building."
         ```"""
-        do_shift_labels = False
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -1589,7 +1588,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.text_config.pad_token_id, self.config.text_config.decoder_start_token_id
                 )
-                do_shift_labels = True
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1612,14 +1610,11 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            shift_labels = kwargs.pop("shift_labels", None)
-            if do_shift_labels and shift_labels is None:
-                shift_labels = labels
             loss = self.loss_function(
                 logits=logits,
                 labels=labels,
                 vocab_size=self.config.text_config.vocab_size,
-                shift_labels=shift_labels,
+                shift_labels=labels,
                 **kwargs,
             )
 
