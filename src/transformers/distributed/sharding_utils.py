@@ -54,12 +54,13 @@ class DtensorShardOperation:
     Placement tuples are ordered outermost-first; for a 2-D (fsdp, tp) mesh
     the tuple is (fsdp_placement, tp_placement).
 
-    | Scenario                                          | Placements                            |
-    |---------------------------------------------------|---------------------------------------|
-    | TP-only, non-fused (e.g. q_proj/k_proj/v_proj)    | [Shard(d)]                            |
-    | TP-only, fused gate/up                            | [_StridedShard(d, sf=2)]              |
-    | TP + FSDP, same tensor dim                        | [_StridedShard(d, sf=tp_size), Shard(d)] |
-    | TP + FSDP, different dims                         | [Shard(d1), Shard(d2)]                |
+    | Scenario                                          | Placements                                  |
+    |---------------------------------------------------|---------------------------------------------|
+    | TP-only, non-fused (e.g. q_proj/k_proj/v_proj)    | [Shard(d)]                                   |
+    | TP-only, fused gate/up                            | [_StridedShard(d, sf=2)]                     |
+    | TP + FSDP, same tensor dim (contiguous TP case)   | [Shard(d), Shard(d)]                         |
+    | TP + FSDP, same tensor dim (fused/interleaved TP) | [_StridedShard(d, sf=tp_size), Shard(d)]     |
+    | TP + FSDP, different dims                         | [Shard(d1), Shard(d2)]                       |
 
     Mesh dimensions are listed outermost-first. For a 2-D (fsdp=F, tp=T) mesh,
     rank index = fsdp_idx * T + tp_idx.
@@ -125,58 +126,80 @@ class DtensorShardOperation:
           full [N, in, out] param.
         """
         source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
-        placements = [(md, p) for md, p in enumerate(self.placements) if hasattr(p, "dim")]
+        dim_placements = [
+            (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")
+        ]
 
         # Dense path
         if tensor_idx is None:
-            if not placements:
+            if not dim_placements:
                 return source[...].to(device=device, dtype=dtype)
-            has_strided = any(not p.is_shard() for _, p in placements)
-            intervals = [[(0, size)] for size in source_shape]
-            for mesh_dim, placement in placements:  # [i.e: (0, Shard(0)), (1, Shard(-1))]
+         
+            # Determine for each tensor dimension, which type of sharding operations to apply (_StridedShard or Shard) and which rank to apply it to.
+            # i.e: dim 0 -> [ Strided(rank0, size=2, sf=2), Shard(rank1, size=2) ]
+            # i.e: dim 1 -> [ Shard(rank0, size=2)]
+            planned_ops_by_dim = [[] for _ in source_shape]
+            for mesh_dim, placement in dim_placements:
                 sub_mesh = self._get_sub_mesh(mesh_dim)
                 rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
-                source_dim = self._norm_dim(placement.dim)
-                if not placement.is_shard():
-                    intervals[source_dim] = self._strided_intervals(
-                        intervals[source_dim], rank, world_size, placement.split_factor
-                    )
-                else:
-                    intervals[source_dim] = self._contiguous_intervals(intervals[source_dim], rank, world_size)
-            # Only _StridedShard can produce multi-interval dims that need cat.
-            if has_strided:
-                return self._slice_and_cat(source, intervals, device, dtype)
-            slices = tuple(slice(*(pieces[0] if pieces else (0, 0))) for pieces in intervals)
-            return source[slices].to(device=device, dtype=dtype)
+                dim_idx = self._normalize_param_dim(placement.dim)
+                planned_ops_by_dim[dim_idx].append((placement, rank, world_size))
+
+            # Apply the sharding operations to each tensor dimension.
+            intervals_by_dim = [[(0, size)] for size in source_shape]
+            for dim_idx, planned_ops in enumerate(planned_ops_by_dim):
+                intervals = intervals_by_dim[dim_idx]
+                for placement, rank, world_size in planned_ops:
+                    if placement.is_shard():
+                        intervals = self._apply_contiguous_shard(intervals, rank, world_size)
+                    else:
+                        intervals = self._apply_strided_shard(intervals, rank, world_size, placement.split_factor)
+                intervals_by_dim[dim_idx] = intervals
+
+            has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
+            if has_strided_shard:
+                # Multi-interval dim: read each piece separately, then concatenate.
+                return self._slice_and_cat(source, intervals_by_dim, device, dtype)
+            else:
+                slice_parts = []
+                for intervals in intervals_by_dim:
+                    start, end = intervals[0] if intervals else (0, 0)
+                    slice_parts.append(slice(start, end))
+
+                return source[tuple(slice_parts)].to(device=device, dtype=dtype)
 
         # MoE path: drop the piece if this rank does not own tensor_idx
         # along axis 0. Once shard_tensor has been called for all N pieces,
         # the caller (MergeModulelist) stacks the kept slices along axis 0 to
         # form this rank's local shard of the param.
-        shards_leading_axis = any(self._norm_dim(p.dim) == 0 for _, p in placements)
-        owns_index = self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
-        if shards_leading_axis and not owns_index:
+        shards_axis0 = any(self._normalize_param_dim(placement.dim) == 0 for _, placement in dim_placements)
+        owns_tensor_idx = self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
+        if shards_axis0 and not owns_tensor_idx:
             return None
 
-        # Inner dims use only _contiguous_intervals (one piece per dim), so a
+        # Inner dims use only _apply_contiguous_shard (one piece per dim), so a
         # single slice suffices
-        inner_placements = [(md, p) for md, p in placements if self._norm_dim(p.dim) != 0]
-        if not inner_placements:
+        inner_dim_placements = [
+            (mesh_dim, placement)
+            for mesh_dim, placement in dim_placements
+            if self._normalize_param_dim(placement.dim) != 0
+        ]
+        if not inner_dim_placements:
             return source[...].to(device=device, dtype=dtype)
-        slice_per_dim: list[tuple[int, int]] = [(0, size) for size in source_shape]
+        source_ranges_by_dim: list[tuple[int, int]] = [(0, size) for size in source_shape]
         # placement.dim is indexed in param space (e.g. axis 2 of [N, in, out]).
         # source is in source space (e.g. axis 1 of [in, out]), so we translate
         # from one to the other by stripping the leading axis.
-        for mesh_dim, placement in inner_placements:
+        for mesh_dim, placement in inner_dim_placements:
             sub_mesh = self._get_sub_mesh(mesh_dim)
             rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
-            param_dim = self._norm_dim(placement.dim)
+            param_dim = self._normalize_param_dim(placement.dim)
             source_dim = param_dim - 1
-            pieces = self._contiguous_intervals([slice_per_dim[source_dim]], rank, world_size)
-            slice_per_dim[source_dim] = pieces[0] if pieces else (0, 0)
-        return source[tuple(slice(s, e) for s, e in slice_per_dim)].to(device=device, dtype=dtype)
+            interval_pieces = self._apply_contiguous_shard([source_ranges_by_dim[source_dim]], rank, world_size)
+            source_ranges_by_dim[source_dim] = interval_pieces[0] if interval_pieces else (0, 0)
+        return source[tuple(slice(s, e) for s, e in source_ranges_by_dim)].to(device=device, dtype=dtype)
 
-    def _strided_intervals(
+    def _apply_strided_shard(
         self, intervals: list[tuple[int, int]], rank: int, world_size: int, split_factor: int
     ) -> list[tuple[int, int]]:
         narrowed = []
@@ -192,30 +215,57 @@ class DtensorShardOperation:
                     narrowed.append((group_start + offset, group_start + offset + size))
         return narrowed
 
-    def _contiguous_intervals(
+    def _apply_contiguous_shard(
         self, intervals: list[tuple[int, int]], rank: int, world_size: int
     ) -> list[tuple[int, int]]:
-        total = sum(end - start for start, end in intervals)
-        my_size, my_offset = Shard.local_shard_size_and_offset(total, world_size, rank)
-        if my_size == 0:
+        # We want to find the local intervals for this rank when the total length is partitioned across world_size ranks.
+        # We apply contiguous sharding to a list of intervals. Two cases:
+        # 1. The intervals is a single interval -> we return the local interval for this rank.
+        # 2. The intervals are disjoint (i.e: 2D TP + FSDP, same tensor dim (fused/interleaved TP = [StridedShard(d, sf=tp_size), Shard(d)]) 
+        # -> find overlapping local intervals across the disjoint intervals.
+
+        # Compute rank's local length and start offset when the total length is partitioned across world_size ranks.
+        flat_total_len = sum(end - start for start, end in intervals)
+        local_flat_len, local_flat_start = Shard.local_shard_size_and_offset(flat_total_len, world_size, rank)
+        local_flat_end = local_flat_start + local_flat_len
+
+        if local_flat_len == 0:
             return []
 
-        out: list[tuple[int, int]] = []
-        flat_pos = 0
-        slice_end = my_offset + my_size
-        for start, end in intervals:
-            length = end - start
-            interval_end_flat = flat_pos + length
-            if interval_end_flat <= my_offset:  # entirely before my slice
-                flat_pos = interval_end_flat
+        # Single-interval case.
+        if len(intervals) == 1:
+            source_start, _ = intervals[0]
+            return [(source_start + local_flat_start, source_start + local_flat_end)]
+
+        # Disjoint intervals case.
+        # 1) Build flat mapping from source intervals.
+        # Example: intervals=[(0,3), (10,15)] -> flat segments: (0,3,0) and (3,8,10)
+        # meaning flat [0,3) maps to source [0,3), and flat [3,8) maps to source [10,15).
+        flat_segments = []  # (interval_flat_start, interval_flat_end, source_start)
+        idx = 0
+        for source_start, source_end in intervals:
+            interval_len = source_end - source_start
+            if interval_len <= 0:
                 continue
-            if flat_pos >= slice_end:  # entirely after my slice
-                break
-            sub_start = max(0, my_offset - flat_pos)
-            sub_end = min(length, slice_end - flat_pos)
-            out.append((start + sub_start, start + sub_end))
-            flat_pos = interval_end_flat
-        return out
+            flat_segments.append((idx, idx + interval_len, source_start))
+            idx += interval_len
+
+        # 2) Intersect this rank's flat span with each flat segment, then map overlap
+        # back to source coordinates.
+        # Example: local flat span [2,6) with segments above gives:
+        #   overlap with [0,3) => [2,3) -> source (2,3)
+        #   overlap with [3,8) => [3,6) -> source (10,13)
+        # result: local_intervals = [(2,3), (10,13)]
+        local_intervals = []
+        for interval_flat_start, interval_flat_end, source_start in flat_segments:
+            overlap_flat_start = max(interval_flat_start, local_flat_start)
+            overlap_flat_end = min(interval_flat_end, local_flat_end)
+            if overlap_flat_start < overlap_flat_end:
+                source_overlap_start = source_start + (overlap_flat_start - interval_flat_start)
+                source_overlap_end = source_start + (overlap_flat_end - interval_flat_start)
+                local_intervals.append((source_overlap_start, source_overlap_end))
+
+        return local_intervals
 
     def _slice_and_cat(self, source, intervals, device, dtype):
         multi_interval_dim: int | None = None
@@ -247,7 +297,7 @@ class DtensorShardOperation:
             return self.device_mesh
         return self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim]]
 
-    def _norm_dim(self, dim: int) -> int:
+    def _normalize_param_dim(self, dim: int) -> int:
         # if dim is negative, it should be normalized to the last axis
         return dim if dim >= 0 else self.param_ndim + dim
 
