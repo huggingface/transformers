@@ -71,7 +71,9 @@ class Kimi_K25Config(PreTrainedConfig):
     projection_hidden_act: str = "gelu"
     projection_layer_norm_eps: float = 1e-5
     image_token_id: int = 163605
-    video_token_id: int = 163606
+    video_token_id: int = 163840
+    vision_start_token_id: int = 163602
+    vision_end_token_id: int = 163604
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):

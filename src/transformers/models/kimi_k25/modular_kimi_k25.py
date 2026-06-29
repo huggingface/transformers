@@ -23,6 +23,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -100,7 +101,9 @@ class Kimi_K25Config(PreTrainedConfig):
     projection_hidden_act: str = "gelu"
     projection_layer_norm_eps: float = 1e-5
     image_token_id: int = 163605
-    video_token_id: int = 163606
+    video_token_id: int = 163840
+    vision_start_token_id: int = 163602
+    vision_end_token_id: int = 163604
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
@@ -518,6 +521,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
         image_features: torch.FloatTensor | None = None,
+        video_features: torch.FloatTensor | None = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -528,17 +532,30 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
                 torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
-        return special_image_mask
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if video_features is not None:
+            torch_compilable_check(
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
+            )
+        return special_image_mask, special_video_mask
 
     @can_return_tuple
     @auto_docstring
@@ -564,16 +581,25 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         """
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            multimodal_mask = (input_ids == self.config.image_token_id) | (input_ids == self.config.video_token_id)
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[multimodal_mask] = 0
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
+            image_embeds = image_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
-            video_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=video_embeds)
+            video_embeds = video_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         outputs = self.language_model(
@@ -693,6 +719,12 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
     def _prepare_position_ids_for_generation(self, **kwargs):
         raise AttributeError("Kimi doesn't use m-rope!")
 
+    def _get_image_nums_and_video_nums(self, **super_kwargs):
+        raise AttributeError()
+
+    def _expand_inputs_for_generation(self, **kwargs):
+        return GenerationMixin._expand_inputs_for_generation(self, **kwargs)
+
 
 class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
@@ -756,7 +788,7 @@ class Kimi_K25Processor(Qwen2VLProcessor):
             current_chunk = metadata.timestamps[chunk_id : chunk_id + temporal_patch_size]
             timestamp_str = time.strftime("%H:%M:%S", time.gmtime(timestamp)) + f".{int(timestamp % 1 * 1000):03d}"
             num_frame_tokens = video_grid_thw[chunk_id][1:].prod() // merge_length
-            video_tokens = num_frame_tokens * self.image_token
+            video_tokens = num_frame_tokens * self.video_token
             video_structure += f"{timestamp_str}<|media_begin|>video<|media_content|>{video_tokens}<|media_end|>"
         return video_structure
 

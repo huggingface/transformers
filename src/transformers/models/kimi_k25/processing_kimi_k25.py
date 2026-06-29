@@ -97,7 +97,7 @@ class Kimi_K25Processor(ProcessorMixin):
             current_chunk = metadata.timestamps[chunk_id : chunk_id + temporal_patch_size]
             timestamp_str = time.strftime("%H:%M:%S", time.gmtime(timestamp)) + f".{int(timestamp % 1 * 1000):03d}"
             num_frame_tokens = video_grid_thw[chunk_id][1:].prod() // merge_length
-            video_tokens = num_frame_tokens * self.image_token
+            video_tokens = num_frame_tokens * self.video_token
             video_structure += f"{timestamp_str}<|media_begin|>video<|media_content|>{video_tokens}<|media_end|>"
         return video_structure
 
