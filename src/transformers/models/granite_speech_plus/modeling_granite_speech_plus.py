@@ -28,7 +28,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -41,7 +41,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import AutoModel, AutoModelForCausalLM
+from ..auto import AutoModel
 from .configuration_granite_speech_plus import GraniteSpeechPlusConfig, GraniteSpeechPlusEncoderConfig
 
 
@@ -87,9 +87,11 @@ class GraniteSpeechPlusEncoderProjector(nn.Module):
 class GraniteSpeechPlusPreTrainedModel(PreTrainedModel):
     config: GraniteSpeechPlusConfig
     input_modalities = ("audio", "text")
+    base_model_prefix = "model"
 
     _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
     _supports_sdpa = True
+    _supports_attention_backend = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -103,6 +105,167 @@ class GraniteSpeechPlusPreTrainedModel(PreTrainedModel):
             relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
             attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
             init.copy_(module.attention_dists, attention_dists)
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for Granite Speech outputs, with hidden states and attentions.
+    """
+)
+@dataclass
+class GraniteSpeechPlusModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio hidden states.
+    """
+
+    audio_hidden_states: torch.FloatTensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    The Granite Speech model, which consists of an audio encoder, projector, and language model,
+    without a language modeling head.
+    """
+)
+class GraniteSpeechPlusModel(GraniteSpeechPlusPreTrainedModel):
+    def __init__(self, config: GraniteSpeechPlusConfig):
+        super().__init__(config)
+        self.encoder = GraniteSpeechPlusCTCEncoder(config.encoder_config)
+        self.projector = GraniteSpeechPlusEncoderProjector(config)
+        self.language_model = AutoModel.from_config(config.text_config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def get_audio_features(
+        self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
+        projected_embeds = self.projector(audio_outputs.last_hidden_state)
+        audio_outputs.pooler_output = projected_embeds
+
+        return audio_outputs
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_audio_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_audio_mask = special_audio_mask.all(-1)
+        else:
+            special_audio_mask = input_ids == self.config.audio_token_id
+
+        n_audio_tokens = special_audio_mask.sum()
+        n_audio_features = audio_features.shape[0]
+        special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_audio_mask].numel() == audio_features.numel(),
+            f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
+        )
+        return special_audio_mask
+
+    def get_merged_audio_embeddings(
+        self, input_ids: torch.Tensor, audio_features: torch.Tensor, input_features_mask: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """
+        Adds the audio token to the model's LLM vocabulary so that we can pass it
+        through the tokenizer; it's assumed that the embeddings corresponding to the
+        <|audio|> token will be clobbered with speech features.
+
+        Args:
+            input_ids (`torch.Tensor`):
+                Input IDs containing one or more audio tokens.
+            audio_features (`torch.Tensor`):
+                Audio features to be masked into the language embeddings to form multimodal embeddings.
+            input_features_mask (`torch.Tensor`, *optional*, defaults to `None`)
+                Mask to be applied to audio features prior to scattering into the language embeddings.
+        """
+        is_audio_index = input_ids == self.config.audio_token_id
+        llm_input_ids = torch.where(is_audio_index, 0, input_ids)
+        inputs_embeds = self.language_model.get_input_embeddings()(llm_input_ids)  # [bsz, # features, hidden size]
+
+        audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        if input_features_mask is not None:
+            audio_features = audio_features[input_features_mask]
+
+        special_audio_mask = self.get_placeholder_mask(
+            input_ids, inputs_embeds=inputs_embeds, audio_features=audio_features
+        )
+        inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
+        return inputs_embeds
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | GraniteSpeechPlusModelOutputWithPast:
+        r"""
+        input_features_mask (`torch.Tensor`, *optional*):
+            Mask to be applied to audio features prior to scattering into the language embeddings.
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if input_features is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both input_features and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if inputs_embeds is None:
+            # Get the base embeddings; set all audio tokens to 0 index
+            # to avoid out of vocabulary issues with the LLM embedding.
+            # Audio features will be masked into is_audio_idx indices later.
+            is_audio_idx = input_ids == self.config.audio_token_id
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[is_audio_idx] = 0
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
+
+        audio_embeds = None
+        if input_features is not None:
+            if input_features.dtype != self.dtype:
+                input_features = input_features.to(self.dtype)
+            # Get the audio features from the encoder / projector
+            audio_embeds = self.get_audio_features(input_features, return_dict=True).pooler_output
+
+            # Merge the audio features into the LLM embeddings
+            inputs_embeds = self.get_merged_audio_embeddings(
+                input_ids=input_ids,
+                audio_features=audio_embeds,
+                input_features_mask=input_features_mask,
+            )
+
+        outputs = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        return GraniteSpeechPlusModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            audio_hidden_states=audio_embeds,
+        )
 
 
 ### Encoder - conformer is adapted from: https://github.com/lucidrains/conformer.git
@@ -317,7 +480,7 @@ class GraniteSpeechPlusCTCEncoder(GraniteSpeechPlusPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Base class for LlavaNext causal language model (or autoregressive) outputs.
+    Base class for Granite Speech causal language model (or autoregressive) outputs.
     """
 )
 @dataclass
@@ -332,6 +495,8 @@ class GraniteSpeechPlusCausalLMOutputWithPast(ModelOutput):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Projected audio hidden states.
     """
 
     loss: torch.FloatTensor | None = None
@@ -339,6 +504,7 @@ class GraniteSpeechPlusCausalLMOutputWithPast(ModelOutput):
     past_key_values: Cache | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
+    audio_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -348,18 +514,12 @@ class GraniteSpeechPlusCausalLMOutputWithPast(ModelOutput):
     """
 )
 class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel, GenerationMixin):
-    _supports_attention_backend = True
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: GraniteSpeechPlusConfig):
         super().__init__(config)
-        # NOTE: It doesn't matter when we initialize from config, but we should be careful
-        # to make sure this does not pick up the adapter_config if in the future we use
-        # from_pretrained or something similar, since that should be set by the composite
-        # model; don't need to consider it twice
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-
-        self.encoder = GraniteSpeechPlusCTCEncoder(config.encoder_config)
-        self.projector = GraniteSpeechPlusEncoderProjector(config)
+        self.model = GraniteSpeechPlusModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         if config.has_lora_adapter and not is_peft_available():
             logger.warning(
@@ -371,29 +531,10 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
 
         self.post_init()
 
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
+    def get_audio_features(self, *args, **kwargs):
+        return self.model.get_audio_features(*args, **kwargs)
 
     @can_return_tuple
-    @auto_docstring
-    def get_audio_features(
-        self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
-        projected_embeds = self.projector(audio_outputs.last_hidden_state)
-        audio_outputs.pooler_output = projected_embeds
-
-        return audio_outputs
-
     @auto_docstring
     def forward(
         self,
@@ -406,12 +547,9 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **lm_kwargs,
-    ) -> tuple[torch.Tensor] | GraniteSpeechPlusCausalLMOutputWithPast:
+        **kwargs,
+    ) -> tuple | GraniteSpeechPlusCausalLMOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor`, *optional*):
             Mask to be applied to audio features prior to scattering into the language embeddings.
@@ -421,55 +559,21 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
         # TODO (@alex-jw-brooks) add an example to this docstring once models are released
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if input_features is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both input_features and inputs_embeds at the same time, and must specify either one"
-            )
-
-        if inputs_embeds is None:
-            # Get the base embeddings; set all audio tokens to 0 index
-            # to avoid out of vocabulary issues with the LLM embedding.
-            # Audio features will be masked into is_audio_idx indices later.
-            is_audio_idx = input_ids == self.config.audio_token_id
-            llm_input_ids = input_ids.clone()
-            llm_input_ids[is_audio_idx] = 0
-            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
-
-        if input_features is not None:
-            if input_features.dtype != self.dtype:
-                input_features = input_features.to(self.dtype)
-            # Get the audio features from the encoder / projector
-            audio_embeds = self.get_audio_features(input_features, return_dict=True).pooler_output
-
-            # Merge the audio features into the LLM embeddings
-            inputs_embeds = self.get_merged_audio_embeddings(
-                input_ids=input_ids,
-                audio_features=audio_embeds,
-                input_features_mask=input_features_mask,
-            )
-
-        outputs = self.language_model(
+        outputs = self.model(
+            input_ids=input_ids,
+            input_features=input_features,
+            input_features_mask=input_features_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            logits_to_keep=logits_to_keep,
-            **lm_kwargs,
+            **kwargs,
         )
-        logits = outputs[0]
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -489,16 +593,13 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
                 shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
             )
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
         return GraniteSpeechPlusCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            audio_hidden_states=outputs.audio_hidden_states,
         )
 
     def prepare_inputs_for_generation(
@@ -514,7 +615,7 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
     ):
         # Overwritten -- in specific circumstances we don't want to forward audio inputs to the model
 
-        model_inputs = self.language_model.prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -530,60 +631,6 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
         if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["input_features"] = input_features
         return model_inputs
-
-    def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_features: torch.FloatTensor
-    ):
-        """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
-        """
-        if input_ids is None:
-            special_audio_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_audio_mask = special_audio_mask.all(-1)
-        else:
-            special_audio_mask = input_ids == self.config.audio_token_id
-
-        n_audio_tokens = special_audio_mask.sum()
-        n_audio_features = audio_features.shape[0]
-        special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        torch_compilable_check(
-            inputs_embeds[special_audio_mask].numel() == audio_features.numel(),
-            f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
-        )
-        return special_audio_mask
-
-    def get_merged_audio_embeddings(
-        self, input_ids: torch.Tensor, audio_features: torch.Tensor, input_features_mask: torch.Tensor | None = None
-    ) -> torch.Tensor:
-        """
-        Adds the audio token to the model's LLM vocabulary so that we can pass it
-        through the tokenizer; it's assumed that the embeddings corresponding to the
-        <|audio|> token will be clobbered with speech features.
-
-        Args:
-            input_ids (`torch.Tensor`):
-                Input IDs containing one or more audio tokens.
-            audio_features (`torch.Tensor`):
-                Audio features to be masked into the language embeddings to form multimodal embeddings.
-            input_features_mask (`torch.Tensor`, *optional*, defaults to `None`)
-                Mask to be applied to audio features prior to scattering into the language embeddings.
-        """
-        is_audio_index = input_ids == self.config.audio_token_id
-        llm_input_ids = torch.where(is_audio_index, 0, input_ids)
-        inputs_embeds = self.language_model.get_input_embeddings()(llm_input_ids)  # [bsz, # features, hidden size]
-
-        audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
-        if input_features_mask is not None:
-            audio_features = audio_features[input_features_mask]
-
-        special_audio_mask = self.get_placeholder_mask(
-            input_ids, inputs_embeds=inputs_embeds, audio_features=audio_features
-        )
-        inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
-        return inputs_embeds
 
     def generate(self, *args, **kwargs) -> torch.LongTensor:
         # This model is expected to have a lora adapter, which is only
@@ -616,6 +663,7 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
 
 
 __all__ = [
+    "GraniteSpeechPlusModel",
     "GraniteSpeechPlusCTCEncoder",
     "GraniteSpeechPlusForConditionalGeneration",
     "GraniteSpeechPlusPreTrainedModel",

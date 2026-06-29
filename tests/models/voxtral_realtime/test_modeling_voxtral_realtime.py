@@ -20,6 +20,7 @@ from transformers import (
     AutoProcessor,
     VoxtralRealtimeConfig,
     VoxtralRealtimeForConditionalGeneration,
+    VoxtralRealtimeModel,
     is_datasets_available,
     is_torch_available,
 )
@@ -48,6 +49,7 @@ if is_torch_available():
 
 class VoxtralRealtimeModelTester(ALMModelTester):
     config_class = VoxtralRealtimeConfig
+    base_model_class = VoxtralRealtimeModel
     conditional_generation_class = VoxtralRealtimeForConditionalGeneration
     text_config_class = VoxtralRealtimeTextConfig
     audio_config_class = VoxtralRealtimeEncoderConfig

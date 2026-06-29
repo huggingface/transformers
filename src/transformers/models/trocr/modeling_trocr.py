@@ -539,6 +539,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
             embed_pos = self.embed_positions(input, past_key_values_length=past_key_values_length)
         else:
             embed_pos = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+        embed_pos = embed_pos.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + embed_pos
 

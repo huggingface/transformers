@@ -49,7 +49,7 @@ def load_wkv_cuda_kernel(context_length):
 
     from ...integrations.hub_kernels import get_kernel
 
-    rwkv_cuda_kernel = get_kernel("kernels-community/rwkv")
+    rwkv_cuda_kernel = get_kernel("kernels-community/rwkv", version=1)
     rwkv_cuda_kernel.max_seq_length = context_length
 
 

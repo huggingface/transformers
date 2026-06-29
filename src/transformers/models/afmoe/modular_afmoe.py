@@ -111,7 +111,7 @@ class AfmoeSparseMoeBlock(nn.Module):
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
 
         # Get routing decisions (returns flattened top-k)
-        router_logits, top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
+        _, top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
 
         # Process through shared experts
         shared_output = self.shared_experts(hidden_states_flat).view(batch_size, seq_len, hidden_dim)
@@ -395,9 +395,7 @@ class AfmoeModel(AfmoePreTrainedModel):
 
 class AfmoeForCausalLM(LlamaForCausalLM, AfmoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):

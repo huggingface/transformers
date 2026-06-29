@@ -30,7 +30,7 @@ from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, TypeVar
 
 import numpy as np
 
@@ -41,6 +41,10 @@ from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_prox
 if TYPE_CHECKING:
     import torch
     from torch import nn
+
+
+# Generic class or function
+T = TypeVar("T")
 
 
 logger = logging.get_logger(__name__)
@@ -259,10 +263,10 @@ def is_mlx_array(x) -> bool:
 
 
 def is_flash_attention_requested(
-    config=None, requested_attention_implementation: str | None = None, version: int | None = None
+    config=None, requested_attention_implementation: str | None = None, version: int | list[int] | None = None
 ) -> bool:
     """
-    Checks whether some flavor of flash attention is requested or not. Optionally, checks for a specific version of
+    Checks whether some flavor of flash attention is requested or not. Optionally, checks for specific versions of
     flash attention.
 
     This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
@@ -289,7 +293,10 @@ def is_flash_attention_requested(
 
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
-        return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
+        if isinstance(version, int):
+            version = [version]
+        return any(re.match(r".*flash.*" + str(v), checked_attention_implementation) is not None for v in version)
+
     # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
 
@@ -429,7 +436,7 @@ class ModelOutput(OrderedDict):
             raise ValueError(f"{self.__class__.__name__} should not have more than one required field.")
 
         first_field = getattr(self, class_fields[0].name)
-        other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
+        other_fields_are_none = all(self.__dict__.get(field.name) is None for field in class_fields[1:])
 
         if other_fields_are_none and not is_tensor(first_field):
             if isinstance(first_field, dict):
@@ -466,7 +473,7 @@ class ModelOutput(OrderedDict):
                 self[class_fields[0].name] = first_field
         else:
             for field in class_fields:
-                v = getattr(self, field.name)
+                v = self.__dict__.get(field.name)
                 if v is not None:
                     self[field.name] = v
 
@@ -1049,6 +1056,13 @@ def merge_with_config_defaults(func):
 def check_model_inputs(func):
     logger.warning_once("The `check_model_inputs` decorator is deprecated in favor of `merge_with_config_defaults`.")
     return merge_with_config_defaults(func)
+
+
+def no_inherit_decorator(obj: T) -> T:
+    """
+    Identity decorator that prevents the modular converter from propagating its decorators to specific files.
+    """
+    return obj
 
 
 class GeneralInterface(MutableMapping):

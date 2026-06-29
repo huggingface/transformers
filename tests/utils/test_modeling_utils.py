@@ -59,7 +59,6 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.distributed import DistributedConfig
 from transformers.modeling_flash_attention_utils import is_flash_attn_available
 from transformers.models.mistral.modeling_mistral import MistralModel
 from transformers.testing_utils import (
@@ -86,6 +85,7 @@ from transformers.utils import (
     WEIGHTS_NAME,
 )
 from transformers.utils.import_utils import (
+    PACKAGE_DISTRIBUTION_MAPPING,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
@@ -336,34 +336,38 @@ if is_torch_available():
     class TestOffline(unittest.TestCase):
         def test_offline(self):
             with tempfile.TemporaryDirectory() as tmpdir:
-                # First offline load should fail
-                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
-                    with pytest.raises(OSError):
+                # TODO: only necessary for read-only cache systems; replace with a shared helper
+                with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                    # First offline load should fail
+                    with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
+                        with pytest.raises(OSError):
+                            AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                    # Enable online mode for download
+                    with patch("huggingface_hub.constants.HF_HUB_OFFLINE", False):
+                        snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                    # Load again in offline mode - should work now
+                    with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
                         AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                # Enable online mode for download
-                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", False):
-                    snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                # Load again in offline mode - should work now
-                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
-                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
         def test_local_files_only(self):
             with tempfile.TemporaryDirectory() as tmpdir:
-                # Empty cache => fail to load from cache
-                with pytest.raises(OSError):
+                # TODO: only necessary for read-only cache systems; replace with a shared helper
+                with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                    # Empty cache => fail to load from cache
+                    with pytest.raises(OSError):
+                        AutoModelForImageClassification.from_pretrained(
+                            TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
+                        )
+
+                    # Populate cache
+                    snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                    # Load again from cache => success
                     AutoModelForImageClassification.from_pretrained(
                         TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
                     )
-
-                # Populate cache
-                snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                # Load again from cache => success
-                AutoModelForImageClassification.from_pretrained(
-                    TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
-                )
 
 
 # Need to be serializable, which means they cannot be in a test class method
@@ -431,42 +435,6 @@ class ModelUtilsTest(TestCasePlus):
         mock_world_size.assert_not_called()
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
-
-    def test_model_from_pretrained_fsdp_distributes_before_loading(self):
-        model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=8, n_positions=8, n_ctx=8, vocab_size=32))
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            call_order = []
-
-            fake_mesh = mock.Mock()
-            fake_mesh.mesh_dim_names = ("fsdp",)
-            fake_mesh.ndim = 1
-
-            def fake_apply_fsdp(model, fsdp_mesh, fsdp_plan):
-                call_order.append("distribute")
-                self.assertIs(fsdp_mesh, fake_mesh)
-                self.assertIsNone(fsdp_plan)
-                return model
-
-            def fake_load_pretrained_model(model, state_dict, checkpoint_files, load_config, expected_keys=None):
-                call_order.append("load")
-                self.assertIs(load_config.device_mesh, fake_mesh)
-                return mock.Mock(), None
-
-            with (
-                patch("transformers.modeling_utils.init_device_mesh", return_value=fake_mesh),
-                patch("transformers.distributed.utils.apply_fully_shard_data_parallel", side_effect=fake_apply_fsdp),
-                patch.object(GPT2LMHeadModel, "_load_pretrained_model", side_effect=fake_load_pretrained_model),
-                patch.object(
-                    GPT2LMHeadModel,
-                    "_finalize_model_loading",
-                    side_effect=lambda model, load_config, loading_info: loading_info,
-                ),
-            ):
-                GPT2LMHeadModel.from_pretrained(tmp_dir, distributed_config=DistributedConfig(fsdp_size=2))
-
-        self.assertEqual(call_order, ["distribute", "load"])
 
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
@@ -601,6 +569,8 @@ class ModelUtilsTest(TestCasePlus):
 
         model = AutoModel.from_config(config, dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
+        # the resolved dtype is kept on the config so it matches the actual weights (see #46512)
+        self.assertEqual(model.config.dtype, torch.float16)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
@@ -1010,68 +980,83 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_checkpoint_variant_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir)
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir, variant="v2", use_safetensors=False
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir)
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant",
+                    cache_dir=tmp_dir,
+                    variant="v2",
+                    use_safetensors=False,
+                )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_hub_sharded(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained(
-                    "hf-internal-testing/tiny-random-bert-variant-sharded", cache_dir=tmp_dir
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained(
+                        "hf-internal-testing/tiny-random-bert-variant-sharded", cache_dir=tmp_dir
+                    )
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant-sharded",
+                    cache_dir=tmp_dir,
+                    variant="v2",
+                    use_safetensors=False,
                 )
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant-sharded",
-                cache_dir=tmp_dir,
-                variant="v2",
-                use_safetensors=False,
-            )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_hub_safe(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir)
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir, variant="v2"
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained(
+                        "hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir
+                    )
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir, variant="v2"
+                )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_hub_sharded_safe(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained(
-                    "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained(
+                        "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir
+                    )
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir, variant="v2"
                 )
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir, variant="v2"
-            )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_save_load(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant",
-                cache_dir=tmp_dir,
-                variant="v2",
-                use_safetensors=False,
-            )
-            weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant",
+                    cache_dir=tmp_dir,
+                    variant="v2",
+                    use_safetensors=False,
+                )
+                weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
 
-            model.save_pretrained(tmp_dir, variant="v2")
-            # saving will create a variant checkpoint
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
+                model.save_pretrained(tmp_dir, variant="v2")
+                # saving will create a variant checkpoint
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
 
-            model.save_pretrained(tmp_dir)
-            # saving shouldn't delete variant checkpoints
-            weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
+                model.save_pretrained(tmp_dir)
+                # saving shouldn't delete variant checkpoints
+                weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
 
-            # there should be a normal checkpoint
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+                # there should be a normal checkpoint
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
 
         self.assertIsNotNone(model)
 
@@ -1174,6 +1159,40 @@ class ModelUtilsTest(TestCasePlus):
             )
             outputs2 = new_model_with_offload(inputs)
             torch.testing.assert_close(outputs1[0].cpu(), outputs2[0].cpu())
+
+    @slow
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_onload_dtype(self):
+        from accelerate.utils import align_module_device
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # load model with full disk offloading
+            model = AutoModelForCausalLM.from_pretrained(
+                "inference-optimization/DSV4-tiny-empty",
+                device_map="auto",
+                max_memory={},
+                offload_folder=tmp_dir,
+                offload_buffers=True,
+            )
+
+            # note that `model.dtype` and the dtype of `tid2eid` differ
+            offloaded = model.model.layers[0].mlp.gate.tid2eid
+            self.assertEqual(offloaded.dtype, torch.int64)
+            self.assertEqual(model.dtype, torch.bfloat16)
+
+            # the dtype used to load from disk should match
+            index = model.model.layers[0].mlp.gate._hf_hook.weights_map.dataset.index
+            weights_info = index["model.layers.0.mlp.gate.tid2eid"]
+            weights_info_type = getattr(torch, weights_info["dtype"])
+            self.assertEqual(weights_info_type, offloaded.dtype)
+            self.assertEqual(weights_info_type, torch.int64)
+
+            # the onloaded dtype should be the weight dtype, not the model dtype
+            with align_module_device(model.model.layers[0].mlp.gate):
+                self.assertEqual(model.model.layers[0].mlp.gate.tid2eid.dtype, offloaded.dtype)
+                self.assertEqual(model.model.layers[0].mlp.gate.tid2eid.dtype, torch.int64)
 
     @slow
     @require_torch
@@ -1313,29 +1332,33 @@ class ModelUtilsTest(TestCasePlus):
 
         # test that only safetensors if both available and use_safetensors=False
         with tempfile.TemporaryDirectory() as tmp_dir:
-            CLIPTextModel.from_pretrained(
-                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
-                subfolder="text_encoder",
-                use_safetensors=False,
-                cache_dir=tmp_dir,
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                CLIPTextModel.from_pretrained(
+                    "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+                    subfolder="text_encoder",
+                    use_safetensors=False,
+                    cache_dir=tmp_dir,
+                )
 
-            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
-            self.assertTrue(any(f.endswith("bin") for f in all_downloaded_files))
-            self.assertFalse(any(f.endswith("safetensors") for f in all_downloaded_files))
+                all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
+                self.assertTrue(any(f.endswith("bin") for f in all_downloaded_files))
+                self.assertFalse(any(f.endswith("safetensors") for f in all_downloaded_files))
 
         # test that no safetensors if both available and use_safetensors=True
         with tempfile.TemporaryDirectory() as tmp_dir:
-            CLIPTextModel.from_pretrained(
-                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
-                subfolder="text_encoder",
-                use_safetensors=True,
-                cache_dir=tmp_dir,
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                CLIPTextModel.from_pretrained(
+                    "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+                    subfolder="text_encoder",
+                    use_safetensors=True,
+                    cache_dir=tmp_dir,
+                )
 
-            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
-            self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
-            self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
+                all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
+                self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
+                self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
 
         # test no model file found when use_safetensors=None (default when safetensors package available)
         with self.assertRaises(OSError) as missing_model_file_error:
@@ -2892,6 +2915,20 @@ class TestAttentionImplementation(unittest.TestCase):
             )
         self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
+    def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/45520.
+        # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
+        # (e.g. installed via a non-standard wheel), the availability checks must not raise
+        # a KeyError; they should simply return False.
+        stripped_map = {
+            k: v for k, v in PACKAGE_DISTRIBUTION_MAPPING.items() if k not in ("flash_attn", "flash_attn_interface")
+        }
+        with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
+            with patch("transformers.modeling_flash_attention_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
+                self.assertFalse(is_flash_attn_2_available())
+                self.assertFalse(is_flash_attn_3_available())
+                self.assertFalse(is_flash_attn_4_available())
+
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
             self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
@@ -2997,6 +3034,60 @@ class TestAttentionImplementation(unittest.TestCase):
         experts_module.config._experts_implementation = "foobar"
         with self.assertRaisesRegex(KeyError, "`foobar` is not a valid experts implementation registered"):
             _ = experts_module(hidden_states, dummy_indices, dummy_scores)
+
+    def test_can_set_attn_returns_false_when_module_missing(self):
+        # Simulate the "module cleared from sys.modules" case (test cleanup, REPL).
+        from transformers.models.llama.modeling_llama import LlamaModel
+
+        original = sys.modules.pop(LlamaModel.__module__)
+        try:
+            self.assertFalse(LlamaModel._can_set_attn_implementation())
+            self.assertFalse(LlamaModel._can_set_experts_implementation())
+        finally:
+            sys.modules[LlamaModel.__module__] = original
+
+    def test_can_set_attn_skips_torch_dynamic_wrappers(self):
+        # Simulate FSDP2's `FSDP<ModelName>`: a dynamic subclass whose __module__ lives under torch.*
+        from transformers.models.llama.modeling_llama import LlamaModel
+
+        FSDPLlamaModel = type("FSDPLlamaModel", (LlamaModel,), {})
+        FSDPLlamaModel.__module__ = "torch.distributed.fsdp._fully_shard._fsdp_state"
+
+        # The MRO walk should skip past FSDPLlamaModel to LlamaModel and find the underlying answer.
+        self.assertTrue(FSDPLlamaModel._can_set_attn_implementation())
+
+    def test_can_set_attn_modern_vs_legacy(self):
+        # Modern interface model: True. Legacy model (T5 doesn't use ALL_ATTENTION_FUNCTIONS): False.
+        from transformers.models.llama.modeling_llama import LlamaModel
+        from transformers.models.t5.modeling_t5 import T5Model
+
+        self.assertTrue(LlamaModel._can_set_attn_implementation())
+        self.assertFalse(T5Model._can_set_attn_implementation())
+
+    def test_can_set_attn_legacy_edge_cases(self):
+        # FSMT: bare `class Attention(nn.Module):` -- tightened regex catches this case.
+        from transformers.models.fsmt.modeling_fsmt import FSMTModel
+
+        self.assertFalse(FSMTModel._can_set_attn_implementation())
+
+        # SLANet: `class SLANetAttentionGRUCell(nn.Module):` -- "Attention" not at end of class name.
+        from transformers.models.slanet.modeling_slanet import SLANetBackbone
+
+        self.assertFalse(SLANetBackbone._can_set_attn_implementation())
+
+        # ShieldGemma2: output dataclass with "Attention" in the name but no `nn.Module` parent.
+        # No actual Attention class -> assume True (multimodal model or inherits from elsewhere).
+        from transformers.models.shieldgemma2.modeling_shieldgemma2 import ShieldGemma2ForImageClassification
+
+        self.assertTrue(ShieldGemma2ForImageClassification._can_set_attn_implementation())
+
+    def test_can_set_experts_moe_vs_dense(self):
+        # MoE model with @use_experts_implementation: True. Non-MoE model: False.
+        from transformers.models.llama.modeling_llama import LlamaModel
+        from transformers.models.mixtral.modeling_mixtral import MixtralModel
+
+        self.assertTrue(MixtralModel._can_set_experts_implementation())
+        self.assertFalse(LlamaModel._can_set_experts_implementation())
 
 
 @require_torch
@@ -3568,60 +3659,81 @@ class DisableMmapLoadingTest(unittest.TestCase):
             torch.testing.assert_close(loaded_mmap[k], loaded_no_mmap[k])
 
 
-@require_torch
-class TestImplementationDetection(unittest.TestCase):
-    """Tests for the two `_can_set_*_implementation` checks."""
+class RemoteAndCustomCodeModelTests(unittest.TestCase):
+    def test_remote_code_registration(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`
+        """
+        model = AutoModel.from_pretrained("hf-internal-testing/dummy_remote_code", trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(model.is_remote_code())
+        self.assertFalse(model.__class__.__module__.startswith("transformers."))
 
-    def test_returns_false_when_module_missing(self):
-        # Simulate the "module cleared from sys.modules" case (test cleanup, REPL).
-        from transformers.models.llama.modeling_llama import LlamaModel
+    def test_remote_code_registration_with_model_type_collision(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`, even if the `model_type` registered in the custom model is the same as an existing one
+        in the library. In this case, we should also be able to load the native model if `trust_remote_code=False` after registration.
+        """
 
-        original = sys.modules.pop(LlamaModel.__module__)
-        try:
-            self.assertFalse(LlamaModel._can_set_attn_implementation())
-            self.assertFalse(LlamaModel._can_set_experts_implementation())
-        finally:
-            sys.modules[LlamaModel.__module__] = original
+        # This remote model uses "llama" as model_type, same to our llama inside the lib
+        model_name = "hf-internal-testing/dummy_remote_code_collision_model_type"
+        custom_model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(custom_model.is_remote_code())
+        self.assertFalse(custom_model.__class__.__module__.startswith("transformers."))
+        # Check the config as well
+        self.assertFalse(custom_model.config.__class__.__module__.startswith("transformers."))
 
-    def test_skips_torch_dynamic_wrappers(self):
-        # Simulate FSDP2's `FSDP<ModelName>`: a dynamic subclass whose __module__ lives under torch.*
-        from transformers.models.llama.modeling_llama import LlamaModel
+        # Check that if we do NOT use `trust_remote_code=True`, then the registration of the same model type before it will not force
+        # a model type of the wrong type, i.e. we use the native LlamaModel
+        native_model = AutoModel.from_pretrained("hf-internal-testing/tiny-llama")
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertFalse(native_model.is_remote_code())
+        self.assertTrue(native_model.__class__.__module__.startswith("transformers."))
+        # Check the config as well
+        self.assertTrue(native_model.config.__class__.__module__.startswith("transformers."))
 
-        FSDPLlamaModel = type("FSDPLlamaModel", (LlamaModel,), {})
-        FSDPLlamaModel.__module__ = "torch.distributed.fsdp._fully_shard._fsdp_state"
+    def test_remote_code_registration_with_config_and_model_type_collision(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`, even if the config class AND the `model_type` used in the custom model are the same as an
+        existing model in the library. In this case, we should also be able to load the native model if `trust_remote_code=False`
+        after registration.
+        """
 
-        # The MRO walk should skip past FSDPLlamaModel to LlamaModel and find the underlying answer.
-        self.assertTrue(FSDPLlamaModel._can_set_attn_implementation())
+        model_name = "hf-internal-testing/dummy_remote_code_collision_config_and_model_type"
+        custom_model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(custom_model.is_remote_code())
+        self.assertFalse(custom_model.__class__.__module__.startswith("transformers."))
+        # Here, the config class is the original llama config even with the remote model
+        self.assertTrue(custom_model.config.__class__.__module__.startswith("transformers."))
 
-    def test_can_set_attn_modern_vs_legacy(self):
-        # Modern interface model: True. Legacy model (T5 doesn't use ALL_ATTENTION_FUNCTIONS): False.
-        from transformers.models.llama.modeling_llama import LlamaModel
-        from transformers.models.t5.modeling_t5 import T5Model
+        # Check that if we do NOT use `trust_remote_code=True`, then the registration of the same model type with the
+        # same name and same config class before it will not force a model type of the wrong type, i.e. we use the native LlamaModel
+        native_model = AutoModel.from_pretrained("hf-internal-testing/tiny-llama")
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertFalse(native_model.is_remote_code())
+        self.assertTrue(native_model.__class__.__module__.startswith("transformers."))
+        # Check config as well
+        self.assertTrue(native_model.config.__class__.__module__.startswith("transformers."))
 
-        self.assertTrue(LlamaModel._can_set_attn_implementation())
-        self.assertFalse(T5Model._can_set_attn_implementation())
+    def test_custom_code_is_detected(self):
+        """Test that classes defined in the current context (user module, notebook, ...) will be detected as custom code"""
 
-    def test_can_set_attn_legacy_edge_cases(self):
-        # FSMT: bare `class Attention(nn.Module):` -- tightened regex catches this case.
-        from transformers.models.fsmt.modeling_fsmt import FSMTModel
+        class MyNewModel(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.foo = nn.Linear(2, 2)
+                self.post_init()
 
-        self.assertFalse(FSMTModel._can_set_attn_implementation())
+            def forward(self, x):
+                return self.foo(x)
 
-        # SLANet: `class SLANetAttentionGRUCell(nn.Module):` -- "Attention" not at end of class name.
-        from transformers.models.slanet.modeling_slanet import SLANetBackbone
+        # This is a type created in the current session - it should be custom code, but not remote code
+        model = MyNewModel(PreTrainedConfig())
 
-        self.assertFalse(SLANetBackbone._can_set_attn_implementation())
-
-        # ShieldGemma2: output dataclass with "Attention" in the name but no `nn.Module` parent.
-        # No actual Attention class -> assume True (multimodal model or inherits from elsewhere).
-        from transformers.models.shieldgemma2.modeling_shieldgemma2 import ShieldGemma2ForImageClassification
-
-        self.assertTrue(ShieldGemma2ForImageClassification._can_set_attn_implementation())
-
-    def test_can_set_experts_moe_vs_dense(self):
-        # MoE model with @use_experts_implementation: True. Non-MoE model: False.
-        from transformers.models.llama.modeling_llama import LlamaModel
-        from transformers.models.mixtral.modeling_mixtral import MixtralModel
-
-        self.assertTrue(MixtralModel._can_set_experts_implementation())
-        self.assertFalse(LlamaModel._can_set_experts_implementation())
+        self.assertTrue(model.is_custom_code())
+        self.assertFalse(model.is_remote_code())

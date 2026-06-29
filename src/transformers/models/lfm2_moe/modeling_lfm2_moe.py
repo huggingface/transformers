@@ -192,23 +192,22 @@ class Lfm2MoeExperts(nn.Module):
         return final_hidden_states
 
 
-class Lfm2MoeSparseMoeBlock(nn.Module):
+class Lfm2MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.routed_scaling_factor = config.routed_scaling_factor
+        self.num_experts = config.num_experts
         self.norm_topk_prob = config.norm_topk_prob
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.routed_scaling_factor = config.routed_scaling_factor
         self.use_expert_bias = config.use_expert_bias
 
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        self.experts = Lfm2MoeExperts(config)
-        if self.use_expert_bias:
-            self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
-
-    def route_tokens_to_experts(self, router_logits):
+    def forward(self, hidden_states, expert_bias=None):
+        router_logits = F.linear(hidden_states, self.weight)
         routing_weights = router_logits.sigmoid()
         if self.use_expert_bias:
-            scores_for_routing = routing_weights + self.expert_bias
+            scores_for_routing = routing_weights + expert_bias
             _, selected_experts = torch.topk(scores_for_routing, k=self.top_k, dim=-1)
             routing_weights = torch.gather(routing_weights, dim=1, index=selected_experts).type_as(router_logits)
         else:
@@ -217,13 +216,23 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         if self.norm_topk_prob:
             routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-6)
         routing_weights = routing_weights * self.routed_scaling_factor
-        return selected_experts, routing_weights
+        return router_logits, routing_weights, selected_experts
+
+
+class Lfm2MoeSparseMoeBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.experts = Lfm2MoeExperts(config)
+        self.gate = Lfm2MoeTopKRouter(config)
+        self.use_expert_bias = config.use_expert_bias
+        if self.use_expert_bias:
+            self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        router_logits = self.gate(hidden_states_reshaped)
-        selected_experts, routing_weights = self.route_tokens_to_experts(router_logits)
+        expert_bias = self.expert_bias if self.use_expert_bias else None
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped, expert_bias)
         final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
@@ -401,6 +410,7 @@ class Lfm2MoeShortConv(nn.Module):
         x: torch.Tensor,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        seq_idx: torch.IntTensor | None = None,
     ):
         x = apply_mask_to_padding_states(x, attention_mask)
         BCx = self.in_proj(x).transpose(-1, -2)
@@ -423,7 +433,8 @@ class Lfm2MoeShortConv(nn.Module):
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
                 conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
 
-            conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None)
+            # `seq_idx` resets conv state at packed-sample boundaries; None = previous behaviour.
+            conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None, seq_idx=seq_idx)
 
         y = C * conv_out
         y = self.out_proj(y.transpose(-1, -2).contiguous())
@@ -434,6 +445,7 @@ class Lfm2MoeShortConv(nn.Module):
         x: torch.Tensor,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        seq_idx: torch.IntTensor | None = None,
     ):
         seqlen = x.shape[1]
 
@@ -450,6 +462,20 @@ class Lfm2MoeShortConv(nn.Module):
                 conv_out += self.conv.bias
 
             conv_out = conv_out.unsqueeze(-1)
+        elif seq_idx is not None and x.shape[0] == 1:
+            # Per-segment conv so the receptive field cannot cross packed-sample boundaries.
+            if past_key_values is not None:
+                conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
+                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
+            si = seq_idx[0]
+            change = (si[1:] != si[:-1]).nonzero(as_tuple=True)[0] + 1
+            bounds = torch.cat([change.new_zeros(1), change, change.new_full((1,), si.numel())]).tolist()
+            parts = []
+            for i in range(len(bounds) - 1):
+                s, e = bounds[i], bounds[i + 1]
+                if e > s:
+                    parts.append(self.conv(Bx[:, :, s:e])[..., : e - s])
+            conv_out = torch.cat(parts, dim=-1)
         else:
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
@@ -467,10 +493,11 @@ class Lfm2MoeShortConv(nn.Module):
         hidden_states: torch.Tensor,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        seq_idx: torch.IntTensor | None = None,
     ):
         if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, past_key_values, attention_mask)
-        return self.slow_forward(hidden_states, past_key_values, attention_mask)
+            return self.cuda_kernels_forward(hidden_states, past_key_values, attention_mask, seq_idx=seq_idx)
+        return self.slow_forward(hidden_states, past_key_values, attention_mask, seq_idx=seq_idx)
 
 
 class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
@@ -514,6 +541,7 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
                 hidden_states=self.operator_norm(hidden_states),
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
+                seq_idx=kwargs.get("seq_idx"),
             )
         hidden_states = hidden_states + residual
         hidden_states = hidden_states + self.feed_forward(self.ffn_norm(hidden_states))
@@ -544,6 +572,8 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
         if isinstance(module, Lfm2MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Lfm2MoeTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Lfm2MoeSparseMoeBlock):
             if module.use_expert_bias:
                 init.zeros_(module.expert_bias)
@@ -630,10 +660,8 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
 @auto_docstring
 class Lfm2MoeForCausalLM(Lfm2MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)
