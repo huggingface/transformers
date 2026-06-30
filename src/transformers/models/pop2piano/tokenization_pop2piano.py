@@ -576,7 +576,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 **kwargs,
             )
 
-        # since we already have truncated sequnences we are just left to do padding
+        # since we already have truncated sequences we are just left to do padding
         token_ids = self.pad(
             token_ids,
             padding=padding_strategy,
