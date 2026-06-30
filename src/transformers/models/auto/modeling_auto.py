@@ -338,6 +338,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mvp", "MvpModel"),
         ("nanochat", "NanoChatModel"),
         ("nemotron", "NemotronModel"),
+        ("nemotron3_5_asr", "Nemotron3_5AsrForRNNT"),
         ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingEncoder"),
         ("nemotron_h", "NemotronHModel"),
@@ -357,6 +358,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ovis2", "Ovis2Model"),
         ("owlv2", "Owlv2Model"),
         ("owlvit", "OwlViTModel"),
+        ("paddleocr_vl", "PaddleOCRVLModel"),
         ("paligemma", "PaliGemmaModel"),
         ("parakeet_ctc", "ParakeetForCTC"),
         ("parakeet_encoder", "ParakeetEncoder"),
@@ -1735,6 +1737,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_RNNT_MAPPING_NAMES = OrderedDict(
     [
         # Model for RNN Transducer (RNN-T) mapping.
+        ("nemotron3_5_asr", "Nemotron3_5AsrForRNNT"),
         ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
         ("parakeet_rnnt", "ParakeetForRNNT"),
     ]
