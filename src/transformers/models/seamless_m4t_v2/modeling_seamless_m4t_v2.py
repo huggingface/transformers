@@ -1528,6 +1528,7 @@ class SeamlessM4Tv2SpeechEncoder(SeamlessM4Tv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
     def forward(
@@ -1632,6 +1633,7 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
     def forward(
@@ -1641,28 +1643,6 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        r"""
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-        """
         if input_ids is not None and self.is_t2u_encoder:
             raise ValueError(
                 "You cannot pass input_ids to the encoder of the text_to_units model. Pass inputs_embeds instead."
@@ -1784,9 +1764,9 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
