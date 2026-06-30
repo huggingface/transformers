@@ -26,9 +26,9 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MoE,
-    DeepseekV3NaiveMoe,
     DeepseekV3PreTrainedModel,
     DeepseekV3TopkRouter,
 )
@@ -73,6 +73,12 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
         "layers.*.mlp.down_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
 
@@ -174,7 +180,7 @@ class MiMoV2FlashTopkRouter(DeepseekV3TopkRouter):
     pass
 
 
-class MiMoV2FlashNaiveMoe(DeepseekV3NaiveMoe):
+class MiMoV2FlashExperts(DeepseekV3Experts):
     pass
 
 
