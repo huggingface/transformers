@@ -29,20 +29,14 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class VibeVoiceConfig(PreTrainedConfig):
     r"""
-    acoustic_tokenizer_config (`Union[AutoConfig, dict]`, *optional*):
-        The config object or dictionary of the acoustic tokenizer.
-    semantic_tokenizer_encoder_config (`Union[AutoConfig, dict]`, *optional*):
+    semantic_model_config (`Union[AutoConfig, dict]`, *optional*):
         The config object or dictionary of the semantic tokenizer encoder. This tokenizer extracts semantic features from audio.
     audio_bos_token_id (`int`, *optional*, defaults to 151652):
         The token ID indicating the start of audio tokens.
     audio_eos_token_id (`int`, *optional*, defaults to 151653):
         The token ID indicating the end of audio tokens.
-    audio_diffusion_token_id (`int`, *optional*, defaults to 151654):
-        The token ID for audio diffusion placeholder tokens in the input sequence.
     num_head_layers (`int`, *optional*, defaults to 4):
         Number of layers in the diffusion head.
-    hidden_act (`str`, *optional*, defaults to `"silu"`):
-        The activation function used by the diffusion head.
     frequency_embedding_size (`int`, *optional*, defaults to 256):
         The size of the sinusoidal frequency embedding for timestep encoding in the diffusion head.
     num_diffusion_steps (`int`, *optional*, defaults to 10):
@@ -63,8 +57,8 @@ class VibeVoiceConfig(PreTrainedConfig):
 
     model_type = "vibevoice"
     sub_configs = {
-        "acoustic_tokenizer_config": AutoConfig,
-        "semantic_tokenizer_encoder_config": AutoConfig,
+        "audio_config": AutoConfig,
+        "semantic_model_config": AutoConfig,
         "text_config": AutoConfig,
     }
 
@@ -79,14 +73,14 @@ class VibeVoiceConfig(PreTrainedConfig):
         "language_model.layers.*.mlp.down_proj": "rowwise",
     }
 
-    acoustic_tokenizer_config: dict | PreTrainedConfig | None = None
-    semantic_tokenizer_encoder_config: dict | PreTrainedConfig | None = None
+    audio_config: dict | PreTrainedConfig | None = None
+    semantic_model_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     pad_token_id: int = 151643
     eos_token_id: int = 151643
     audio_bos_token_id: int = 151652
     audio_eos_token_id: int = 151653
-    audio_diffusion_token_id: int = 151654
+    audio_token_id: int = 151654
     num_head_layers: int = 4
     intermediate_size: int = 4608
     rms_norm_eps: float = 1e-5
@@ -96,27 +90,21 @@ class VibeVoiceConfig(PreTrainedConfig):
     mlp_bias: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.acoustic_tokenizer_config, dict):
-            self.acoustic_tokenizer_config["model_type"] = self.acoustic_tokenizer_config.get(
-                "model_type", "vibevoice_acoustic_tokenizer"
-            )
-            self.acoustic_tokenizer_config = CONFIG_MAPPING[self.acoustic_tokenizer_config["model_type"]](
-                **self.acoustic_tokenizer_config
-            )
-        elif self.acoustic_tokenizer_config is None:
-            self.acoustic_tokenizer_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer"]()
+        if isinstance(self.audio_config, dict):
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "vibevoice_acoustic_tokenizer")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer"]()
 
-        if isinstance(self.semantic_tokenizer_encoder_config, dict):
-            self.semantic_tokenizer_encoder_config["model_type"] = self.semantic_tokenizer_encoder_config.get(
+        if isinstance(self.semantic_model_config, dict):
+            self.semantic_model_config["model_type"] = self.semantic_model_config.get(
                 "model_type", "vibevoice_acoustic_tokenizer_encoder"
             )
-            self.semantic_tokenizer_encoder_config = CONFIG_MAPPING[
-                self.semantic_tokenizer_encoder_config["model_type"]
-            ](**self.semantic_tokenizer_encoder_config)
-        elif self.semantic_tokenizer_encoder_config is None:
-            self.semantic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](
-                hidden_size=128
+            self.semantic_model_config = CONFIG_MAPPING[self.semantic_model_config["model_type"]](
+                **self.semantic_model_config
             )
+        elif self.semantic_model_config is None:
+            self.semantic_model_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](hidden_size=128)
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")

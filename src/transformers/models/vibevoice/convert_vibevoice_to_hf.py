@@ -50,18 +50,21 @@ STATE_DICT_MAPPING = {
     r"semantic_tokenizer\.encoder\.head\.conv\.":                       r"semantic_tokenizer_encoder.head.",
 
     # Acoustic tokenizer encoder
-    r"acoustic_tokenizer\.encoder\.downsample_layers\.0\.0\.conv\.":    r"acoustic_tokenizer.encoder.stem.conv.conv.",
-    r"acoustic_tokenizer\.encoder\.stages\.0\.":                        r"acoustic_tokenizer.encoder.stem.stage.",
-    r"acoustic_tokenizer\.encoder\.downsample_layers\.(\d+)\.0\.conv\.": r"acoustic_tokenizer.encoder.conv_layers.PLACEHOLDER.conv.conv.",
-    r"acoustic_tokenizer\.encoder\.stages\.(\d+)\.":                    r"acoustic_tokenizer.encoder.conv_layers.PLACEHOLDER.stage.",
-    r"acoustic_tokenizer\.encoder\.head\.conv\.":                       r"acoustic_tokenizer.encoder.head.",
+    r"acoustic_tokenizer\.encoder\.downsample_layers\.0\.0\.conv\.":    r"audio_tower.encoder.stem.conv.conv.",
+    r"acoustic_tokenizer\.encoder\.stages\.0\.":                        r"audio_tower.encoder.stem.stage.",
+    r"acoustic_tokenizer\.encoder\.downsample_layers\.(\d+)\.0\.conv\.": r"audio_tower.encoder.conv_layers.PLACEHOLDER.conv.conv.",
+    r"acoustic_tokenizer\.encoder\.stages\.(\d+)\.":                    r"audio_tower.encoder.conv_layers.PLACEHOLDER.stage.",
+    r"acoustic_tokenizer\.encoder\.head\.conv\.":                       r"audio_tower.encoder.head.",
 
     # Acoustic tokenizer decoder: upsample_layers.0 -> stem, upsample_layers.N -> conv_layers.N-1
-    r"acoustic_tokenizer\.decoder\.upsample_layers\.0\.0\.conv\.conv\.":           r"acoustic_tokenizer.decoder.stem.conv.conv.",
-    r"acoustic_tokenizer\.decoder\.stages\.0\.":                                   r"acoustic_tokenizer.decoder.stem.stage.",
-    r"acoustic_tokenizer\.decoder\.upsample_layers\.(\d+)\.0\.convtr\.convtr\.":  r"acoustic_tokenizer.decoder.conv_layers.PLACEHOLDER.convtr.convtr.",
-    r"acoustic_tokenizer\.decoder\.stages\.(\d+)\.":                               r"acoustic_tokenizer.decoder.conv_layers.PLACEHOLDER.stage.",
-    r"acoustic_tokenizer\.decoder\.head\.conv\.":                                  r"acoustic_tokenizer.decoder.head.",
+    r"acoustic_tokenizer\.decoder\.upsample_layers\.0\.0\.conv\.conv\.":           r"audio_tower.decoder.stem.conv.conv.",
+    r"acoustic_tokenizer\.decoder\.stages\.0\.":                                   r"audio_tower.decoder.stem.stage.",
+    r"acoustic_tokenizer\.decoder\.upsample_layers\.(\d+)\.0\.convtr\.convtr\.":  r"audio_tower.decoder.conv_layers.PLACEHOLDER.convtr.convtr.",
+    r"acoustic_tokenizer\.decoder\.stages\.(\d+)\.":                               r"audio_tower.decoder.conv_layers.PLACEHOLDER.stage.",
+    r"acoustic_tokenizer\.decoder\.head\.conv\.":                                  r"audio_tower.decoder.head.",
+
+    # Rename any remaining acoustic tokenizer keys (the module is `audio_tower` in the HF model)
+    r"acoustic_tokenizer\.":                                                       r"audio_tower.",
 
     # Diffusion head renaming
     r"prediction_head\.t_embedder\.mlp\.0\.":                                      r"diffusion_head.timestep_embedder.layer_1.",
@@ -71,9 +74,17 @@ STATE_DICT_MAPPING = {
     r"prediction_head\.final_layer\.linear\.":                                     r"diffusion_head.final_layer.linear_2.",
     r"prediction_head\.":                                                          r"diffusion_head.",
 
+    # Multimodal connectors (acoustic connector is the `multi_modal_projector` in the HF model)
+    r"acoustic_connector\.fc1\.": r"multi_modal_projector.linear_1.",
+    r"acoustic_connector\.norm\.": r"multi_modal_projector.act.",
+    r"acoustic_connector\.fc2\.": r"multi_modal_projector.linear_2.",
+    r"semantic_connector\.fc1\.": r"semantic_connector.linear_1.",
+    r"semantic_connector\.norm\.": r"semantic_connector.act.",
+    r"semantic_connector\.fc2\.": r"semantic_connector.linear_2.",
+
     # Latent factors
-    r"^model\.speech_scaling_factor":                                              r"latent_scaling_factor",
-    r"^model\.speech_bias_factor":                                                 r"latent_bias_factor",
+    r"^model\.speech_scaling_factor":                                              r"model.latent_scaling_factor",
+    r"^model\.speech_bias_factor":                                                 r"model.latent_bias_factor",
 
     # Clean up nested conv layers (must be after above mappings)
     r"mixer\.conv\.conv\.conv\.":                                                  r"mixer.conv.",
@@ -236,12 +247,12 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
     ]
     # fmt: on
 
-    # Process tokenizer configs
+    # Process tokenizer configs (pop old keys so they don't end up in the pushed config)
     semantic_config_dict = process_tokenizer_config(
-        model_config.get("semantic_tokenizer_config", {}).copy(), config_keys_to_remove
+        model_config.pop("semantic_tokenizer_config", {}).copy(), config_keys_to_remove
     )
     acoustic_config_dict = process_tokenizer_config(
-        model_config.get("acoustic_tokenizer_config", {}).copy(), config_keys_to_remove
+        model_config.pop("acoustic_tokenizer_config", {}).copy(), config_keys_to_remove
     )
     # Acoustic tokenizer has additional vae_std parameter
     if "fix_std" in acoustic_config_dict:
@@ -288,7 +299,7 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
 {{ system_prompt -}}
 {%- set audio_bos_token = audio_bos_token | default("<|vision_start|>") %}
 {%- set audio_eos_token = audio_eos_token | default("<|vision_end|>") %}
-{%- set audio_diffusion_token = audio_diffusion_token | default("<|vision_pad|>") %}
+{%- set audio_token = audio_token | default("<|vision_pad|>") %}
 {%- set ns = namespace(speakers_with_audio="") %}
 {%- for message in messages %}
     {%- set role = message['role'] %}
@@ -303,7 +314,7 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
 {{ " Voice input:\n" }}
 {%- for speaker in ns.speakers_with_audio.rstrip(',').split(',') %}
 {%- if speaker %}
- Speaker {{ speaker }}:{{ audio_bos_token }}{{ audio_diffusion_token }}{{ audio_eos_token }}{{ "\n" }}
+ Speaker {{ speaker }}:{{ audio_bos_token }}{{ audio_token }}{{ audio_eos_token }}{{ "\n" }}
 {%- endif %}
 {%- endfor %}
 {%- endif %}
@@ -344,16 +355,16 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
 
     # 9) Create and save full VibeVoice model
     logger.info("Creating full model")
-    model_config["acoustic_tokenizer_config"] = acoustic_config.to_dict()
-    model_config["semantic_tokenizer_encoder_config"] = semantic_encoder_config.to_dict()
+    model_config["audio_config"] = acoustic_config.to_dict()
+    model_config["semantic_model_config"] = semantic_encoder_config.to_dict()
     vibevoice_config = VibeVoiceConfig(**model_config)
     vibevoice_model = VibeVoiceForConditionalGeneration(vibevoice_config).to(dtype)
     logger.info(f"Number of parameters in model: {len(vibevoice_model.state_dict())}")
     # -- print dtypes of key components for verification
-    logger.info(f"Acoustic connector dtype: {next(vibevoice_model.model.acoustic_connector.parameters()).dtype}")
+    logger.info(f"Acoustic connector dtype: {next(vibevoice_model.model.multi_modal_projector.parameters()).dtype}")
     logger.info(f"Semantic connector dtype: {next(vibevoice_model.model.semantic_connector.parameters()).dtype}")
     logger.info(f"Language model dtype: {next(vibevoice_model.model.language_model.parameters()).dtype}")
-    logger.info(f"Acoustic tokenizer dtype: {next(vibevoice_model.model.acoustic_tokenizer.parameters()).dtype}")
+    logger.info(f"Acoustic tokenizer dtype: {next(vibevoice_model.model.audio_tower.parameters()).dtype}")
     logger.info(
         f"Semantic tokenizer dtype: {next(vibevoice_model.model.semantic_tokenizer_encoder.parameters()).dtype}"
     )

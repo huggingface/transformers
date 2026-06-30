@@ -35,7 +35,7 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.checkpoint = "bezzam/VibeVoice-1.5B"
+        cls.checkpoint = "bezzam/VibeVoice-1.5B-hf"
         processor = VibeVoiceProcessor.from_pretrained(cls.checkpoint)
         cls.tmpdirname = tempfile.mkdtemp()
         processor.save_pretrained(cls.tmpdirname)
@@ -46,7 +46,7 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 {{ system_prompt -}}
 {%- set audio_bos_token = audio_bos_token | default("<|vision_start|>") %}
 {%- set audio_eos_token = audio_eos_token | default("<|vision_end|>") %}
-{%- set audio_diffusion_token = audio_diffusion_token | default("<|vision_pad|>") %}
+{%- set audio_token = audio_token | default("<|vision_pad|>") %}
 {%- set ns = namespace(speakers_with_audio="") %}
 {%- for message in messages %}
     {%- set role = message['role'] %}
@@ -61,7 +61,7 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 {{ " Voice input:\n" }}
 {%- for speaker in ns.speakers_with_audio.rstrip(',').split(',') %}
 {%- if speaker %}
- Speaker {{ speaker }}:{{ audio_bos_token }}{{ audio_diffusion_token }}{{ audio_eos_token }}{{ "\n" }}
+ Speaker {{ speaker }}:{{ audio_bos_token }}{{ audio_token }}{{ audio_eos_token }}{{ "\n" }}
 {%- endif %}
 {%- endfor %}
 {%- endif %}

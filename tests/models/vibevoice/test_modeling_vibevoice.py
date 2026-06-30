@@ -82,6 +82,8 @@ class VibeVoiceModelTester:
         is_training=True,
         use_cache=True,
         num_head_layers=2,
+        frequency_embedding_size=8,
+        intermediate_size=16,
         text_config={
             "model_type": "qwen2",
             "intermediate_size": 36,
@@ -93,12 +95,12 @@ class VibeVoiceModelTester:
             "num_key_value_heads": 4,
             "use_labels": True,
             "use_mrope": False,
-            "vocab_size": 99,
+            "vocab_size": 10,
             "pad_token_id": 0,
             "eos_token_id": 0,  # same as pad_token for Vibevoice
             "bos_token_id": None,
         },
-        acoustic_tokenizer_config={
+        audio_config={
             "model_type": "vibevoice_acoustic_tokenizer",
             "hidden_size": 16,
             "kernel_size": 3,
@@ -106,7 +108,7 @@ class VibeVoiceModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
-        semantic_tokenizer_encoder_config={
+        semantic_model_config={
             "model_type": "vibevoice_acoustic_tokenizer_encoder",
             "channels": 1,
             "hidden_size": 32,
@@ -122,9 +124,11 @@ class VibeVoiceModelTester:
         self.is_training = is_training
         self.use_cache = use_cache
         self.text_config = text_config
-        self.acoustic_tokenizer_config = acoustic_tokenizer_config
-        self.semantic_tokenizer_encoder_config = semantic_tokenizer_encoder_config
+        self.audio_config = audio_config
+        self.semantic_model_config = semantic_model_config
         self.num_head_layers = num_head_layers
+        self.frequency_embedding_size = frequency_embedding_size
+        self.intermediate_size = intermediate_size
 
         # Extract common attributes for testing
         self.vocab_size = text_config["vocab_size"]
@@ -136,16 +140,17 @@ class VibeVoiceModelTester:
     def get_config(self):
         return VibeVoiceConfig(
             text_config=self.text_config,
-            acoustic_tokenizer_config=self.acoustic_tokenizer_config,
-            semantic_tokenizer_encoder_config=self.semantic_tokenizer_encoder_config,
+            audio_config=self.audio_config,
+            semantic_model_config=self.semantic_model_config,
             num_head_layers=self.num_head_layers,
+            frequency_embedding_size=self.frequency_embedding_size,
+            intermediate_size=self.intermediate_size,
             use_cache=self.use_cache,
             pad_token_id=self.text_config["pad_token_id"],
             eos_token_id=self.text_config["eos_token_id"],
-            # Use token IDs that exist in our test vocabulary (vocab_size=99)
             audio_bos_token_id=3,  # Instead of default 151652
             audio_eos_token_id=4,  # Instead of default 151653
-            audio_diffusion_token_id=5,  # Instead of default 151654
+            audio_token_id=5,  # Instead of default 151654
         )
 
     def prepare_config_and_inputs(self):
@@ -183,10 +188,6 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     )
     _is_composite = True
     test_resize_embeddings = False
-    # setting to false due to error: 'VibeVoiceForConditionalGeneration' object has no attribute 'hf_device_map'
-    test_cpu_offload = False
-    test_disk_offload_safetensors = False
-    test_disk_offload_bin = False
 
     def setUp(self):
         self.model_tester = VibeVoiceModelTester(self)
@@ -253,28 +254,18 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has unique generation")
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has unique generation")
+    @unittest.skip(reason="VibeVoice generation requires noise_scheduler parameter.")
     def test_generate_continue_from_past_key_values(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has unique generation")
+    @unittest.skip(reason="VibeVoice generation requires noise_scheduler parameter.")
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has unique generation")
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation has unique generation")
-    def test_prompt_lookup_decoding_stops_at_eos(self):
+    @unittest.skip(reason="VibeVoice generation requires noise_scheduler parameter.")
+    def test_generate_from_random_inputs_embeds(self):
         pass
 
     @pytest.mark.generate
@@ -289,22 +280,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
     @pytest.mark.generate
     @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
-    def test_generate_from_inputs_embeds_1_beam_search(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
     def test_model_parallel_beam_search(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires noise_scheduler parameter.")
-    def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="VibeVoice generation requires noise_scheduler parameter.")
-    def test_generate_from_random_inputs_embeds(self):
         pass
 
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
@@ -328,22 +304,12 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     def test_greedy_generate_dict_outputs(self):
         pass
 
-    @unittest.skip(reason="VibeVoice has composite model structure.")
-    def test_tied_weights_keys(self):
-        pass
-
-    @unittest.skip(reason="VibeVoice has nested PreTrainedModels (acoustic_tokenizer contains encoder/decoder).")
+    @unittest.skip(reason="VibeVoice has nested PreTrainedModels (audio_tower contains encoder/decoder).")
     def test_internal_model_config_and_subconfig_are_same(self):
         pass
 
     @unittest.skip("Submodel (VibeVoiceAcousticTokenizerEncoderModel) does not have attention")
     def test_can_set_attention_dynamically_composite_model(self):
-        pass
-
-    @unittest.skip(
-        "VibeVoice has composite structure which fails with AttributeError: 'VibeVoiceForConditionalGeneration' object has no attribute 'hf_device_map'"
-    )
-    def test_model_parallelism(self):
         pass
 
     @pytest.mark.generate

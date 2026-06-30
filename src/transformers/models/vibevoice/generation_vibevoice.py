@@ -151,6 +151,13 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
 
+        # `pad_token_id` is created on `inputs_tensor.device` in `_prepare_special_tokens`. For multimodal models
+        # (e.g. BLIP-2, LLaVA) sharded across devices via `device_map="auto"`, `inputs_tensor` (e.g. `pixel_values`
+        # on the vision encoder) and `input_ids` (on the language model) can live on different devices, so we need to
+        # realign `pad_token_id` with `input_ids` to avoid cross-device ops below.
+        if pad_token_id is not None:
+            pad_token_id = pad_token_id.to(input_ids.device)
+
         model_forward = (
             self.get_compiled_call(generation_config.compile_config)
             if self._valid_auto_compile_criteria(model_kwargs, generation_config)
@@ -185,7 +192,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         valid_tokens = [
             self.config.audio_bos_token_id,
             self.config.audio_eos_token_id,
-            self.config.audio_diffusion_token_id,
+            self.config.audio_token_id,
             self.config.eos_token_id,
         ]
         if hasattr(self.config, "bos_token_id") and self.config.bos_token_id is not None:
@@ -331,7 +338,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                                 diffusion_start_idx, :, 0, :
                             ].clone()
 
-            diffusion_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_diffusion_token_id)
+            diffusion_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_token_id)
             diffusion_idx = diffusion_mask.nonzero(as_tuple=True)[0].cpu()
             if diffusion_idx.numel() > 0:
                 # Negative pass for classifier-free guidance
@@ -348,9 +355,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 condition = torch.cat([positive_condition, negative_condition], dim=0).to(diffusion_head_device)
 
                 # Diffusion sampling
-                noisy_audio_latent = torch.randn(
-                    condition.shape[0], self.config.acoustic_tokenizer_config.hidden_size
-                ).to(condition)
+                noisy_audio_latent = torch.randn(condition.shape[0], self.config.audio_config.hidden_size).to(
+                    condition
+                )
                 noise_scheduler.set_timesteps(num_inference_steps=num_diffusion_steps)
                 half_noise_latent_length = len(noisy_audio_latent) // 2
                 for timestep in noise_scheduler.timesteps:
@@ -366,9 +373,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 audio_latent = noisy_audio_latent[:half_noise_latent_length].unsqueeze(1)
 
                 # Decode to audio
-                scaled_latent = audio_latent / self.latent_scaling_factor.to(
+                scaled_latent = audio_latent / self.model.latent_scaling_factor.to(
                     audio_latent.device
-                ) - self.latent_bias_factor.to(audio_latent.device)
+                ) - self.model.latent_bias_factor.to(audio_latent.device)
                 if diffusion_idx.numel() < batch_size:
                     padded_latent = torch.zeros(batch_size, *scaled_latent.shape[1:]).to(
                         scaled_latent.device, scaled_latent.dtype
@@ -376,8 +383,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     padded_latent[diffusion_idx] = scaled_latent
                 else:
                     padded_latent = scaled_latent
-                audio_output = self.model.acoustic_tokenizer.decode(
-                    padded_latent.to(self.model.acoustic_tokenizer.device),
+                audio_output = self.model.audio_tower.decode(
+                    padded_latent.to(self.model.audio_tower.device),
                     padding_cache=acoustic_cache,
                     use_cache=True,
                 )
@@ -403,9 +410,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
                 semantic_features = semantic_outputs.latents[diffusion_idx]
                 semantic_cache = semantic_outputs.padding_cache
-                acoustic_embed = self.model.acoustic_connector(audio_latent)
+                acoustic_embed = self.model.multi_modal_projector(audio_latent)
                 semantic_embed = self.model.semantic_connector(semantic_features)
-                diffusion_embeds = acoustic_embed + semantic_embed
+                diffusion_embeds = acoustic_embed + semantic_embed.to(acoustic_embed.device)
                 next_inputs_embeds[diffusion_idx] = diffusion_embeds.to(next_inputs_embeds.device)
 
             inputs_embeds = next_inputs_embeds
@@ -442,7 +449,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 audio=generated_audio,
             )
         else:
-            # NOTE (ebezzam): new tokens in input_ids are simply audio tokens (mainly `audio_diffusion_token_id` to
+            # NOTE (ebezzam): new tokens in input_ids are simply audio tokens (mainly `audio_token_id` to
             # trigger generation) so returning `input_ids` is insufficient for generating audio
             return generated_audio
         # ============================================

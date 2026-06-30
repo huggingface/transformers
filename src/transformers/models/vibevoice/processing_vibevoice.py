@@ -37,7 +37,7 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {"padding": True, "padding_side": "left", "add_special_tokens": False, "return_tensors": "pt"},
         "audio_kwargs": {
             "sampling_rate": 24000,
-            "pad_to_multiple_of": 3200,  # acoustic_tokenizer.hop_length
+            "pad_to_multiple_of": 3200,  # audio_tower.hop_length
         },
         "common_kwargs": {"return_attention_mask": True},
     }
@@ -62,7 +62,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             The token used to indicate the beginning of audio generation.
         audio_eos_token (`str`, *optional*, defaults to `"<|vision_end|>"`):
             The token used to indicate the end of audio generation.
-        audio_diffusion_token (`str`, *optional*, defaults to `"<|vision_pad|>"`):
+        audio_token (`str`, *optional*, defaults to `"<|vision_pad|>"`):
             The token used to indicate to continue generating audio.
     """
 
@@ -73,14 +73,14 @@ class VibeVoiceProcessor(ProcessorMixin):
         chat_template=None,
         audio_bos_token="<|vision_start|>",
         audio_eos_token="<|vision_end|>",
-        audio_diffusion_token="<|vision_pad|>",
+        audio_token="<|vision_pad|>",
     ):
         self.audio_bos_token = audio_bos_token
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
         self.audio_eos_token = audio_eos_token
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
-        self.audio_diffusion_token = audio_diffusion_token
-        self.audio_diffusion_token_id = tokenizer.convert_tokens_to_ids(audio_diffusion_token)
+        self.audio_token = audio_token
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -136,7 +136,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, (list, tuple)):
             raise ValueError("text input must be a string or list of strings")
-        n_audio_in_text = [sample.count(self.audio_diffusion_token) for sample in text]
+        n_audio_in_text = [sample.count(self.audio_token) for sample in text]
 
         n_audio = 0
         if audio is not None:
@@ -161,11 +161,11 @@ class VibeVoiceProcessor(ProcessorMixin):
             num_audio_tokens = (
                 torch.ceil(data["padding_mask"].sum(dim=-1) / audio_kwargs["pad_to_multiple_of"]).int().tolist()
             )
-            audio_token_pattern = re.compile(re.escape(self.audio_diffusion_token))
+            audio_token_pattern = re.compile(re.escape(self.audio_token))
             audio_token_iter = iter(num_audio_tokens)
             for i, sample in enumerate(text):
                 text[i] = audio_token_pattern.sub(
-                    lambda m: self.audio_diffusion_token * next(audio_token_iter),
+                    lambda m: self.audio_token * next(audio_token_iter),
                     sample,
                 )
 
@@ -178,7 +178,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             # For diffusion loss
             acoustic_loss_mask = torch.zeros_like(data["input_ids"], dtype=torch.bool)
             if audio is not None:
-                acoustic_loss_mask[data["input_ids"] == self.audio_diffusion_token_id] = True
+                acoustic_loss_mask[data["input_ids"] == self.audio_token_id] = True
             data["acoustic_loss_mask"] = acoustic_loss_mask
 
         return BatchFeature(data=data, tensor_type=return_tensors)
