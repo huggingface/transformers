@@ -1155,37 +1155,3 @@ def retry(
         return wrapper
 
     return decorator
-
-
-def force_accelerate_hooks(child_module_name: str) -> Callable | None:
-    """
-    Decorator to forcefully fire the accelerate hooks of `child_module_name`, before entering the forward of the parent itself.
-    Indeed, the hooks of the child are only fired through the `forward` child's method, so if the child weights are used directly,
-    as is the case inside `causal_conv1d_fn` and `causal_conv1d_update` for example, they will not be fired. This may cause device
-    issues, especially in the case of offloading, that this decorator will correct.
-    """
-
-    def decorator(forward_func: Callable) -> Callable:
-        @wraps(forward_func)
-        def wrapped(self, *args, **kwargs):
-            hooked_module = getattr(self, child_module_name)
-            hook = getattr(hooked_module, "_hf_hook", None)
-            if hook is not None:
-                # Note that here we only call the hook with the module, not `*args` not `**kwargs`, as we assume the `forward`
-                # on which this decorator is applied is responsible to move the args and kwargs with its own hook if any. This makes
-                # sense as the module decorated with this should have all internal modules on the same device
-                hook.pre_forward(hooked_module)
-
-            output = forward_func(self, *args, **kwargs)
-
-            if hook is not None:
-                # Note that here we only call the hook with the module, not `output`, as we assume the `forward` on which
-                # this decorator is applied is responsible to move the output with its own hook if any. This makes sense
-                # as the module decorated with this should have all internal modules on the same device
-                hook.post_forward(hooked_module, ())
-
-            return output
-
-        return wrapped
-
-    return decorator
