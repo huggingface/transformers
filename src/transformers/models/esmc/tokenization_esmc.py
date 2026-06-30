@@ -83,7 +83,8 @@ class ESMCTokenizer(TokenizersBackend):
             The mask token, used for masked language modelling.
         eos_token (`str`, *optional*, defaults to `"<eos>"`):
             The end-of-sequence token (appended to every sequence).
-        bos_token (`<fill_type>`, *optional*): <fill_docstring>
+        bos_token (`str`, *optional*, defaults to `"<cls>"`):
+            The beginning-of-sequence token (prepended to every sequence). When unset, uses cls_token.
         chain_break_token (`str`, *optional*, defaults to `"|"`):
             Token inserted between chains in multi-chain protein inputs.
 
