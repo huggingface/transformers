@@ -487,12 +487,21 @@ class MimiEncoder(nn.Module):
             conv_layer = self.get_submodule(layername)
             setattr(conv_layer, "layer_idx", layer_idx)
 
-    def forward(self, hidden_states, padding_cache=None):
+    def forward(self, hidden_states, padding_cache=None, output_lengths=None):
         for layer in self.layers:
             if isinstance(layer, (MimiConv1d, MimiResnetBlock)):
                 hidden_states = layer(hidden_states, padding_cache=padding_cache)
             else:
                 hidden_states = layer(hidden_states)
+            # zero out positions after valid lengths so that garbage from conv bias
+            # does not leak into boundary positions at later strided convolutions.
+            if output_lengths is not None:
+                if isinstance(layer, MimiConv1d):
+                    output_lengths = layer._get_output_length(output_lengths)
+                time_mask = torch.arange(
+                    hidden_states.shape[-1], device=hidden_states.device
+                ) < output_lengths.unsqueeze(1)
+                hidden_states = hidden_states * time_mask.unsqueeze(1)
         return hidden_states
 
 
@@ -1466,12 +1475,26 @@ class MimiModel(MimiPreTrainedModel):
         Encodes the given input using the underlying VQVAE. The padding mask is required to compute the correct scale.
         """
 
-        # TODO: @eustlb, let's make the encoder support padding_mask so that batched inputs are supported.
-        embeddings = self.encoder(input_values, padding_cache=padding_cache)
+        input_lengths = None
+        if padding_mask is not None and padding_cache is None:
+            padding_mask_2d = padding_mask.any(dim=1) if padding_mask.dim() == 3 else padding_mask
+            input_lengths = padding_mask_2d.sum(dim=-1)
+        embeddings = self.encoder(input_values, padding_cache=padding_cache, output_lengths=input_lengths)
+        attention_mask = None
+        encoder_output_lengths = None
+        if input_lengths is not None:
+            encoder_output_lengths = input_lengths
+            for layer_name in self.encoder._mimiconv1d_layer_names:
+                encoder_output_lengths = self.encoder.get_submodule(layer_name)._get_output_length(
+                    encoder_output_lengths
+                )
+            attention_mask = torch.arange(embeddings.shape[-1], device=embeddings.device).unsqueeze(
+                0
+            ) < encoder_output_lengths.unsqueeze(1)
 
-        # TODO: @eustlb, convert the padding mask to attention mask.
         encoder_outputs = self.encoder_transformer(
             embeddings.transpose(1, 2),
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_streaming,
             return_dict=return_dict,
@@ -1481,10 +1504,18 @@ class MimiModel(MimiPreTrainedModel):
         elif len(encoder_outputs) > 1:
             past_key_values = encoder_outputs[1]
         embeddings = encoder_outputs[0].transpose(1, 2)
-        embeddings = self.downsample(embeddings, padding_cache=padding_cache)
 
+        if encoder_output_lengths is not None:
+            last_valid_idx = (encoder_output_lengths - 1).clamp(min=0)
+            last_valid_emb = embeddings.gather(2, last_valid_idx.view(-1, 1, 1).expand(-1, embeddings.shape[1], 1))
+            garbage_mask = torch.arange(embeddings.shape[-1], device=embeddings.device).unsqueeze(
+                0
+            ) >= encoder_output_lengths.unsqueeze(1)
+            embeddings = torch.where(garbage_mask.unsqueeze(1), last_valid_emb, embeddings)
+        embeddings = self.downsample(embeddings, padding_cache=padding_cache)
         codes = self.quantizer.encode(embeddings, num_quantizers)
         codes = codes.transpose(0, 1)
+
         return codes, past_key_values, padding_cache
 
     def get_encoded_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
