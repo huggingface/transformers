@@ -390,6 +390,7 @@ class ImageTextToTextPipeline(Pipeline):
         # User-defined `generation_config` passed to the pipeline call take precedence
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
+        generate_kwargs["return_dict_in_generate"] = False
 
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
 
@@ -415,7 +416,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
-        if getattr(self.tokenizer, "response_schema", False):
+        if getattr(self.tokenizer, "response_template", None) or getattr(self.tokenizer, "response_schema", None):
             skip_special_tokens = False
         generated_texts = self.processor.post_process_image_text_to_text(
             generated_sequence, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
@@ -441,7 +442,7 @@ class ImageTextToTextPipeline(Pipeline):
             generated_texts = new_generated_texts
         if return_type == ReturnType.FULL_TEXT:
             full_texts = []
-            for prompt_text, generated_text in zip(input_texts, generated_texts):
+            for prompt_text, generated_text, decoded_input in zip(input_texts, generated_texts, decoded_inputs):
                 if isinstance(prompt_text, str):
                     generated_text = prompt_text + generated_text
                 elif isinstance(prompt_text, Chat):
@@ -461,7 +462,13 @@ class ImageTextToTextPipeline(Pipeline):
                         ]
                     else:
                         # When we're not starting from a prefill, the output is a new assistant message
-                        if getattr(self.tokenizer, "response_schema", False):
+                        if getattr(self.tokenizer, "response_template", None) is not None:
+                            # New-style templates need to see the prompt as `prefix`, because chat
+                            # templates often pre-write part of the assistant message (e.g. an
+                            # opening <think> tag), which affects parsing.
+                            assistant_message = self.tokenizer.parse_response(generated_text, prefix=decoded_input)
+                        elif getattr(self.tokenizer, "response_schema", None) is not None:
+                            # Legacy schemas parse the generated text alone and don't support `prefix`
                             assistant_message = self.tokenizer.parse_response(generated_text)
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}

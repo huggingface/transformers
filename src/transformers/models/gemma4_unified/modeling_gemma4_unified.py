@@ -30,7 +30,15 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
+from ...masking_utils import (
+    _preprocess_mask_arguments,
+    blockwise_overlay,
+    create_causal_mask,
+    create_masks_for_generate,
+    create_sliding_window_causal_mask,
+    maybe_pad_block_sequence_ids,
+    sliding_window_overlay,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput, SequenceClassifierOutputWithPast
@@ -175,7 +183,7 @@ class Gemma4UnifiedRMSNorm(nn.Module):
 
     def _norm(self, hidden_states: torch.Tensor):
         mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
-        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to addess compiler differences between Torch and JAX
+        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -815,7 +823,9 @@ class Gemma4UnifiedVisionEmbedder(nn.Module):
             (batch, num_patches, mm_embed_dim) — embedded features (including padding positions).
         """
         # Step 1: Patch embedding (LN → Dense → LN)
-        hidden_states = self.patch_ln1(pixel_values.to(self.patch_dense.weight.dtype))
+        if (target_dtype := self.patch_dense.weight.dtype).is_floating_point:
+            pixel_values = pixel_values.to(target_dtype)
+        hidden_states = self.patch_ln1(pixel_values)
         hidden_states = self.patch_dense(hidden_states)
         hidden_states = self.patch_ln2(hidden_states)
 
@@ -860,7 +870,8 @@ class Gemma4UnifiedMultimodalEmbedder(nn.Module):
             A torch.Tensor of embeddings with shape `[batch_size, seq_len, self.config.text_config.hidden_size]`.
         """
         # Additional dtype casting
-        inputs_embeds = inputs_embeds.to(self.embedding_projection.weight.dtype)
+        if (target_dtype := self.embedding_projection.weight.dtype).is_floating_point:
+            inputs_embeds = inputs_embeds.to(target_dtype)
         embs_normed = self.embedding_pre_projection_norm(inputs_embeds)
         return self.embedding_projection(embs_normed)
 
@@ -1043,9 +1054,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
                 f" {image_features.shape[0]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(
-                image_mask.to(inputs_embeds.device), image_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_features)
 
         if pixel_values_videos is not None:
             video_features = self.get_video_features(
@@ -1062,14 +1071,12 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
                 f" {video_features.shape[0]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(
-                video_mask.to(inputs_embeds.device), video_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_features)
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
-            audio_features = audio_output.pooler_output
+            audio_features = audio_output.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             audio_mask_from_encoder = audio_output.attention_mask  # True = valid
 
             # Strip padding tokens: only keep real (non-padding) audio soft tokens.
@@ -1085,9 +1092,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
                 f" {audio_features.shape[0] * audio_features.shape[1]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(audio_mask.to(inputs_embeds.device), audio_features)
 
         # It may already have been prepared by, e.g., `generate`
         if position_ids is None:
@@ -1186,6 +1191,61 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
 
         # Use the same unified pipeline as images
         return self.get_image_features(pixel_values_videos, video_position_ids, **kwargs)
+
+
+def create_masks_for_vision_model(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    past_key_values: Cache | None,
+    position_ids: torch.Tensor | None,
+    block_sequence_ids: torch.Tensor,
+) -> dict:
+    """Create full_attention and sliding_attention masks with correct composition.
+
+    For global (full attention) layers:  causal only (no bidirectional)
+    For local (sliding window) layers:  AND(sliding_window, OR(causal, blockwise))
+
+    Unlike Gemma 3 (which applies bidirectional attention on all layers), Gemma 4
+    explicitly disables bidirectional attention on global attention layers.
+    """
+    mask_kwargs = {
+        "config": config,
+        "inputs_embeds": inputs_embeds,
+        "attention_mask": attention_mask,
+        "past_key_values": past_key_values,
+        "position_ids": position_ids,
+    }
+
+    # Full attention: causal only — no bidirectional blockwise overlay.
+    full_mask = create_causal_mask(**mask_kwargs)
+
+    # We need to manually pad the sequence IDs for the sliding mask
+    # as it's passed as an `or_mask_function` which bypasses internal padding.
+    early_exit, _, _, _, kv_length, _, kv_offset = _preprocess_mask_arguments(
+        **mask_kwargs,
+        layer_idx=0,
+    )
+    if early_exit:
+        padded_block_sequence_ids = block_sequence_ids
+    else:
+        padded_block_sequence_ids = maybe_pad_block_sequence_ids(
+            block_sequence_ids, attention_mask, kv_length, kv_offset
+        )
+
+    # Sliding attention: AND(sliding_window, OR(causal, blockwise))
+    # Pass blockwise as or_mask_function (applied as step 2 in create_causal_mask)
+    # Pass sliding_window as and_mask_function (applied as step 3, after OR)
+    sliding_mask = create_causal_mask(
+        **mask_kwargs,
+        or_mask_function=blockwise_overlay(padded_block_sequence_ids),
+        and_mask_function=sliding_window_overlay(config.sliding_window),
+    )
+
+    return {
+        "full_attention": full_mask,
+        "sliding_attention": sliding_mask,
+    }
 
 
 @auto_docstring(
@@ -1356,14 +1416,15 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             "position_ids": position_ids,
         }
 
-        # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-        # Smaller Gemma models use a conventional casual attention mask
-        if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-            if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+        text_config = config.get_text_config()
+        use_bidir = getattr(text_config, "use_bidirectional_attention", None) == "vision"
 
-            mask_kwargs["block_sequence_ids"] = block_sequence_ids
+        if use_bidir and mm_token_type_ids is not None:
+            block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+            return create_masks_for_vision_model(
+                block_sequence_ids=block_sequence_ids,
+                **mask_kwargs,
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 
