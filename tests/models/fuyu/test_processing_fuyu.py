@@ -322,10 +322,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     def test_unstructured_kwargs_batched(self):
         if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.get_processor(use_full=True)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2)
