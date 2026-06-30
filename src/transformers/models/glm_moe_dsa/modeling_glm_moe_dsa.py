@@ -200,10 +200,6 @@ class GlmMoeDsaIndexer(nn.Module):
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
 
-    def apply_indexer_rotary_pos_emb(self, q_rot, k_rot, cos, sin):
-        # GLM-MoE-DSA uses interleaved RoPE in the indexer.
-        return apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-
     @torch.no_grad()
     def forward(
         self,
@@ -217,13 +213,8 @@ class GlmMoeDsaIndexer(nn.Module):
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
 
-        This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
-        and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
-        are preserved: Hq·Hk = q·k), and FP8 quantization is a precision optimization, we skip both and compute
-        scores directly in bf16/fp32.
-
-        The scoring logic computes:
-            index_score[b,s,t] = Σ_h (weight[b,s,h] · softmax_scale · q[b,s,h,:] · k[b,t,:])
+        Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE
+        rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
 
         Args:
             hidden_states: Input hidden states `[B, S, hidden_size]`.
@@ -245,7 +236,8 @@ class GlmMoeDsaIndexer(nn.Module):
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        q_rot, k_rot = self.apply_indexer_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        # GLM-MoE-DSA uses interleaved RoPE in the indexer
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 

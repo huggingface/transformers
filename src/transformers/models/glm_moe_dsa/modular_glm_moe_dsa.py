@@ -15,6 +15,7 @@
 from collections.abc import Callable
 
 import torch
+import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
@@ -134,9 +135,67 @@ class GlmMoeDsaRotaryEmbedding(DeepseekV32RotaryEmbedding):
 
 
 class GlmMoeDsaIndexer(DeepseekV32Indexer):
-    def apply_indexer_rotary_pos_emb(self, q_rot, k_rot, cos, sin):
-        # GLM-MoE-DSA uses interleaved RoPE in the indexer.
-        return apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+    @torch.no_grad()
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        q_resid: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        position_ids: torch.Tensor,
+        past_key_values: Cache | None = None,
+    ) -> torch.Tensor:
+        """
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
+
+        Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE
+        rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
+
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
+            position_embeddings: `(cos, sin)` from RotaryEmbedding.
+            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
+            past_key_values: Cache object containing the indexer key cache for this layer.
+
+        Returns:
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
+                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+        """
+        batch_size, seq_len, _ = hidden_states.shape
+        cos, sin = position_embeddings
+        q = self.wq_b(q_resid)  # [B, S, H*D]
+        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
+        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+
+        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
+        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+
+        # GLM-MoE-DSA uses interleaved RoPE in the indexer
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
+
+        if past_key_values is not None:
+            k = past_key_values.update_indexer(k, self.layer_idx)
+
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
+        scores = F.relu(scores)
+
+        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
+        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+        if attention_mask is not None:
+            index_scores = index_scores + attention_mask
+        else:
+            key_positions = torch.arange(index_scores.shape[-1], device=index_scores.device)
+            causal = key_positions[None, None, :] > position_ids[:, :, None]  # [B, S, T]
+            index_scores = index_scores.masked_fill(causal, float("-inf"))
+
+        topk = min(self.index_topk, index_scores.shape[-1])
+        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
 class GlmMoeDsaAttention(DeepseekV3Attention):

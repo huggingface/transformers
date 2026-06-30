@@ -194,10 +194,6 @@ class DeepseekV32Indexer(nn.Module):
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
 
-    def apply_indexer_rotary_pos_emb(self, q_rot, k_rot, cos, sin):
-        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention.
-        return apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-
     @torch.no_grad()
     def forward(
         self,
@@ -239,7 +235,8 @@ class DeepseekV32Indexer(nn.Module):
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        q_rot, k_rot = self.apply_indexer_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention
+        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
