@@ -182,6 +182,12 @@ class Tipsv2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_eager_matches_sdpa_inference(self, *args):
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
+    @unittest.skip(
+        "Tipsv2VisionModel reverse loading fails because conversion mapping requires different patterns depending on config.use_swiglu_ffn"
+    )
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
+        pass
+
 
 @require_torch
 class Tipsv2VisionBackboneTest(unittest.TestCase, BackboneTesterMixin):
@@ -284,12 +290,6 @@ class Tipsv2TextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(
-        "Tipsv2TextModel reverse loading fails because conversion mapping requires different patterns depending on config.use_swiglu_ffn"
-    )
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
-        pass
 
 
 class Tipsv2ModelTester:
