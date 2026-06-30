@@ -104,7 +104,12 @@ class AXK1TopkRouter(nn.Module):
         self.n_routed_experts = config.n_routed_experts
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+        # `e_score_correction_bias` is specific to the noaux_tc topk method. For other methods
+        # (e.g. "none") the buffer is absent, so checkpoints without it don't report a missing key.
+        if getattr(config, "topk_method", "noaux_tc") == "noaux_tc":
+            self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+        else:
+            self.e_score_correction_bias = None
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
@@ -141,7 +146,10 @@ class AXK1MoE(nn.Module):
 
     def route_tokens_to_experts(self, router_logits):
         router_logits = router_logits.sigmoid()
-        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
+        if self.gate.e_score_correction_bias is not None:
+            router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
+        else:
+            router_logits_for_choice = router_logits
         group_scores = (
             router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
             .topk(2, dim=-1)[0]
@@ -358,7 +366,8 @@ class AXK1PreTrainedModel(LlamaPreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, AXK1TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.e_score_correction_bias)
+            if module.e_score_correction_bias is not None:
+                init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, AXK1NaiveMoe):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
