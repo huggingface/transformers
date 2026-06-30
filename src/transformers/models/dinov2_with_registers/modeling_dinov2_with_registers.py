@@ -530,7 +530,6 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
         embedding_output = self.embeddings(pixel_values)
         attention_mask = create_bidirectional_mask(
             config=self.config,
