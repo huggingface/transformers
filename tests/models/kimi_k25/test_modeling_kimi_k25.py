@@ -217,6 +217,7 @@ class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
     def test_mismatching_num_image_tokens(self):
         pass
 
+
 @require_torch
 class Kimi26IntegrationTest(unittest.TestCase):
     def setUp(self):

@@ -979,6 +979,69 @@ class WeightRenaming(WeightTransform):
         return collected_tensors
 
 
+class GroupWeightRename(WeightRenaming):
+    """
+    Applies a list of paired WeightRenaming transforms, activated lazily by the first ("guard")
+    source pattern.  Use this when two renames share an intermediate name (e.g. `norm0→norm1`
+    and `norm1→norm2`) so that loading an already-converted checkpoint (which has `norm1`
+    and `norm2` but no `norm0`) does not incorrectly re-apply the renames.
+
+    NOTE: order `source_patterns` so that the one that is absent in an already-converted checkpoint
+    comes first.  The state dict is iterated in sorted key order, so the guard pattern must be
+    lexicographically smaller than the dependent patterns. Otherwise the dependents will be
+    skipped on the first pass and never retried.
+    """
+
+    __slots__ = ("_active",)
+
+    def __init__(self, source_patterns: list[str], target_patterns: list[str]):
+        if len(source_patterns) != len(target_patterns):
+            raise ValueError("GroupWeightRename: source_patterns and target_patterns must have the same length")
+        super().__init__(source_patterns=source_patterns, target_patterns=target_patterns)
+        self._active = None  # None = undecided; True = guard was seen
+
+    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
+        matched = self._scoped_match(source_key)
+        if matched is None:
+            return source_key, None
+
+        prefix_dot, key_to_match, match_object = matched
+        matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
+        group_index = int(matching_group_name[1:])
+
+        if group_index == 0:
+            # Guard pattern matched — activate the group for subsequent keys
+            self._active = True
+        elif not self._active:
+            # Dependent pattern matched before the guard was ever seen → skip
+            return source_key, None
+
+        self._was_used = True
+        replacement = self.target_patterns[group_index]
+        if re.search(r"\\\d", replacement):
+            group_start = self.compiled_sources.groupindex[matching_group_name]
+            replacement = re.sub(
+                r"\\(\d+)",
+                lambda m: match_object.group(group_start + int(m.group(1))),
+                replacement,
+            )
+        renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
+        if prefix_dot is not None:
+            renamed_key = prefix_dot + renamed_key
+        return renamed_key, self.source_patterns[group_index]
+
+    def reverse_transform(self) -> GroupWeightRename:
+        # Swap source↔target then sort pairs by (new) source pattern so the guard
+        # (lex-smallest) stays first, preserving the ordering contract.
+        pairs = sorted(zip(self._original_target_patterns, self._original_source_patterns))
+        reversed_srcs = [p[0] for p in pairs]
+        reversed_tgts = [p[1] for p in pairs]
+        result = GroupWeightRename(source_patterns=reversed_srcs, target_patterns=reversed_tgts)
+        result.scope_prefix = self.scope_prefix
+        result.base_model_prefix = self.base_model_prefix
+        return result
+
+
 class PrefixChange(WeightRenaming):
     """
     Special case of WeightRenaming, used to simplify adding/removing full parts of a weight name. The regexes

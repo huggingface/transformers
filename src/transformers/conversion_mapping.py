@@ -22,6 +22,7 @@ from .core_model_loading import (
     Chunk,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
+    GroupWeightRename,
     MergeModulelist,
     PrefixChange,
     Transpose,
@@ -265,29 +266,40 @@ def _build_checkpoint_conversion_mapping():
             # Same as llava, add `model` as prefix if needed
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
+            # norm/fc/wo renames come before encoder/blocks renames so their source
+            # patterns match the original checkpoint format (vision_tower.encoder.blocks.X.*)
+            GroupWeightRename(
+                source_patterns=[
+                    r"vision_tower.encoder.blocks.(\d+).norm0",
+                    r"vision_tower.encoder.blocks.(\d+).norm1",
+                ],
+                target_patterns=[
+                    r"vision_tower.encoder.blocks.\1.norm1",
+                    r"vision_tower.encoder.blocks.\1.norm2",
+                ],
+            ),
+            GroupWeightRename(
+                source_patterns=[
+                    r"vision_tower.encoder.blocks.(\d+).mlp.fc0",
+                    r"vision_tower.encoder.blocks.(\d+).mlp.fc1",
+                ],
+                target_patterns=[
+                    r"vision_tower.encoder.blocks.\1.mlp.fc1",
+                    r"vision_tower.encoder.blocks.\1.mlp.fc2",
+                ],
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_tower.encoder.blocks.(\d+).wo",
+                target_patterns=r"vision_tower.encoder.blocks.\1.attn.proj",
+            ),
             WeightRenaming(source_patterns=r"vision_tower.encoder", target_patterns="model.vision_tower"),
-            # Rename projection/norm/mlp modules
+            # Rename projection modules
             WeightRenaming(source_patterns=r"mm_projector.proj.0", target_patterns="model.mm_projector.in_proj"),
             WeightRenaming(source_patterns=r"mm_projector.proj.2", target_patterns="model.mm_projector.out_proj"),
             WeightRenaming(source_patterns=r"blocks", target_patterns="layers"),
             WeightRenaming(
-                source_patterns=r"vision_tower.layers.(\d+).norm1", target_patterns=r"vision_tower.layers.\1.norm2"
-            ),
-            WeightRenaming(
-                source_patterns=r"vision_tower.layers.(\d+).norm0", target_patterns=r"vision_tower.layers.\1.norm1"
-            ),
-            WeightRenaming(
-                source_patterns=r"vision_tower.layers.(\d+).mlp.fc1", target_patterns=r"vision_tower.layers.\1.mlp.fc2"
-            ),
-            WeightRenaming(
-                source_patterns=r"vision_tower.layers.(\d+).mlp.fc0", target_patterns=r"vision_tower.layers.\1.mlp.fc1"
-            ),
-            WeightRenaming(
                 source_patterns=r"vision_tower.patch_embed.pos_emb.weight",
                 target_patterns="model.vision_tower.patch_embed.pos_emb.position_embeddings",
-            ),
-            WeightRenaming(
-                source_patterns=r"vision_tower.layers.(\d+).wo", target_patterns=r"vision_tower.layers.\1.attn.proj"
             ),
             # Unfuse qkv and apply rope permutation
             WeightConverter(
