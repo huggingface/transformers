@@ -449,6 +449,54 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "glm5_next": [
+            # TODO: refactor to not rely on \1 as the prefix is the same no need to complicate it
+            #
+            # Older GLM-5-Next checkpoints store HyperConnection parameters as flat
+            # per-layer tensors. The implementation keeps them inside `attn_hc` /
+            # `ffn_hc` submodules so the MHC flow can reuse the DeepSeek-V4 layout.
+            WeightRenaming(source_patterns="hc_attn_fn", target_patterns="attn_hc.fn"),
+            WeightRenaming(source_patterns="hc_attn_base", target_patterns="attn_hc.base"),
+            WeightRenaming(source_patterns="hc_attn_scale", target_patterns="attn_hc.scale"),
+            WeightRenaming(source_patterns="hc_ffn_fn", target_patterns="ffn_hc.fn"),
+            WeightRenaming(source_patterns="hc_ffn_base", target_patterns="ffn_hc.base"),
+            WeightRenaming(source_patterns="hc_ffn_scale", target_patterns="ffn_hc.scale"),
+            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_fn$", target_patterns=r"layers.\1.attn_hc.fn"),
+            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_base$", target_patterns=r"layers.\1.attn_hc.base"),
+            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_scale$", target_patterns=r"layers.\1.attn_hc.scale"),
+            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_fn$", target_patterns=r"layers.\1.ffn_hc.fn"),
+            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_base$", target_patterns=r"layers.\1.ffn_hc.base"),
+            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_scale$", target_patterns=r"layers.\1.ffn_hc.scale"),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.f_a_proj\.",
+                target_patterns=r"model.layers.\1.self_attn.forget_gate.f_a_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.f_b_proj\.",
+                target_patterns=r"model.layers.\1.self_attn.forget_gate.f_b_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.dt_bias$",
+                target_patterns=r"model.layers.\1.self_attn.forget_gate.dt_bias",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.A_log$",
+                target_patterns=r"model.layers.\1.self_attn.forget_gate.A_log",
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "LlavaModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
@@ -1414,15 +1462,6 @@ def _build_checkpoint_conversion_mapping():
             source_patterns=".weight_v$",
             target_patterns=".parametrizations.weight.original1",
         ),
-        # Older GLM-5-Next checkpoints store HyperConnection parameters as flat
-        # per-layer tensors. The implementation keeps them inside `attn_hc` /
-        # `ffn_hc` submodules so the MHC flow can reuse the DeepSeek-V4 layout.
-        WeightRenaming(source_patterns="hc_attn_fn", target_patterns="attn_hc.fn"),
-        WeightRenaming(source_patterns="hc_attn_base", target_patterns="attn_hc.base"),
-        WeightRenaming(source_patterns="hc_attn_scale", target_patterns="attn_hc.scale"),
-        WeightRenaming(source_patterns="hc_ffn_fn", target_patterns="ffn_hc.fn"),
-        WeightRenaming(source_patterns="hc_ffn_base", target_patterns="ffn_hc.base"),
-        WeightRenaming(source_patterns="hc_ffn_scale", target_patterns="ffn_hc.scale"),
     ]
     # Base DetrModel/ConditionalDetrModel transforms are picked up automatically as
     # scoped sub-module transforms; only the segmentation-specific patterns are needed here.
@@ -1486,30 +1525,6 @@ def _build_checkpoint_conversion_mapping():
     mapping["laguna"] += [
         WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
-    ]
-    mapping["glm5_next"] = [
-        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_fn$", target_patterns=r"layers.\1.attn_hc.fn"),
-        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_base$", target_patterns=r"layers.\1.attn_hc.base"),
-        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_scale$", target_patterns=r"layers.\1.attn_hc.scale"),
-        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_fn$", target_patterns=r"layers.\1.ffn_hc.fn"),
-        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_base$", target_patterns=r"layers.\1.ffn_hc.base"),
-        WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_scale$", target_patterns=r"layers.\1.ffn_hc.scale"),
-        WeightRenaming(
-            source_patterns=r"^model\.layers\.(\d+)\.self_attn\.f_a_proj\.",
-            target_patterns=r"model.layers.\1.self_attn.forget_gate.f_a_proj.",
-        ),
-        WeightRenaming(
-            source_patterns=r"^model\.layers\.(\d+)\.self_attn\.f_b_proj\.",
-            target_patterns=r"model.layers.\1.self_attn.forget_gate.f_b_proj.",
-        ),
-        WeightRenaming(
-            source_patterns=r"^model\.layers\.(\d+)\.self_attn\.dt_bias$",
-            target_patterns=r"model.layers.\1.self_attn.forget_gate.dt_bias",
-        ),
-        WeightRenaming(
-            source_patterns=r"^model\.layers\.(\d+)\.self_attn\.A_log$",
-            target_patterns=r"model.layers.\1.self_attn.forget_gate.A_log",
-        ),
     ]
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:

@@ -19,16 +19,16 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from copy import copy
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, LinearAttentionLayer
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
-from ...masking_utils import create_causal_mask
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -51,10 +51,36 @@ class Glm5NextUnweightedRMSNorm(nn.Module):
 
 
 class Glm5NextHyperConnection(nn.Module):
-    """
-    GLM-5-Next MHC wrapper over the DeepSeek-V4 HyperConnection implementation.
+    r"""
+    Manifold-Constrained Hyper-Connections
+    (mHC) (Xie et al., 2026) to strengthen the conventional residual connections between adjacent
+    Transformer blocks
 
-    GLM-5-Next uses the same stream collapse / Sinkhorn residual mixer as DeepSeek-V4.
+    Owns the learned (`fn`, `base`, `scale`)
+    parameters that turn the incoming `hc_mult` residual streams into collapse / expand
+    weights. The decoder layer instantiates two of these (one for the attention site,
+    one for the mlp site).
+
+    ASCII shape guide — `B` = batch, `S` = seq, `H` = hc_mult, `D` = hidden_size::
+
+              hidden_streams        flatten(2)        RMSNorm-rescale + F.linear(fn)
+         [B, S, H, D]  ──────────►  [B, S, H*D]  ─────────────────────────────────►
+                                                             mix-logits
+                                                             [B, S, (2+H)*H]
+                                                                    │
+                            ┌───────────────────────────────────────┴──────────────────────────────┐
+                            ▼                          ▼                                           ▼
+                        pre logits                post logits                               comb logits
+                        [B, S, H]                 [B, S, H]                                 [B, S, H, H]
+                        × scale[0]                × scale[1]                                × scale[2]
+                        + base[:H]                + base[H:2H]                              + base[2H:]
+                        σ() + eps                 2·σ()                                     softmax(-1) + eps
+                        │                         │                                         │
+                        pre                       post                                      Sinkhorn(iters)
+                        (stream collapse weights) (block-output placement, range [0, 2])    row/col normalise
+                                                                                            │
+                                                                                            comb
+                                                                                            (stream mixer)
     """
 
     def __init__(self, config: Glm5NextConfig):
@@ -71,7 +97,6 @@ class Glm5NextHyperConnection(nn.Module):
         # H×H residual combine matrix that gets Sinkhorn-projected onto the
         # doubly-stochastic manifold). Each output gets its own learned scale.
         self.scale = nn.Parameter(torch.empty(3))
-        self.post_mult_value = 2.0
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         r"""
@@ -90,28 +115,18 @@ class Glm5NextHyperConnection(nn.Module):
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
 
         pre = torch.sigmoid(pre_w * pre_scale + pre_b) + self.hc_eps
-        post = self.post_mult_value * torch.sigmoid(post_w * post_scale + post_b)
+        post = 2 * torch.sigmoid(post_w * post_scale + post_b)
         comb_logits = comb_w.view(*comb_w.shape[:-1], hc, hc) * comb_scale + comb_b.view(hc, hc)
         comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
         comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
         for _ in range(self.hc_sinkhorn_iters - 1):
             comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
-
+        # Collapse the `hc_mult` parallel streams down to a single sequence using
+        # the `pre` weights: one weighted sum across the stream axis, ready for
+        # the sublayer (attn / MLP).
         collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
         return post, comb, collapsed
-
-    def apply_residual_update(
-        self,
-        post: torch.Tensor,
-        residual: torch.Tensor,
-        hidden_streams: torch.Tensor,
-        sublayer_output: torch.Tensor,
-    ) -> torch.Tensor:
-        dtype = hidden_streams.dtype
-        return post.to(dtype).unsqueeze(-1) * sublayer_output.unsqueeze(-2) + torch.matmul(
-            residual.to(dtype).transpose(-1, -2), hidden_streams
-        )
 
 
 class Glm5NextHyperHead(nn.Module):
@@ -964,111 +979,85 @@ class Glm5NextRMSNorm(nn.Module):
 class Glm5NextMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
-        original_config = config
-        config = copy(config)
-        config.intermediate_size = (
-            original_config.intermediate_size if intermediate_size is None else intermediate_size
-        )
-        config.mlp_bias = False
-        config.hidden_act = "silu"
-        self.config = original_config
+        self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = nn.SiLU()
-        self.swiglu_limit = getattr(config, "swiglu_limit", None)
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.swiglu_limit = config.swiglu_limit
 
     def forward(self, x):
         gate = self.gate_proj(x)
         up = self.up_proj(x)
+        # Optional clamping
         if self.swiglu_limit is not None:
-            gate = gate.clamp(max=self.swiglu_limit)
+            gate = gate.clamp(min=None, max=self.swiglu_limit)
             up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.down_proj(self.act_fn(gate) * up)
+
+
+@use_experts_implementation
+class Glm5NextExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.moe_intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.swiglu_limit = config.swiglu_limit
+
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
+        final = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(mask[expert_idx])
+            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
+            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
+            final.index_add_(0, token_idx, current.to(final.dtype))
+        return final
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        # Optional clamping
+        if self.swiglu_limit is not None:
+            gate = gate.clamp(min=None, max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Simple swiglu instead of alpha
+        return F.silu(gate) * up
 
 
 class Glm5NextTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.n_routed_experts = config.n_routed_experts
-
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.reshape(-1, self.config.hidden_size)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        return router_logits
-
-
-class Glm5NextExpert(Glm5NextMLP):
-    def __init__(self, config):
-        super().__init__(config, intermediate_size=config.moe_intermediate_size)
-
-
-class Glm5NextNaiveMoe(nn.ModuleList):
-    # Per-expert ModuleList layout: GLM-5-Next checkpoints use separate
-    # `gate_proj`/`up_proj`/`down_proj` per expert (not Mixtral's fused
-    # `gate_up_proj`).
-    def __init__(self, config):
-        super().__init__([Glm5NextExpert(config) for _ in range(config.n_routed_experts)])
-        self.num_experts = config.n_routed_experts
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.moe_intermediate_size
-
-    def forward(self, hidden_states, top_k_index, top_k_weights):
-        final_hidden_states = torch.zeros_like(hidden_states)
-        if hidden_states.numel() == 0 or top_k_index.numel() == 0:
-            return final_hidden_states
-        top_k_weights = top_k_weights.to(device=hidden_states.device, dtype=hidden_states.dtype)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            if token_idx.numel() == 0:
-                continue
-            current_state = hidden_states[token_idx]
-            current_hidden_states = self[expert_idx](current_state)
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
-
-        return final_hidden_states
-
-
-class Glm5NextMoE(nn.Module):
-    """
-    A mixed expert module containing shared experts.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.experts = Glm5NextNaiveMoe(config)
-        self.gate = Glm5NextTopkRouter(config)
-        self.shared_experts = Glm5NextMLP(
-            config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-        )
-        self.n_routed_experts = config.n_routed_experts
-        self.n_group = config.n_group
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.top_k = config.num_experts_per_tok
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
 
-    def route_tokens_to_experts(self, router_logits):
-        router_logits = router_logits.sigmoid()
-        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        scores = router_logits.sigmoid()
+        scores_for_choice = scores + self.e_score_correction_bias
         group_scores = (
-            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]
             .sum(dim=-1)
         )
@@ -1077,52 +1066,58 @@ class Glm5NextMoE(nn.Module):
         group_mask.scatter_(1, group_idx, 1)
         score_mask = (
             group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
+            .reshape(-1, self.num_experts)
         )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
+        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = router_logits.gather(1, topk_indices)
+        topk_weights = scores.gather(1, topk_indices)
         if self.norm_topk_prob:
             denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
             topk_weights /= denominator
         topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
+        return router_logits, topk_weights, topk_indices
 
-    def forward(self, hidden_states):
+
+class Glm5NextMoE(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+    """
+
+    def __init__(self, config: Glm5NextConfig):
+        super().__init__()
+        self.config = config
+        self.experts = Glm5NextExperts(config)
+        self.gate = Glm5NextTopkRouter(config)
+        self.shared_experts = Glm5NextMLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
-        hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).reshape(*orig_shape)
-        return hidden_states + self.shared_experts(residuals)
-
-
-# =============================================================================
-# Decoder Layer
-# =============================================================================
+        _, topk_weights, topk_indices = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
 
 
 class Glm5NextDecoderLayer(GradientCheckpointingLayer):
-    """
-    Decoder layer for GLM-5-Next with:
-    - KDA linear attention on layers in `linear_attn_config["kda_layers"]`
-    - MLA (Multi-head Latent Attention) on all other layers
-    - MHC (Manifold-Constrained Hyper-Connection) wrapping both sublayers
-    """
-
     def __init__(self, config: Glm5NextConfig, layer_idx: int):
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
-        self.layer_type = config.layer_types[layer_idx]
+        self.self_attn = Glm5NextAttention(config, layer_idx)
 
-        # Attention type dispatch
-        self.is_linear_attn = self.layer_type == "linear_attention"
+        if config.mlp_layer_types[layer_idx] == "sparse":
+            self.mlp = Glm5NextMoE(config)
+        else:
+            self.mlp = Glm5NextMLP(config)
 
-        if self.is_linear_attn:
+        self.input_layernorm = Glm5NextRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Glm5NextRMSNorm(config.hidden_size, config.rms_norm_eps)
+        if config.layer_types[layer_idx] == "linear_attention":
+            # TODO: remove hidden size and rms norm and move to linear directly
             self.self_attn = Glm5NextLinearAttention(
                 hidden_size=config.hidden_size,
                 config=config,
@@ -1132,19 +1127,10 @@ class Glm5NextDecoderLayer(GradientCheckpointingLayer):
         else:
             self.self_attn = Glm5NextAttention(config, layer_idx)
 
-        # MLP: first 3 layers dense, rest MoE (with shared experts)
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = Glm5NextMoE(config)
-        else:
-            self.mlp = Glm5NextMLP(config)
-
-        self.input_layernorm = Glm5NextRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Glm5NextRMSNorm(config.hidden_size, config.rms_norm_eps)
-
         self.mhc = config.mhc
         self.hc_mult = config.hc_mult
-        self.attn_hc = Glm5NextHyperConnection(config) if self.mhc else None
-        self.ffn_hc = Glm5NextHyperConnection(config) if self.mhc else None
+        self.attn_hc = Glm5NextHyperConnection(config) if config.mhc else None
+        self.ffn_hc = Glm5NextHyperConnection(config) if config.mhc else None
 
     def forward(
         self,
@@ -1157,33 +1143,14 @@ class Glm5NextDecoderLayer(GradientCheckpointingLayer):
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, None]:
-        if not self.mhc:
-            residual = hidden_states
-            hidden_states = self.input_layernorm(hidden_states)
-            hidden_states, _, _ = self.self_attn(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-            hidden_states = residual + hidden_states
+        dtype = hidden_states.dtype
 
-            residual = hidden_states
-            hidden_states = self.post_attention_layernorm(hidden_states)
-            hidden_states = residual + self.mlp(hidden_states)
-
-            return hidden_states, hidden_states
-
-        if self.layer_idx == 0:
-            hidden_states = hidden_states.unsqueeze(2).expand(-1, -1, self.hc_mult, -1).contiguous()
-
-        h_post_attn, h_res_attn, attn_input = self.attn_hc(hidden_states)
-        attn_input = self.input_layernorm(attn_input)
-        attn_output, _, _ = self.self_attn(
-            hidden_states=attn_input,
+        residual = hidden_states
+        post, comb, hidden_states = self.attn_hc(hidden_states) if self.mhc else (None, None, hidden_states)
+        # Self attn
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _, _ = self.self_attn(
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1191,14 +1158,25 @@ class Glm5NextDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        hidden_states = self.attn_hc.apply_residual_update(h_post_attn, h_res_attn, hidden_states, attn_output)
+        hidden_states = self.apply_residual(post, comb, hidden_states, residual, dtype=dtype)
 
-        h_post_mlp, h_res_mlp, mlp_input = self.ffn_hc(hidden_states)
-        mlp_input = self.post_attention_layernorm(mlp_input)
-        mlp_output = self.mlp(mlp_input)
-        hidden_states = self.ffn_hc.apply_residual_update(h_post_mlp, h_res_mlp, hidden_states, mlp_output)
+        residual = hidden_states
+        post, comb, hidden_states = self.ffn_hc(hidden_states) if self.mhc else (None, None, hidden_states)
+        # Feed forward
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.apply_residual(post, comb, hidden_states, residual, dtype=dtype)
 
         return hidden_states, hidden_states.mean(dim=2) if hidden_states.ndim == 4 else hidden_states
+
+    def apply_residual(self, post, comb, hidden_states, residual, dtype=None):
+        """Either apply normal additive residual stream or MHC residual stream"""
+        if post is None and comb is None:
+            return hidden_states + residual
+
+        return post.to(dtype).unsqueeze(-1) * hidden_states.unsqueeze(-2) + torch.matmul(
+            comb.to(dtype).transpose(-1, -2), residual
+        )
 
 
 # =============================================================================
@@ -1231,18 +1209,18 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Glm5NextTopkRouter):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            nn.init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, Glm5NextForgetGate):
-            nn.init.normal_(module.A_log, mean=0.0, std=0.02)
-            nn.init.zeros_(module.dt_bias)
-        elif isinstance(module, Glm5NextLinearAttention):
-            nn.init.ones_(module.o_norm.weight)
-        elif isinstance(module, Glm5NextHyperConnection):
-            nn.init.normal_(module.fn, mean=0.0, std=0.02)
-            nn.init.zeros_(module.base)
-            nn.init.ones_(module.scale)
+        # if isinstance(module, Glm5NextTopkRouter):
+        #    nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        #    nn.init.zeros_(module.e_score_correction_bias)
+        # elif isinstance(module, Glm5NextForgetGate):
+        #    nn.init.normal_(module.A_log, mean=0.0, std=0.02)
+        #    nn.init.zeros_(module.dt_bias)
+        # elif isinstance(module, Glm5NextLinearAttention):
+        #    nn.init.ones_(module.o_norm.weight)
+        # elif isinstance(module, Glm5NextHyperConnection):
+        #    nn.init.normal_(module.fn, mean=0.0, std=0.02)
+        #    nn.init.zeros_(module.base)
+        #    nn.init.ones_(module.scale)
 
 
 class Glm5NextRotaryEmbedding(nn.Module):
@@ -1322,11 +1300,9 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
             [Glm5NextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Glm5NextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Glm5NextRotaryEmbedding(config=config)
+        self.rotary_emb = Glm5NextRotaryEmbedding(config)
         self.gradient_checkpointing = False
-        self.mhc = config.mhc
-        self.hc_mult = config.hc_mult
-        self.hc_head = Glm5NextHyperHead() if self.mhc else None
+        self.hc_head = Glm5NextHyperHead() if config.mhc else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1358,31 +1334,41 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        # TODO: this currently not used at all as in glm moe dsa --> no prev indices passed along
+        topk_indices = None
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states, _ = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
+                # prev_topk_indices=topk_indices,
                 **kwargs,
             )
 
-        if self.mhc:
-            hidden_states = self.hc_head(hidden_states)
+        hidden_states = self.hc_head(hidden_states)
         hidden_states = self.norm(hidden_states)
+
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
@@ -1392,10 +1378,8 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
 @auto_docstring
 class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1403,6 +1387,7 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @can_return_tuple
@@ -1461,26 +1446,6 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-        )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids: torch.LongTensor,
-        next_sequence_length: int | None = None,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        is_first_iteration: bool | None = False,
-        **kwargs,
-    ):
-        return super().prepare_inputs_for_generation(
-            input_ids=input_ids,
-            next_sequence_length=next_sequence_length,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
         )
 
 
