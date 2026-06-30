@@ -337,6 +337,38 @@ def _patch_cummin(original):
     return _patch_cummax_or_cummin(original, mode="min")
 
 
+@register_patch("onnx", "torch.exp", "torch.Tensor.exp")
+def _patch_exp(original):
+    """Lower `exp` on complex tensors via Euler — onnxscript has no dispatch for `aten.exp` on
+    complex inputs. Real inputs hit the original path."""
+
+    def patch(input):
+        if torch.is_complex(input):
+            magnitude = original(input.real)
+            return torch.complex(magnitude * input.imag.cos(), magnitude * input.imag.sin())
+        return original(input)
+
+    return patch
+
+
+@register_patch("onnx", "torch.fft.irfft")
+def _patch_irfft(original):
+    """Replace `irfft` with `ifft` over the conjugate-mirrored input — ORT's `DFT` op rejects the
+    `is_onesided=1`/`inverse=1` combination that torch's `irfft` lowers to. Mirroring restores the
+    full spectrum so the inverse path uses two-sided DFT, which ORT accepts. Assumes even `n`
+    (which is the common case for STFT-based audio codecs)."""
+
+    def patch(input, n=None, dim=-1, norm=None):
+        if n is None:
+            n = 2 * (input.shape[dim] - 1)
+        slc = [slice(None)] * input.ndim
+        slc[dim] = slice(1, -1)
+        full = torch.cat([input, input[tuple(slc)].flip(dims=[dim]).conj()], dim=dim)
+        return torch.fft.ifft(full, n=n, dim=dim, norm=norm).real
+
+    return patch
+
+
 @register_patch("onnx", "torch.bucketize")
 def _patch_bucketize(original):
     """Vectorized bucketize avoiding scalar-constant tensors that cause alias/detach issues."""

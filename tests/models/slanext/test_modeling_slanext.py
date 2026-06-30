@@ -60,7 +60,7 @@ class SLANeXtModelTester:
         self.parent = parent
         if vision_config is None:
             vision_config = {
-                "hidden_size": 1,
+                "hidden_size": 2,
                 "num_hidden_layers": 1,
                 "num_attention_heads": 1,
                 "global_attn_indexes": [1, 1, 1, 1],
@@ -87,8 +87,8 @@ class SLANeXtModelTester:
     def get_config(self) -> SLANeXtConfig:
         config = SLANeXtConfig(
             vision_config=self.vision_config,
-            out_channels=1,
-            hidden_size=1,
+            out_channels=2,
+            hidden_size=2,
             max_text_length=1,
         )
 
