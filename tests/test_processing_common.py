@@ -390,13 +390,14 @@ class ProcessorTesterMixin:
         """Override this method to provide custom kwargs for processor initialization."""
         return {}
 
-    def get_component(self, attribute, **kwargs):
+    def get_component(self, attribute, use_full=False, **kwargs):
+        dirpath = self.full_tmpdirname if (use_full and self.full_tmpdirname is not None) else self.tmpdirname
         if attribute not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in attribute:
             auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
-            component = auto_processor_class.from_pretrained(self.tmpdirname, subfolder=attribute, **kwargs)  # noqa
+            component = auto_processor_class.from_pretrained(dirpath, subfolder=attribute, **kwargs)  # noqa
         else:
             auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute]
-            component = auto_processor_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
+            component = auto_processor_class.from_pretrained(dirpath, **kwargs)  # noqa
         if "tokenizer" in attribute and not component.pad_token:
             component.pad_token = "[TEST_PAD]"
             if component.pad_token_id is None:
