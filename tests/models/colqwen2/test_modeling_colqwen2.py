@@ -267,6 +267,12 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertIsInstance(outputs, ColQwen2ForRetrievalOutput)
 
+    @unittest.skip(
+        reason="Conversions applied to underlying VLM saved in legacy format. Colqwen2 doesn't match any of those regexes!"
+    )
+    def test_reverse_loading_mapping(self, **kwargs):
+        pass
+
     @unittest.skip(reason="Some undefined behavior encountered with test versions of Qwen2-VL. Skip for now.")
     def test_model_parallelism(self):
         pass
