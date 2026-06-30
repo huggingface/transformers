@@ -34,13 +34,32 @@ Pre-trained checkpoints are available on the Hugging Face Hub:
 
 ## Usage example
 
+ESMC is registered with the auto classes (`AutoModel`, `AutoModelForMaskedLM`,
+`AutoModelForSequenceClassification`, `AutoModelForTokenClassification`).
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+import torch
+from transformers import pipeline
+
+extractor = pipeline(
+    task="feature-extraction",
+    model="biohub/ESMC-300M",
+)
+# Per-residue representations of shape (batch, sequence_length, hidden_size).
+representations = extractor("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ", return_tensors="pt")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
 ```python
 import torch
 from transformers import AutoModel, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
-# ESMC is registered with the auto classes (AutoModel, AutoModelForMaskedLM,
-# AutoModelForSequenceClassification, AutoModelForTokenClassification).
 model = AutoModel.from_pretrained("biohub/ESMC-300M")
 
 inputs = tokenizer("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ", return_tensors="pt")
@@ -50,6 +69,9 @@ with torch.no_grad():
 # Per-residue representations of shape (batch, sequence_length, hidden_size).
 representations = outputs.last_hidden_state
 ```
+
+</hfoption>
+</hfoptions>
 
 ## ESMCConfig
 
