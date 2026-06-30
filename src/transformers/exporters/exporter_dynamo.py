@@ -201,19 +201,20 @@ def _patch_classifier_cast(_original):
 
 @register_patch("dynamo", "torch.nn.functional.scaled_dot_product_attention")
 def _patch_sdpa(original):
-    """Route SDPA through the MATH backend during tracing — CPU SDPA's flash/efficient paths
-    guard on ``Eq(batch, 1)`` (upstream https://github.com/pytorch/pytorch/issues/180202), which
-    trips ``GuardOnDataDependentSymNode`` whenever the batch dim comes from a data-dependent op
-    like ``pixel_values[bool_mask]`` (Idefics2/3 and most VLMs). The MATH backend decomposes to
-    matmul+softmax with no batch-1 dispatch, so the guard never fires. ``torch.export`` bakes the
-    decomposed ops into the graph, so this only affects the trace — there's no SDPA op left at
-    runtime to choose a backend.
+    """Route SDPA through the MATH backend on CPU during tracing — CPU SDPA's flash/efficient
+    paths guard on ``Eq(batch, 1)`` (upstream https://github.com/pytorch/pytorch/issues/180202),
+    which trips ``GuardOnDataDependentSymNode`` whenever the batch dim comes from a data-dependent
+    op like ``pixel_values[bool_mask]`` (Idefics2/3 and most VLMs). The MATH decomposition has no
+    batch-1 dispatch, so the guard never fires. CUDA exports are left alone — the GPU kernels
+    don't have this guard, and we want the flash/efficient decompositions there.
     """
     from torch.nn.attention import SDPBackend, sdpa_kernel
 
-    def patch(*args, **kwargs):
-        with sdpa_kernel(SDPBackend.MATH):
-            return original(*args, **kwargs)
+    def patch(query, *args, **kwargs):
+        if query.device.type == "cpu":
+            with sdpa_kernel(SDPBackend.MATH):
+                return original(query, *args, **kwargs)
+        return original(query, *args, **kwargs)
 
     return patch
 
