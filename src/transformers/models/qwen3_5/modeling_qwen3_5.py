@@ -369,6 +369,37 @@ def torch_recurrent_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
+def accelerate_hook_compatible_wrapper(original_func: Callable) -> Callable:
+    """
+    Wrapper around a function to trigger the accelerate hooks even when the weights are used directly rather than
+    through their `forward`, as is the case inside `causal_conv1d_fn` and `causal_conv1d_update`.
+    """
+
+    def wrapped(*args, **kwargs):
+        hook = None
+        hooked_module = kwargs.pop("hooked_module", None)
+        if hooked_module is not None:
+            if (hook := getattr(hooked_module, "_hf_hook", None)) is not None:
+                # args, kwargs = hook.pre_forward(hooked_module, *args, **kwargs)
+                hook.pre_forward(hooked_module)
+
+        # Since the weights of the module were passed to the caller before being moved, we need to re-update them
+        if hook is not None:
+            if "weight" in kwargs:
+                kwargs["weight"] = hooked_module.weight.squeeze(1)
+            if "bias" in kwargs:
+                kwargs["bias"] = hooked_module.bias
+
+        output = original_func(*args, **kwargs)
+
+        if hook is not None:
+            return hook.post_forward(hooked_module, output)
+        else:
+            return output
+
+    return wrapped
+
+
 @use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
 class Qwen3_5GatedDeltaNet(nn.Module):
     def __init__(self, config: Qwen3_5Config, layer_idx: int):
@@ -417,8 +448,12 @@ class Qwen3_5GatedDeltaNet(nn.Module):
 
         self.out_proj = nn.Linear(self.value_dim, self.hidden_size, bias=False)
 
-        self.causal_conv1d_fn = causal_conv1d_fn
-        self.causal_conv1d_update = causal_conv1d_update or torch_causal_conv1d_update
+        self.causal_conv1d_fn = (
+            accelerate_hook_compatible_wrapper(causal_conv1d_fn) if causal_conv1d_fn is not None else None
+        )
+        self.causal_conv1d_update = accelerate_hook_compatible_wrapper(
+            causal_conv1d_update or torch_causal_conv1d_update
+        )
         self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
         self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
 
