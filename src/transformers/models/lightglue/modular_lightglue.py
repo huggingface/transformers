@@ -26,6 +26,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
+from ...utils.generic import no_inherit_decorator
 from ...utils.import_utils import requires
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
@@ -198,6 +199,7 @@ class LightGluePositionalEncoder(nn.Module):
         return output
 
 
+@no_inherit_decorator
 class LightGlueAttention(LlamaAttention):
     def __init__(self, config: LightGlueConfig, layer_idx: int):
         super().__init__()

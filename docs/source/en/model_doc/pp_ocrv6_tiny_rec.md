@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-05-19 and added to Hugging Face Transformers on 2026-05-19.*
+*This model was contributed to Hugging Face Transformers on 2026-05-19.*
 
 # PP-OCRv6_tiny_rec
 
@@ -23,11 +23,11 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-TODO.
+PP-OCRv6_tiny_rec is the most lightweight recognition model in the PP-OCRv6 series. It uses LCNetV4 as the backbone with a direct reshape projection instead of an encoder neck, and a CTC+NRTR multi-head decoder. The model supports 49 languages and contains 1.1M parameters.
 
 ## Model Architecture
 
-TODO.
+<img src="https://cdn-uploads.huggingface.co/production/uploads/684ba591e717a30275a1b76a/9hBYIA-pO6jhnG6bcZEaf.png" width="600"/>
 
 ## Usage
 

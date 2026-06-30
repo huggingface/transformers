@@ -28,6 +28,7 @@ import torch
 
 from ..utils import logging
 from .hub_kernels import lazy_load_kernel
+from .tensor_parallel import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -169,18 +170,10 @@ def sonicmoe_experts_forward(
     # already zero (RouterParallel masks them at dispatch), so the per-token reduction
     # contributes nothing for sentinel slots.
 
-    # FSDP2 / EP wraps weights as DTensors but the kernel takes raw CUTLASS / CuteDSL pointers,
-    # so unwrap to local shards before reshaping. `to_local()` is autograd-aware — backward
-    # will rewrap the gradient as a DTensor matching each parameter's placements.
-    w1 = self.gate_up_proj
-    w2 = self.down_proj
-    b1 = self.gate_up_proj_bias if self.has_bias else None
-    b2 = self.down_proj_bias if self.has_bias else None
-    if isinstance(w1, torch.distributed.tensor.DTensor):
-        w1 = w1.to_local()
-        w2 = w2.to_local()
-        b1 = b1.to_local() if b1 is not None else None
-        b2 = b2.to_local() if b2 is not None else None
+    w1 = to_local(self.gate_up_proj)
+    w2 = to_local(self.down_proj)
+    b1 = to_local(self.gate_up_proj_bias) if self.has_bias else None
+    b2 = to_local(self.down_proj_bias) if self.has_bias else None
 
     # Map activation function
     act_name = getattr(self.config, "hidden_act", "silu").lower()

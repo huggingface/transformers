@@ -12,16 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
+import os
+import shutil
+import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pytest
+from huggingface_hub import sync_bucket
 
 from transformers.audio_utils import (
+    TORCHCODEC_ONLY_FILETYPES,
+    _format_from_source,
     amplitude_to_db,
     amplitude_to_db_batch,
     chroma_filter_bank,
+    get_audio_filetype,
     hertz_to_mel,
+    load_audio,
+    load_audio_librosa,
+    load_audio_torchcodec,
     mel_filter_bank,
     mel_to_hertz,
     power_to_db,
@@ -30,11 +42,35 @@ from transformers.audio_utils import (
     spectrogram_batch,
     window_function,
 )
-from transformers.testing_utils import is_librosa_available, require_librosa
+from transformers.testing_utils import is_librosa_available, require_librosa, require_torchcodec, slow
+from transformers.utils import is_torch_tensor
 
 
 if is_librosa_available():
     from librosa.filters import chroma
+
+
+def normalize_waveform(arr: np.ndarray) -> np.ndarray:
+    """Normalizes an array by dividing by its L2 norm."""
+    return arr / np.linalg.norm(arr)
+
+
+def compute_rmse(arr1, arr2) -> np.ndarray:
+    """
+    Computes the RMSE between two audio arrays after L2 normalization.
+    Accepts both ``torch.Tensor`` and ``np.ndarray`` inputs;
+    arrays are truncated to the shorter length before comparison.
+    """
+    if is_torch_tensor(arr1):
+        arr1 = arr1.cpu().numpy()
+    if is_torch_tensor(arr2):
+        arr2 = arr2.cpu().numpy()
+    arr1 = np.asarray(arr1).squeeze()
+    arr2 = np.asarray(arr2).squeeze()
+    max_length = min(arr1.shape[-1], arr2.shape[-1])
+    arr1 = arr1[..., :max_length]
+    arr2 = arr2[..., :max_length]
+    return np.sqrt(((normalize_waveform(arr1) - normalize_waveform(arr2)) ** 2).mean())
 
 
 class AudioUtilsFunctionTester(unittest.TestCase):
@@ -1749,3 +1785,183 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         )
 
         self.assertTrue(np.allclose(original_chroma, utils_chroma))
+
+
+@slow
+class LoadAudioTester(unittest.TestCase):
+    _BUCKET_URI = "hf://buckets/hf-internal-testing/all-audio-formats"
+    _BUCKET_RESOLVE_URL = "https://huggingface.co/buckets/hf-internal-testing/all-audio-formats/resolve"
+    _BUCKET_FILETYPES = {
+        # Audio formats
+        "audio.3gp": "3gp",
+        "audio.aac": "aac",
+        "audio.ac3": "ac3",
+        "audio.aiff": "aiff",
+        "audio.amr": "amr",
+        "audio.au": "au",
+        "audio.caf": "caf",
+        "audio.flac": "flac",
+        "audio.m4a": "m4a",
+        "audio.mp2": "mp2",
+        "audio.mp3": "mp3",
+        "audio.ogg": "ogg",
+        "audio.opus": "opus",
+        "audio.rf64": "rf64",
+        "audio.sf": "sf",
+        "audio.sox": "sox",
+        "audio.voc": "voc",
+        "audio.w64": "w64",
+        "audio.wav": "wav",
+        "audio.wavex": "wav",
+        "audio.wma": "wma",
+        "audio.wv": "wv",
+        # Video formats
+        "video.3gp": "3gp",
+        "video.avi": "avi",
+        "video.flv": "flv",
+        "video.hevc.mp4": "mp4",
+        "video.m4v": "mp4",
+        "video.mkv": "mkv",
+        "video.mov": "mov",
+        "video.mp4": "mp4",
+        "video.mpg": "mpg",
+        "video.ogv": "ogv",
+        "video.ts": "ts",
+        "video.webm": "webm",
+        "video.wmv": "wmv",
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.data_dir = tempfile.mkdtemp(prefix="all-audio-")
+        try:
+            sync_bucket(cls._BUCKET_URI, cls.data_dir, quiet=True)
+        except Exception as e:
+            shutil.rmtree(cls.data_dir, ignore_errors=True)
+            raise unittest.SkipTest(f"could not sync the all-audio bucket: {e}")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.data_dir, ignore_errors=True)
+
+    def _path(self, name: str) -> str:
+        return os.path.join(self.data_dir, name)
+
+    def _sources(self, name: str) -> dict[str, str]:
+        """The same synced file expressed as every source form `load_audio` accepts."""
+        with open(self._path(name), "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        # bucket files are named `audio.*` / `video.*`, which gives the data: URI top-level type
+        media_type = f"{name.split('.', 1)[0]}/{self._BUCKET_FILETYPES[name]}"
+        return {
+            "path": self._path(name),
+            "url": f"{self._BUCKET_RESOLVE_URL}/{name}?download=true",
+            "base64": b64,
+            "data_uri": f"data:{media_type};base64,{b64}",
+        }
+
+    # ---- magic-byte filetype detection --------------------------------------------------------
+
+    def test_get_audio_filetype_identifies_every_bucket_format(self):
+        for name, expected in self._BUCKET_FILETYPES.items():
+            with open(self._path(name), "rb") as f:
+                self.assertEqual(get_audio_filetype(f.read()), expected, name)
+
+    def test_get_audio_filetype_rejects_non_audio_bytes(self):
+        for blob in (b"", b"\xff", b"not audio at all", b"\x89PNG\r\n\x1a\n", b"%PDF-1.4"):
+            with self.assertRaises(ValueError):
+                get_audio_filetype(blob)
+
+    def test_format_from_source(self):
+        # format read straight from the source string, without resolving/decoding it
+        cases = {
+            "data:audio/wav;base64,AAAA": "wav",  # complete data: URI -> media subtype
+            "data:video/mp4;base64,AAAA": "mp4",
+            "data:audio/x-wav;base64,AAAA": "wav",  # the `x-` vendor prefix is stripped
+            "data:;base64,AAAA": None,  # data: URI without a media type -> no hint
+            "https://host/path/clip.MP4?download=true": "mp4",  # URL: extension only, query dropped
+            "/some/dir/song.flac": "flac",  # local path -> extension
+            "cm9hcgo=": None,  # raw base64 -> no hint
+        }
+        for source, expected in cases.items():
+            self.assertEqual(_format_from_source(source), expected, source)
+
+    # ---- source forms: local path, URL, base64, data: URI -------------------------------------
+
+    @require_librosa
+    def test_load_audio_from_every_source_form(self):
+        # a single sync gives us the file as a local path, a public URL, raw base64 and a data: URI
+        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+            for form, source in self._sources("audio.flac").items():
+                audio = load_audio(source, sampling_rate=16000)
+                self.assertIsInstance(audio, np.ndarray, form)
+                self.assertGreater(audio.size, 0, form)
+
+    @require_librosa
+    def test_invalid_base64_raises_value_error(self):
+        # a non-URL, non-path string is treated as base64 and must fail cleanly
+        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+            with self.assertRaises(ValueError) as cm:
+                load_audio("clearly_not_valid_base64_@@@")
+        self.assertIn("base64", str(cm.exception))
+
+    # ---- librosa fallback (torchcodec unavailable) --------------------------------------------
+
+    @require_librosa
+    def test_librosa_decodes_soundfile_formats(self):
+        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+            for name, filetype in self._BUCKET_FILETYPES.items():
+                if filetype in TORCHCODEC_ONLY_FILETYPES:
+                    continue
+                audio = load_audio(self._path(name), sampling_rate=16000)
+                self.assertIsInstance(audio, np.ndarray, name)
+                self.assertGreater(audio.size, 0, name)
+
+    @require_librosa
+    def test_librosa_rejects_torchcodec_only_formats_with_helpful_error(self):
+        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+            for name, filetype in self._BUCKET_FILETYPES.items():
+                if filetype not in TORCHCODEC_ONLY_FILETYPES:
+                    continue
+                with self.assertRaises(RuntimeError) as cm:
+                    load_audio(self._path(name), sampling_rate=16000)
+                # actionable hint instead of librosa's cryptic "Format not recognised"
+                self.assertIn("torchcodec", str(cm.exception), name)
+
+    def test_video_url_rejected_up_front_without_download(self):
+        # the format is read from the URL extension alone -> clear error, no bytes fetched
+        with (
+            patch("transformers.audio_utils.is_torchcodec_available", return_value=False),
+            patch("transformers.audio_utils._fetch_audio_bytes") as fetch,
+        ):
+            with self.assertRaises(RuntimeError) as cm:
+                load_audio("https://host/clip.mp4?download=true")
+        message = str(cm.exception)
+        self.assertIn("mp4", message)
+        self.assertIn("torchcodec", message)
+        fetch.assert_not_called()
+
+    @require_librosa
+    def test_deprecated_load_audio_librosa_warns_and_pins_librosa(self):
+        # BC: even with torchcodec available, the alias must still decode with librosa
+        with patch("transformers.audio_utils.is_torchcodec_available", return_value=True):
+            with self.assertWarns(FutureWarning):
+                audio = load_audio_librosa(self._path("audio.wav"), sampling_rate=16000)
+        self.assertIsInstance(audio, np.ndarray)
+
+    @require_torchcodec
+    def test_deprecated_load_audio_torchcodec_warns_and_pins_torchcodec(self):
+        # BC: the alias must use torchcodec even when the auto-selection would pick librosa
+        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+            with self.assertWarns(FutureWarning):
+                audio = load_audio_torchcodec(self._path("audio.wav"), sampling_rate=16000)
+        self.assertIsInstance(audio, np.ndarray)
+
+    # ---- torchcodec dispatch ------------------------------------------------------------------
+
+    @require_torchcodec
+    def test_torchcodec_decodes_every_bucket_format(self):
+        for name in self._BUCKET_FILETYPES:
+            audio = load_audio(self._path(name), sampling_rate=16000)
+            self.assertIsInstance(audio, np.ndarray, name)
+            self.assertGreater(audio.size, 0, name)

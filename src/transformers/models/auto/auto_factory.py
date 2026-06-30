@@ -21,8 +21,6 @@ from collections import OrderedDict
 from collections.abc import Iterator
 from typing import Any, TypeVar
 
-from huggingface_hub import repo_exists
-
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import (
@@ -31,6 +29,7 @@ from ...utils import (
     copy_func,
     extract_commit_hash,
     find_adapter_config_file,
+    hf_api,
     is_peft_available,
     is_torch_available,
     logging,
@@ -227,18 +226,16 @@ class _BaseAutoModelClass:
             else:
                 repo_id = config.name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
-            # This block handles the case where the user is loading a model with `trust_remote_code=True`
-            # but a library model exists with the same name. We don't want to override the autoclass
-            # mappings in this case, or all future loads of that model will be the remote code model.
-            if not has_local_code:
-                cls.register(config.__class__, model_class, exist_ok=True)
-                model_class.register_for_auto_class(auto_class=cls)
+            cls.register(config.__class__, model_class, exist_ok=True)
+            model_class.register_for_auto_class(auto_class=cls)
             _ = kwargs.pop("code_revision", None)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class._from_config(config, **kwargs)
         elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
-            if model_class.config_class == config.sub_configs.get("text_config", None):
+            text_config_class = config.sub_configs.get("text_config", None)
+            # getattr avoids AttributeError, as registered remote-code model classes may lack config_class
+            if text_config_class is not None and getattr(model_class, "config_class", None) == text_config_class:
                 # TODO: Validate that copying the parent quantization config to the text sub-config preserves
                 # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
                 parent_config = config
@@ -345,11 +342,13 @@ class _BaseAutoModelClass:
                 **kwargs,
             )
 
-            # if torch_dtype=auto was passed here, ensure to pass it on
-            if kwargs_orig.get("torch_dtype", None) == "auto":
-                kwargs["torch_dtype"] = "auto"
-            if kwargs_orig.get("dtype", None) == "auto":
-                kwargs["dtype"] = "auto"
+            # A concrete dtype is absorbed into the config above and then dropped at the composite
+            # `get_text_config()` swap, so re-inject the user's value as an explicit kwarg to force the model's
+            # `from_pretrained` to honor it over the config's saved dtype (#46459).
+            if kwargs_orig.get("torch_dtype", None) is not None:
+                kwargs["torch_dtype"] = kwargs_orig["torch_dtype"]
+            if kwargs_orig.get("dtype", None) is not None:
+                kwargs["dtype"] = kwargs_orig["dtype"]
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
@@ -380,19 +379,17 @@ class _BaseAutoModelClass:
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )
             _ = hub_kwargs.pop("code_revision", None)
-            # This block handles the case where the user is loading a model with `trust_remote_code=True`
-            # but a library model exists with the same name. We don't want to override the autoclass
-            # mappings in this case, or all future loads of that model will be the remote code model.
-            if not has_local_code:
-                cls.register(config.__class__, model_class, exist_ok=True)
-                model_class.register_for_auto_class(auto_class=cls)
+            cls.register(config.__class__, model_class, exist_ok=True)
+            model_class.register_for_auto_class(auto_class=cls)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
         elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
-            if model_class.config_class == config.sub_configs.get("text_config", None):
+            text_config_class = config.sub_configs.get("text_config", None)
+            # getattr avoids AttributeError, as registered remote-code model classes may lack config_class
+            if text_config_class is not None and getattr(model_class, "config_class", None) == text_config_class:
                 # TODO: Validate that copying the parent quantization config to the text sub-config preserves
                 # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
                 parent_config = config
@@ -463,7 +460,7 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         kwargs.pop("use_timm_backbone", None)
-        if not repo_exists(pretrained_model_name_or_path):
+        if not hf_api().repo_exists(pretrained_model_name_or_path):
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
@@ -674,6 +671,16 @@ class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue
             if model_type in self._model_mapping and not exist_ok:
                 raise ValueError(f"'{key}' is already used by a Transformers model.")
 
+        # Some remote code may simply register a new custom model/processor/..., while using a native Transformers config. In such
+        # cases, we should skip registering, as we will otherwise always remap the native config to the custom model/processor/... in
+        # the same session, even if `trust_remote_code=False` is specified by the user (in which case we should use the native
+        # Transformers model/processor/... corresponding to the config)
+        # This is because remote/native is indistinguisable from the config class only in such cases, as they both use the same class - then
+        # `from_pretrained`/`from_config` are responsible to grab the correct class depending on whether `trust_remote_code` is True/False
+        if key.__module__.startswith("transformers."):
+            return
+
+        # Register the new mapping (this will always take precedence in __getattr__ and __contains__ compared to base mapping)
         self._extra_content[key] = value
 
 

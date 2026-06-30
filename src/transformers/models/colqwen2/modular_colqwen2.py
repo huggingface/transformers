@@ -304,9 +304,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
 
             if pixel_values is not None:
                 image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True).pooler_output
-                image_mask = (
-                    (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-                )
+                image_mask = (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1)
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 

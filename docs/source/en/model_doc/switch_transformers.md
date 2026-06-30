@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-01-11 and added to Hugging Face Transformers on 2022-11-15.*
+*This model was published in HF papers on 2021-01-11 and contributed to Hugging Face Transformers on 2022-11-15.*
 
 
 # Switch Transformers
@@ -51,7 +51,7 @@ print(tokenizer.decode(outputs[0]))
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes](../quantization/bitsandbytes/) to only quantize the weights to 8-bits.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 8-bits.
 
 ```python
 # pip install bitsandbytes

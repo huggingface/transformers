@@ -51,7 +51,14 @@ from transformers.models.auto.feature_extraction_auto import get_feature_extract
 from transformers.models.auto.image_processing_auto import get_image_processor_config
 from transformers.models.auto.tokenization_auto import REGISTERED_TOKENIZER_CLASSES
 from transformers.models.auto.video_processing_auto import get_video_processor_config
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
+from transformers.testing_utils import (
+    TOKEN,
+    TemporaryHubRepo,
+    get_tests_dir,
+    is_staging_test,
+    require_scipy,
+    require_tokenizers,
+)
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
     FEATURE_EXTRACTOR_NAME,
@@ -252,6 +259,20 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         new_tokenizer = new_processor.tokenizer
         self.assertTrue(new_tokenizer.special_attribute_present)
         self.assertEqual(new_tokenizer.__class__.__name__, "NewTokenizerFast")
+
+    @require_tokenizers
+    @require_scipy
+    def test_load_fallback_subfolder_remote_code(self):
+        # Reproducer for https://github.com/huggingface/transformers/pull/46592
+        # physical-intelligence/fast declares a `bpe_tokenizer` attribute (not `tokenizer`),
+        # so _load_tokenizer_from_pretrained tries to load from a `bpe_tokenizer` subfolder.
+        # The tokenizer files are actually at the repo root, so the fallback path must kick in.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor = AutoProcessor.from_pretrained(
+                "physical-intelligence/fast", trust_remote_code=True, cache_dir=tmp_dir
+            )
+        self.assertIsNotNone(processor)
+        self.assertTrue(hasattr(processor, "bpe_tokenizer"))
 
     def test_new_processor_registration(self):
         try:

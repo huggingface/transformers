@@ -62,9 +62,8 @@ class YoutuConfig(DeepseekV3Config):
     base_model_tp_plan = {
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
     }
-    base_model_sp_plan = None
     attribute_map = {}
 
     vocab_size: int = 128256

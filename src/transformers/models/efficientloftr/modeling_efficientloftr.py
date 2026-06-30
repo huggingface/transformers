@@ -1069,7 +1069,9 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         confidence = confidence.view(batch_size, height, width, height, width)
         matched_indices, matching_scores = self._get_matches_from_scores(confidence)
 
-        keypoints = torch.stack([matched_indices % width, matched_indices // width], dim=-1) * coarse_scale
+        width_t = torch.tensor(width, device=matched_indices.device)
+        # TorchDynamo makes width a SymInt and then complains about it not being a Tensor in the remainder op
+        keypoints = torch.stack([matched_indices % width_t, matched_indices // width_t], dim=-1) * coarse_scale
 
         return keypoints, matching_scores, matched_indices
 
@@ -1178,8 +1180,10 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         indices_0 = indices[:, 0]
         indices_1 = indices[:, 1]
-        indices_1_i = indices_1 // fine_kernel_size
-        indices_1_j = indices_1 % fine_kernel_size
+        fine_kernel_size_t = torch.tensor(fine_kernel_size, device=indices_1.device)
+        # TorchDynamo makes fine_kernel_size a SymInt and then complains about it not being a Tensor in the division and remainder ops
+        indices_1_i = indices_1 // fine_kernel_size_t
+        indices_1_j = indices_1 % fine_kernel_size_t
 
         # matches_indices, indices_0, indices_1_i, indices_1_j of shape (num_matches, 3, 3)
         batch_indices = torch.arange(batch_size, device=indices_0.device).reshape(batch_size, 1, 1, 1)

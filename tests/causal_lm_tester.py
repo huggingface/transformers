@@ -30,7 +30,6 @@ from transformers.testing_utils import (
 )
 
 from .test_configuration_common import ConfigTester
-from .test_fsdp_mixin import FSDPTesterMixin
 from .test_modeling_common import (
     GenerationTesterMixin,
     ModelTesterMixin,
@@ -272,12 +271,7 @@ class CausalLMModelTester:
 
 @require_torch
 class CausalLMModelTest(
-    ModelTesterMixin,
-    GenerationTesterMixin,
-    PipelineTesterMixin,
-    TrainingTesterMixin,
-    TensorParallelTesterMixin,
-    FSDPTesterMixin,
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TrainingTesterMixin, TensorParallelTesterMixin
 ):
     model_tester_class = None
     all_model_classes = None
@@ -634,7 +628,7 @@ def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool
     config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
     config.rope_parameters.update(rope_params)
 
-    if any(name in config.__class__.__name__.lower() for name in ["gemma3", "modernbert"]):
+    if any(name in config.__class__.__name__.lower() for name in ["gemma3", "modernbert", "olmo3"]):
         config.rope_parameters = {layer_type: config.rope_parameters.copy() for layer_type in config.layer_types}
 
     for sub_config in config.sub_configs.keys():

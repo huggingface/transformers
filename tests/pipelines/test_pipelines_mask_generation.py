@@ -93,6 +93,16 @@ class MaskGenerationPipelineTests(unittest.TestCase):
     def run_pipeline_test(self, mask_generator, examples):
         pass
 
+    def test_preprocess_is_last(self):
+        mask_generator = pipeline("mask-generation", model="hf-internal-testing/tiny-random-SamModel")
+        mask_generator.image_processor.pad_size = {"height": 24, "width": 24}
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        for points_per_batch in (100, 64):
+            with self.subTest(points_per_batch=points_per_batch):
+                batches = list(mask_generator.preprocess(image, points_per_batch=points_per_batch))
+                self.assertTrue(batches[-1]["is_last"])
+                self.assertFalse(any(b["is_last"] for b in batches[:-1]))
+
     @slow
     @require_torch
     def test_small_model_pt(self):

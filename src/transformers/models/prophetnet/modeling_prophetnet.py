@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, logging, torch_compilable_check
 from .configuration_prophetnet import ProphetNetConfig
 
 
@@ -45,16 +45,21 @@ def ngram_attention_bias(sequence_length, ngram, device, dtype):
     """
     This function computes the bias for the predict stream
     """
-    left_block = (
-        torch.ones((ngram, sequence_length, sequence_length), device=device, dtype=dtype) * torch.finfo(dtype).min
-    )
-    right_block = left_block.detach().clone()
-    # create bias
-    for stream_idx in range(ngram):
-        right_block[stream_idx].fill_diagonal_(0, wrap=False)
-        left_block[stream_idx].triu_(-stream_idx + 1)
+    neg_inf = torch.finfo(dtype).min
+    rows = torch.arange(sequence_length, device=device).view(1, sequence_length, 1)
+    cols = torch.arange(sequence_length, device=device).view(1, 1, sequence_length)
+    stream_offsets = (-torch.arange(ngram, device=device) + 1).view(ngram, 1, 1)
 
-    left_block[:, :, 0] = 0
+    # Main-stream mask: stream `s` allows positions strictly below the `1 - s` diagonal
+    # (cell -inf iff `col - row >= 1 - s`), with the first column always allowed.
+    left_mask = (cols - rows >= stream_offsets) & (cols != 0)
+    # Predict-stream mask: each stream only attends to its own future position (the diagonal).
+    right_mask = (rows != cols).expand(ngram, sequence_length, sequence_length)
+
+    neg_inf_t = torch.tensor(neg_inf, dtype=dtype, device=device)
+    zero_t = torch.zeros((), dtype=dtype, device=device)
+    left_block = torch.where(left_mask, neg_inf_t, zero_t)
+    right_block = torch.where(right_mask, neg_inf_t, zero_t)
     return torch.cat([left_block, right_block], dim=2)
 
 
@@ -617,8 +622,8 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         # MAIN-STREAM
         # main attn weights
-        # [batch_size, number_heads, sequence_length, head_dimesion]
-        # x [batch_size, number_heads, head_dimesion, sequence_length]
+        # [batch_size, number_heads, sequence_length, head_dimension]
+        # x [batch_size, number_heads, head_dimension, sequence_length]
         # -> [batch_size, number_heads, sequence_length, sequence_length]
         main_attn_weights = torch.einsum("bntc,bncs->bnts", main_query_states, main_key_states.transpose(2, 3))
 
@@ -641,32 +646,32 @@ class ProphetNetNgramSelfAttention(nn.Module):
         main_attn_probs = nn.functional.dropout(main_attn_probs, p=self.attention_dropout, training=self.training)
         # project to attn_output
         # [batch_size, number_heads, sequence_length, sequence_length]
-        # x [batch_size, number_heads, sequence_length, head_dimesion]
-        # -> [batch_size, number_heads, sequence_length, head_dimesion]
+        # x [batch_size, number_heads, sequence_length, head_dimension]
+        # -> [batch_size, number_heads, sequence_length, head_dimension]
         main_attn_output = torch.einsum("bntc,bncs->bnts", main_attn_probs, main_value_states)
         # reshape so that num_heads dim is merged into last `head_dim` axis
         main_attn_output = main_attn_output.transpose(1, 2).reshape(batch_size, 1, sequence_length, hidden_size)
         main_attn_output = self.out_proj(main_attn_output)
 
         # PREDICT-STREAM
-        # [batch_size, ngram, number_heads, sequence_length, head_dimesion]
+        # [batch_size, ngram, number_heads, sequence_length, head_dimension]
         predict_query_states = torch.stack(predict_query_states_list, 1).view(
             batch_size, self.ngram, self.num_attn_heads, sequence_length, self.head_dim
         )
 
-        # [batch_size, ngram, number_heads, 2*sequence_length, head_dimesion]
+        # [batch_size, ngram, number_heads, 2*sequence_length, head_dimension]
         predict_key_states = torch.stack([torch.cat([main_key_states, key], 2) for key in predict_key_states_list], 1)
 
         # [batch_size, sequence_length, ngram, hidden_size]
         predict_hidden_states = torch.stack(hidden_states_predict_list, dim=2)
 
-        # [batch_size, number_heads, ngram, 2*sequence_length, head_dimesion]
+        # [batch_size, number_heads, ngram, 2*sequence_length, head_dimension]
         predict_value_states = torch.cat(
             [torch.cat([main_value_states, v_p], 2).unsqueeze(2) for v_p in predict_value_states_list], 2
         )
 
-        # [batch_size, ngram, number_heads, sequence_length, head_dimesion]
-        # x [batch_size, ngram, number_heads, 2*sequence_length, head_dimesion]
+        # [batch_size, ngram, number_heads, sequence_length, head_dimension]
+        # x [batch_size, ngram, number_heads, 2*sequence_length, head_dimension]
         # -> [batch_size, ngram, number_heads, sequence_length, 2*sequence_length]
         predict_attn_weights = torch.einsum("bnhtc,bnhsc->bnhts", (predict_query_states, predict_key_states))
 
@@ -696,14 +701,14 @@ class ProphetNetNgramSelfAttention(nn.Module):
         )
         # project to attention output
         # [batch_size, ngram, number_heads, sequence_length, 2*sequence_length]
-        # x [batch_size, ngram, number_heads, 2*sequence_length, head_dimesion]
-        # -> [batch_size, ngram, number_heads, sequence_length, head_dimesion]
+        # x [batch_size, ngram, number_heads, 2*sequence_length, head_dimension]
+        # -> [batch_size, ngram, number_heads, sequence_length, head_dimension]
         predict_attn_output = torch.einsum(
             "bnhts,bnhsc->bnhtc", (predict_attn_probs, predict_value_states.transpose(1, 2))
         )
 
         # reshape so that num_heads dim is merged into last `head_dim` axis
-        # [batch_size, ngram, number_heads, sequence_length, head_dimesion] -> [batch_size, ngram, sequence_length, hidden_size]
+        # [batch_size, ngram, number_heads, sequence_length, head_dimension] -> [batch_size, ngram, sequence_length, hidden_size]
         predict_attn_output = predict_attn_output.transpose(2, 3)
         predict_attn_output = predict_attn_output.reshape(batch_size, self.ngram, sequence_length, hidden_size)
         predict_attn_output = self.out_proj(predict_attn_output)
@@ -774,8 +779,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         if predict_relative_position_buckets is None:
             key_sequence_length = attn_weights.shape[-1]
-            assert position_ids[0][0] == key_sequence_length - 1, (
-                "`position_ids` are incorrect. They should be of the format 1 2 3 4 5 ... (key_sequence_length - 1)"
+            torch_compilable_check(
+                position_ids[0][0] == key_sequence_length - 1,
+                "`position_ids` are incorrect. They should be of the format 1 2 3 4 5 ... (key_sequence_length - 1)",
             )
             relative_positions = (
                 torch.arange(0, key_sequence_length)

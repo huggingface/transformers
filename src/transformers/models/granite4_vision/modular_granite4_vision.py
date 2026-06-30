@@ -427,7 +427,9 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
             if deepstack_features is not None and layer_idx in deepstack_features:
                 features = deepstack_features[layer_idx].to(hidden_states.device, hidden_states.dtype)
                 mask = vision_mask.to(hidden_states.device)
-                hidden_states = hidden_states.masked_scatter(mask, (hidden_states[mask] + features.flatten()).view(-1))
+                hidden_states = hidden_states.masked_scatter(
+                    mask, (hidden_states[mask.squeeze(-1)] + features).view(-1)
+                )
 
             hidden_states = decoder_layer(
                 hidden_states,

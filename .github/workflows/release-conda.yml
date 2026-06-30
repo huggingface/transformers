@@ -27,7 +27,7 @@ jobs:
           persist-credentials: false
 
       - name: Install miniconda
-        uses: conda-incubator/setup-miniconda@9f54435e0e72c53962ee863144e47a4b094bfd35  # v2.3.0
+        uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5  # v4.0.1
         with:
           auto-update-conda: true
           auto-activate-base: false

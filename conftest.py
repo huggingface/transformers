@@ -152,9 +152,6 @@ _pytest.doctest.DoctestModule = HfDoctestModule
 doctest.DocTestParser = HfDocTestParser
 
 if is_torch_available():
-    # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
-    # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
-    enable_tf32(False)
     # # torch.backends.fp32_precision does not cascade to torch.backends.cudnn.conv.fp32_precision and torch.backends.cudnn.rnn.fp32_precision
     # TODO: Considering move this to `enable_tf32`, or report a bug to `torch`.
     import torch
@@ -167,6 +164,10 @@ if is_torch_available():
     # TODO: report a bug to `torch`
     if hasattr(torch.backends.cudnn, "allow_tf32"):
         torch.backends.cudnn.allow_tf32 = False
+
+    # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
+    # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
+    enable_tf32(False)
 
     # This is necessary to make several `test_batching_equivalence` pass (within the tolerance `1e-5`)
     if hasattr(torch.backends.cudnn, "conv") and hasattr(torch.backends.cudnn.conv, "fp32_precision"):

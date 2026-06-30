@@ -74,6 +74,8 @@
     title: Descripción general
   - local: debugging
     title: Debugging
+  - local: torch_compile
+    title: torch.compile
   title: Rendimiento y escalabilidad
 - sections:
   - local: add_new_pipeline

@@ -46,6 +46,10 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5OmniProcessor
     model_id = "Qwen/Qwen2.5-Omni-7B"
 
+    video_unstructured_max_length = 690
+    video_text_kwargs_max_length = 690
+    video_text_kwargs_override_max_length = 690
+
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
@@ -57,7 +61,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_video_processor(cls):
         video_processor_class = cls._get_component_class_from_processor("video_processor")
         return video_processor_class.from_pretrained(
-            cls.model_id, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
+            cls.model_id, size={"shortest_edge": 12 * 12, "longest_edge": 28 * 28}
         )
 
     def prepare_audio_inputs(self, batch_size: int = 3):

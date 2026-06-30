@@ -130,10 +130,7 @@ class PI0Model(PI0PreTrainedModel):
         llm_input_ids[input_ids == self.config.vlm_config.image_token_id] = 0
         inputs_embeds = self.vlm.get_input_embeddings()(llm_input_ids)
         special_image_mask = (
-            (input_ids == self.config.vlm_config.image_token_id)
-            .unsqueeze(-1)
-            .expand_as(inputs_embeds)
-            .to(inputs_embeds.device)
+            (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).to(inputs_embeds.device)
         )
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, total_image_features)
 
@@ -222,7 +219,7 @@ class PI0Model(PI0PreTrainedModel):
 class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
 
-    _tp_plan = {"action_out_proj": "colwise_allgather"}
+    _tp_plan = {"action_out_proj": "colwise_gather_output"}
 
     def __init__(self, config: PI0Config):
         super().__init__(config)

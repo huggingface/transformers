@@ -37,13 +37,13 @@ def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, mode
 
     downstream_dict = checkpoint["Downstream"]
 
-    hf_congfig = HubertConfig.from_pretrained(config_path)
-    hf_model = HubertForSequenceClassification.from_pretrained(base_model_name, config=hf_congfig)
+    hf_config = HubertConfig.from_pretrained(config_path)
+    hf_model = HubertForSequenceClassification.from_pretrained(base_model_name, config=hf_config)
     hf_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
         base_model_name, return_attention_mask=True, do_normalize=False
     )
 
-    if hf_congfig.use_weighted_layer_sum:
+    if hf_config.use_weighted_layer_sum:
         hf_model.layer_weights.data = checkpoint["Featurizer"]["weights"]
 
     hf_model.projector.weight.data = downstream_dict["projector.weight"]

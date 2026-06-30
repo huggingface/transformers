@@ -585,7 +585,6 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             raise ValueError(f"Number of labels should be >=0: {self.config.num_labels}")
 
         # The decode head always needs all stage outputs, so force hidden_states on internally.
-        kwargs["output_hidden_states"] = True
         outputs = self.segformer(pixel_values, **kwargs)
 
         encoder_hidden_states = outputs.hidden_states

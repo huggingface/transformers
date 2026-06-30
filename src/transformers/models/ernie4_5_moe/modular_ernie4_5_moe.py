@@ -24,7 +24,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding, apply_rotary_pos_emb, rotate_half  # noqa: F401
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
@@ -58,6 +58,7 @@ class Ernie4_5_MoeRotaryEmbedding(Ernie4_5RotaryEmbedding):
         super().__init__(config, device)
 
 
+@no_inherit_decorator
 class Ernie4_5_MoeAttention(LlamaAttention):
     def __init__(self, config: Ernie4_5_MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -81,7 +82,7 @@ class Ernie4_5_MoeStatics(nn.Module):
         super().__init__()
 
         num_experts_groups = 1
-        num_experts = config.moe_num_experts
+        num_experts = config.num_experts
 
         self.e_score_correction_bias = nn.Parameter(
             torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
@@ -100,16 +101,17 @@ class Ernie4_5_MoeStatics(nn.Module):
 class Ernie4_5_MoeExperts(MixtralExperts):
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.moe_num_experts
+        self.num_experts = config.num_experts
         self.intermediate_dim = config.moe_intermediate_size
 
 
 class Ernie4_5_MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.weight = nn.Parameter(torch.zeros(config.moe_num_experts, config.hidden_size, dtype=torch.float32))
+        self.weight = nn.Parameter(torch.zeros(config.num_experts, config.hidden_size, dtype=torch.float32))
         self.moe_statics = Ernie4_5_MoeStatics(config)
-        self.top_k = config.moe_k
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
         self.norm_min = config.moe_norm_min
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -128,15 +130,15 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
         routing_weights = routing_weights.to(hidden_states.dtype)
-        return router_logits, selected_experts, routing_weights
+        return router_logits, routing_weights, selected_experts
 
 
 class Ernie4_5_MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_dim = config.hidden_size
-        self.num_experts = config.moe_num_experts
-        self.top_k = config.moe_k
+        self.num_experts = config.num_experts
+        self.top_k = config.num_experts_per_tok
         self.gate = Ernie4_5_MoeTopKRouter(config)
         self.experts = Ernie4_5_MoeExperts(config)
 
@@ -151,7 +153,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        _, top_k_index, top_k_weights = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
 
         if self.shared_experts is not None:
@@ -290,8 +292,8 @@ class Ernie4_5_MoeForCausalLM(MixtralForCausalLM):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)
 
         self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.moe_num_experts
-        self.num_experts_per_tok = config.moe_k
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()

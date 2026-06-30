@@ -22,6 +22,7 @@ import pytest
 from datasets import Audio, load_dataset
 from pytest import mark
 
+from tests.utils.test_audio_utils import normalize_waveform
 from transformers import AutoFeatureExtractor, MimiConfig, set_seed
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
@@ -336,18 +337,8 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-# Copied from transformers.tests.encodec.test_modeling_encodec.normalize
-def normalize(arr):
-    norm = np.linalg.norm(arr)
-    normalized_arr = arr / norm
-    return normalized_arr
-
-
-# Copied from transformers.tests.encodec.test_modeling_encodec.compute_rmse
 def compute_rmse(arr1, arr2):
-    arr1_normalized = normalize(arr1)
-    arr2_normalized = normalize(arr2)
-    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
+    return np.sqrt(((normalize_waveform(arr1) - normalize_waveform(arr2)) ** 2).mean())
 
 
 @slow

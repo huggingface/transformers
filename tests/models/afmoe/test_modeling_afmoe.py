@@ -163,7 +163,9 @@ class AfmoeIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
-        num_tokens_to_generate = 24
+        # We keep this small because the compiled generation with static cache with bfloat16 is sensitive and sometimes
+        # gives different outputs after a few tokens.
+        num_tokens_to_generate = 4
         prompts = [
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
@@ -178,6 +180,7 @@ class AfmoeIntegrationTest(unittest.TestCase):
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=num_tokens_to_generate, do_sample=False)
+        # On Nvidia A10, it's "My favorite all time favorite condiment is ketchup. ketchup is Heinz."
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 
         generated_ids = model.generate(

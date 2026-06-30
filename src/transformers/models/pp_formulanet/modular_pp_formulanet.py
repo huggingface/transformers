@@ -505,8 +505,8 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         )
 
     # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
-    def get_encoder(self):
-        return self.model.get_encoder()
+    def get_encoder(self, modality: str | None = None):
+        return self.model.get_encoder(modality=modality)
 
     def get_placeholder_mask(self):
         raise AttributeError("The PPFormulaNet does not need placeholder mask.")

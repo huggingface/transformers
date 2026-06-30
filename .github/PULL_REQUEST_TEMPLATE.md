@@ -32,14 +32,12 @@ this policy is likely to be updated regularly in the near future. For more infor
 
 ## Before submitting
 - [ ] This PR fixes a typo or improves the docs (you can dismiss the other checks if that's the case).
-- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#create-a-pull-request),
-      Pull Request section?
+- [ ] Did you read the [contributor guideline](https://huggingface.co/docs/transformers/contributing) and the
+      [Pull Request](https://huggingface.co/docs/transformers/pr_checks) checks?
 - [ ] Was this discussed/approved via a Github issue or the [forum](https://discuss.huggingface.co/)? Please add a link
       to it if that's the case.
-- [ ] Did you make sure to update the documentation with your changes? Here are the
-      [documentation guidelines](https://github.com/huggingface/transformers/tree/main/docs), and
-      [here are tips on formatting docstrings](https://github.com/huggingface/transformers/tree/main/docs#writing-source-documentation).
-- [ ] Did you write any new necessary tests?
+- [ ] Did you make sure to update the documentation with your changes according to the [guidelines](https://github.com/huggingface/transformers/tree/main/docs)?
+- [ ] Did you write any new necessary [tests](https://huggingface.co/docs/transformers/testing)?
 
 
 ## Who can review?
@@ -54,7 +52,7 @@ members/contributors who may be interested in your PR.
 
 Models:
 
-- text models: @ArthurZucker @Cyrilvallez
+- text models: @ArthurZucker @Cyrilvallez @vasqu
 - vision models: @yonigozlan @molbap
 - audio models: @eustlb @ebezzam @vasqu
 - multimodal models: @zucchini-nlp
@@ -62,7 +60,7 @@ Models:
 
 Library:
 
-- generate: @zucchini-nlp (visual-language models) or @gante (all others)
+- generate: @zucchini-nlp (visual-language models) or @Cyrilvallez (all others)
 - continuous batching: @remi-or @ArthurZucker @McPatate
 - pipelines: @Rocketknight1
 - tokenizers: @ArthurZucker and @itazap
@@ -77,7 +75,7 @@ Integrations:
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
 - quantization: @SunMarc
-- kernels: @drbh
+- kernels: @vasqu @drbh
 - peft: @BenjaminBossan @githubnemo
 
 Devices/Backends:

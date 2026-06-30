@@ -49,7 +49,7 @@ from transformers.testing_utils import (
     require_vision,
     slow,
 )
-from transformers.utils.chat_parsing_utils import recursive_parse
+from transformers.utils.chat_parsing import parse_response
 from transformers.utils.import_utils import is_serve_available
 
 
@@ -568,26 +568,24 @@ class TestAppRoutes(unittest.TestCase):
             return await c.request(method, path, **kwargs)
 
     def test_health(self):
-        resp = asyncio.get_event_loop().run_until_complete(self._request("GET", "/health"))
+        resp = asyncio.run(self._request("GET", "/health"))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), {"status": "ok"})
 
     def test_models_list(self):
-        resp = asyncio.get_event_loop().run_until_complete(self._request("GET", "/v1/models"))
+        resp = asyncio.run(self._request("GET", "/v1/models"))
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["object"], "list")
         self.assertEqual(len(data["data"]), 1)
 
     def test_request_id_generated(self):
-        resp = asyncio.get_event_loop().run_until_complete(self._request("GET", "/health"))
+        resp = asyncio.run(self._request("GET", "/health"))
         self.assertIn("x-request-id", resp.headers)
         self.assertEqual(len(resp.headers["x-request-id"]), 36)  # UUID length
 
     def test_request_id_passthrough(self):
-        resp = asyncio.get_event_loop().run_until_complete(
-            self._request("GET", "/health", headers={"x-request-id": "my-id"})
-        )
+        resp = asyncio.run(self._request("GET", "/health", headers={"x-request-id": "my-id"}))
         self.assertEqual(resp.headers["x-request-id"], "my-id")
 
 
@@ -1811,7 +1809,7 @@ class TestToolCallUnit(unittest.TestCase):
     def test_parse_tool_calls_from_text(self):
         text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
         processor = MagicMock()
-        processor.parse_response = lambda t, s: recursive_parse(t, s)
+        processor.parse_response = parse_response
         schema = next(v["schema"] for k, v in _TOOL_CALL_FALLBACKS.items() if "qwen2" in k)
         calls = parse_tool_calls(processor, text, schema)
         self.assertEqual(len(calls), 1)
@@ -1823,7 +1821,7 @@ class TestToolCallUnit(unittest.TestCase):
             '<tool_call>\n{"name": "get_weather", "arguments": {"city": "London"}}\n</tool_call>'
         )
         processor = MagicMock()
-        processor.parse_response = lambda t, s: recursive_parse(t, s)
+        processor.parse_response = parse_response
         schema = next(v["schema"] for k, v in _TOOL_CALL_FALLBACKS.items() if "qwen2" in k)
         calls = parse_tool_calls(processor, text, schema)
         self.assertEqual(len(calls), 2)

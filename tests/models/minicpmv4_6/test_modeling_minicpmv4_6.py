@@ -24,6 +24,7 @@ from transformers import (
 )
 from transformers.models.minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6VisionConfig
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     require_torch_accelerator,
@@ -32,6 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_modeling_common import floats_tensor
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -363,7 +365,6 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-@unittest.skip(reason="waiting for release")
 class MiniCPMV4_6IntegrationTest(unittest.TestCase):
     model_id = "openbmb/MiniCPM-V-4_6"
 
@@ -416,7 +417,47 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        self.assertIn("cat", decoded_text.lower())
+        self.assertEqual(
+            "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+            decoded_text,
+        )
+
+    @slow
+    def test_small_model_video_generation(self):
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        model = MiniCPMV4_6ForConditionalGeneration.from_pretrained(
+            self.model_id, device_map="auto", dtype=torch.bfloat16
+        )
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                        ),
+                    },
+                    {"type": "text", "text": "What is shown in this video?"},
+                ],
+            }
+        ]
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(model.device, dtype=torch.bfloat16)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+
+        expected_texts = Expectations(
+            {
+                ("cuda", None): "The video shows two tennis players engaged in a match or practice session on an indoor tennis court. The player in the foreground is positioned at the net,",
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+
+        self.assertEqual(EXPECTED_TEXT, decoded_text)
 
     @slow
     def test_small_model_vision_generation_batch(self):
@@ -431,7 +472,9 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of animal is this?"},
                 ],
@@ -451,9 +494,16 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_texts = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        self.assertEqual(len(decoded_texts), 2)
-        for text in decoded_texts:
-            self.assertIn("cat", text.lower())
+        expected_texts = Expectations(
+            {
+                ("cuda", None): [
+                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+        self.assertListEqual(decoded_texts, EXPECTED_TEXT)
 
     @slow
     def test_small_model_vision_generation_batch_mixed(self):
@@ -468,7 +518,9 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of animal is this?"},
                 ],
@@ -489,6 +541,13 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_texts = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        self.assertEqual(len(decoded_texts), 2)
-        self.assertTrue(len(decoded_texts[0]) > 0)
-        self.assertTrue(len(decoded_texts[1]) > 0)
+        expected_texts = Expectations(
+            {
+                ("cuda", None): [
+                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                    "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+        self.assertListEqual(decoded_texts, EXPECTED_TEXT)

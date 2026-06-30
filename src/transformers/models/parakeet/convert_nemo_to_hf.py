@@ -27,8 +27,10 @@ from transformers import (
     ParakeetEncoderConfig,
     ParakeetFeatureExtractor,
     ParakeetForCTC,
+    ParakeetForRNNT,
     ParakeetForTDT,
     ParakeetProcessor,
+    ParakeetRNNTConfig,
     ParakeetTDTConfig,
     ParakeetTokenizer,
 )
@@ -155,17 +157,30 @@ def write_processor(
         # Normally CTC and TDT already have
         tokenizer_converted_fast.add_tokens([AddedToken("<unk>", normalized=False, special=True)])
         print(f"Added <unk> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<unk>')}")
-    if tokenizer_converted_fast.convert_tokens_to_ids("<pad>") is None:
-        # Normally CTC doesn't have while TDT has at token id = 2
-        tokenizer_converted_fast.add_tokens([AddedToken("<pad>", normalized=False, special=True)])
-        print(f"Added <pad> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<pad>')}")
-    if model_type == "tdt":
-        # TDT needs a separate blank token
+
+    if model_type == "rnnt":
+        # RNN-T (unlike TDT) has no dedicated pad token in its NeMo vocab. NeMo's blank is the final vocab entry,
+        # i.e. `config.blank_token_id == len(labels)`, and the joint head emits exactly `len(labels) + 1` logits.
+        # Add `<blank>` *first* so it lands on that id (no `<pad>` is appended to push it past the model's vocab),
+        # and reuse it as the pad token: decoding already skips the pad id, and padding decoder/label tensors with
+        # the blank id keeps every id within the joint vocab. This aligns the tokenizer's `<blank>` id with the
+        # model's blank logit, so the processor can prepend `<blank>` to build decoder_input_ids unchanged.
         tokenizer_converted_fast.add_tokens([AddedToken("<blank>", normalized=False, special=True)])
         print(f"Added <blank> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<blank>')}")
+        pad_token = AddedToken("<blank>", normalized=False, special=True)
+    else:
+        if tokenizer_converted_fast.convert_tokens_to_ids("<pad>") is None:
+            # Normally CTC doesn't have while TDT has at token id = 2
+            tokenizer_converted_fast.add_tokens([AddedToken("<pad>", normalized=False, special=True)])
+            print(f"Added <pad> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<pad>')}")
+        if model_type == "tdt":
+            # TDT needs a separate blank token (its vocab already carries a distinct <pad>)
+            tokenizer_converted_fast.add_tokens([AddedToken("<blank>", normalized=False, special=True)])
+            print(f"Added <blank> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<blank>')}")
+        pad_token = AddedToken("<pad>", normalized=False, special=True)
     tokenizer_converted_fast.add_special_tokens(
         {
-            "pad_token": AddedToken("<pad>", normalized=False, special=True),
+            "pad_token": pad_token,
             "unk_token": AddedToken("<unk>", normalized=False, special=True),
         }
     )
@@ -202,6 +217,9 @@ def write_processor(
     processor = ParakeetProcessor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer_converted_fast,
+        # Drives the decoding/timestamp rules (CTC collapses repeats; TDT uses predicted durations + punctuation
+        # attach; RNN-T uses single-frame spans).
+        decoder_type=model_type,
     )
     processor.save_pretrained(output_dir)
 
@@ -396,6 +414,76 @@ def write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_t
     print("Model reloaded successfully.")
 
 
+def convert_rnnt_config(nemo_config, encoder_config):
+    """Convert NeMo RNN-T config to HF RNN-T config (a TDT config with no token durations)."""
+    decoder_config = nemo_config["decoder"]
+    labels = nemo_config["labels"]
+    blank_token_id = len(labels)
+    vocab_size = len(labels) + 1  # +1 for blank token, which is added to tokenizer
+
+    prednet = decoder_config.get("prednet", {})
+    decoder_hidden_size = prednet.get("pred_hidden", 640)
+    num_decoder_layers = prednet.get("pred_rnn_layers", 2)
+    print(
+        f"RNN-T config: vocab_size={vocab_size} (including blank token), "
+        f"decoder_hidden={decoder_hidden_size}, decoder_layers={num_decoder_layers}"
+    )
+
+    return ParakeetRNNTConfig(
+        vocab_size=vocab_size,
+        decoder_hidden_size=decoder_hidden_size,
+        num_decoder_layers=num_decoder_layers,
+        hidden_act="relu",
+        max_symbols_per_step=10,
+        encoder_config=encoder_config.to_dict(),
+        pad_token_id=labels.index("<pad>") if "<pad>" in labels else 0,
+        blank_token_id=blank_token_id,  # blank token is different from pad token for RNN-T
+    )
+
+
+def write_rnnt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id=None, revision=None):
+    """Write RNN-T model using encoder config, RNN-T config, and converted state dict.
+
+    RNN-T shares the TDT decoder/joint weight layout (the joint head is just `vocab_size` wide, with no
+    duration logits), so the TDT state-dict converter is reused as-is.
+    """
+    model_config = convert_rnnt_config(nemo_config, encoder_config)
+    print(f"Converted RNN-T config: {model_config}")
+
+    converted_state_dict = load_and_convert_tdt_state_dict(model_files, model_config.vocab_size)
+
+    print("Loading the checkpoint in a Parakeet RNN-T model.")
+    with torch.device("meta"):
+        model = ParakeetForRNNT(model_config)
+
+    missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False, assign=True)
+
+    if missing_keys:
+        print(f"Warning: Missing keys: {missing_keys}")
+    if unexpected_keys:
+        print(f"Warning: Unexpected keys: {unexpected_keys}")
+
+    if not missing_keys and not unexpected_keys:
+        print("All weights loaded successfully!")
+
+    del model.config._name_or_path
+
+    model.generation_config.decoder_start_token_id = model.config.blank_token_id
+
+    print("Saving the model.")
+    model.save_pretrained(output_dir)
+
+    if push_to_repo_id:
+        model.push_to_hub(push_to_repo_id, revision=revision)
+
+    del model
+
+    gc.collect()
+    print("Reloading the model to check if it's saved correctly.")
+    ParakeetForRNNT.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
+    print("Model reloaded successfully.")
+
+
 def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id=None, revision=None):
     """Main model conversion function."""
     encoder_config = convert_encoder_config(nemo_config)
@@ -406,6 +494,8 @@ def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_i
         write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id, revision)
     elif model_type == "tdt":
         write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id, revision)
+    elif model_type == "rnnt":
+        write_rnnt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id, revision)
     else:
         raise ValueError(f"Model type {model_type} not supported.")
 
@@ -460,7 +550,9 @@ python src/transformers/models/parakeet/convert_nemo_to_hf.py \
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--hf_repo_id", required=True, help="Model repo on huggingface.co")
-    parser.add_argument("--model_type", required=True, choices=["ctc", "tdt"], help="Model type (`ctc`, `tdt`)")
+    parser.add_argument(
+        "--model_type", required=True, choices=["ctc", "tdt", "rnnt"], help="Model type (`ctc`, `tdt`, `rnnt`)"
+    )
     parser.add_argument("--output_dir", required=True, help="Output directory for HuggingFace model")
     parser.add_argument("--push_to_repo_id", help="Repository ID to push the model to on the Hub")
     parser.add_argument(

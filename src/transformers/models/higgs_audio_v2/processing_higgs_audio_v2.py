@@ -200,14 +200,14 @@ class HiggsAudioV2Processor(ProcessorMixin):
             audio_input_ids_list = [torch.cat(batch_el, dim=0) for batch_el in audio_input_ids_list]
 
             # pad and stack
-            lenghts = [ids.shape[0] for ids in audio_input_ids_list]
-            max_length = max(lenghts)
+            lengths = [ids.shape[0] for ids in audio_input_ids_list]
+            max_length = max(lengths)
             audio_input_ids_list = [
                 F.pad(ids, (0, 0, 0, max_length - ids.shape[0]), value=self.audio_stream_eos_id)
                 for ids in audio_input_ids_list
             ]
             audio_input_ids = torch.stack(audio_input_ids_list, dim=0)
-            audio_input_ids_mask = torch.arange(max_length)[None, :] < torch.tensor(lenghts)[:, None]
+            audio_input_ids_mask = torch.arange(max_length)[None, :] < torch.tensor(lengths)[:, None]
 
         # tokenize text
         data = self.tokenizer(text, **text_kwargs)

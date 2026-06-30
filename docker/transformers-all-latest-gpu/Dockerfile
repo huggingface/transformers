@@ -36,9 +36,11 @@ RUN set -e; \
     # Determine torch version
     if [ ${#PYTORCH} -gt 0 ] && [ "$PYTORCH" != "pre" ]; then \
         VERSION="torch==${PYTORCH}.*"; \
+        TORCHAUDIO_VERSION="torchaudio==${PYTORCH}.*"; \
         TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
     else \
         VERSION="torch"; \
+        TORCHAUDIO_VERSION="torchaudio"; \
         TORCHCODEC_VERSION="torchcodec"; \
     fi; \
     \
@@ -50,7 +52,7 @@ RUN set -e; \
         python3 -m pip install --no-cache-dir -U \
             $VERSION \
             torchvision \
-            torchaudio \
+            $TORCHAUDIO_VERSION \
             --extra-index-url https://download.pytorch.org/whl/$CUDA; \
         # We need to specify the version if the torch version is not the latest stable one.
         python3 -m pip install --no-cache-dir -U \

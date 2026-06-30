@@ -91,21 +91,22 @@ class MiniMaxConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
-
     attribute_map = {"num_experts": "num_local_experts"}
 
     vocab_size: int = 32000
@@ -216,6 +217,8 @@ class MiniMaxLightningAttention(nn.Module):
         self.register_buffer("query_decay", query_decay)
         self.register_buffer("key_decay", key_decay)
         self.register_buffer("diagonal_decay", diagonal_decay)
+
+        self.layer_type = config.layer_types[layer_idx]
 
     def get_slope_rate(self):
         base = 1 / (2 ** (8 / self.num_attention_heads))
@@ -361,12 +364,12 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         super().__init__(config, layer_idx)
 
         self.layer_idx = layer_idx
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.block_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
         del self.mlp
         self.mlp = MiniMaxSparseMoeBlock(config)
-        if self.layer_type == "linear_attention":
+        if self.block_type == "linear_attention":
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.attn_alpha_factor = config.linear_attn_alpha_factor
             self.attn_beta_factor = config.linear_attn_beta_factor

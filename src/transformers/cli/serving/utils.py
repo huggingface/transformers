@@ -108,9 +108,16 @@ _TOOL_CALL_FALLBACKS = {
         "stc": "<tool_call>",
         "etc": "</tool_call>",
         "schema": {
-            "x-regex-iterator": r"<tool_call>(.*?)</tool_call>",
-            "type": "array",
-            "items": {"type": "object", "x-parser": "json"},
+            "defaults": {},
+            "start_anchor": "<|im_start|>assistant\n",
+            "fields": {
+                "tool_calls": {
+                    "open": "<tool_call>",
+                    "close": "</tool_call>",
+                    "repeats": True,
+                    "content": "json",
+                },
+            },
         },
     },
     # Qwen 3.5 family wraps tool calls in <tool_call>...</tool_call> (single-token delimiters,
@@ -148,10 +155,23 @@ def get_tool_call_config(processor, model: "PreTrainedModel") -> dict | None:
     tokenizer = getattr(processor, "tokenizer", processor)
     stc = getattr(tokenizer, "stc_token", None)
     etc = getattr(tokenizer, "etc_token", None)
+    response_template = getattr(tokenizer, "response_template", None)
     response_schema = getattr(tokenizer, "response_schema", None)
 
-    # Models with full tokenizer config (e.g. Gemma 4)
-    if stc and etc and response_schema:
+    schema: dict | None = None
+    # Prefer the new-style response_template (e.g. Gemma 4).
+    if stc and etc and response_template and "tool_calls" in response_template.get("fields", {}):
+        schema = {
+            "defaults": {},
+            "fields": {"tool_calls": response_template["fields"]["tool_calls"]},
+        }
+        # Carry the parent template's anchor through so the sub-schema loads (anchor is required).
+        for anchor_key in ("start_anchor", "start_anchor_pattern"):
+            if anchor_key in response_template:
+                schema[anchor_key] = response_template[anchor_key]
+                break
+    # Legacy response_schema path (still supported for old tokenizers).
+    elif stc and etc and response_schema:
         schema = response_schema["properties"]["tool_calls"]
     else:
         # Fallback: known model families without full tokenizer config. Matched by exact
@@ -197,6 +217,9 @@ def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | Non
     Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
     """
     parsed = processor.parse_response(generated_ids, schema)
+    # The new response_template path returns a dict like {"tool_calls": [...]}; unwrap.
+    if isinstance(parsed, dict) and "tool_calls" in parsed:
+        parsed = parsed["tool_calls"]
     if not parsed:
         return None
     if not isinstance(parsed, list):
@@ -1232,12 +1255,17 @@ class BaseHandler:
                     if isinstance(url, dict):
                         url = url["url"]
                     parsed["content"].append({"type": "image", "url": url})
-                # Audio: unlike images, load_audio doesn't accept raw base64 — wrap as a data URI
+                # Audio: OpenAI's input_audio is {"data": <base64>, "format": "wav"|"mp3"}, enabling URI for load_audio
+                # If format is missing, we can just hand over raw base64 and let load_audio sniff the format from the bytes.
                 elif content_type == "input_audio" and modality == Modality.MULTIMODAL:
                     input_audio = content["input_audio"]
-                    fmt = input_audio.get("format", "wav") if isinstance(input_audio, dict) else "wav"
-                    audio_b64 = input_audio["data"]
-                    parsed["content"].append({"type": "audio", "url": f"data:audio/{fmt};base64,{audio_b64}"})
+                    if isinstance(input_audio, dict):
+                        audio_b64 = input_audio["data"]
+                        fmt = input_audio.get("format")
+                        url = f"data:audio/{fmt};base64,{audio_b64}" if fmt else audio_b64
+                    else:
+                        url = input_audio
+                    parsed["content"].append({"type": "audio", "url": url})
                 # Extensions (not part of the OpenAI API standard)
                 elif content_type == "video_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
                     parsed["content"].append({"type": "video", "url": content["video_url"]["url"]})

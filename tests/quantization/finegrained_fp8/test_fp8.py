@@ -392,6 +392,10 @@ class FP8QuantizerTest(unittest.TestCase):
         Checks implicitly if the moe implementation is correct, i.e. it does not crash for cases
         where the indices go over `top_k` as shown within the Minimax M2 model
         """
+        # deepgemm only has CUDA kernels, skip on other devices
+        if experts_implementation == "deepgemm" and torch_device != "cuda":
+            self.skipTest("deepgemm is only supported on CUDA")
+
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version
             experts_implementation=experts_implementation,

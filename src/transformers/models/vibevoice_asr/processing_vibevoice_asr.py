@@ -17,7 +17,7 @@ import re
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput, make_list_of_audio, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
@@ -196,14 +196,9 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             [`BatchFeature`]: Processor outputs ready to be passed to [`VibeVoiceAsrForConditionalGeneration.generate`].
         """
 
-        if isinstance(audio, str):
-            audio_items: list[str | np.ndarray] = [audio]
-        elif isinstance(audio, (list, tuple)) and audio and all(isinstance(el, str) for el in audio):
-            audio_items = list(audio)
-        else:
-            audio_items = list(make_list_of_audio(audio))
-            if is_torch_available():
-                audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
+        audio_items: list[str | np.ndarray] = list(make_list_of_audio_chat_template(audio))
+        if is_torch_available():
+            audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
 
         batch_size = len(audio_items)
         if batch_size == 0:

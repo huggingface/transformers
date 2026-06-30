@@ -231,7 +231,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         for i in range(0, n_points, points_per_batch):
             batched_points = grid_points[:, i : i + points_per_batch, :, :]
             labels = input_labels[:, i : i + points_per_batch]
-            is_last = i == n_points - points_per_batch
+            is_last = i + points_per_batch >= n_points
             yield {
                 "input_points": batched_points,
                 "input_labels": labels,

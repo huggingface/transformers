@@ -61,6 +61,19 @@ class CheckersCacheTest(unittest.TestCase):
         with (
             patch.object(sys, "argv", ["checkers.py", *args]),
             patch.object(sys, "stdout", new=stdout),
+            # checkers.main() is OTel-instrumented: with a live OTLP endpoint +
+            # TRACEPARENT in the env (as in CI, where configure-ci-otel wraps the
+            # pytest job), it would export real spans for the fake "demo" checker
+            # into production telemetry. Blank these out so the in-process run is
+            # a tracing no-op and the test never leaks spans.
+            patch.dict(
+                os.environ,
+                {
+                    "OTEL_EXPORTER_OTLP_ENDPOINT": "",
+                    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "",
+                    "TRACEPARENT": "",
+                },
+            ),
         ):
             exit_code = None
             try:

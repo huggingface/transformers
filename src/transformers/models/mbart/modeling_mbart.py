@@ -1128,9 +1128,12 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
             torch.unique_consecutive(eos_mask.sum(1)).numel() == 1,
             "All examples must have the same number of <eos> tokens.",
         )
-        sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
-            :, -1, :
-        ]
+        selected = hidden_states[eos_mask, :]
+        torch_compilable_check(
+            selected.shape[0] // hidden_states.shape[0] >= 1,
+            "Each example must contain at least one <eos> token.",
+        )
+        sentence_representation = selected.view(hidden_states.size(0), -1, hidden_states.size(-1))[:, -1, :]
         logits = self.classification_head(sentence_representation)
 
         loss = None

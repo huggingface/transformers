@@ -278,6 +278,56 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
+    def test_model_pt_chat_template_with_response_template_prefix(self):
+        # When the chat template pre-writes the start of the assistant message (here, an
+        # opening <think> block), the pipeline must pass the prompt to `parse_response` as
+        # `prefix=` so that generated text is correctly routed into the prefilled region.
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        pipe.processor.chat_template = (
+            "{% for message in messages %}"
+            "{{ '<|im_start|>' + message['role'] + '\n' }}"
+            "{% for item in message['content'] %}"
+            "{% if item['type'] == 'image' %}{{ '<image>' }}"
+            "{% elif item['type'] == 'text' %}{{ item['text'] }}{% endif %}"
+            "{% endfor %}"
+            "{{ '<|im_end|>' + '\n' }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}{{ '<|im_start|>assistant\n<think>\n' }}{% endif %}"
+        )
+        pipe.tokenizer.response_template = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|im_start|>assistant\n",
+            "fields": {
+                "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+                "content": {"close": "<|im_end|>", "content": "text"},
+            },
+        }
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What's in this image?"},
+                    {
+                        "type": "image",
+                        "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                    },
+                ],
+            }
+        ]
+        outputs = pipe(text=messages, do_sample=False, max_new_tokens=10)
+        parsed_message = outputs[0]["generated_text"][-1]
+        # The model never emits </think> here, so everything it generates stays inside the
+        # `thinking` region opened by the chat template in the prompt. Without `prefix=`,
+        # the parser would never see the opening <think> and would mis-route the generated
+        # text into `content` instead.
+        self.assertEqual(parsed_message["role"], "assistant")
+        self.assertIn("thinking", parsed_message)
+        self.assertNotIn("content", parsed_message)
+        self.assertIsInstance(parsed_message["thinking"], str)
+        self.assertGreater(len(parsed_message["thinking"]), 0)
+
+    @slow
+    @require_torch
     def test_model_pt_chat_template(self):
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
         image_ny = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"

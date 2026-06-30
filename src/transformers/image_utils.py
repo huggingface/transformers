@@ -168,7 +168,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> list[ImageInput]:
 
     Args:
         images (`ImageInput`):
-            Image of images to turn into a list of images.
+            Image or batch of images to turn into a list of images.
         expected_ndims (`int`, *optional*, defaults to 3):
             Expected number of dimensions for a single input image. If the input image has a different number of
             dimensions, an error is raised.

@@ -27,7 +27,7 @@ Consider the quantization methods below for inference.
 | quantization method | use case |
 |---|---|
 | bitsandbytes | ease of use and QLoRA fine-tuning on NVIDIA and Intel GPUs |
-| compressed-tensors | loading specific quantized formats (FP8, Sparse) |
+| compressed-tensors | loading specific quantized formats (FP8) |
 | GPTQModel or AWQ | good 4-bit accuracy with upfront calibration |
 | HQQ | fast on the fly quantization without calibration |
 | SINQ | super-fast but high-quality on the fly quantization without calibration |
@@ -112,7 +112,7 @@ See the [AWQ documentation](./awq) for more details.
 
 | Pros                                                         | Cons                                                        |
 |--------------------------------------------------------------|-------------------------------------------------------------|
-| Supports flexible formats including FP8 and sparsity.        | Primarily for loading pre-quantized models.                 |
+| Supports flexible formats like FP8.        | Primarily for loading pre-quantized models.                 |
 |                                                              | Doesn't perform quantization within Transformers directly.  |
 
 See the [compressed-tensors documentation](./compressed_tensors) for more details.

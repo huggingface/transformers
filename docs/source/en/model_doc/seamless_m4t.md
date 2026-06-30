@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2023-08-22 and added to Hugging Face Transformers on 2023-10-23.*
+*This model was published in HF papers on 2023-08-22 and contributed to Hugging Face Transformers on 2023-10-23.*
 
 # SeamlessM4T
 
@@ -124,7 +124,7 @@ You have the possibility to change the speaker used for speech synthesis with th
 
 #### 3. Change the generation strategy
 
-You can use different [generation strategies](./generation_strategies) for speech and text generation, e.g `.generate(input_ids=input_ids, text_num_beams=4, speech_do_sample=True)` which will successively perform beam-search decoding on the text model, and multinomial sampling on the speech model.
+You can use different [generation strategies](../generation_strategies) for speech and text generation, e.g `.generate(input_ids=input_ids, text_num_beams=4, speech_do_sample=True)` which will successively perform beam-search decoding on the text model, and multinomial sampling on the speech model.
 
 #### 4. Generate speech and text at the same time
 

@@ -2233,7 +2233,7 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state)[-1])
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
                 sources.append(self.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
 
@@ -2482,7 +2482,7 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         thresholds = class_thresholds[class_ids]
         mask = max_probs >= thresholds
 
-        indices = torch.argsort(mask.to(torch.int8), dim=1, descending=True)
+        indices = torch.argsort(mask.int(), dim=1, descending=True)
 
         sorted_class_ids = torch.take_along_dim(class_ids, indices, dim=1)
         sorted_boxes = torch.take_along_dim(bboxes, indices[..., None].expand(-1, -1, 4), dim=1)

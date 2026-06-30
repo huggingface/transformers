@@ -55,25 +55,19 @@ class DogeConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.dt_proj": "rowwise_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.dt_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
-        "layers.*.mlp.router_gate": "colwise_allgather",
-        "layers.*.mlp.down_embed": "vocab_allreduce",
-        "layers.*.mlp.up_embed": "vocab_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.router_gate": "colwise_gather_output",
+        "layers.*.mlp.down_embed": "rowwise_split_input",
+        "layers.*.mlp.up_embed": "rowwise_split_input",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 32768

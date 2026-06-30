@@ -420,8 +420,6 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         >>> dataset_index = torch.tensor([1])
         >>> outputs = model(pixel_values, dataset_index)
         ```"""
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
-
         embedding_output = self.embeddings(pixel_values)
         outputs: BaseModelOutput = self.encoder(embedding_output, dataset_index=dataset_index, **kwargs)
         hidden_states = outputs.hidden_states

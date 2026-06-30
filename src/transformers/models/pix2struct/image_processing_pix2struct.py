@@ -19,7 +19,6 @@ from typing import Union
 
 import torch
 import torchvision.transforms.v2.functional as tvF
-from huggingface_hub import hf_hub_download
 from PIL import Image, ImageDraw, ImageFont
 
 from ...image_processing_backends import TorchvisionBackend
@@ -28,6 +27,7 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ChannelDimension, ImageInput, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
+from ...utils.hub import hf_api
 from ...utils.import_utils import requires_backends
 
 
@@ -104,7 +104,7 @@ def render_text(
     elif font_path is not None:
         font = font_path
     else:
-        font = hf_hub_download(DEFAULT_FONT_PATH, "Arial.TTF")
+        font = hf_api().hf_hub_download(DEFAULT_FONT_PATH, "Arial.TTF")
     font = ImageFont.truetype(font, encoding="UTF-8", size=text_size)
 
     # Use a temporary canvas to determine the width and height in pixels when

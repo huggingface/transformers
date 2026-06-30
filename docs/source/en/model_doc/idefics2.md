@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-05-03 and added to Hugging Face Transformers on 2024-04-15.*
+*This model was published in HF papers on 2024-05-03 and contributed to Hugging Face Transformers on 2024-04-15.*
 
 # Idefics2
 
@@ -167,9 +167,9 @@ model = Idefics2ForConditionalGeneration.from_pretrained(
 
 ## Shrinking down Idefics2 using quantization
 
-As the Idefics2 model has 8 billion parameters, that would require about 16GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization). If the model is quantized to 4 bits (or half a byte per parameter), that requires only about 3.5GB of RAM.
+As the Idefics2 model has 8 billion parameters, that would require about 16GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization/overview). If the model is quantized to 4 bits (or half a byte per parameter), that requires only about 3.5GB of RAM.
 
-Quantizing a model is as simple as passing a `quantization_config` to the model. One can change the code snippet above with the changes below. We'll leverage the BitsAndyBytes quantization (but refer to [this page](../quantization) for other quantization methods):
+Quantizing a model is as simple as passing a `quantization_config` to the model. One can change the code snippet above with the changes below. We'll leverage the BitsAndyBytes quantization (but refer to [this page](../quantization/overview) for other quantization methods):
 
 ```diff
 + from transformers import BitsAndBytesConfig

@@ -1517,7 +1517,7 @@ class MMGroundingDinoDecoder(MMGroundingDinoPreTrainedModel):
             elif num_coordinates == 2:
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
             else:
-                raise ValueError("Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
+                raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
             query_pos = encode_sinusoidal_position_embedding(
                 reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2
             )
@@ -2218,7 +2218,7 @@ class MMGroundingDinoMLPPredictionHead(nn.Module):
 class MMGroundingDinoObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):

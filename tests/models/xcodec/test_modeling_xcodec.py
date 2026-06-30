@@ -25,6 +25,7 @@ from parameterized import parameterized
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from tests.utils.test_audio_utils import compute_rmse
 from transformers import AutoFeatureExtractor, XcodecConfig
 from transformers.testing_utils import (
     is_torch_available,
@@ -143,7 +144,7 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["input_values", "audio_codes", "bandwidth", "return_dict"]
+            expected_arg_names = ["input_values", "audio_codes", "bandwidth"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_gradient_checkpointing_backward_compatibility(self):
@@ -247,25 +248,6 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="The XcodecModel does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):
         pass
-
-
-# Copied from transformers.tests.encodec.test_modeling_encodec.normalize
-def normalize(arr):
-    norm = np.linalg.norm(arr)
-    normalized_arr = arr / norm
-    return normalized_arr
-
-
-# Copied from transformers.tests.encodec.test_modeling_encodec.compute_rmse
-def compute_rmse(arr1, arr2):
-    arr1_np = arr1.cpu().numpy().squeeze()
-    arr2_np = arr2.cpu().numpy().squeeze()
-    max_length = min(arr1.shape[-1], arr2.shape[-1])
-    arr1_np = arr1_np[..., :max_length]
-    arr2_np = arr2_np[..., :max_length]
-    arr1_normalized = normalize(arr1_np)
-    arr2_normalized = normalize(arr2_np)
-    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
 
 """
