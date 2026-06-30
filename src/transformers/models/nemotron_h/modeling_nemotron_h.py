@@ -45,7 +45,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.zamba2.modeling_zamba2 import Zamba2RMSNormGated
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import force_accelerate_hooks, merge_with_config_defaults
 from ...utils.import_utils import resolve_internal_import
 from ...utils.output_capturing import capture_outputs
 from .configuration_nemotron_h import NemotronHConfig
@@ -583,6 +583,7 @@ class NemotronHMamba2Mixer(nn.Module):
         return contextualized_states
     # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,

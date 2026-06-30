@@ -31,7 +31,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import accelerate_hook_compatible_wrapper, merge_with_config_defaults
+from ...utils.generic import force_accelerate_hooks, merge_with_config_defaults
 from ...utils.import_utils import resolve_internal_import
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, eager_attention_forward
@@ -346,6 +346,7 @@ class JambaMambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
@@ -363,11 +364,11 @@ class JambaMambaMixer(nn.Module):
             self.config.use_mamba_kernels = False
 
         if self.config.use_mamba_kernels:
-            return accelerate_hook_compatible_wrapper(self.cuda_kernels_forward)(
-                hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
-            )
-        return accelerate_hook_compatible_wrapper(self.slow_forward)(
-            hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
+            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
+        return self.slow_forward(
+            hidden_states,
+            cache_params,
+            attention_mask,
         )
 
 

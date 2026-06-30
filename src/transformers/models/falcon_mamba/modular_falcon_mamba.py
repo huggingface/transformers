@@ -20,7 +20,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...utils import auto_docstring, logging
-from ...utils.generic import accelerate_hook_compatible_wrapper
+from ...utils.generic import force_accelerate_hooks
 from ...utils.import_utils import is_mambapy_available, is_torch_greater_or_equal, is_torchdynamo_compiling, is_tracing
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
@@ -404,6 +404,7 @@ class FalconMambaMixer(MambaMixer):
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
         return contextualized_states
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
@@ -415,12 +416,8 @@ class FalconMambaMixer(MambaMixer):
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
         )
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
-            return accelerate_hook_compatible_wrapper(self.cuda_kernels_forward)(
-                hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
-            )
-        return accelerate_hook_compatible_wrapper(self.slow_forward)(
-            hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
-        )
+            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
+        return self.slow_forward(hidden_states, cache_params, attention_mask)
 
     @torch.no_grad()
     def init_falcon_mamba_weights(self):

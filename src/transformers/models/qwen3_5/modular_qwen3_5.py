@@ -249,10 +249,9 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
             mixed_qkv = self.causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-                hooked_module=self.conv1d,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
             )
         else:
             # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
@@ -271,7 +270,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                     bias=self.conv1d.bias,
                     activation=self.activation,
                     seq_idx=kwargs.get("seq_idx"),
-                    hooked_module=self.conv1d,
                 )
             else:
                 mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])

@@ -43,7 +43,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import accelerate_hook_compatible_wrapper, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import force_accelerate_hooks, maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_qwen3_next import Qwen3NextConfig
@@ -548,10 +548,8 @@ class Qwen3NextGatedDeltaNet(nn.Module):
 
         self.out_proj = nn.Linear(self.value_dim, self.hidden_size, bias=False)
 
-        self.causal_conv1d_fn = accelerate_hook_compatible_wrapper(causal_conv1d_fn)
-        self.causal_conv1d_update = accelerate_hook_compatible_wrapper(
-            causal_conv1d_update or torch_causal_conv1d_update
-        )
+        self.causal_conv1d_fn = causal_conv1d_fn
+        self.causal_conv1d_update = causal_conv1d_update or torch_causal_conv1d_update
         self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
         self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
 
@@ -591,6 +589,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         a = a.reshape(a.size(0), a.size(1), self.num_v_heads)
         return query, key, value, z, b, a
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -627,10 +626,9 @@ class Qwen3NextGatedDeltaNet(nn.Module):
             mixed_qkv = self.causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-                hooked_module=self.conv1d,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
             )
         else:
             # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
@@ -649,7 +647,6 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                     bias=self.conv1d.bias,
                     activation=self.activation,
                     seq_idx=kwargs.get("seq_idx"),
-                    hooked_module=self.conv1d,
                 )
             else:
                 mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])

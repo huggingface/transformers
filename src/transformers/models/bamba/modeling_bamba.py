@@ -42,7 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from ...utils.generic import accelerate_hook_compatible_wrapper, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import force_accelerate_hooks, maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import resolve_internal_import
 from ...utils.output_capturing import capture_outputs
 from .configuration_bamba import BambaConfig
@@ -845,6 +845,7 @@ class BambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
@@ -854,9 +855,7 @@ class BambaMixer(nn.Module):
         **kwargs,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
-            return accelerate_hook_compatible_wrapper(self.cuda_kernels_forward)(
-                hidden_states, cache_params, attention_mask, seq_idx, hooked_module=self.conv1d
-            )
+            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask, seq_idx)
         if seq_idx is not None:
             raise NotImplementedError(
                 "`seq_idx` support requires fast path support. Please install `mamba_ssm` and `causal_conv1d`"
@@ -866,9 +865,7 @@ class BambaMixer(nn.Module):
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
             hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
-        return accelerate_hook_compatible_wrapper(self.torch_forward)(
-            hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
-        )
+        return self.torch_forward(hidden_states, cache_params, attention_mask)
 
 
 class BambaMLP(nn.Module):
