@@ -858,7 +858,9 @@ class TrackioCallbackTest(unittest.TestCase):
         model = self._create_model()
 
         callback.setup(args, state, model)
+        callback.on_log(args, state, control, model=model, logs={"train_loss": 0.5})
         callback.on_train_end(args, state, control, model=model)
+        # Simulate evaluation after training
         callback.on_log(args, state, control, model=model, logs={"eval_loss": 0.5})
 
         self.assertEqual(fake_trackio.init.call_count, 2)
