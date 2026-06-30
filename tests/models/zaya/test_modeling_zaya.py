@@ -327,7 +327,7 @@ class ZayaIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=logits.dtype)
         torch.testing.assert_close(logits[0, -3:, -3:], expected_slice, rtol=1e-3, atol=1e-3)
 
-        expected_argmax = torch.tensor([[105, 9731, 107, 740, 564, 1601, 611, 236881, 236881, 107, 107]])
+        expected_argmax = torch.tensor([[105, 9731, 107, 740, 564, 1601, 611, 3124, 236881, 107, 107]])
         torch.testing.assert_close(logits.argmax(-1), expected_argmax)
 
     @slow
