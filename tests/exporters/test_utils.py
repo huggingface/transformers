@@ -144,6 +144,11 @@ EXPORT_GENERATE_SKIP_MODEL_CLASSES = {
     # output-shape check in test_torch_export_generate fails. Plain forward exports work.
     # TODO: align the generate-decomposition path with the realtime KV-cache shape.
     "VoxtralRealtimeForConditionalGeneration",
+    # Gemma3n's KV-shared layers (`num_kv_shared_layers`) reuse cache entries from earlier layers;
+    # the exported prefill returns only `logits` while eager surfaces the populated KV cache
+    # (`past_key_values.layers.*.{keys,values,_sliding_window_tensor}`). Same shape as Voxtral.
+    # TODO: align the generate-decomposition path with the KV-shared layer cache layout.
+    "Gemma3nForConditionalGeneration",
 }
 
 

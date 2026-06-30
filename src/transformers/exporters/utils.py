@@ -489,7 +489,7 @@ def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -
     feature_lens = inputs["feature_lens"]
     input_features = inputs["input_features"]
 
-    if hasattr(model, "n_window_infer"):
+    if hasattr(model, "n_window_infer") and hasattr(model, "n_window"):
         from ..models.qwen3_omni_moe.modeling_qwen3_omni_moe import (
             chunk_and_pad_features,
             get_audio_cu_seqlens,
@@ -500,8 +500,9 @@ def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -
         inputs["padded_feature"] = padded_feature
         inputs["chunk_lengths"] = chunk_lengths
         inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, model.n_window_infer, model.n_window)
-        inputs["valid_indices"] = get_valid_indices(chunk_lengths)
-    else:
+        inputs["valid_indices"] = get_valid_indices(chunk_lengths, model.n_window)
+
+    elif hasattr(model, "n_window"):
         from ..models.qwen2_5_omni.modeling_qwen2_5_omni import (
             chunk_and_pad_features,
             get_audio_cu_seqlens,
@@ -515,6 +516,28 @@ def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -
         inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
         inputs["valid_indices"] = get_valid_indices(chunk_lengths)
         inputs["pool_indices"] = get_pool_indices(feature_lens)
+
+
+@register_export_input_preparer("input_features", "input_features_mask")
+def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Precompute `cu_seqlens` for Qwen3-ASR — the encoder's call to ``get_audio_cu_seqlens``
+    has a data-dependent Python loop that we evaluate here so the encoder pops the result
+    from ``kwargs``. Mirrors the few lines that build ``feature_lens``/``chunk_lengths`` in
+    ``Qwen3ASREncoder.forward``.
+    """
+    from ..models.qwen3_asr.modeling_qwen3_asr import get_audio_cu_seqlens
+
+    n_window = _find_submodule_attr(model, "n_window")
+    n_window_infer = _find_submodule_attr(model, "n_window_infer")
+    if n_window is None or n_window_infer is None:
+        return
+
+    input_features_mask = inputs["input_features_mask"]
+    batch_size, padded_feature_length = input_features_mask.shape
+    num_chunks = padded_feature_length // (n_window * 2)
+    feature_lens = input_features_mask.sum(-1).to(torch.long)
+    chunk_lengths = input_features_mask.view(batch_size, num_chunks, -1).sum(dim=-1).reshape(-1).to(torch.long)
+    inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, n_window_infer, n_window)
 
 
 def precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:

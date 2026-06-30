@@ -360,6 +360,7 @@ def _reshaped_vision_attention_forward(
     # Audio attention: separate `_proj` + `.out_proj`, no rotary
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniAudioAttention.forward",
     "transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe.Qwen3OmniMoeAudioAttention.forward",
+    "transformers.models.qwen3_asr.modeling_qwen3_asr.Qwen3ASRAudioAttention.forward",
 )
 def _patch_chunked_vision_attention(original):
     """Bind `returns_tuple` once per class by inspecting the original forward's source."""
