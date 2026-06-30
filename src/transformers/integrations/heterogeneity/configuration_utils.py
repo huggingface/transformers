@@ -58,11 +58,8 @@ class HeterogeneousConfigMixin:
     def __getattribute__(self, key: str) -> Any:
         # In heterogeneous configs, per-layer attributes are ambiguous on the global config.
         # Callers must read them from a concrete layer unless they explicitly opt into the global value.
-        try:
-            heterogeneity_spec = super().__getattribute__("_heterogeneity_spec")
-        except AttributeError:
-            pass
-        else:
+        heterogeneity_spec = super().__getattribute__("__dict__").get("_heterogeneity_spec")
+        if heterogeneity_spec is not None:
             if key in heterogeneity_spec.per_layer_attributes:
                 if not _getattr_or_default(self, "allow_global_per_layer_attribute_access"):
                     raise AmbiguousGlobalPerLayerAttributeError(
