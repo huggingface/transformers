@@ -76,6 +76,20 @@ class Kimi_K25VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("qk_rope_head_dim", 16)
         kwargs.setdefault("v_head_dim", 32)
         kwargs.setdefault("qk_nope_head_dim", 32)
+        kwargs.setdefault("attention_probs_dropout_prob", 0.0)
+
+        # MoE fields synced with DeepSeekV3Tester
+        # `first_k_dense_replace` enables MoEs after `layer=0`
+        kwargs.setdefault("first_k_dense_replace", 1)
+        kwargs.setdefault("n_group", 2)
+        kwargs.setdefault("topk_group", 1)
+        kwargs.setdefault("num_experts_per_tok", 8)
+        kwargs.setdefault("n_shared_experts", 1)
+        kwargs.setdefault("n_routed_experts", 8)
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("aux_loss_alpha", 0.001)
+        kwargs.setdefault("routed_scaling_factor", 2.5)
+
         kwargs.setdefault(
             "rope_parameters",
             {
@@ -199,6 +213,9 @@ class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip(reason="Needs to update values in `grid_thw` otherwise it just gets broadcasted")
+    def test_mismatching_num_image_tokens(self):
+        pass
 
 @require_torch
 class Kimi26IntegrationTest(unittest.TestCase):
