@@ -159,10 +159,6 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
             antialias=True,
         ).to(dtype=target_dtype)
 
-        if not torch.jit.is_tracing():
-            if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
-                raise ValueError("Width or height does not match with the interpolated position embeddings")
-
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
 
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
