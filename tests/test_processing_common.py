@@ -139,25 +139,29 @@ class ProcessorTesterMixin:
             )
 
         cls.tmpdirname = tempfile.mkdtemp()
+        cls.full_tmpdirname = None
 
-        # If model_id is specified, load components from that model
-        if cls.model_id is not None:
-            processor = cls._setup_from_pretrained(cls.model_id)
-        else:
-            # Otherwise, create generic components
-            processor = cls._setup_from_components()
-
-        # setup test attributes
-        cls._setup_test_attributes(processor)
-        processor.save_pretrained(cls.tmpdirname)
-
-        # If tiny_model_id is specified, set up a lightweight processor for most tests
         if cls.tiny_model_id is not None:
-            cls.tiny_tmpdirname = tempfile.mkdtemp()
+            # tiny_model_id is set: tmpdirname holds the lightweight processor (used by all tests),
+            # full_tmpdirname holds the full processor (used only by tests that call get_processor(use_full=True)).
             tiny_processor = cls._setup_from_pretrained(cls.tiny_model_id)
-            tiny_processor.save_pretrained(cls.tiny_tmpdirname)
+            cls._setup_test_attributes(tiny_processor)
+            tiny_processor.save_pretrained(cls.tmpdirname)
+
+            cls.full_tmpdirname = tempfile.mkdtemp()
+            if cls.model_id is not None:
+                full_processor = cls._setup_from_pretrained(cls.model_id)
+            else:
+                full_processor = cls._setup_from_components()
+            full_processor.save_pretrained(cls.full_tmpdirname)
         else:
-            cls.tiny_tmpdirname = None
+            # No tiny_model_id: tmpdirname holds the only processor.
+            if cls.model_id is not None:
+                processor = cls._setup_from_pretrained(cls.model_id)
+            else:
+                processor = cls._setup_from_components()
+            cls._setup_test_attributes(processor)
+            processor.save_pretrained(cls.tmpdirname)
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -378,8 +382,8 @@ class ProcessorTesterMixin:
         """Clean up the temporary directory."""
         if hasattr(cls, "tmpdirname"):
             shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-        if hasattr(cls, "tiny_tmpdirname") and cls.tiny_tmpdirname is not None:
-            shutil.rmtree(cls.tiny_tmpdirname, ignore_errors=True)
+        if hasattr(cls, "full_tmpdirname") and cls.full_tmpdirname is not None:
+            shutil.rmtree(cls.full_tmpdirname, ignore_errors=True)
 
     @staticmethod
     def prepare_processor_dict():
@@ -409,8 +413,8 @@ class ProcessorTesterMixin:
         return components
 
     def get_processor(self, use_full=False):
-        if not use_full and self.tiny_tmpdirname is not None:
-            return self.processor_class.from_pretrained(self.tiny_tmpdirname)
+        if use_full and self.full_tmpdirname is not None:
+            return self.processor_class.from_pretrained(self.full_tmpdirname)
         return self.processor_class.from_pretrained(self.tmpdirname)
 
     def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
