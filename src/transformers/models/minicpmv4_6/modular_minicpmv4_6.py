@@ -36,6 +36,11 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import (
+    get_vision_merged_shape,
+    get_vision_nearest_position_ids,
+    get_vision_window_index,
+)
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..idefics3.modeling_idefics3 import Idefics3VisionEmbeddings
 from ..lfm2_vl.modeling_lfm2_vl import Lfm2VlModel
@@ -127,32 +132,14 @@ class MiniCPMV4_6VisionEmbeddings(Idefics3VisionEmbeddings):
         self,
         pixel_values: torch.FloatTensor,
         target_sizes: torch.IntTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         patch_embeds = self.patch_embedding(pixel_values)
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
-        boundaries = torch.arange(1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side)
-
-        position_embeddings = []
-        for target_size in target_sizes:
-            nb_patches_h = target_size[0]
-            nb_patches_w = target_size[1]
-
-            fractional_coords_h = torch.arange(0, 1 - 1e-6, 1 / nb_patches_h)
-            fractional_coords_w = torch.arange(0, 1 - 1e-6, 1 / nb_patches_w)
-
-            bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
-            bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
-
-            pos_ids = (
-                (bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w)
-                .flatten()
-                .to(self.position_embedding.weight.device)
-            )
-
-            position_embeddings.append(self.position_embedding(pos_ids))
-
-        position_embeddings = torch.concat(position_embeddings, dim=0).unsqueeze(0)
+        pos_ids = get_vision_nearest_position_ids(target_sizes, self.num_patches_per_side, kwargs=kwargs)
+        pos_ids = pos_ids.to(self.position_embedding.weight.device)
+        position_embeddings = self.position_embedding(pos_ids).unsqueeze(0)
         embeddings = embeddings + position_embeddings
         return embeddings
 
@@ -308,55 +295,27 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         init.normal_(self.linear_2.weight, std=0.25)
         init.normal_(self.linear_2.bias, std=1e-6)
 
-    def get_window_index(self, target_sizes):
+    def get_window_index(self, target_sizes, kwargs=None):
         window_h, window_w = self.window_kernel_size
-        max_seqlens = window_h * window_w
-
-        window_index_list = []
-        cu_seqlens = [0]
-        token_offset = 0
-
-        for height, width in target_sizes:
-            # Cast 0-d device tensors to Python ints so that the whole function
-            # stays CPU-side integer arithmetic. `torch.arange` without `device=`
-            # always returns on CPU; mixing with a device-bound `token_offset`
-            # raises in strict PyTorch versions (2.10+).
-            height, width = int(height), int(width)
-            if height % window_h != 0 or width % window_w != 0:
-                raise ValueError(
-                    f"height={height}, width={width} must be divisible by window size ({window_h}, {window_w})"
-                )
-            index = torch.arange(height * width).reshape(height, width)
-            num_windows_h = height // window_h
-            num_windows_w = width // window_w
-            num_windows = num_windows_h * num_windows_w
-
-            index = index.reshape(num_windows_h, window_h, num_windows_w, window_w)
-            index = index.permute(0, 2, 1, 3).reshape(num_windows, window_h * window_w)
-
-            window_index_list.append(index.reshape(-1) + token_offset)
-
-            cu_this = torch.arange(1, num_windows + 1) * (window_h * window_w) + cu_seqlens[-1]
-            cu_seqlens.extend(cu_this.tolist())
-
-            token_offset += height * width
-
-        window_index = torch.cat(window_index_list)
-        cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32)
-
-        return window_index, cu_seqlens, max_seqlens
+        if window_h != window_w:
+            raise ValueError(f"window_kernel_size must be square; got ({window_h}, {window_w})")
+        grid_thw = F.pad(target_sizes, (1, 0), value=1)
+        window_index, cu_seqlens = get_vision_window_index(
+            grid_thw, spatial_merge_size=1, window_size=window_h, patch_size=1, kwargs=kwargs
+        )
+        return window_index, cu_seqlens, window_h * window_w
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         target_sizes: torch.IntTensor,
-        cu_seqlens: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         residual = hidden_states
         hidden_states = self.layer_norm1(hidden_states)
         device = hidden_states.device
 
-        window_index, window_cu_seqlens, window_max_seqlens = self.get_window_index(target_sizes)
+        window_index, window_cu_seqlens, window_max_seqlens = self.get_window_index(target_sizes, kwargs=kwargs)
         window_index = window_index.to(device)
 
         hidden_states = hidden_states[:, window_index, :]
@@ -368,28 +327,26 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         hidden_states = hidden_states[:, torch.argsort(window_index), :]
         hidden_states = residual + hidden_states
 
-        batch_size, _ = target_sizes.shape
+        # Vectorised window merge: reshape (1, batch*seq_per_img, D) → (batch, seq_per_img, D)
+        # and lift per-image (h, w) from target_sizes[0]. This assumes the input batch was
+        # packed with uniform per-image sizes (the standard NaViT preprocessing output).
+        batch_size = target_sizes.shape[0]
         window_h, window_w = self.window_kernel_size
-        all_pixel_values = []
-        for batch_idx in range(batch_size):
-            height, width = target_sizes[batch_idx]
-            patch = hidden_states[0, cu_seqlens[batch_idx] : cu_seqlens[batch_idx + 1], :].squeeze(0)
+        embed_dim = hidden_states.shape[-1]
+        seq_per_img = hidden_states.shape[1] // batch_size
+        patch = hidden_states.view(batch_size, seq_per_img, embed_dim)
+        merged_h, merged_w = get_vision_merged_shape(target_sizes, self.window_kernel_size, kwargs=kwargs)
 
-            embed_dim = patch.shape[-1]
-            merged_h, merged_w = height // window_h, width // window_w
-            patch_5d = patch.view(merged_h, window_h, merged_w, window_w, embed_dim).permute(0, 2, 1, 3, 4)
-            hidden_state = patch_5d.reshape(merged_h * merged_w, window_h * window_w * embed_dim)
-            residual = patch_5d.reshape(merged_h * merged_w, window_h * window_w, embed_dim).mean(dim=1)
+        patch_5d = patch.view(batch_size, merged_h, window_h, merged_w, window_w, embed_dim).permute(0, 1, 3, 2, 4, 5)
+        flat = patch_5d.reshape(batch_size * merged_h * merged_w, window_h * window_w * embed_dim)
+        residual = patch_5d.reshape(batch_size * merged_h * merged_w, window_h * window_w, embed_dim).mean(dim=1)
 
-            hidden_state = self.pre_norm(hidden_state)
-            hidden_state = self.linear_1(hidden_state)
-            hidden_state = self.act(hidden_state)
-            hidden_state = self.linear_2(hidden_state)
+        hidden_state = self.pre_norm(flat)
+        hidden_state = self.linear_1(hidden_state)
+        hidden_state = self.act(hidden_state)
+        hidden_state = self.linear_2(hidden_state)
 
-            all_pixel_values.append(hidden_state + residual)
-
-        new_hidden_states = torch.concat(all_pixel_values, dim=0).unsqueeze(0)
-        return new_hidden_states
+        return (hidden_state + residual).unsqueeze(0)
 
 
 class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
@@ -453,7 +410,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             Whether to apply the ViT window-attention merger after the encoder.
         """
 
-        hidden_states = self.embeddings(pixel_values, target_sizes=target_sizes)
+        hidden_states = self.embeddings(pixel_values, target_sizes=target_sizes, **kwargs)
 
         cu_seqlens = F.pad(
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(hidden_states.device),
@@ -473,7 +430,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             for layer_index, encoder_layer in enumerate(self.encoder.layers):
                 hidden_states = encoder_layer(hidden_states, **attn_kwargs)
                 if layer_index == insert_layer_id:
-                    hidden_states = self.vit_merger(hidden_states, target_sizes, cu_seqlens)
+                    hidden_states = self.vit_merger(hidden_states, target_sizes, **kwargs)
 
                     # NOTE: Downsampled hidden states, and therefore other kwargs should also!
                     attn_kwargs, target_sizes, cu_seqlens = self.get_downsampled_inputs(

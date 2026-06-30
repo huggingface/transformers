@@ -122,7 +122,6 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
 
 [[autodoc]] Qwen3_5ForConditionalGeneration
     - forward
-<<<<<<< HEAD
 
 ## Qwen3_5ForSequenceClassification
 
@@ -142,5 +141,3 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
 ## Qwen3_5Tokenizer
 
 [[autodoc]] Qwen3_5Tokenizer
-=======
->>>>>>> 52b4732861 (docs)

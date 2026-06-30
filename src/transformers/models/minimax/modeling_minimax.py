@@ -135,6 +135,8 @@ class MiniMaxLightningAttention(nn.Module):
         self.register_buffer("key_decay", key_decay)
         self.register_buffer("diagonal_decay", diagonal_decay)
 
+        self.layer_type = config.layer_types[layer_idx]
+
     def get_slope_rate(self):
         base = 1 / (2 ** (8 / self.num_attention_heads))
         exponent = torch.arange(self.num_attention_heads) + 1
@@ -540,11 +542,11 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = MiniMaxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.layer_idx = layer_idx
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.block_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
         self.mlp = MiniMaxSparseMoeBlock(config)
-        if self.layer_type == "linear_attention":
+        if self.block_type == "linear_attention":
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.attn_alpha_factor = config.linear_attn_alpha_factor
             self.attn_beta_factor = config.linear_attn_beta_factor

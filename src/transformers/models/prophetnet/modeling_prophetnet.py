@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, logging, torch_compilable_check
 from .configuration_prophetnet import ProphetNetConfig
 
 
@@ -45,16 +45,21 @@ def ngram_attention_bias(sequence_length, ngram, device, dtype):
     """
     This function computes the bias for the predict stream
     """
-    left_block = (
-        torch.ones((ngram, sequence_length, sequence_length), device=device, dtype=dtype) * torch.finfo(dtype).min
-    )
-    right_block = left_block.detach().clone()
-    # create bias
-    for stream_idx in range(ngram):
-        right_block[stream_idx].fill_diagonal_(0, wrap=False)
-        left_block[stream_idx].triu_(-stream_idx + 1)
+    neg_inf = torch.finfo(dtype).min
+    rows = torch.arange(sequence_length, device=device).view(1, sequence_length, 1)
+    cols = torch.arange(sequence_length, device=device).view(1, 1, sequence_length)
+    stream_offsets = (-torch.arange(ngram, device=device) + 1).view(ngram, 1, 1)
 
-    left_block[:, :, 0] = 0
+    # Main-stream mask: stream `s` allows positions strictly below the `1 - s` diagonal
+    # (cell -inf iff `col - row >= 1 - s`), with the first column always allowed.
+    left_mask = (cols - rows >= stream_offsets) & (cols != 0)
+    # Predict-stream mask: each stream only attends to its own future position (the diagonal).
+    right_mask = (rows != cols).expand(ngram, sequence_length, sequence_length)
+
+    neg_inf_t = torch.tensor(neg_inf, dtype=dtype, device=device)
+    zero_t = torch.zeros((), dtype=dtype, device=device)
+    left_block = torch.where(left_mask, neg_inf_t, zero_t)
+    right_block = torch.where(right_mask, neg_inf_t, zero_t)
     return torch.cat([left_block, right_block], dim=2)
 
 
@@ -774,8 +779,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         if predict_relative_position_buckets is None:
             key_sequence_length = attn_weights.shape[-1]
-            assert position_ids[0][0] == key_sequence_length - 1, (
-                "`position_ids` are incorrect. They should be of the format 1 2 3 4 5 ... (key_sequence_length - 1)"
+            torch_compilable_check(
+                position_ids[0][0] == key_sequence_length - 1,
+                "`position_ids` are incorrect. They should be of the format 1 2 3 4 5 ... (key_sequence_length - 1)",
             )
             relative_positions = (
                 torch.arange(0, key_sequence_length)

@@ -722,17 +722,19 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
     def _prepare_question_positions(self, input_ids: torch.Tensor) -> torch.Tensor:
         rows, flat_positions = torch.where(input_ids == self.config.question_token_id)
         num_questions = torch.bincount(rows)
+        torch_compilable_check(
+            num_questions.size(0) == input_ids.size(0),
+            "All samples in the batch must have at least one question token.",
+        )
+        # rows is sorted: col[i] = i - first_occurrence(rows[i])
+        first_idx = torch.searchsorted(rows, rows, side="left")
+        cols = torch.arange(rows.size(0), device=rows.device) - first_idx
         positions = torch.full(
             (input_ids.size(0), num_questions.max()),
             self.config.pad_token_id,
             dtype=torch.long,
             device=input_ids.device,
         )
-        torch_compilable_check(
-            num_questions.size(0) == input_ids.size(0),
-            "All samples in the batch must have at least one question token.",
-        )
-        cols = torch.cat([torch.arange(n) for n in num_questions])
         positions[rows, cols] = flat_positions
         return positions
 

@@ -1497,7 +1497,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.encoder
 
     def get_decoder(self):

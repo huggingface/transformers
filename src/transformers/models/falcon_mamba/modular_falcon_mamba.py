@@ -103,7 +103,7 @@ class FalconMambaConfig(MambaConfig):
 
     @property
     def layer_types(self):
-        return ["mamba"] * self.num_hidden_layers
+        return ["linear_attention"] * self.num_hidden_layers
 
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
@@ -156,12 +156,8 @@ class FalconMambaMixer(MambaMixer):
         super().__init__(config, layer_idx)
 
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
-        self.register_buffer(
-            "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
-        )
-        self.register_buffer(
-            "dt_rms", torch.nn.Parameter(torch.ones(self.intermediate_size), requires_grad=False), persistent=False
-        )
+        self.register_buffer("b_c_rms", torch.ones(self.ssm_state_size, requires_grad=False), persistent=False)
+        self.register_buffer("dt_rms", torch.ones(self.intermediate_size, requires_grad=False), persistent=False)
         self.rms_eps = config.mixer_rms_eps
 
     def cuda_kernels_forward(

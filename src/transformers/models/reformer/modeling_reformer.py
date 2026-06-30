@@ -40,6 +40,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
     logging,
+    torch_compilable_check,
 )
 from .configuration_reformer import ReformerConfig
 
@@ -262,9 +263,18 @@ class AxialPositionEmbeddings(nn.Module):
                     f"{self.least_common_mult_chunk_length})."
                 )
 
-            # compute how many columns are needed
+            # compute how many columns are needed; ceil-div as `(x + bs - 1) // bs` to keep
+            # the engine on positive-arithmetic, and the `torch_compilable_check` calls propagate
+            # the trivial bounds `0 <= max_position_id < axial_pos_shape[0] * axial_pos_shape[1]`
+            # (from the axial-encoding contract) so the result stays within `[1, axial_pos_shape[0]]`.
             max_position_id = position_ids.max().item()
-            required_pos_encodings_columns = -(-(max_position_id + 1) // self.axial_pos_shape[1])
+            axial_h, axial_w = self.axial_pos_shape
+            torch_compilable_check(max_position_id >= 0, "Axial position id underflow.")
+            torch_compilable_check(
+                max_position_id < axial_h * axial_w,
+                "Position id exceeds axial_pos_shape[0] * axial_pos_shape[1].",
+            )
+            required_pos_encodings_columns = (max_position_id + axial_w) // axial_w
 
             # cut to columns that are needed
             position_encodings = torch.cat(

@@ -378,16 +378,15 @@ class MaskTest(unittest.TestCase):
     def test_create_masks_for_generate_defers_for_unmapped_layer_types(self):
         """
         `create_masks_for_generate` pre-builds attention masks for compilable caches by mapping each
-        `config.layer_types` entry through `LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING`. Hybrid models with a layer type
-        that has no mask function (e.g. `linear_attention` in Qwen3.5 / Qwen3-Next, which build their own per-layer
-        masks in the forward) must not raise `KeyError` here; instead the raw attention mask is returned so the model
-        can build its own masks.
+        `config.layer_types` entry through `LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING`. Hybrid models with a
+        non-attention layer type (e.g. ``moe`` / ``mlp`` in Nemotron-H) have no mask function — the helper must
+        not raise `KeyError`; instead the raw attention mask is returned so the model can build its own masks.
         """
         config = LlamaConfig(num_hidden_layers=2)
-        config.layer_types = ["full_attention", "linear_attention"]
+        config.layer_types = ["full_attention", "moe"]
         attention_mask = torch.ones((1, 5), dtype=torch.long, device=torch_device)
 
-        # Must not raise (previously `KeyError: 'linear_attention'`), and defers the raw mask to the model.
+        # Must not raise (previously `KeyError: 'moe'`), and defers the raw mask to the model.
         out = create_masks_for_generate(
             config, inputs_embeds=None, attention_mask=attention_mask, past_key_values=None
         )
