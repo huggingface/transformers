@@ -127,6 +127,7 @@ print(f"Most likely label: '{most_likely_label}' with probability: {probs[0][mos
 # Most likely label: 'a photo of a cat' with probability: 0.975
 ```
 
+</hfoption>
 <hfoption id="AutoBackbone for vision feature maps">
 
 Use [`AutoBackbone`] to load the vision backbone directly and get spatial feature maps, without the text model. 
@@ -150,8 +151,6 @@ with torch.no_grad():
 # feature_maps is a tuple of tensors, one per requested stage
 patch_features = outputs.feature_maps[-1] # (batch_size, hidden_size, height, width) tensor
 ```
-
-</hfoption>
 
 </hfoption>
 <hfoption id="Tipsv2VisionModel">

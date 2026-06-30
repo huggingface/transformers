@@ -152,7 +152,7 @@ class Tipsv2ProcessorKwargs(ProcessingKwargs, total=False):
 class Tipsv2Processor(ProcessorMixin):
     valid_processor_kwargs = Tipsv2ProcessorKwargs
 
-    def __init__(self, image_processor: Tipsv2ImageProcessor | None = None, tokenizer: Tipsv2Tokenizer | None = None):
+    def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
 
 

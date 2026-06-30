@@ -20,8 +20,6 @@
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-from .image_processing_tipsv2 import Tipsv2ImageProcessor
-from .tokenization_tipsv2 import Tipsv2Tokenizer
 
 
 class Tipsv2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -38,7 +36,7 @@ class Tipsv2ProcessorKwargs(ProcessingKwargs, total=False):
 class Tipsv2Processor(ProcessorMixin):
     valid_processor_kwargs = Tipsv2ProcessorKwargs
 
-    def __init__(self, image_processor: Tipsv2ImageProcessor | None = None, tokenizer: Tipsv2Tokenizer | None = None):
+    def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
 
 
