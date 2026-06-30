@@ -13,18 +13,21 @@
 # limitations under the License.
 import re
 
-from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_torch_available, logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
 class HunYuanVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": False,
+        },
+    }
 
 
 @auto_docstring
@@ -81,11 +84,8 @@ class HunYuanVLProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    def _get_spatial_patch_size(self) -> int:
-        return getattr(self.image_processor, "spatial_patch_size", 1)
-
     def _get_image_token_count(self, grid_h: int, grid_w: int) -> tuple[int, int, int]:
-        spatial_patch_size = self._get_spatial_patch_size()
+        spatial_patch_size = getattr(self.image_processor, "spatial_patch_size", 1)
         patch_h = grid_h // self.image_processor.merge_size // spatial_patch_size
         patch_w = grid_w // self.image_processor.merge_size // spatial_patch_size
         num_image_tokens = patch_h * (patch_w + 1) + (2 if self.cat_extra_token else 0)
@@ -94,7 +94,7 @@ class HunYuanVLProcessor(ProcessorMixin):
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         _, grid_h, grid_w = (int(value) for value in image_inputs["image_grid_thw"][image_idx])
         _, _, num_image_tokens = self._get_image_token_count(grid_h, grid_w)
-        return self.image_start_token + self.image_token * num_image_tokens + self.image_end_token
+        return self.image_token * num_image_tokens
 
     @staticmethod
     def _has_wrappers(prompt: str, token_start: int, start_token: str, token: str, end_token: str) -> bool:
@@ -106,66 +106,6 @@ class HunYuanVLProcessor(ProcessorMixin):
             and prompt[end_index : end_index + len(end_token)] == end_token
         )
 
-    def get_text_with_replacements(
-        self,
-        text: list[str],
-        images_replacements: list[str] = [],
-        videos_replacements: list[str] = [],
-        audio_replacements: list[str] = [],
-    ) -> tuple[list[str], list[dict]]:
-        if not images_replacements:
-            return super().get_text_with_replacements(
-                text, images_replacements, videos_replacements, audio_replacements
-            )
-
-        if videos_replacements or audio_replacements:
-            raise ValueError("HunYuanVLProcessor only supports image inputs.")
-
-        image_replacements = iter(images_replacements)
-        batch_replacement_offsets = []
-        for batch_idx, sample in enumerate(text):
-            last = 0
-            replacement_offsets = []
-            expanded_sample = []
-            for match in re.finditer(re.escape(self.image_token), sample):
-                start, end = match.span()
-                expanded_sample.append(sample[last:start])
-
-                try:
-                    replacement_text = next(image_replacements)
-                except StopIteration as error:
-                    raise ValueError(
-                        f"Found more {self.image_token} tokens in the text than image inputs were provided."
-                    ) from error
-
-                if self._has_wrappers(sample, start, self.image_start_token, self.image_token, self.image_end_token):
-                    replacement_text = replacement_text[len(self.image_start_token) : -len(self.image_end_token)]
-
-                replacement_offsets.append(
-                    {
-                        "type": "image",
-                        "span": (start, end),
-                        "new_span": (start, start + len(replacement_text)),
-                        "text": match.group(),
-                        "replacement": replacement_text,
-                    }
-                )
-                expanded_sample.append(replacement_text)
-                last = end
-
-            expanded_sample.append(sample[last:])
-            text[batch_idx] = "".join(expanded_sample)
-            batch_replacement_offsets.append(replacement_offsets)
-
-        try:
-            next(image_replacements)
-        except StopIteration:
-            pass
-        else:
-            raise ValueError(f"Found fewer {self.image_token} tokens in the text than image inputs were provided.")
-
-        return text, batch_replacement_offsets
-
     def validate_inputs(
         self,
         images: ImageInput = None,
@@ -175,9 +115,6 @@ class HunYuanVLProcessor(ProcessorMixin):
         **kwargs: Unpack[HunYuanVLProcessorKwargs],
     ):
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
-
-        if text is not None and not is_torch_available():
-            raise ImportError("HunYuanVLProcessor requires PyTorch when processing text inputs.")
 
         if images is not None and text is not None:
             if any(not isinstance(prompt, str) for prompt in text):
@@ -194,31 +131,17 @@ class HunYuanVLProcessor(ProcessorMixin):
                     f"images ({num_images})."
                 )
 
-    def __call__(
-        self,
-        images: ImageInput = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[HunYuanVLProcessorKwargs],
-    ) -> BatchFeature:
-        if text is not None and not is_torch_available():
-            raise ImportError("HunYuanVLProcessor requires PyTorch when processing text inputs.")
-
-        output_kwargs = self._merge_kwargs(
-            HunYuanVLProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        output_kwargs["text_kwargs"].setdefault("add_special_tokens", False)
-        return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
-
-        text_kwargs = dict(kwargs.pop("text_kwargs", {}))
-        if "add_special_tokens" not in kwargs:
-            text_kwargs.setdefault("add_special_tokens", False)
-        if "return_tensors" not in kwargs and return_tensors is not None:
-            text_kwargs.setdefault("return_tensors", return_tensors)
-
-        outputs = super().__call__(images=images, text=text, text_kwargs=text_kwargs, **kwargs)
-        return outputs
+            for prompt in text:
+                for match in re.finditer(re.escape(self.image_token), prompt):
+                    if not self._has_wrappers(
+                        prompt, match.start(), self.image_start_token, self.image_token, self.image_end_token
+                    ):
+                        raise ValueError(
+                            f"HunYuanVL image placeholders must be formatted as "
+                            f"{self.image_start_token}{self.image_token}{self.image_end_token}. "
+                            "Please format prompts with the processor chat template or include the image start/end "
+                            "tokens explicitly."
+                        )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """Compute the number of placeholder tokens needed for the given list of image sizes."""

@@ -68,7 +68,7 @@ class HunYuanVLVisionConfig(PreTrainedConfig):
 
     model_type = "hunyuan_vl_vision"
     base_config_key = "vision_config"
-    attribute_map = {"layer_norm_eps": "rms_norm_eps"}
+    attribute_map = {"attention_heads": "num_attention_heads", "layer_norm_eps": "rms_norm_eps"}
 
     hidden_act: str = "gelu"
     hidden_size: int = 1152
@@ -119,11 +119,6 @@ class HunYuanVLTextConfig(PreTrainedConfig):
     eod_token_id (`int`, *optional*, defaults to 3):
         Token id representing the end-of-document marker. Inherited from [`HunYuanDenseV1Config`] and re-documented
         here so the auto-generated docstring stays in sync.
-    tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-        Whether to tie the input and output word embeddings.
-    rope_parameters (`dict`, *optional*):
-        RoPE configuration payload. Legacy `rope_scaling` / `rope_theta` checkpoint fields are normalized into this
-        canonical field by the base configuration class.
     sep_token_id (`int`, *optional*, defaults to 4):
         Token id used as a separator marker by HunYuan tokenizers.
     use_qk_norm (`bool`, *optional*, defaults to `False`):
@@ -186,6 +181,18 @@ class HunYuanVLTextConfig(PreTrainedConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)
+        rope_parameters = getattr(self, "rope_parameters", None)
+        if rope_parameters and rope_parameters.get("xdrope_section") is not None:
+            head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
+            xdrope_section = rope_parameters["xdrope_section"]
+            section_values = [float(section) for section in xdrope_section]
+            section_ints = [int(section) for section in section_values]
+            expected_sum = head_dim // 2
+            if not all(value.is_integer() for value in section_values) or sum(section_ints) != expected_sum:
+                raise ValueError(
+                    f"Illegal xdrope partition: expected half-head sections summing to {expected_sum}, got {section_ints}"
+                )
+            rope_parameters["xdrope_section"] = section_ints
 
     def convert_rope_params_to_dict(self, **kwargs):
         kwargs = super().convert_rope_params_to_dict(**kwargs)
@@ -260,7 +267,8 @@ class HunYuanVLConfig(PreTrainedConfig):
         # nested `text_config` block) we fold the recognized text-side keys into the text config payload. This keeps
         # ``HunYuanVLConfig.from_pretrained(...)`` working with both the upstream nested layout and the existing
         # public OCR checkpoints.
-        text_kwargs = self._extract_text_kwargs(kwargs)
+        text_keys = set(self.sub_configs["text_config"].__dataclass_fields__) | {"rope_scaling", "rope_theta"}
+        text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
 
         if isinstance(self.vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
@@ -290,17 +298,6 @@ class HunYuanVLConfig(PreTrainedConfig):
         # silently drop a top-level `rope_parameters`. We already perform the equivalent work ourselves above,
         # so go straight to the base class.
         super().__post_init__(**kwargs)
-
-    @classmethod
-    def _extract_text_kwargs(cls, kwargs: dict) -> dict:
-        """
-        Pop and return the subset of ``kwargs`` that should be forwarded to [`HunYuanVLTextConfig`].
-
-        Required to support legacy Tencent checkpoints whose ``config.json`` stores the text-backbone fields at the
-        top level instead of inside a nested ``text_config`` block.
-        """
-        text_keys = set(cls.sub_configs["text_config"].__dataclass_fields__) | {"rope_scaling", "rope_theta"}
-        return {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
 
 
 __all__ = ["HunYuanVLConfig", "HunYuanVLVisionConfig", "HunYuanVLTextConfig"]

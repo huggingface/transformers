@@ -46,6 +46,28 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
+        cls.image_start_token = processor.image_start_token
+        cls.image_end_token = processor.image_end_token
+
+    def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
+        if isinstance(modalities, str):
+            modalities = [modalities]
+
+        special_token_to_add = ""
+        if modalities is not None and "image" in modalities:
+            special_token_to_add += f"{self.image_start_token}{self.image_token}{self.image_end_token}"
+
+        if batch_size is None:
+            return f"lower newer {special_token_to_add}"
+
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+
+        if batch_size == 1:
+            return [f"lower newer {special_token_to_add}"]
+        return [f"lower newer {special_token_to_add}", f" {special_token_to_add} upper older longer string"] + [
+            f"lower newer {special_token_to_add}"
+        ] * (batch_size - 2)
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -108,7 +130,9 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         image = Image.new("RGB", (32, 32), color="white")
 
-        inputs = processor(text=["<image> hello"], images=[image], padding=True, return_tensors="pt")
+        inputs = processor(
+            text=["<image_start><image><image_end> hello"], images=[image], padding=True, return_tensors="pt"
+        )
 
         self.assertSetEqual(
             set(inputs.keys()),
@@ -129,7 +153,9 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         image = Image.new("RGB", (32, 32), color="white")
 
-        inputs = processor(text=["<image> hello"], images=[image], padding=True, return_tensors="pt")
+        inputs = processor(
+            text=["<image_start><image><image_end> hello"], images=[image], padding=True, return_tensors="pt"
+        )
 
         input_ids = inputs["input_ids"][0].tolist()
         self.assertEqual(processor.image_token_id, processor.tokenizer.image_token_id)
@@ -138,19 +164,27 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn(processor.image_token_id, input_ids)
         self.assertNotIn(processor.tokenizer.convert_tokens_to_ids("<new_tail>"), input_ids)
 
-    def test_processor_expands_bare_and_wrapped_image_tokens(self):
+    def test_processor_expands_wrapped_image_tokens(self):
         processor = self.get_processor()
         image = Image.new("RGB", (32, 32), color="white")
 
-        for prompt in ["<image> hello", "<image_start><image><image_end> hello"]:
-            inputs = processor(text=[prompt], images=[image], padding=True, return_tensors="pt")
-            input_ids = inputs["input_ids"][0].tolist()
-            _, grid_h, grid_w = (int(value) for value in inputs["image_grid_thw"][0])
-            _, _, expected_image_tokens = processor._get_image_token_count(grid_h, grid_w)
+        inputs = processor(
+            text=["<image_start><image><image_end> hello"], images=[image], padding=True, return_tensors="pt"
+        )
+        input_ids = inputs["input_ids"][0].tolist()
+        _, grid_h, grid_w = (int(value) for value in inputs["image_grid_thw"][0])
+        _, _, expected_image_tokens = processor._get_image_token_count(grid_h, grid_w)
 
-            self.assertEqual(input_ids.count(processor.image_start_token_id), 1)
-            self.assertEqual(input_ids.count(processor.image_token_id), expected_image_tokens)
-            self.assertEqual(input_ids.count(processor.image_end_token_id), 1)
+        self.assertEqual(input_ids.count(processor.image_start_token_id), 1)
+        self.assertEqual(input_ids.count(processor.image_token_id), expected_image_tokens)
+        self.assertEqual(input_ids.count(processor.image_end_token_id), 1)
+
+    def test_processor_rejects_bare_image_tokens(self):
+        processor = self.get_processor()
+        image = Image.new("RGB", (32, 32), color="white")
+
+        with self.assertRaisesRegex(ValueError, "image placeholders must be formatted"):
+            processor(text=["<image> hello"], images=[image], padding=True, return_tensors="pt")
 
     def test_apply_chat_template_keeps_wrapped_image_tokens_single_wrapped(self):
         processor = self.get_processor()

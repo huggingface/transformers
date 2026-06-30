@@ -24,11 +24,12 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..hunyuan_v1_dense.configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
@@ -109,7 +110,7 @@ class HunYuanVLVisionConfig(PreTrainedConfig):
 
     model_type = "hunyuan_vl_vision"
     base_config_key = "vision_config"
-    attribute_map = {"layer_norm_eps": "rms_norm_eps"}
+    attribute_map = {"attention_heads": "num_attention_heads", "layer_norm_eps": "rms_norm_eps"}
 
     hidden_act: str = "gelu"
     hidden_size: int = 1152
@@ -160,11 +161,6 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
     eod_token_id (`int`, *optional*, defaults to 3):
         Token id representing the end-of-document marker. Inherited from [`HunYuanDenseV1Config`] and re-documented
         here so the auto-generated docstring stays in sync.
-    tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-        Whether to tie the input and output word embeddings.
-    rope_parameters (`dict`, *optional*):
-        RoPE configuration payload. Legacy `rope_scaling` / `rope_theta` checkpoint fields are normalized into this
-        canonical field by the base configuration class.
     sep_token_id (`int`, *optional*, defaults to 4):
         Token id used as a separator marker by HunYuan tokenizers.
     use_qk_norm (`bool`, *optional*, defaults to `False`):
@@ -206,6 +202,18 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
         # Legacy aliases (`pad_id`, `attention_head_dim`, `org_vocab_size`) are normalized onto canonical fields by the
         # base `__setattr__` via `attribute_map`, so no manual translation is needed here.
         super().__post_init__(**kwargs)
+        rope_parameters = getattr(self, "rope_parameters", None)
+        if rope_parameters and rope_parameters.get("xdrope_section") is not None:
+            head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
+            xdrope_section = rope_parameters["xdrope_section"]
+            section_values = [float(section) for section in xdrope_section]
+            section_ints = [int(section) for section in section_values]
+            expected_sum = head_dim // 2
+            if not all(value.is_integer() for value in section_values) or sum(section_ints) != expected_sum:
+                raise ValueError(
+                    f"Illegal xdrope partition: expected half-head sections summing to {expected_sum}, got {section_ints}"
+                )
+            rope_parameters["xdrope_section"] = section_ints
 
     def convert_rope_params_to_dict(self, **kwargs):
         kwargs = PreTrainedConfig.convert_rope_params_to_dict(self, **kwargs)
@@ -284,7 +292,8 @@ class HunYuanVLConfig(Qwen2VLConfig):
         # nested `text_config` block) we fold the recognized text-side keys into the text config payload. This keeps
         # ``HunYuanVLConfig.from_pretrained(...)`` working with both the upstream nested layout and the existing
         # public OCR checkpoints.
-        text_kwargs = self._extract_text_kwargs(kwargs)
+        text_keys = set(self.sub_configs["text_config"].__dataclass_fields__) | {"rope_scaling", "rope_theta"}
+        text_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
 
         if isinstance(self.vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
@@ -314,17 +323,6 @@ class HunYuanVLConfig(Qwen2VLConfig):
         # silently drop a top-level `rope_parameters`. We already perform the equivalent work ourselves above,
         # so go straight to the base class.
         PreTrainedConfig.__post_init__(self, **kwargs)
-
-    @classmethod
-    def _extract_text_kwargs(cls, kwargs: dict) -> dict:
-        """
-        Pop and return the subset of ``kwargs`` that should be forwarded to [`HunYuanVLTextConfig`].
-
-        Required to support legacy Tencent checkpoints whose ``config.json`` stores the text-backbone fields at the
-        top level instead of inside a nested ``text_config`` block.
-        """
-        text_keys = set(cls.sub_configs["text_config"].__dataclass_fields__) | {"rope_scaling", "rope_theta"}
-        return {key: kwargs.pop(key) for key in list(kwargs) if key in text_keys}
 
 
 class HunYuanVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):
@@ -388,56 +386,19 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
         return resized_height // patch_size, resized_width // patch_size
 
 
-def _get_past_seq_length(past_key_values: Cache | None, layer_idx: int | None = None) -> int:
-    """Return the cached sequence length from a standard Transformers ``Cache``."""
-    if past_key_values is None:
-        return 0
-
-    if layer_idx is None:
-        seq_len = past_key_values.get_seq_length()
-    else:
-        seq_len = past_key_values.get_seq_length(layer_idx)
-
-    if isinstance(seq_len, torch.Tensor):
-        return int(seq_len.max().item())
-    return int(seq_len)
-
-
-def _normalize_xdrope_section(xdrope_section, head_dim: int) -> list[int] | None:
-    """
-    Normalize the ``xdrope_section`` config field to integer half-head partition sizes.
-
-    Tencent checkpoints store absolute half-head partition sizes, e.g. ``[16, 16, 16, 16]`` for ``head_dim=128``.
-    """
-    if xdrope_section is None:
-        return None
-
-    section_values = [float(section) for section in xdrope_section]
-    section_ints = [int(section) for section in section_values]
-    expected_sum = head_dim // 2
-    if not all(value.is_integer() for value in section_values) or sum(section_ints) != expected_sum:
-        raise ValueError(
-            f"Illegal xdrope partition: expected half-head sections summing to {expected_sum}, got {section_ints}"
-        )
-    return section_ints
-
-
-def apply_rotary_pos_emb_xdrope(q, k, cos, sin, position_ids, xdrope_section, output_size):
+def apply_rotary_pos_emb_xdrope(q, k, cos, sin, xdrope_section):
     """Apply HunYuan's xdrope rotary embedding to ``q`` and ``k``."""
     x_dim = len(xdrope_section)
-    cos = cos[position_ids, ...].permute(0, 2, 1, 3).reshape(output_size[0], output_size[2], x_dim, -1).contiguous()
-    sin = sin[position_ids, ...].permute(0, 2, 1, 3).reshape(output_size[0], output_size[2], x_dim, -1).contiguous()
-
     xdrope_section = [int(section) * 2 for section in xdrope_section]
     if sum(xdrope_section) != cos.shape[-1]:
         raise ValueError(
             f"Illegal partition for xd rope: expected {cos.shape[-1]} rotary dims, got {sum(xdrope_section)}"
         )
 
-    cos = torch.cat([m[:, :, i % x_dim, :] for i, m in enumerate(cos.split(xdrope_section, dim=-1))], dim=-1)
-    sin = torch.cat([m[:, :, i % x_dim, :] for i, m in enumerate(sin.split(xdrope_section, dim=-1))], dim=-1)
-    cos = cos.view(output_size[0], 1, output_size[2], -1)
-    sin = sin.view(output_size[0], 1, output_size[2], -1)
+    cos = torch.cat([m[i % x_dim] for i, m in enumerate(cos.split(xdrope_section, dim=-1))], dim=-1)
+    sin = torch.cat([m[i % x_dim] for i, m in enumerate(sin.split(xdrope_section, dim=-1))], dim=-1)
+    cos = cos.unsqueeze(1)
+    sin = sin.unsqueeze(1)
 
     origin_dtype = q.dtype
     q, k = q.float(), k.float()
@@ -455,14 +416,33 @@ class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
     def __init__(self, config: HunYuanVLTextConfig, device=None):
         super().__init__(config, device=device)
         rope_parameters = getattr(config, "rope_parameters", None) or {}
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.xdrope_section = _normalize_xdrope_section(rope_parameters.get("xdrope_section"), head_dim)
+        self.xdrope_section = rope_parameters.get("xdrope_section")
 
-    def _build_rotary_cache(self, x: torch.Tensor, seq_len: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """Build a full ``(cos, sin)`` cache for xdrope position-id indexing."""
-        position_ids = torch.arange(seq_len, device=x.device).unsqueeze(0)
-        cos, sin = self(x, position_ids)
-        return cos.squeeze(0), sin.squeeze(0)
+    @torch.no_grad()
+    @dynamic_rope_update
+    def forward(self, x, position_ids):
+        output_shape = None
+        if position_ids.dim() == 3:
+            num_axes, batch_size, seq_len = position_ids.shape
+            output_shape = (num_axes, batch_size, seq_len)
+            position_ids = position_ids.reshape(num_axes * batch_size, seq_len)
+
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        cos = cos.to(dtype=x.dtype)
+        sin = sin.to(dtype=x.dtype)
+        if output_shape is not None:
+            cos = cos.view(*output_shape, -1)
+            sin = sin.view(*output_shape, -1)
+        return cos, sin
 
 
 class HunYuanVLVisionMLP(SiglipMLP):
@@ -580,19 +560,18 @@ class HunYuanVLVisionPatchMerger(nn.Module):
 
 class HunYuanVLVisionAttention(MllamaVisionAttention):
     def __init__(self, config: HunYuanVLVisionConfig):
-        nn.Module.__init__(self)
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
+        super().__init__(config)
         self.is_causal = False
         self.head_dim = getattr(config, "head_dim", self.embed_dim // self.num_heads)
-        self.num_key_value_groups = 1
         self.scaling = self.head_dim**-0.5
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=True)
 
+    # TODO: remove this override once #46977 deprecates the MllamaVisionAttention
+    # `hidden_state` argument name in favor of `hidden_states`. The implementation is
+    # otherwise identical to the parent, but SiglipEncoderLayer calls it with `hidden_states=`.
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -642,15 +621,14 @@ class HunYuanVLDenseV1Attention(HunYuanDenseV1Attention):
     """
     HunYuan dense attention with optional xdrope rotary embeddings.
 
-    On prefill, when ``rope_parameters['xdrope_section']`` is set and ``position_ids`` carries a 4-channel
-    multimodal layout, queries and keys are rotated through [`apply_rotary_pos_emb_xdrope`]. Otherwise the layer
-    behaves exactly like [`HunYuanDenseV1Attention`].
+    When ``rope_parameters['xdrope_section']`` is set, queries and keys are rotated with HunYuan's XdRoPE axes.
+    During decoding all axes carry the same text-only positions, reducing the operation to standard 1D RoPE.
     """
 
     def __init__(self, config: HunYuanVLTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         rope_parameters = getattr(config, "rope_parameters", None) or {}
-        self.xdrope_section = _normalize_xdrope_section(rope_parameters.get("xdrope_section"), self.head_dim)
+        self.xdrope_section = rope_parameters.get("xdrope_section")
 
     def forward(
         self,
@@ -667,27 +645,13 @@ class HunYuanVLDenseV1Attention(HunYuanDenseV1Attention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        position_ids = kwargs.get("position_ids")
-        use_xdrope_prefill = (
-            self.xdrope_section is not None
-            and position_ids is not None
-            and position_ids.dim() == 3
-            and _get_past_seq_length(past_key_values, self.layer_idx) == 0
-        )
-
         if position_embeddings is None:
             raise ValueError("HunYuanVLDenseV1Attention requires precomputed rotary embeddings.")
 
-        if use_xdrope_prefill:
+        if self.xdrope_section is not None:
             cos, sin = position_embeddings
-            output_size = (
-                query_states.size(0),
-                query_states.size(1),
-                query_states.size(2),
-                key_states.size(2),
-            )
             query_states, key_states = apply_rotary_pos_emb_xdrope(
-                query_states, key_states, cos, sin, position_ids, self.xdrope_section, output_size
+                query_states, key_states, cos, sin, self.xdrope_section
             )
         else:
             cos, sin = position_embeddings
@@ -830,43 +794,62 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel, HunYuanDenseV1Model):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
+        num_xdrope_axes = len(self.rotary_emb.xdrope_section or [])
+        past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
         if position_ids is None:
-            past_seen_tokens = _get_past_seq_length(past_key_values)
             position_ids = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
-            position_ids = position_ids.unsqueeze(0)
+            if num_xdrope_axes:
+                position_ids = position_ids.view(1, 1, -1).expand(num_xdrope_axes, inputs_embeds.shape[0], -1)
+            else:
+                position_ids = position_ids.unsqueeze(0)
+        elif num_xdrope_axes and position_ids.dim() == 2:
+            position_ids = position_ids[None, ...].expand(num_xdrope_axes, -1, -1)
+        elif num_xdrope_axes and position_ids.dim() == 3:
+            is_legacy_batch_first = (
+                position_ids.shape[0] == inputs_embeds.shape[0]
+                and position_ids.shape[1] in {num_xdrope_axes, num_xdrope_axes + 1}
+            )
+            is_channel_first = (
+                position_ids.shape[1] == inputs_embeds.shape[0]
+                and position_ids.shape[0] in {num_xdrope_axes, num_xdrope_axes + 1}
+            )
+            if is_legacy_batch_first and not is_channel_first:
+                position_ids = position_ids.permute(1, 0, 2)
 
-        causal_position_ids = position_ids[:, 0, :] if position_ids.dim() >= 3 else position_ids
+        text_position_ids = None
+        rotary_position_ids = position_ids
+        if num_xdrope_axes and position_ids.dim() == 3:
+            if position_ids.shape[0] == num_xdrope_axes + 1:
+                text_position_ids = position_ids[0]
+                rotary_position_ids = position_ids[1:]
+            elif position_ids.shape[0] == num_xdrope_axes:
+                text_position_ids = position_ids[0]
+            else:
+                raise ValueError(
+                    f"Expected {num_xdrope_axes} XdRoPE channels, optionally preceded by a text-only channel, got "
+                    f"position_ids with shape {tuple(position_ids.shape)}."
+                )
+        elif position_ids.dim() == 2:
+            text_position_ids = position_ids
+
         causal_mask = create_causal_mask(
             self.config,
             inputs_embeds,
             attention_mask,
             past_key_values=past_key_values,
-            position_ids=causal_position_ids,
+            position_ids=text_position_ids,
         )
 
         hidden_states = inputs_embeds
-        use_xdrope_prefill = (
-            self.rotary_emb.xdrope_section is not None
-            and position_ids is not None
-            and position_ids.dim() == 3
-            and _get_past_seq_length(past_key_values) == 0
-        )
-        if use_xdrope_prefill:
-            rotary_seq_len = max(hidden_states.shape[1], int(position_ids.max().item()) + 1)
-            position_embeddings = self.rotary_emb._build_rotary_cache(hidden_states, rotary_seq_len)
-        else:
-            rotary_position_ids = position_ids
-            if rotary_position_ids is not None and rotary_position_ids.dim() == 3:
-                rotary_position_ids = rotary_position_ids[:, 0, :]
-            position_embeddings = self.rotary_emb(hidden_states, rotary_position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, rotary_position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
-                position_ids=position_ids,
+                position_ids=text_position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
@@ -886,13 +869,11 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel, HunYuanDenseV1Model):
     """
 )
 class HunYuanVLModel(HunYuanVLPreTrainedModel):
-    config: HunYuanVLConfig
-    base_model_prefix = "model"
-
     def __init__(self, config: HunYuanVLConfig):
         super().__init__(config)
         self.language_model = HunYuanVLTextModel(config.text_config)
-        self.vit = HunYuanVLVisionTransformer(config.vision_config)
+        self.vision_tower = HunYuanVLVisionTransformer(config.vision_config)
+        self.rope_deltas = None
         self.post_init()
 
     def get_image_position_ids(self, grid_thw: torch.LongTensor, device: str | torch.device | None = None):
@@ -957,21 +938,26 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         input_ids: torch.LongTensor,
         image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-    ) -> torch.LongTensor:
+    ) -> tuple[torch.LongTensor, torch.LongTensor]:
         """
-        Build HunYuanVL's 4-channel `(text_pos, width, height, temporal)` xdrope position ids.
+        Build HunYuanVL XdRoPE position ids.
 
-        Text and non-grid image wrapper tokens use the flat sequence index in every channel. The image grid tokens
-        inside each placeholder span overwrite the width and height channels with per-image 2D coordinates.
+        Returns the XdRoPE axes consumed by the text rotary embedding: `(width, height, image_index)` for 3-axis
+        configs and `(position, width, height, image_index)` for 4-axis configs.
         """
+        rope_parameters = self.config.text_config.rope_parameters or {}
+        num_xdrope_axes = len(rope_parameters.get("xdrope_section", []))
+        if num_xdrope_axes not in {3, 4}:
+            raise ValueError(f"HunYuanVL expects 3 or 4 XdRoPE axes, got {num_xdrope_axes}.")
         position_ids = torch.zeros(
+            num_xdrope_axes,
             input_ids.shape[0],
-            4,
             input_ids.shape[1],
             dtype=input_ids.dtype,
             device=input_ids.device,
         )
         grid_iter = iter(image_grid_thw) if image_grid_thw is not None else None
+        rope_deltas = []
         image_index = 0
 
         for batch_idx, current_input_ids in enumerate(input_ids):
@@ -983,7 +969,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             current_position_ids = torch.arange(
                 current_input_ids.shape[-1], dtype=input_ids.dtype, device=input_ids.device
             )
-            current_position_ids = current_position_ids.view(1, -1).expand(4, -1).clone()
+            current_position_ids = current_position_ids.view(1, -1).expand(num_xdrope_axes, -1).clone()
 
             if grid_iter is not None:
                 for span_start, span_end in self.get_image_placeholder_spans(current_input_ids):
@@ -1008,21 +994,25 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
                         )
 
                     grid_end = grid_start + grid_tokens
-                    current_position_ids[1, grid_start:grid_end] = position_width.to(dtype=input_ids.dtype)
-                    current_position_ids[2, grid_start:grid_end] = position_height.to(dtype=input_ids.dtype)
+                    offset = 1 if num_xdrope_axes == 4 else 0
+                    current_position_ids[offset, grid_start:grid_end] = position_width.to(dtype=input_ids.dtype)
+                    current_position_ids[offset + 1, grid_start:grid_end] = position_height.to(dtype=input_ids.dtype)
+                    current_position_ids[offset + 2, grid_start:grid_end] = image_index
                     image_index += 1
 
             if valid_token_mask is not None:
-                position_ids[batch_idx, :, valid_token_mask] = current_position_ids
+                position_ids[:, batch_idx, valid_token_mask] = current_position_ids
             else:
-                position_ids[batch_idx] = current_position_ids
+                position_ids[:, batch_idx] = current_position_ids
+            rope_deltas.append(current_position_ids.max() + 1 - len(current_input_ids))
 
         if image_grid_thw is not None and image_index != len(image_grid_thw):
             raise ValueError(
                 "Found fewer image placeholder spans than entries in `image_grid_thw`: "
                 f"spans={image_index}, images={len(image_grid_thw)}."
             )
-        return position_ids
+        rope_deltas = torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
+        return position_ids, rope_deltas
 
     def compute_xdrope_position_ids(
         self,
@@ -1031,24 +1021,46 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
     ) -> torch.LongTensor | None:
-        if input_ids is None or image_grid_thw is None or _get_past_seq_length(past_key_values) != 0:
+        past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
+        if input_ids is None or image_grid_thw is None or past_seen_tokens != 0:
             return None
-        return self.get_rope_index(input_ids, image_grid_thw=image_grid_thw, attention_mask=attention_mask)
+        rope_positions, rope_deltas = self.get_rope_index(
+            input_ids, image_grid_thw=image_grid_thw, attention_mask=attention_mask
+        )
+        self.rope_deltas = rope_deltas
+        text_positions = torch.zeros_like(input_ids)
+        for batch_idx, current_input_ids in enumerate(input_ids):
+            if attention_mask is not None:
+                valid_token_mask = attention_mask[batch_idx].bool()
+                current_input_ids = current_input_ids[valid_token_mask]
+                text_positions[batch_idx, valid_token_mask] = torch.arange(
+                    current_input_ids.shape[-1], dtype=input_ids.dtype, device=input_ids.device
+                )
+            else:
+                text_positions[batch_idx] = torch.arange(
+                    current_input_ids.shape[-1], dtype=input_ids.dtype, device=input_ids.device
+                )
+        text_positions = text_positions.unsqueeze(0)
+        return torch.cat([text_positions, rope_positions], dim=0)
 
+    @can_return_tuple
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None
-    ) -> torch.FloatTensor:
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Encode images into continuous embeddings that can be scattered into the language-model token stream.
+        Encode images and return the complete vision tower outputs.
 
         pixel_values (`torch.FloatTensor`):
             Flat per-patch pixel features produced by the image processor.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        vit_dtype = next(self.vit.parameters()).dtype
-        pixel_values = pixel_values.to(vit_dtype)
-        return self.vit(pixel_values, grid_thw=image_grid_thw).pooler_output
+        vision_dtype = next(self.vision_tower.parameters()).dtype
+        pixel_values = pixel_values.to(vision_dtype)
+        return self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
 
     def get_placeholder_mask(
         self,
@@ -1105,7 +1117,8 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
 
         image_embeds = None
         if pixel_values is not None and image_grid_thw is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_outputs = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+            image_embeds = image_outputs.pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, dtype=inputs_embeds.dtype, non_blocking=True)
             image_mask = self.get_placeholder_mask(
                 input_ids,
@@ -1156,9 +1169,12 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         self.post_init()
 
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None
-    ) -> torch.FloatTensor:
-        return self.model.get_image_features(pixel_values, image_grid_thw)
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     def get_placeholder_mask(
         self,
@@ -1169,6 +1185,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         return self.model.get_placeholder_mask(input_ids, inputs_embeds, image_features)
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1184,6 +1201,11 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Flat per-patch pixel features produced by the image processor.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+
         Example:
 
         ```python
@@ -1260,21 +1282,6 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         is_first_iteration=False,
         **kwargs,
     ):
-        if position_ids is None:
-            if is_first_iteration and image_grid_thw is not None:
-                position_ids = self.model.compute_xdrope_position_ids(
-                    input_ids=input_ids,
-                    image_grid_thw=image_grid_thw,
-                    attention_mask=attention_mask,
-                    past_key_values=past_key_values,
-                )
-            if position_ids is None:
-                text_position_ids = super()._prepare_position_ids_for_generation(
-                    input_ids,
-                    {"attention_mask": attention_mask, "past_key_values": past_key_values},
-                )
-                position_ids = text_position_ids[:, None, :].expand(-1, 4, -1)
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1294,27 +1301,36 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        text_position_ids = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
-        past_key_values = model_kwargs.get("past_key_values")
-        if _get_past_seq_length(past_key_values) != 0:
-            return text_position_ids[:, None, :].expand(-1, 4, -1)
+        rope_parameters = self.config.text_config.rope_parameters or {}
+        num_xdrope_axes = len(rope_parameters.get("xdrope_section", []))
+
+        past_length = 0
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            past_length = cache.get_seq_length()
+        if past_length != 0 and self.model.rope_deltas is not None:
+            return text_positions[None, ...] + self.model.rope_deltas
 
         if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
             inputs_tensor = model_kwargs["input_ids"]
 
         is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
         if is_input_ids and model_kwargs.get("image_grid_thw") is not None:
-            position_ids = self.model.compute_xdrope_position_ids(
-                input_ids=inputs_tensor,
+            rope_positions, rope_deltas = self.model.get_rope_index(
+                inputs_tensor,
                 image_grid_thw=model_kwargs.get("image_grid_thw"),
                 attention_mask=model_kwargs.get("attention_mask"),
-                past_key_values=past_key_values,
             )
-            if position_ids is not None:
-                return position_ids
+            self.model.rope_deltas = rope_deltas
+        else:
+            rope_positions = text_positions.unsqueeze(0).expand(num_xdrope_axes, -1, -1)
+            self.model.rope_deltas = torch.zeros(
+                inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
+            )
 
-        return text_position_ids[:, None, :].expand(-1, 4, -1)
+        text_positions = text_positions[None, ...]
+        return torch.cat([text_positions, rope_positions], dim=0)
 
 
 __all__ = [

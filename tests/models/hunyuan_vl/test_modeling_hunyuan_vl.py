@@ -123,6 +123,8 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
 class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = HunYuanVLVisionText2TextModelTester
     test_all_params_have_gradient = False
+    # HunYuanVL packs all images into one flat patch stream; pixel_values.shape[0] is total patches, not batch size.
+    skip_test_image_features_output_shape = True
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -325,27 +327,3 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=True):
         super().test_reverse_loading_mapping(check_keys_were_modified, skip_base_model)
-
-    @unittest.skip("HunYuanVL get_image_features returns projected placeholder embeddings, not a vision ModelOutput.")
-    def test_get_image_features_output_0(self):
-        pass
-
-    @unittest.skip("HunYuanVL get_image_features returns projected placeholder embeddings, not a vision ModelOutput.")
-    def test_get_image_features_output_1(self):
-        pass
-
-    @unittest.skip("HunYuanVL get_image_features returns projected placeholder embeddings, not a vision ModelOutput.")
-    def test_get_image_features_output_2(self):
-        pass
-
-    @unittest.skip("HunYuanVL get_image_features returns projected placeholder embeddings, not a vision ModelOutput.")
-    def test_get_image_features_output(self):
-        pass
-
-    @unittest.skip("HunYuanVL get_image_features returns projected placeholder embeddings, not a vision ModelOutput.")
-    def test_get_image_features_hidden_states(self):
-        pass
-
-    @unittest.skip("HunYuanVL get_image_features returns projected placeholder embeddings, not a vision ModelOutput.")
-    def test_get_image_features_attentions(self):
-        pass
