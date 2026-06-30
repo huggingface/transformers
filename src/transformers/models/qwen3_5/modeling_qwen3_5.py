@@ -33,7 +33,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_linear_attention_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
     GenericForSequenceClassification,
@@ -412,8 +412,6 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 self.head_v_dim,
                 eps=self.layer_norm_epsilon,
                 activation=self.activation,
-                device=torch.cuda.current_device(),
-                dtype=config.dtype if config.dtype is not None else torch.get_default_dtype(),
             )
         )
 
@@ -431,7 +429,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
-        self.layer_type = "linear_attention"
+        self.layer_type = config.layer_types[layer_idx]
 
         self.in_proj_qkv = nn.Linear(self.hidden_size, self.key_dim * 2 + self.value_dim, bias=False)
         self.in_proj_z = nn.Linear(self.hidden_size, self.value_dim, bias=False)
@@ -1202,7 +1200,7 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention": create_linear_attention_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds
@@ -1286,19 +1284,13 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        # Add `start_position` after arange for compile
         position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
-        position_width = torch.arange(llm_grid_w, device=device) + start_position
         position_height = torch.arange(llm_grid_h, device=device) + start_position
+        position_width = torch.arange(llm_grid_w, device=device) + start_position
 
-        # Repeat the positions per each grid and per video frame. Repeat patterns are important
-        # do not modify without checking values!
-        position_width = position_width.repeat(llm_grid_h * llm_grid_t)
-        position_height = position_height.repeat_interleave(llm_grid_w).repeat(llm_grid_t)
-        # Important: add `start_positions` after applying `time_interval`, order matters
-        position_temporal = position_temporal.repeat_interleave(llm_grid_h * llm_grid_w) + start_position
-        vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
-
+        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
+        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
+        vision_position_ids[0] += start_position  # must be after time_interval multiply
         return vision_position_ids
 
     def get_rope_index(

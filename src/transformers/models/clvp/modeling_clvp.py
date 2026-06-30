@@ -133,7 +133,9 @@ def _pad_extra_bos_eos_tokens(
         seq_len = input_ids.shape[1]
         is_pad = input_ids == pad_token_id
         first_pad = torch.where(
-            is_pad.any(1, keepdim=True), is_pad.int().argmax(1, keepdim=True), torch.tensor(seq_len)
+            is_pad.any(1, keepdim=True),
+            is_pad.int().argmax(1, keepdim=True),
+            torch.tensor(seq_len, device=input_ids.device),
         )
         col = torch.arange(seq_len + 1, device=input_ids.device)
         src = torch.where(col < first_pad, col, (col - 1).clamp(min=0))

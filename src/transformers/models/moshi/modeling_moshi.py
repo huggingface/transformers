@@ -27,7 +27,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig, GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput, Seq2SeqLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -37,10 +36,6 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import maybe_autocast
 from ..auto.modeling_auto import AutoModel
 from .configuration_moshi import MoshiConfig, MoshiDepthConfig
-
-
-if is_flash_attn_available():
-    pass
 
 
 logger = logging.get_logger(__name__)

@@ -60,25 +60,33 @@ class DiffLlamaRotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class DiffLlamaAttention(LlamaAttention):
-    """Multi-headed differential attention (https://arxiv.org/abs/2410.05258).
+    """Multi-headed differential attention (https://huggingface.co/papers/2410.05258).
 
-    Computes ``(softmax(Q1 K1ᵀ) - λ · softmax(Q2 K2ᵀ)) · V`` as **two standard attention calls**
-    that share Q and K but use the two halves of V (concatenated outputs along the last dim
-    reconstruct the per-head ``2 * head_dim`` the paper calls for; the head-axis chunk-and-subtract
-    then realises the differential combination).
-
-    The natural "shortcut" of packing V along ``head_dim`` to do a single attention call with
-    ``V`` of shape ``(B, H, S, 2D)`` is *slower* in practice. Asymmetric V trips PyTorch's SDPA
-    backend selector — it can't use Flash or cuDNN with ``head_dim_v != head_dim_q`` and falls
-    back to the memory-efficient / math kernel. Benchmarks at production shapes (prefill, long
-    context, training-sized batches) show the two-call version is **~30 % faster** than the
-    V-doubling version even though it issues an extra kernel launch — the gain from picking the
-    fast Flash/cuDNN kernel dominates the launch overhead. Flash Attention 2 also requires
-    ``head_dim_v == head_dim_q``, which only the two-call structure satisfies.
+    Computes ``(softmax(Q1 K1ᵀ) - λ · softmax(Q2 K2ᵀ)) · V`` as two standard attention calls
+    sharing Q and K over the two halves of V. The two-call structure is ~30% faster than the
+    V-doubling shortcut at production shapes, since asymmetric V (``head_dim_v != head_dim_q``)
+    forces SDPA off Flash/cuDNN onto the memory-efficient/math kernel; Flash Attention 2 also
+    requires ``head_dim_v == head_dim_q``.
     """
 
     def __init__(self, config: DiffLlamaConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
+        # The Differential Transformer paper (https://huggingface.co/papers/2410.05258) does not
+        # specify how attention dropout should be applied to the differential combination, and our
+        # two-call implementation has no single softmax to share a dropout mask across. Refuse
+        # rather than pick semantics the paper doesn't define.
+        if config.attention_dropout > 0.0:
+            raise ValueError(
+                "DiffLlama does not support `attention_dropout > 0`: the differential attention "
+                "mechanism has no paper-defined dropout semantics."
+            )
+        # ``torch.chunk(value_states, 2, dim=1).repeat(1, 2, ...)`` below requires the KV-head axis
+        # to split evenly into the two halves of the differential combination.
+        if config.num_key_value_heads is None or config.num_key_value_heads % 2 != 0:
+            raise ValueError(
+                "DiffLlama requires `num_key_value_heads` to be even (and at least 2): the two-call "
+                f"differential attention splits the value tensor along KV heads, got {config.num_key_value_heads}."
+            )
         self.lambda_init = lambda_init_fn(layer_idx)
         self.lambda_q1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
         self.lambda_k1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
@@ -114,15 +122,16 @@ class DiffLlamaAttention(LlamaAttention):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        # Both calls share Q and K, so their attention weights are mathematically identical —
-        # return just the first call's; concatenating would double the key dim incorrectly.
+        # The first call's weights are returned; the second's are mathematically identical
+        # (shared Q/K). ``config.attention_dropout > 0`` is rejected in ``__init__`` because the
+        # two calls cannot share a single softmax-dropout mask the way V-doubling did.
         attn_output1, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states1,
             attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
+            dropout=0.0,
             scaling=self.scaling,
             **kwargs,
         )
@@ -132,7 +141,7 @@ class DiffLlamaAttention(LlamaAttention):
             key_states,
             value_states2,
             attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
+            dropout=0.0,
             scaling=self.scaling,
             **kwargs,
         )

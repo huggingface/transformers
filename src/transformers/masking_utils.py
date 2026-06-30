@@ -20,7 +20,11 @@ from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
 from .utils.generic import GeneralInterface, is_flash_attention_requested
-from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_tracing
+from .utils.import_utils import (
+    is_torch_flex_attn_available,
+    is_torch_greater_or_equal,
+    is_tracing,
+)
 
 
 if is_torch_flex_attn_available():
@@ -668,9 +672,10 @@ def flash_attention_mask(
     if attention_mask is not None:
         # Here we need to slice from the right if using sliding or chunked (for full attention, this is equivalent to doing nothing)
         attention_mask = attention_mask[:, -kv_length:]
-        # We only return an actual mask if there is at least 1 padding token, otherwise we return `None` and use `is_causal` in FA2
-        # (note that the attention_mask is a boolean dtype here)
-        if attention_mask.all():
+        # We only return an actual mask if there is at least 1 padding token AND the length is the same as the kv_length (it can only
+        # be smaller, if and only if we use a StaticCache, in which case we need a mask to properly slice k/v), otherwise we return
+        # `None` and use `is_causal` in FA2 (note that the attention_mask is a boolean dtype here)
+        if attention_mask.shape[1] == kv_length and attention_mask.all():
             attention_mask = None
 
     return attention_mask
@@ -856,8 +861,8 @@ def _preprocess_mask_arguments(
     # If using a cache, it can give all information about mask sizes based on seen tokens
     if past_key_values is not None:
         q_offset = past_key_values.get_seq_length()
-        # To avoid graph breaks, StaticLayer return a tensor instead of int -> this has no impact on the ops, but we
-        # need the correct device
+        # To avoid graph breaks, StaticLayer returns a tensor instead of an int -> this has no impact on the ops, but
+        # we need the correct device
         q_offset = q_offset.to(inputs_embeds.device) if isinstance(q_offset, torch.Tensor) else q_offset
         kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, layer_idx)
     # Otherwise, we infer based on our input
@@ -1452,7 +1457,7 @@ def create_chunked_causal_mask(
     return causal_mask
 
 
-def create_linear_attention_mask(
+def create_recurrent_attention_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
@@ -1461,15 +1466,21 @@ def create_linear_attention_mask(
 ) -> torch.Tensor | None:
     """Return the 2D padding mask for mamba / linear-attention layers, sized to the local sequence.
 
-    Returns ``None`` when the input mask is missing, is already a custom 4D attention mask (no 2D
-    padding signal), or when the recurrent state already covers past tokens (cached forwards) —
-    in that case the consumer skips masking entirely. Otherwise we trim the mask to the trailing
-    ``inputs_embeds.shape[1]`` positions so it aligns with the current forward's local sequence
-    and the consumer can multiply directly without further slicing.
+    Returns ``None`` (so the consumer skips masking entirely) when any of:
+    - the input mask is missing or is already a custom 4D attention mask (no 2D padding signal);
+    - the recurrent state already covers past tokens (cached forwards);
+    - the mask is all-ones (un-padded batch — the masking multiply would be a no-op), skipped
+      only outside trace/compile so the graph specialisation stays stable.
+
+    Otherwise we trim the mask to the trailing ``inputs_embeds.shape[1]`` positions so it aligns
+    with the current forward's local sequence and the consumer can multiply directly without
+    further slicing.
     """
     if attention_mask is None or attention_mask.ndim != 2:
         return None
     if past_key_values is not None and past_key_values.has_previous_state():
+        return None
+    if not is_tracing(attention_mask) and torch.all(attention_mask == 1):
         return None
     # ``.contiguous()`` keeps the stride stable across decode steps so ``torch.compile`` doesn't recompile.
     return attention_mask[:, -inputs_embeds.shape[1] :].contiguous()
@@ -1483,8 +1494,8 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "heavily_compressed_attention": create_sliding_window_causal_mask,
     "minimax_m3_sparse": create_causal_mask,
     "deepseek_sparse_attention": create_causal_mask,
-    "linear_attention": create_linear_attention_mask,
-    "conv": create_linear_attention_mask,
+    "linear_attention": create_recurrent_attention_mask,
+    "conv": create_recurrent_attention_mask,
 }
 
 

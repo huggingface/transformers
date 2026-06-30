@@ -43,7 +43,7 @@ logger = logging.get_logger(__name__)
 class MimiOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-        Discret code embeddings computed using `model.encode`.
+        Discrete code embeddings computed using `model.encode`.
     audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
         Decoded audio values, obtained using the decoder part of Mimi.
     encoder_past_key_values (`Cache`, *optional*):
@@ -169,7 +169,7 @@ class MimiConv1dPaddingCache:
 class MimiEncoderOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-        Discret code embeddings computed using `model.encode`.
+        Discrete code embeddings computed using `model.encode`.
     encoder_past_key_values (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
         This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
@@ -676,6 +676,7 @@ class MimiAttention(nn.Module):
         self.head_dim = config.head_dim
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.max_position_embeddings = config.max_position_embeddings
         self.is_causal = True
         self.scaling = 1 / math.sqrt(config.head_dim)
 
@@ -694,9 +695,9 @@ class MimiAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -724,6 +725,7 @@ class MimiAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=self.sliding_window,
             **kwargs,
         )
 
@@ -748,11 +750,11 @@ class MimiTransformerLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -762,11 +764,11 @@ class MimiTransformerLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + self.self_attn_layer_scale(hidden_states)
@@ -799,7 +801,6 @@ class MimiTransformerModel(nn.Module):
         self.layers = nn.ModuleList(
             [MimiTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self._attn_implementation = config._attn_implementation
         self.rotary_emb = MimiRotaryEmbedding(config)
 
         self.gradient_checkpointing = False
@@ -905,11 +906,12 @@ class MimiTransformerModel(nn.Module):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
+                position_ids=position_ids,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
+                position_embeddings=position_embeddings,
             )
 
             hidden_states = layer_outputs[0]
@@ -1441,7 +1443,7 @@ class MimiModel(MimiPreTrainedModel):
 
         Args:
             audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-                Discret code embeddings computed using `model.encode`.
+                Discrete code embeddings computed using `model.encode`.
             padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
                 Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
                 for *masked*.
@@ -1495,7 +1497,7 @@ class MimiModel(MimiPreTrainedModel):
         num_quantizers (`int`, *optional*):
             Number of quantizers (i.e codebooks) to use. By default, all quantizers are used.
         audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
+            Discrete code embeddings computed using `model.encode`.
         encoder_past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
             This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.

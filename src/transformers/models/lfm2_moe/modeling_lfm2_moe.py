@@ -34,7 +34,7 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
-from ...masking_utils import create_causal_mask, create_linear_attention_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -192,23 +192,22 @@ class Lfm2MoeExperts(nn.Module):
         return final_hidden_states
 
 
-class Lfm2MoeSparseMoeBlock(nn.Module):
+class Lfm2MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.routed_scaling_factor = config.routed_scaling_factor
+        self.num_experts = config.num_experts
         self.norm_topk_prob = config.norm_topk_prob
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.routed_scaling_factor = config.routed_scaling_factor
         self.use_expert_bias = config.use_expert_bias
 
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        self.experts = Lfm2MoeExperts(config)
-        if self.use_expert_bias:
-            self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
-
-    def route_tokens_to_experts(self, router_logits):
+    def forward(self, hidden_states, expert_bias=None):
+        router_logits = F.linear(hidden_states, self.weight)
         routing_weights = router_logits.sigmoid()
         if self.use_expert_bias:
-            scores_for_routing = routing_weights + self.expert_bias
+            scores_for_routing = routing_weights + expert_bias
             _, selected_experts = torch.topk(scores_for_routing, k=self.top_k, dim=-1)
             routing_weights = torch.gather(routing_weights, dim=1, index=selected_experts).type_as(router_logits)
         else:
@@ -217,13 +216,23 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         if self.norm_topk_prob:
             routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-6)
         routing_weights = routing_weights * self.routed_scaling_factor
-        return selected_experts, routing_weights
+        return router_logits, routing_weights, selected_experts
+
+
+class Lfm2MoeSparseMoeBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.experts = Lfm2MoeExperts(config)
+        self.gate = Lfm2MoeTopKRouter(config)
+        self.use_expert_bias = config.use_expert_bias
+        if self.use_expert_bias:
+            self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        router_logits = self.gate(hidden_states_reshaped)
-        selected_experts, routing_weights = self.route_tokens_to_experts(router_logits)
+        expert_bias = self.expert_bias if self.use_expert_bias else None
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped, expert_bias)
         final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
@@ -396,7 +405,7 @@ class Lfm2MoeShortConv(nn.Module):
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
 
-        self.layer_type = "conv"
+        self.layer_type = config.layer_types[layer_idx]
 
     def cuda_kernels_forward(
         self,
@@ -552,12 +561,14 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Lfm2MoeDecoderLayer,
         "attentions": Lfm2MoeAttention,
     }
+    _is_stateful = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -565,6 +576,8 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
         if isinstance(module, Lfm2MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Lfm2MoeTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Lfm2MoeSparseMoeBlock):
             if module.use_expert_bias:
                 init.zeros_(module.expert_bias)
@@ -625,7 +638,7 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "conv": create_linear_attention_mask(**mask_kwargs),
+                "conv": create_recurrent_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

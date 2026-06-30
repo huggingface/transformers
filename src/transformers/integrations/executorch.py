@@ -588,7 +588,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.static_cache.layers:
-            layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0])
 
         past_key_values = self.static_cache
 
@@ -756,7 +756,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.cache.layers:
-            layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0])
 
         # Forward pass with the model
         outputs = self.model(
@@ -894,7 +894,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.static_cache.layers:
-            layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0])
 
         # Get outputs from decoder
         outputs = self.decoder(

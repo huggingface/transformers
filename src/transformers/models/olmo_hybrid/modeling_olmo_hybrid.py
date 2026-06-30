@@ -32,7 +32,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask, create_linear_attention_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -466,7 +466,7 @@ class OlmoHybridRotaryEmbedding(nn.Module):
         return inv_freq, attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -706,8 +706,6 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             else FusedRMSNormGated(
                 self.head_v_dim,
                 eps=1e-5,
-                device=torch.cuda.current_device(),
-                dtype=config.dtype if config.dtype is not None else torch.get_default_dtype(),
             )
         )
 
@@ -721,7 +719,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 "https://github.com/fla-org/flash-linear-attention#installation"
             )
 
-        self.layer_type = "linear_attention"
+        self.layer_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -960,6 +958,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             ]
         )
         self.norm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # Released ckpt don't use any ROPE and have  it set to `None`
         self.rotary_emb = (
             OlmoHybridRotaryEmbedding(config=config)
             if getattr(config, "rope_parameters", None) is not None
@@ -1008,7 +1007,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention": create_linear_attention_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

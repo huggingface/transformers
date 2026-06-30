@@ -27,7 +27,7 @@ from torch import nn
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask, create_linear_attention_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -320,7 +320,7 @@ class Lfm2ShortConv(nn.Module):
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
 
-        self.layer_type = "conv"
+        self.layer_type = config.layer_types[layer_idx]
 
     def cuda_kernels_forward(
         self,
@@ -472,12 +472,14 @@ class Lfm2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Lfm2DecoderLayer,
         "attentions": Lfm2Attention,
     }
+    _is_stateful = True
 
 
 @auto_docstring
@@ -535,7 +537,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "conv": create_linear_attention_mask(**mask_kwargs),
+                "conv": create_recurrent_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

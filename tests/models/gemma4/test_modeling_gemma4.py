@@ -292,8 +292,8 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_get_image_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no image in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_output(self, return_dict: bool | None):
         pass
 
@@ -305,8 +305,8 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_get_video_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no videos in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
@@ -468,7 +468,7 @@ class Gemma4Vision2TextModelTester:
 class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma4Model, Gemma4ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma4ForConditionalGeneration,) if is_torch_available() else ()
-    additional_model_inputs = ["mm_token_type_ids"]
+    additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
     model_split_percents = [0.85, 0.9]
 
     def setUp(self):
@@ -514,8 +514,8 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_get_audio_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no audios in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_output(self, return_dict: bool | None):
         pass
 
@@ -527,8 +527,8 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_get_video_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no videos in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 

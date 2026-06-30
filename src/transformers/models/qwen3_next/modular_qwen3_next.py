@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask, create_linear_attention_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -384,8 +384,6 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 self.head_v_dim,
                 eps=self.layer_norm_epsilon,
                 activation=self.activation,
-                device=torch.cuda.current_device(),
-                dtype=config.dtype if config.dtype is not None else torch.get_default_dtype(),
             )
         )
 
@@ -403,7 +401,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
-        self.layer_type = "linear_attention"
+        self.layer_type = config.layer_types[layer_idx]
 
     def fix_query_key_value_ordering(self, mixed_qkvz, mixed_ba):
         """
@@ -728,7 +726,7 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention": create_linear_attention_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

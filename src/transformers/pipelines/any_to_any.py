@@ -445,7 +445,7 @@ class AnyToAnyPipeline(Pipeline):
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
-        if getattr(self.tokenizer, "response_schema", False):
+        if getattr(self.tokenizer, "response_template", None) or getattr(self.tokenizer, "response_schema", None):
             skip_special_tokens = False
         generation_mode = postprocess_kwargs["generation_mode"] or "text"
         if generation_mode == "image" and hasattr(self.model, "decode_image_tokens"):
@@ -475,7 +475,7 @@ class AnyToAnyPipeline(Pipeline):
             generated_outputs = new_generated_texts
         if return_type == ReturnType.FULL_TEXT:
             full_texts = []
-            for prompt_text, generated_text in zip(input_texts, generated_outputs):
+            for prompt_text, generated_text, decoded_input in zip(input_texts, generated_outputs, decoded_inputs):
                 if isinstance(prompt_text, str):
                     generated_text = prompt_text + generated_text
                 elif isinstance(prompt_text, Chat):
@@ -495,7 +495,13 @@ class AnyToAnyPipeline(Pipeline):
                         ]
                     else:
                         # When we're not starting from a prefill, the output is a new assistant message
-                        if getattr(self.tokenizer, "response_schema", False):
+                        if getattr(self.tokenizer, "response_template", None) is not None:
+                            # New-style templates need to see the prompt as `prefix`, because chat
+                            # templates often pre-write part of the assistant message (e.g. an
+                            # opening <think> tag), which affects parsing.
+                            assistant_message = self.tokenizer.parse_response(generated_text, prefix=decoded_input)
+                        elif getattr(self.tokenizer, "response_schema", None) is not None:
+                            # Legacy schemas parse the generated text alone and don't support `prefix`
                             assistant_message = self.tokenizer.parse_response(generated_text)
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}

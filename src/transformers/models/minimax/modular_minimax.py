@@ -101,6 +101,12 @@ class MiniMaxConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     attribute_map = {"num_experts": "num_local_experts"}
 
     vocab_size: int = 32000
@@ -212,7 +218,7 @@ class MiniMaxLightningAttention(nn.Module):
         self.register_buffer("key_decay", key_decay)
         self.register_buffer("diagonal_decay", diagonal_decay)
 
-        self.layer_type = "linear_attention"
+        self.layer_type = config.layer_types[layer_idx]
 
     def get_slope_rate(self):
         base = 1 / (2 ** (8 / self.num_attention_heads))

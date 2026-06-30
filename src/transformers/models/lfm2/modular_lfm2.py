@@ -18,7 +18,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask, create_linear_attention_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -155,7 +155,7 @@ class Lfm2ShortConv(nn.Module):
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
 
-        self.layer_type = "conv"
+        self.layer_type = config.layer_types[layer_idx]
 
     def cuda_kernels_forward(
         self,
@@ -298,7 +298,7 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Lfm2PreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = True
+    _is_stateful = True
 
 
 class Lfm2Model(LlamaModel):
@@ -341,7 +341,7 @@ class Lfm2Model(LlamaModel):
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "conv": create_linear_attention_mask(**mask_kwargs),
+                "conv": create_recurrent_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds
