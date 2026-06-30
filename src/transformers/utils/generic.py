@@ -1155,3 +1155,36 @@ def retry(
         return wrapper
 
     return decorator
+
+
+def accelerate_hook_compatible_wrapper(original_func: Callable, squeeze_weight: bool = True) -> Callable:
+    """
+    Wrapper around a function that uses some weights of a module, without calling that module's `forward` method, to forcefully
+    trigger the accelerate hooks. Indeed, the hooks are only fired through the `forward` method, so if the weights are used directly,
+    as is the case inside `causal_conv1d_fn` and `causal_conv1d_update` for example, they will not be fired. This will cause device
+    issues, that this wrapper will correct.
+    """
+
+    def wrapped(*args, **kwargs):
+        hook = None
+        hooked_module = kwargs.pop("hooked_module", None)
+        if hooked_module is not None:
+            if (hook := getattr(hooked_module, "_hf_hook", None)) is not None:
+                # args, kwargs = hook.pre_forward(hooked_module, *args, **kwargs)
+                hook.pre_forward(hooked_module)
+
+        # Since the weights of the module were passed to the caller before being moved, we need to re-update them
+        if hook is not None:
+            if "weight" in kwargs:
+                kwargs["weight"] = hooked_module.weight.squeeze(1) if squeeze_weight else hooked_module.weight
+            if "bias" in kwargs:
+                kwargs["bias"] = hooked_module.bias
+
+        output = original_func(*args, **kwargs)
+
+        if hook is not None:
+            return hook.post_forward(hooked_module, output)
+        else:
+            return output
+
+    return wrapped

@@ -43,7 +43,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import accelerate_hook_compatible_wrapper, maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_qwen3_next import Qwen3NextConfig
@@ -493,37 +493,6 @@ def torch_recurrent_gated_delta_rule(
         last_recurrent_state = None
     core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
     return core_attn_out, last_recurrent_state
-
-
-def accelerate_hook_compatible_wrapper(original_func: Callable) -> Callable:
-    """
-    Wrapper around a function to trigger the accelerate hooks even when the weights are used directly rather than
-    through their `forward`, as is the case inside `causal_conv1d_fn` and `causal_conv1d_update`.
-    """
-
-    def wrapped(*args, **kwargs):
-        hook = None
-        hooked_module = kwargs.pop("hooked_module", None)
-        if hooked_module is not None:
-            if (hook := getattr(hooked_module, "_hf_hook", None)) is not None:
-                # args, kwargs = hook.pre_forward(hooked_module, *args, **kwargs)
-                hook.pre_forward(hooked_module)
-
-        # Since the weights of the module were passed to the caller before being moved, we need to re-update them
-        if hook is not None:
-            if "weight" in kwargs:
-                kwargs["weight"] = hooked_module.weight.squeeze(1)
-            if "bias" in kwargs:
-                kwargs["bias"] = hooked_module.bias
-
-        output = original_func(*args, **kwargs)
-
-        if hook is not None:
-            return hook.post_forward(hooked_module, output)
-        else:
-            return output
-
-    return wrapped
 
 
 class Qwen3NextGatedDeltaNet(nn.Module):
