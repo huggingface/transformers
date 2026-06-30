@@ -37,12 +37,13 @@ from update_pr_ci_dashboard_recap import (  # noqa: E402
     get_metric_value,
     github_paginate,
     inject_ci_badge,
-    inject_ci_recap,
     prometheus_string,
     quality_job_failed,
+    remove_marked_block,
     render_ci_badge,
     render_ci_recap,
     replace_marked_block,
+    update_or_create_ci_recap_comment,
 )
 
 
@@ -179,22 +180,19 @@ class ReplaceMarkedBlockTest(unittest.TestCase):
         self.assertEqual(out, "REPL mid REPL")
 
 
-class InjectRecapTest(unittest.TestCase):
-    def test_appends_when_no_existing_block(self):
-        recap = f"{RECAP_START}\nbody\n{RECAP_END}"
-        out = inject_ci_recap("Hello world", recap)
-        self.assertEqual(out, f"Hello world\n\n{recap}")
+class RemoveMarkedBlockTest(unittest.TestCase):
+    def test_keeps_body_when_no_existing_block(self):
+        out = remove_marked_block("Hello world", RECAP_START, RECAP_END)
+        self.assertEqual(out, "Hello world")
 
     def test_handles_none_body(self):
-        recap = f"{RECAP_START}\nbody\n{RECAP_END}"
-        out = inject_ci_recap(None, recap)
-        self.assertEqual(out, recap)
+        out = remove_marked_block(None, RECAP_START, RECAP_END)
+        self.assertEqual(out, "")
 
-    def test_replaces_existing_block(self):
+    def test_removes_existing_block(self):
         old = f"text\n{RECAP_START}\nold\n{RECAP_END}\ntail"
-        recap = f"{RECAP_START}\nnew\n{RECAP_END}"
-        out = inject_ci_recap(old, recap)
-        self.assertEqual(out, f"text\n{recap}\ntail")
+        out = remove_marked_block(old, RECAP_START, RECAP_END)
+        self.assertEqual(out, "text\n\ntail")
         self.assertNotIn("old", out)
 
 
@@ -220,10 +218,11 @@ class InjectBadgeTest(unittest.TestCase):
         badge = f"{BADGE_START}\nbadge\n{BADGE_END}"
         recap = f"{RECAP_START}\nrecap\n{RECAP_END}"
         body = inject_ci_badge("Original PR text", badge)
-        body = inject_ci_recap(body, recap)
+        body = f"{body}\n\n{recap}"
+        body = remove_marked_block(body, RECAP_START, RECAP_END)
         self.assertTrue(body.startswith(badge))
         self.assertIn("Original PR text", body)
-        self.assertTrue(body.rstrip().endswith(RECAP_END))
+        self.assertNotIn(RECAP_START, body)
 
 
 class GetMetricValueTest(unittest.TestCase):
@@ -355,6 +354,38 @@ class DeleteOldCommentsTest(unittest.TestCase):
         deleted_url = request_mock.call_args.args[0]
         self.assertIn("/comments/1", deleted_url)
         self.assertEqual(request_mock.call_args.kwargs["method"], "DELETE")
+
+
+class UpdateOrCreateCiRecapCommentTest(unittest.TestCase):
+    def test_updates_existing_recap_comment(self):
+        comments = [
+            {"id": 1, "body": "an unrelated comment"},
+            {"id": 2, "body": f"{RECAP_START}\nold\n{RECAP_END}"},
+        ]
+        recap = f"{RECAP_START}\nnew\n{RECAP_END}"
+        with (
+            patch.object(recap_mod, "github_paginate", return_value=comments),
+            patch.object(recap_mod, "request_json") as request_mock,
+        ):
+            update_or_create_ci_recap_comment("x/y", "t", 5, recap)
+
+        request_mock.assert_called_once()
+        self.assertIn("/comments/2", request_mock.call_args.args[0])
+        self.assertEqual(request_mock.call_args.kwargs["method"], "PATCH")
+        self.assertEqual(request_mock.call_args.kwargs["payload"], {"body": recap})
+
+    def test_creates_recap_comment_when_missing(self):
+        recap = f"{RECAP_START}\nnew\n{RECAP_END}"
+        with (
+            patch.object(recap_mod, "github_paginate", return_value=[{"id": 1, "body": "unrelated"}]),
+            patch.object(recap_mod, "request_json") as request_mock,
+        ):
+            update_or_create_ci_recap_comment("x/y", "t", 5, recap)
+
+        request_mock.assert_called_once()
+        self.assertIn("/issues/5/comments", request_mock.call_args.args[0])
+        self.assertEqual(request_mock.call_args.kwargs["method"], "POST")
+        self.assertEqual(request_mock.call_args.kwargs["payload"], {"body": recap})
 
 
 if __name__ == "__main__":

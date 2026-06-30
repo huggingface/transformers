@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Update a PR body with a compact CI recap from the Grafana pytest dashboard."""
+"""Update a PR with a CI badge and a compact CI recap from the Grafana pytest dashboard."""
 
 import json
 import os
@@ -251,12 +251,11 @@ def replace_marked_block(body, start_marker, end_marker, replacement):
     return None
 
 
-def inject_ci_recap(body, recap):
-    replaced = replace_marked_block(body, RECAP_START, RECAP_END, recap)
-    if replaced is not None:
-        return replaced
-    existing_body = body or ""
-    return f"{existing_body.rstrip()}\n\n{recap}".lstrip()
+def remove_marked_block(body, start_marker, end_marker):
+    updated = replace_marked_block(body, start_marker, end_marker, "")
+    if updated is None:
+        return body or ""
+    return re.sub(r"\n{3,}", "\n\n", updated).strip()
 
 
 def inject_ci_badge(body, badge):
@@ -280,6 +279,26 @@ def delete_old_dashboard_comments(repo, token, pr_number):
             request_json(
                 f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}", token=token, method="DELETE"
             )
+
+
+def update_or_create_ci_recap_comment(repo, token, pr_number, recap):
+    comments = github_paginate(f"/repos/{repo}/issues/{pr_number}/comments", token)
+    existing_comment = next((comment for comment in comments if RECAP_START in (comment.get("body") or "")), None)
+    if existing_comment is not None:
+        request_json(
+            f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{existing_comment['id']}",
+            token=token,
+            method="PATCH",
+            payload={"body": recap},
+        )
+        return
+
+    request_json(
+        f"{GITHUB_API_URL}/repos/{repo}/issues/{pr_number}/comments",
+        token=token,
+        method="POST",
+        payload={"body": recap},
+    )
 
 
 def quality_job_failed(repo, token, run_id):
@@ -323,13 +342,14 @@ def main():
         dashboard_url, recap, workflow_run, quality_job_failed(repo, token, workflow_run["id"])
     )
     updated_body = inject_ci_badge(pr.get("body"), badge_body)
-    updated_body = inject_ci_recap(updated_body, recap_body)
+    updated_body = remove_marked_block(updated_body, RECAP_START, RECAP_END)
     request_json(
         f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr['number']}",
         token=token,
         method="PATCH",
         payload={"body": updated_body},
     )
+    update_or_create_ci_recap_comment(repo, token, pr["number"], recap_body)
 
 
 if __name__ == "__main__":
