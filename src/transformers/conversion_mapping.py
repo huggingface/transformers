@@ -1393,10 +1393,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.ln_1\.", ".layer_norm1."),
             WeightRenaming(r"\.ln_2\.", ".layer_norm2."),
             WeightRenaming(r"\.attn\.", ".self_attn."),
-            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),  # if config.use_swiglu_ffn=False
-            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),  # if config.use_swiglu_ffn=False
-            WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."),  # if config.use_swiglu_ffn=True
-            WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."),  # if config.use_swiglu_ffn=True
+            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),
+            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),
             WeightConverter(
                 source_patterns=r"\.in_proj_weight",
                 target_patterns=[".q_proj.weight", ".k_proj.weight", ".v_proj.weight"],
@@ -1420,6 +1418,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.attn\.proj\.", ".attention.output.dense."),
             WeightRenaming(r"\.ls1\.gamma", ".layer_scale1.lambda1"),
             WeightRenaming(r"\.ls2\.gamma", ".layer_scale2.lambda1"),
+            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),  # if config.use_swiglu_ffn=False
+            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),  # if config.use_swiglu_ffn=False
+            WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."),  # if config.use_swiglu_ffn=True
+            WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."),  # if config.use_swiglu_ffn=True
             WeightConverter(
                 source_patterns=r"\.attn\.qkv\.weight",
                 target_patterns=[
