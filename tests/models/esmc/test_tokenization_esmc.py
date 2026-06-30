@@ -12,20 +12,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
 from transformers import AutoTokenizer, ESMCTokenizer
 from transformers.testing_utils import require_tokenizers, slow
 
+from ...test_tokenization_common import TokenizerTesterMixin
+
 
 @require_tokenizers
-class ESMCTokenizationTest(unittest.TestCase):
+class ESMCTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = ESMCTokenizer
+    test_seq2seq = False
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # ESMC is a fast-only tokenizer with a fixed amino-acid vocab built in __init__ (no vocab
+        # file), so seed the shared tmpdir with a code-built tokenizer for the common-test battery.
+        ESMCTokenizer().save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> ESMCTokenizer:
-        # ESMC is a fast-only tokenizer; the vocab is built in __init__ (no vocab file needed).
-        return ESMCTokenizer(**kwargs)
+        return ESMCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+
+    def get_input_output_texts(self, tokenizer):
+        # The common harness space-joins vocab tokens, but ESMC has no space token (spaces map to
+        # ``<unk>``) and decode re-joins residues with spaces, so round-trip checks need a contiguous
+        # amino-acid input whose decoded form is the space-separated residues.
+        seq = "MKTAYIAKQRLAGVS"
+        return seq, " ".join(seq)
+
+    def test_maximum_encoding_length_pair_input(self):
+        self.skipTest(reason="ESMC is a single-sequence protein tokenizer; it has no sequence-pair template.")
+
+    def test_tokenizer_store_full_signature(self):
+        self.skipTest(reason="`chain_break_token` is fixed by the amino-acid vocab, not a stored init kwarg.")
 
     def test_documented_example(self):
         tokenizer = self.get_tokenizer()
@@ -56,13 +77,6 @@ class ESMCTokenizationTest(unittest.TestCase):
         self.assertEqual(tokenizer.bos_token_id, tokenizer.cls_token_id)
         self.assertEqual(tokenizer.vocab_size, 33)
 
-    def test_batch_padding(self):
-        tokenizer = self.get_tokenizer()
-        batch = tokenizer(["LAGVS", "WC"], padding=True)
-        self.assertListEqual(batch["input_ids"][0], [0, 4, 5, 6, 7, 8, 2])
-        self.assertListEqual(batch["input_ids"][1], [0, 22, 23, 2, 1, 1, 1])
-        self.assertListEqual(batch["attention_mask"][1], [1, 1, 1, 1, 0, 0, 0])
-
     def test_chain_break_token(self):
         tokenizer = self.get_tokenizer()
         self.assertEqual(tokenizer.chain_break_token, "|")
@@ -78,20 +92,6 @@ class ESMCTokenizationTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         # "J" is not a valid amino-acid token in the ESMC vocabulary.
         self.assertIn(tokenizer.unk_token_id, tokenizer("MKJT")["input_ids"])
-
-    def test_decode_round_trip(self):
-        tokenizer = self.get_tokenizer()
-        seq = "MKTAYIAKQR"
-        decoded = tokenizer.decode(tokenizer(seq)["input_ids"], skip_special_tokens=True).replace(" ", "")
-        self.assertEqual(decoded, seq)
-
-    def test_save_and_load(self):
-        tokenizer = self.get_tokenizer()
-        seq = "MKTAYIAKQR"
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tokenizer.save_pretrained(tmpdir)
-            reloaded = ESMCTokenizer.from_pretrained(tmpdir)
-        self.assertListEqual(tokenizer(seq)["input_ids"], reloaded(seq)["input_ids"])
 
     @slow
     def test_tokenizer_integration(self):

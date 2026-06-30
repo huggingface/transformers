@@ -36,7 +36,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import is_flash_attention_requested, maybe_autocast
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_esmc import ESMCConfig
 
@@ -104,13 +104,6 @@ class ESMCRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-    def _apply(self, fn, recurse=True):
-        # Little bit of hackery compared to Llama to match the original's dtypes
-        result = super()._apply(fn, recurse=recurse)
-        inv_freq, _ = self.compute_default_rope_parameters(self.config, device=self.inv_freq.device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        return result
 
 
 class ESMCMLP(nn.Module):
@@ -192,14 +185,7 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class ESMCAttention(nn.Module):
-    """Multi-head self-attention with QK-LayerNorm and RoPE.
-
-    Inherits Llama's projection setup -- ``q/k/v/o_proj`` are bias-free
-    (``config.attention_bias=False``) and there is no GQA
-    (``num_key_value_heads == num_attention_heads``). On top of Llama it applies
-    QK-LayerNorm to the projected query/key (before the head reshape) and runs
-    bidirectionally (``is_causal=False``).
-    """
+    """Multi-head self-attention with QK-LayerNorm and RoPE."""
 
     def __init__(self, config: ESMCConfig, layer_idx: int | None = None):
         super().__init__()
@@ -223,8 +209,8 @@ class ESMCAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_ln = nn.LayerNorm(config.hidden_size, bias=False) if config.qk_layernorm else nn.Identity()
-        self.k_ln = nn.LayerNorm(config.hidden_size, bias=False) if config.qk_layernorm else nn.Identity()
+        self.q_norm = nn.LayerNorm(config.hidden_size, bias=False) if config.qk_layernorm else nn.Identity()
+        self.k_norm = nn.LayerNorm(config.hidden_size, bias=False) if config.qk_layernorm else nn.Identity()
 
     def forward(
         self,
@@ -233,26 +219,19 @@ class ESMCAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Return ``(context, attn_weights)``.
-
-        Attention is computed by the backend selected through ``config._attn_implementation``.
-        ``attn_weights`` is captured by the output recorder when requested and is only populated
-        by backends that expose the probabilities (e.g. ``eager``).
-        """
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_ln(self.q_proj(hidden_states)).to(hidden_states.dtype)
-        key_states = self.k_ln(self.k_proj(hidden_states)).to(hidden_states.dtype)
+        query_states = self.q_norm(self.q_proj(hidden_states)).to(hidden_states.dtype)
+        key_states = self.k_norm(self.k_proj(hidden_states)).to(hidden_states.dtype)
         value_states = self.v_proj(hidden_states)
 
         query_states = query_states.view(hidden_shape).transpose(1, 2)
         key_states = key_states.view(hidden_shape).transpose(1, 2)
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
-        if position_embeddings is not None:
-            cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -275,12 +254,17 @@ class ESMCAttention(nn.Module):
 class ESMCLayer(GradientCheckpointingLayer):
     """Single transformer block: pre-norm attention + pre-norm FFN with residual scaling."""
 
-    def __init__(self, config: ESMCConfig):
+    def __init__(self, config: ESMCConfig, layer_idx: int | None = None):
         super().__init__()
-        self.input_layernorm = nn.LayerNorm(config.hidden_size)
-        self.self_attn = ESMCAttention(config)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = ESMCAttention(config=config, layer_idx=layer_idx)
+
         self.mlp = ESMCMLP(config)
+        # LayerNorm instead of Llama's RMSNorm.
+        self.input_layernorm = nn.LayerNorm(config.hidden_size)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
+        # ESM3 residual scaling to stabilise deep networks.
         self.scaling_factor = math.sqrt(config.num_hidden_layers / 36) if config.scale_residue else 1.0
 
     def forward(
@@ -309,10 +293,10 @@ class ESMCPreTrainedModel(PreTrainedModel):
     config_class = ESMCConfig
     base_model_prefix = "esmc"
     supports_gradient_checkpointing = True
-    _supports_sdpa = True
     _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_attention_backend = True
-    _no_split_modules = ["ESMCLayer"]
     _can_record_outputs = {
         "hidden_states": ESMCLayer,
         "attentions": ESMCAttention,
@@ -320,6 +304,7 @@ class ESMCPreTrainedModel(PreTrainedModel):
     # ``inv_freq`` / ``original_inv_freq`` are non-persistent rotary buffers; ``_extra_state``
     # keys come from the published checkpoint's fused TransformerEngine layout.
     _keys_to_ignore_on_load_unexpected = [r"\._extra_state$", r"\.inv_freq$", r"\.original_inv_freq$"]
+    _no_split_modules = ["ESMCLayer"]
 
 
 @auto_docstring
@@ -330,8 +315,10 @@ class ESMCModel(ESMCPreTrainedModel):
         self.rotary_emb = ESMCRotaryEmbedding(config)
         self.layers = nn.ModuleList([ESMCLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = nn.LayerNorm(config.hidden_size, bias=False)
+        self.gradient_checkpointing = False
         self.post_init()
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -370,25 +357,28 @@ class ESMCModel(ESMCPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         if sequence_id is not None:
-            # Chain-aware attention: a token attends only to tokens sharing its
-            # ``sequence_id`` (block-diagonal), expressed as an additional ``and`` mask
-            # over the bidirectional mask. ``attention_mask`` is ignored here -- padding
-            # is encoded as ``sequence_id == -1``. Flash attention can't represent a
-            # block-diagonal mask without varlen, so multi-chain inputs are rejected.
-            if is_flash_attention_requested(self.config) and (sequence_id > 0).any():
+            # Chain-aware attention: a token attends only to tokens sharing its ``sequence_id``
+            # (block-diagonal), expressed as an additional ``and`` mask over the bidirectional mask.
+            # ``attention_mask`` is ignored here -- padding is encoded as ``sequence_id == -1``.
+            # Flash attention can't represent this block-diagonal mask: it would be silently dropped,
+            # letting tokens attend across chains (and to padding). So ``sequence_id`` requires a
+            # non-flash backend. This is a config-only check (no data inspection), so it stays
+            # ``torch.compile`` / ``torch.export`` friendly -- unlike inspecting the data to decide,
+            # which would either break tracing or silently miss the drop under a captured graph.
+            if is_flash_attention_requested(self.config):
                 raise ValueError(
-                    "Multi-chain ``sequence_id`` (any value > 0) is not supported with "
-                    "flash attention. Re-load the model with attn_implementation='sdpa' "
-                    "(or 'eager' / 'flex_attention') for chain-aware attention masking."
+                    "`sequence_id` (chain-aware attention) is not supported with flash attention, "
+                    "which can't represent the block-diagonal chain mask. Re-load the model with "
+                    "attn_implementation='sdpa' (or 'eager' / 'flex_attention')."
                 )
-            attn_bias = create_bidirectional_mask(
+            attention_mask = create_bidirectional_mask(
                 config=self.config,
                 inputs_embeds=hidden_states,
                 attention_mask=None,
                 and_mask_function=packed_sequence_mask_function(sequence_id),
             )
         else:
-            attn_bias = create_bidirectional_mask(
+            attention_mask = create_bidirectional_mask(
                 config=self.config,
                 inputs_embeds=hidden_states,
                 attention_mask=attention_mask,
@@ -397,7 +387,7 @@ class ESMCModel(ESMCPreTrainedModel):
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states,
-                attn_bias,
+                attention_mask,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
