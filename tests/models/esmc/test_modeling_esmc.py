@@ -15,8 +15,8 @@
 
 import unittest
 
-from transformers import ESMCConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers import AutoTokenizer, ESMCConfig, is_torch_available
+from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -189,13 +189,63 @@ class ESMCModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @slow
 @require_torch
 class ESMCModelIntegrationTest(unittest.TestCase):
-    def test_inference_masked_lm(self):
-        model = ESMCForMaskedLM.from_pretrained("biohub/ESMC-300M").to(torch_device).eval()
-        from transformers import AutoTokenizer
+    checkpoint = "biohub/ESMC-300M"
+    sequence = "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ"
 
-        tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
-        inputs = tokenizer(["MKTAYIAKQR"], return_tensors="pt").to(torch_device)
+    def test_inference_masked_lm(self):
+        model = ESMCForMaskedLM.from_pretrained(self.checkpoint, dtype=torch.bfloat16).to(torch_device).eval()
+        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        inputs = tokenizer([self.sequence], return_tensors="pt").to(torch_device)
+
         with torch.no_grad():
             logits = model(**inputs).logits
+
         self.assertEqual(logits.shape, (1, inputs["input_ids"].shape[1], model.config.vocab_size))
         self.assertTrue(torch.isfinite(logits).all())
+
+        # fmt: off
+        expected_slice = Expectations(
+            {
+                (None, None): torch.tensor([
+                    [-36.000, -36.000, -36.000, 14.250, 21.250, 20.125],
+                    [-29.750, -29.750, -29.875, 22.500, 28.125, 27.750],
+                    [-31.250, -31.250, -31.250, 21.250, 27.500, 27.125],
+                ]),
+                ("cpu", None): torch.tensor([
+                    [-36.000, -36.000, -36.250, 14.250, 21.375, 20.125],
+                    [-29.875, -29.875, -29.875, 22.500, 28.125, 27.750],
+                    [-31.250, -31.250, -31.250, 21.125, 27.500, 27.125],
+                ]),
+            }
+        ).get_expectation()
+        # fmt: on
+        torch.testing.assert_close(logits[0, 1:4, :6].float().cpu(), expected_slice, rtol=1e-2, atol=0.5)
+
+    def test_inference_last_hidden_state(self):
+        model = ESMCModel.from_pretrained(self.checkpoint, dtype=torch.bfloat16).to(torch_device).eval()
+        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        inputs = tokenizer([self.sequence], return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            last_hidden_state = model(**inputs).last_hidden_state
+
+        self.assertEqual(last_hidden_state.shape, (1, inputs["input_ids"].shape[1], model.config.hidden_size))
+        self.assertTrue(torch.isfinite(last_hidden_state).all())
+
+        # fmt: off
+        expected_slice = Expectations(
+            {
+                (None, None): torch.tensor([
+                    [ 0.006805, -0.008179, 0.038574, 0.038330, 0.011841, 0.039307],
+                    [-0.016113, -0.017090, 0.008972, 0.027832, 0.003937, 0.071777],
+                    [-0.003204, -0.026367, 0.002411, 0.024170, 0.025024, 0.047852],
+                ]),
+                ("cpu", None): torch.tensor([
+                    [ 0.007080, -0.008179, 0.038574, 0.038574, 0.011597, 0.039307],
+                    [-0.015991, -0.016968, 0.008911, 0.027710, 0.003784, 0.071777],
+                    [-0.003159, -0.026489, 0.002502, 0.024170, 0.024902, 0.047852],
+                ]),
+            }
+        ).get_expectation()
+        # fmt: on
+        torch.testing.assert_close(last_hidden_state[0, 1:4, :6].float().cpu(), expected_slice, rtol=1e-2, atol=1e-2)
