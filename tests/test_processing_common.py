@@ -100,6 +100,7 @@ class ProcessorTesterMixin:
     model_id = (
         None  # Optional: set this to load from a specific pretrained model instead of creating generic components
     )
+    tiny_model_id = None  # Optional: set this to a lightweight model for memory-sensitive tests
     text_input_name = "input_ids"
     images_input_name = "pixel_values"
     videos_input_name = "pixel_values_videos"
@@ -150,6 +151,14 @@ class ProcessorTesterMixin:
         cls._setup_test_attributes(processor)
         processor.save_pretrained(cls.tmpdirname)
 
+        # If tiny_model_id is specified, set up a lightweight processor for most tests
+        if cls.tiny_model_id is not None:
+            cls.tiny_tmpdirname = tempfile.mkdtemp()
+            tiny_processor = cls._setup_from_pretrained(cls.tiny_model_id)
+            tiny_processor.save_pretrained(cls.tiny_tmpdirname)
+        else:
+            cls.tiny_tmpdirname = None
+
     @classmethod
     def _setup_test_attributes(cls, processor):
         # can be overriden in the child class to define more class attributes
@@ -160,20 +169,36 @@ class ProcessorTesterMixin:
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
-        """Load all components from a pretrained model."""
+        """Load all components from model_id to build the processor.
 
+        For each component not covered by a _setup_<attribute>() hook, loading is attempted
+        from model_id first. If that fails and cls.model_id differs from model_id (i.e. we are
+        setting up a tiny fixture repo), the component falls back to cls.model_id. This allows
+        tiny repos that only contain a subset of components (e.g. just the tokenizer) to be used
+        while the remaining components are pulled from the full pretrained model.
+        """
         # check if there are any custom components to setup
         custom_components = {}
         for attribute in cls.processor_class.get_attributes():
             if hasattr(cls, f"_setup_{attribute}"):
                 custom_method = getattr(cls, f"_setup_{attribute}")
                 custom_components[attribute] = custom_method()
-        # if there is one custom component, we need to add all the other ones (with from_pretrained)
-        if custom_components:
+
+        # Load remaining components individually when needed: either because some custom
+        # components were provided (all must be passed together), or because model_id is a
+        # tiny fixture repo (model_id != cls.model_id) where some components may be missing
+        # and need to fall back to cls.model_id.
+        needs_individual_loading = bool(custom_components) or (
+            cls.model_id is not None and model_id != cls.model_id
+        )
+        if needs_individual_loading:
             for attribute in cls.processor_class.get_attributes():
                 if attribute not in custom_components:
                     component_class = cls._get_component_class_from_processor(attribute)
-                    custom_components[attribute] = component_class.from_pretrained(model_id)
+                    try:
+                        custom_components[attribute] = component_class.from_pretrained(model_id)
+                    except Exception:
+                        custom_components[attribute] = component_class.from_pretrained(cls.model_id)
 
         kwargs.update(cls.prepare_processor_dict())
         processor = cls.processor_class.from_pretrained(model_id, **custom_components, **kwargs)
@@ -348,6 +373,8 @@ class ProcessorTesterMixin:
         """Clean up the temporary directory."""
         if hasattr(cls, "tmpdirname"):
             shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+        if hasattr(cls, "tiny_tmpdirname") and cls.tiny_tmpdirname is not None:
+            shutil.rmtree(cls.tiny_tmpdirname, ignore_errors=True)
 
     @staticmethod
     def prepare_processor_dict():
@@ -376,9 +403,10 @@ class ProcessorTesterMixin:
 
         return components
 
-    def get_processor(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
-        return processor
+    def get_processor(self, use_full=False):
+        if not use_full and self.tiny_tmpdirname is not None:
+            return self.processor_class.from_pretrained(self.tiny_tmpdirname)
+        return self.processor_class.from_pretrained(self.tmpdirname)
 
     def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
         if isinstance(modalities, str):

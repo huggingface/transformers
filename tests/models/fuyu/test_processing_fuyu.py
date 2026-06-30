@@ -38,15 +38,7 @@ if is_torch_available():
 class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = FuyuProcessor
     model_id = "adept/fuyu-8b"
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        # Use a tiny tokenizer fixture (504 tokens) instead of the full adept/fuyu-8b
-        # tokenizer (262,144 tokens, ~300 MB) to reduce memory pressure in the
-        # inherited serialization round-trip tests.
-        from transformers import AutoTokenizer
-
-        return AutoTokenizer.from_pretrained("hf-internal-testing/fuyu-tiny-tokenizer")
+    tiny_model_id = "hf-internal-testing/fuyu-tiny-tokenizer"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -76,7 +68,6 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
 
-    @unittest.skip("Requires full adept/fuyu-8b tokenizer vocabulary")
     def test_fuyu_processing(self):
         """
         Test to ensure that the standard processing on a gold example matches adept's code.
@@ -91,7 +82,6 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         torch.testing.assert_close(one_image_bus_model_inputs["image_patches_indices"], EXPECTED_IMAGE_PATCH_INPUTS)
         torch.testing.assert_close(one_image_bus_model_inputs["input_ids"], EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS)
 
-    @unittest.skip("Requires full adept/fuyu-8b tokenizer vocabulary")
     def test_fuyu_processing_no_image(self):
         """
         Test to check processor works with just text input
@@ -100,7 +90,6 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_outputs = self.get_component("tokenizer")(self.text_prompt)
         self.assertEqual(processor_outputs["input_ids"], tokenizer_outputs["input_ids"])
 
-    @unittest.skip("Requires full adept/fuyu-8b tokenizer vocabulary")
     def test_fuyu_processing_no_text(self):
         """
         Test to check processor works with just image input
@@ -137,7 +126,6 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         processor_outputs = self.get_processor()(images=self.bus_image_pil)
         self.assertTrue((processor_outputs["image_patches_indices"] == EXPECTED_IMAGE_PATCH_INPUTS).all())
 
-    @unittest.skip("Requires full adept/fuyu-8b tokenizer vocabulary")
     def test_fuyu_processing_multiple_image_sample(self):
         """
         Test to check processor works with multiple image inputs for a single text input
