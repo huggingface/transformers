@@ -862,7 +862,7 @@ class TrackioCallbackTest(unittest.TestCase):
         callback.on_train_end(args, state, control, model=model)
         # Simulate evaluation after training
         callback.on_log(args, state, control, model=model, logs={"eval_loss": 0.5})
-
+        # Trackio is reinitialized for the evaluation log, hence the call count should be 2
         self.assertEqual(fake_trackio.init.call_count, 2)
         fake_trackio.finish.assert_called_once()
         self.assertEqual(
