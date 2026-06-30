@@ -45,6 +45,10 @@ removals as we follow upstream.
 | [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO, …) |
 | [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)          |
 
+[`AutoHfExporter`] picks the right exporter from a config and [`AutoExportConfig`] picks the right
+config class from a dict — the same auto-class idiom the rest of `transformers` uses, useful when
+the backend is selected at runtime rather than hard-coded in the call site.
+
 ## Installation
 
 <hfoptions id="exporters-install">

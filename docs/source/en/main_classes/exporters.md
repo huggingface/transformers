@@ -24,6 +24,14 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 </Tip>
 
+## AutoHfExporter
+
+[[autodoc]] exporters.auto.AutoHfExporter
+
+## AutoExportConfig
+
+[[autodoc]] exporters.auto.AutoExportConfig
+
 ## HfExporter
 
 [[autodoc]] exporters.base.HfExporter

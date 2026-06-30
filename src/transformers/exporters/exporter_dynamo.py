@@ -190,7 +190,8 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
 # Each `@register_patch("dynamo", *dotted_paths)` decorator targets one or
 # more `Class.method` paths and wraps a `factory(original) -> replacement`.
 # Multiple paths share the same factory when the same method shape needs to be
-# swapped on several classes (e.g. `_update_mamba_mask` on Jamba/Bamba/…).
+# swapped across several classes (e.g. `_reshaped_vision_attention_forward`
+# applied to every chunked-vision attention class — see the long list below).
 
 
 @register_patch("dynamo", "transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier")
@@ -313,6 +314,10 @@ def _reshaped_vision_attention_forward(
         value_states = v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
 
     if position_embeddings is not None:
+        # Each vision encoder ships its own ``apply_rotary_pos_emb_vision`` in its modeling file
+        # (Qwen2-VL's takes (q, k, cos, sin), Qwen2.5/3-Omni's takes (x, rotary_emb), etc.). Look
+        # it up on the model's own module so this patch stays signature-agnostic across the
+        # ~19 attention classes it's installed on.
         apply_rotary_pos_emb_vision = sys.modules[type(self).__module__].apply_rotary_pos_emb_vision
         if isinstance(position_embeddings, (tuple, list)):
             # (cos, sin) tuple convention — most VL encoders.

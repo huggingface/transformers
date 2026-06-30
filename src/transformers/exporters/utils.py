@@ -143,14 +143,15 @@ def register_patch(backend: str, *paths: str):
     """Append the decorated `factory(original)` to `_PATCHES[backend]`, once per `path`.
 
     Each `path` is a dotted Python path like `"torch.where"`, `"torch.Tensor.unsqueeze"`,
-    or `"transformers.models.jamba.modeling_jamba.JambaModel._update_mamba_mask"`. The
-    rightmost segment is the attribute to swap; the rest is the object that owns it.
+    or `"transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier"`.
+    The rightmost segment is the attribute to swap; the rest is the object that owns it.
     Paths are resolved at decoration time — submodules are imported as needed, falling
     back to `getattr` for class attributes. A path that fails to resolve (e.g. the backend
     isn't installed) is silently skipped so the module still imports.
 
     Passing multiple paths registers the SAME factory against each — useful for swapping
-    the same method on several classes (e.g. `_update_mamba_mask` on Jamba/Bamba/…).
+    the same method or torch op across several call sites (e.g. ``torch.unsqueeze`` +
+    ``torch.Tensor.unsqueeze``, or one vision-attention forward across N model classes).
     """
 
     def decorator(fn):
