@@ -28,7 +28,7 @@ import shutil
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from transformers import (
     DefaultFlowCallback,
@@ -865,7 +865,13 @@ class TrackioCallbackTest(unittest.TestCase):
 
         self.assertEqual(fake_trackio.init.call_count, 2)
         fake_trackio.finish.assert_called_once()
-        fake_trackio.log.assert_called_once_with({"eval/loss": 0.5, "train/global_step": 5})
+        self.assertEqual(
+            fake_trackio.log.call_args_list,
+            [
+                call({"train/global_step": 5}),
+                call({"eval/loss": 0.5, "train/global_step": 5}),
+            ],
+        )
 
 
 class KubeflowCallbackTest(unittest.TestCase):
