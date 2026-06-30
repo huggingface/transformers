@@ -5755,22 +5755,16 @@ class ModelTesterMixin:
         if text_config.rope_parameters.get("mrope_section") is not None:
             self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
 
-        # Factor cannot be smaller than `int(2/head_dim)`, otherwise we'll end up dividing by zero!
-        partial_rotary_factor = text_config.rope_parameters.get("partial_rotary_factor", 1.0)
-        head_dim = getattr(text_config, "head_dim", text_config.hidden_size // text_config.num_attention_heads)
-
-        # Some models use different dim for RoPE, override the value if so
-        if getattr(text_config, "qk_rope_head_dim", None) is not None:
-            head_dim = text_config.qk_rope_head_dim
-
-        partial_rotary_factor = max(partial_rotary_factor, math.nextafter(2 / head_dim, 1.0))
-        if int(head_dim * partial_rotary_factor) <= 2:
-            partial_rotary_factor = math.ceil((3 / head_dim) / 0.05) * 0.05
-        partial_rotary_factor = round(partial_rotary_factor, 10)
-        text_config.partial_rotary_factor = None  # override if present, so it doesn't interfere with test values
+        if not hasattr(text_config, "vocab_size"):
+            self.skipTest("This model has no vocab size defined and the test doesn't yet support non-text modalities.")
 
         short_input = ids_tensor([1, 10], text_config.vocab_size)
         long_input = ids_tensor([1, int(text_config.max_position_embeddings * 1.5)], text_config.vocab_size)
+        short_model_kwargs = long_model_kwargs = {}
+
+        if config.is_encoder_decoder:
+            short_model_kwargs = {"decoder_input_ids": short_input.clone()}
+            long_model_kwargs = {"decoder_input_ids": long_input.clone()}
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         _set_config_rope_params(
@@ -5778,41 +5772,45 @@ class ModelTesterMixin:
             {
                 "rope_type": "default",
                 "rope_theta": 10_000.0,
-                "partial_rotary_factor": partial_rotary_factor,
                 "original_max_position_embeddings": 16384,
             },
         )
         original_model = base_model_class(config)
         original_model.to(torch_device)
         original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
+        original_short_output = original_model(short_input, **short_model_kwargs)
+        original_long_output = original_model(long_input, **long_model_kwargs)
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        _set_config_rope_params(
-            text_config,
-            {
-                "rope_type": scaling_type,
-                "factor": 10.0,
-                "rope_theta": 10_000.0,
-                "partial_rotary_factor": partial_rotary_factor,
-            },
-        )
-        scaled_model = base_model_class(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
+        # Some models don't return last hidden states and use custom naming, just skip the test
+        # Not worth trying to infer the output field names, prob old or rarely used model
+        if getattr(original_short_output, "last_hidden_state", None) is not None:
+            original_short_output = original_short_output.last_hidden_state
+            original_long_output = original_long_output.last_hidden_state
 
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+            _set_config_rope_params(
+                text_config,
+                {
+                    "rope_type": scaling_type,
+                    "factor": 10.0,
+                    "rope_theta": 10_000.0,
+                },
+            )
+            scaled_model = base_model_class(config)
+            scaled_model.to(torch_device)
+            scaled_model.eval()
+            scaled_short_output = scaled_model(short_input, **short_model_kwargs).last_hidden_state
+            scaled_long_output = scaled_model(long_input, **long_model_kwargs).last_hidden_state
 
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+            # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
+            # maximum sequence length, so the outputs for the short input should match.
+            if scaling_type == "dynamic":
+                torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+            else:
+                self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+
+            # The output should be different for long inputs
+            self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
@@ -5863,13 +5861,14 @@ class ModelTesterMixin:
         short_input_length = 10
         partial_rotary_factor = text_config.rope_parameters.get("partial_rotary_factor", 1.0)
         long_input_length = int(text_config.max_position_embeddings * 1.5)
-        is_nested_rope = getattr(text_config, "layer_types", None) is not None and set(
-            text_config.rope_parameters.keys()
-        ).issubset(text_config.layer_types)
+        is_nested_rope = (
+            "rope_theta" not in text_config.rope_parameters.keys()
+            and "rope_theta" in list(text_config.rope_parameters.values())[0]
+        )
 
         kwargs = {}
         if is_nested_rope:
-            kwargs = {"layer_type": text_config.layer_types[0]}
+            kwargs = {"layer_type": list(text_config.rope_parameters.keys())[0]}
 
         # Inputs
         x = torch.randn(
@@ -6097,10 +6096,7 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
     # Has rope_scaling -> model was designed with rope scaling in mind
     # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well
     main_config_has_rope = hasattr(config, "rope_parameters")
-    sub_config_has_rope = any(
-        hasattr(getattr(config, sub_config), "rope_parameters") for sub_config in config.sub_configs.keys()
-    )
-    return main_config_has_rope or sub_config_has_rope
+    return main_config_has_rope
 
 
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:

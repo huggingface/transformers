@@ -248,6 +248,13 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
     def test_disk_offload_safetensors(self):
         pass
 
+    @unittest.skip(
+        reason="Model supports only proportional RoPE in full attn layers, can't modify it without breaking"
+    )
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
     # Tests designed specifically for `DiffusionGemma`, excluding generation tests.
     def test_tied_weights(self):
         """

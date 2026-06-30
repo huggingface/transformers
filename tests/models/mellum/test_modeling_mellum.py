@@ -44,6 +44,7 @@ class MellumModelTester(CausalLMModelTester):
     def __init__(self, parent):
         super().__init__(parent=parent)
         # Override for the TP plan tests.
+        self.layer_types = ["full_attention", "sliding_attention"]
         self.mlp_layer_types = ["dense", "sparse"]
 
 
