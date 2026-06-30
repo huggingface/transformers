@@ -760,6 +760,12 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
             **kwargs,
         )
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.text_model.set_input_embeddings(value)
+
     @can_return_tuple
     @auto_docstring
     def forward(

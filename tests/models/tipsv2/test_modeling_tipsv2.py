@@ -375,10 +375,6 @@ class Tipsv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="TIPSv2Model does not expose a single input embedding layer for the composite model.")
-    def test_model_get_set_embeddings(self):
-        pass
-
     @unittest.skip(
         reason="Inputs_embeds behavior is covered by the text tower; the composite model has image inputs too."
     )
