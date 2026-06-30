@@ -39,11 +39,11 @@ from update_pr_ci_dashboard_recap import (  # noqa: E402
     inject_ci_badge,
     prometheus_string,
     quality_job_failed,
+    recreate_ci_recap_comment,
     remove_marked_block,
     render_ci_badge,
     render_ci_recap,
     replace_marked_block,
-    update_or_create_ci_recap_comment,
 )
 
 
@@ -356,8 +356,8 @@ class DeleteOldCommentsTest(unittest.TestCase):
         self.assertEqual(request_mock.call_args.kwargs["method"], "DELETE")
 
 
-class UpdateOrCreateCiRecapCommentTest(unittest.TestCase):
-    def test_updates_existing_recap_comment(self):
+class RecreateCiRecapCommentTest(unittest.TestCase):
+    def test_deletes_existing_recap_comment_then_creates_new_one(self):
         comments = [
             {"id": 1, "body": "an unrelated comment"},
             {"id": 2, "body": f"{RECAP_START}\nold\n{RECAP_END}"},
@@ -367,12 +367,30 @@ class UpdateOrCreateCiRecapCommentTest(unittest.TestCase):
             patch.object(recap_mod, "github_paginate", return_value=comments),
             patch.object(recap_mod, "request_json") as request_mock,
         ):
-            update_or_create_ci_recap_comment("x/y", "t", 5, recap)
+            recreate_ci_recap_comment("x/y", "t", 5, recap)
 
-        request_mock.assert_called_once()
-        self.assertIn("/comments/2", request_mock.call_args.args[0])
-        self.assertEqual(request_mock.call_args.kwargs["method"], "PATCH")
-        self.assertEqual(request_mock.call_args.kwargs["payload"], {"body": recap})
+        self.assertEqual(request_mock.call_count, 2)
+        delete_call, post_call = request_mock.call_args_list
+        self.assertIn("/comments/2", delete_call.args[0])
+        self.assertEqual(delete_call.kwargs["method"], "DELETE")
+        self.assertIn("/issues/5/comments", post_call.args[0])
+        self.assertEqual(post_call.kwargs["method"], "POST")
+        self.assertEqual(post_call.kwargs["payload"], {"body": recap})
+
+    def test_deletes_all_existing_recap_comments_before_creating_new_one(self):
+        comments = [
+            {"id": 1, "body": f"{RECAP_START}\nold 1\n{RECAP_END}"},
+            {"id": 2, "body": f"{RECAP_START}\nold 2\n{RECAP_END}"},
+        ]
+        recap = f"{RECAP_START}\nnew\n{RECAP_END}"
+        with (
+            patch.object(recap_mod, "github_paginate", return_value=comments),
+            patch.object(recap_mod, "request_json") as request_mock,
+        ):
+            recreate_ci_recap_comment("x/y", "t", 5, recap)
+
+        self.assertEqual(request_mock.call_count, 3)
+        self.assertEqual([call.kwargs["method"] for call in request_mock.call_args_list], ["DELETE", "DELETE", "POST"])
 
     def test_creates_recap_comment_when_missing(self):
         recap = f"{RECAP_START}\nnew\n{RECAP_END}"
@@ -380,7 +398,7 @@ class UpdateOrCreateCiRecapCommentTest(unittest.TestCase):
             patch.object(recap_mod, "github_paginate", return_value=[{"id": 1, "body": "unrelated"}]),
             patch.object(recap_mod, "request_json") as request_mock,
         ):
-            update_or_create_ci_recap_comment("x/y", "t", 5, recap)
+            recreate_ci_recap_comment("x/y", "t", 5, recap)
 
         request_mock.assert_called_once()
         self.assertIn("/issues/5/comments", request_mock.call_args.args[0])

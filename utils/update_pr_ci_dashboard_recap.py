@@ -41,6 +41,7 @@ OLD_DASHBOARD_COMMENT_MARKERS = (
 
 
 def log_workflow_run(workflow_run):
+    """Print the GitHub Actions workflow_run payload fields used for debugging."""
     print("=== Triggering PR CI workflow_run info ===")
     print(f"  Run ID:           {workflow_run.get('id')}")
     print(f"  Run number:       {workflow_run.get('run_number')}")
@@ -58,6 +59,7 @@ def log_workflow_run(workflow_run):
 
 
 def request_json(url, token=None, method="GET", payload=None):
+    """Send an HTTP request and parse the response body as JSON."""
     headers = {
         "Accept": "application/vnd.github+json" if "api.github.com" in url else "application/json",
         "User-Agent": "transformers-ci-dashboard-recap",
@@ -85,6 +87,7 @@ def request_json(url, token=None, method="GET", payload=None):
 
 
 def github_paginate(path, token, key=None):
+    """Return all items from a paginated GitHub API endpoint."""
     page = 1
     items = []
     separator = "&" if "?" in path else "?"
@@ -102,10 +105,12 @@ def github_paginate(path, token, key=None):
 
 
 def prometheus_string(value):
+    """Escape a value for use inside a Prometheus label selector string."""
     return str(value).replace("\\", "\\\\").replace('"', '\\"')
 
 
 def query_prometheus(query):
+    """Run a Prometheus query through the Grafana datasource proxy."""
     url = f"{GRAFANA_QUERY_URL}?{urllib.parse.urlencode({'query': query})}"
     payload = request_json(url)
     if payload.get("status") != "success":
@@ -114,6 +119,7 @@ def query_prometheus(query):
 
 
 def first_value(result):
+    """Return the first Prometheus sample value as a float, if present."""
     if not result:
         return None
     try:
@@ -123,6 +129,7 @@ def first_value(result):
 
 
 def get_latest_run_id(pr_number):
+    """Return the latest pytest dashboard run id recorded for a PR."""
     pr = prometheus_string(pr_number)
     result = query_prometheus(f'topk(1, last_over_time(pytest_run_start_time_seconds{{pr="{pr}"}}[90d]))')
     if not result:
@@ -131,6 +138,7 @@ def get_latest_run_id(pr_number):
 
 
 def get_metric_value(query, fallback_query=None, fallback_on_zero=False):
+    """Return a metric value, optionally using a fallback query when the primary value is missing."""
     value = first_value(query_prometheus(query))
     if (value is None or (fallback_on_zero and value == 0)) and fallback_query is not None:
         return first_value(query_prometheus(fallback_query))
@@ -138,6 +146,7 @@ def get_metric_value(query, fallback_query=None, fallback_on_zero=False):
 
 
 def get_ci_recap(pr_number, current_run_url, current_run_conclusion):
+    """Collect the compact CI metrics displayed in the PR recap comment."""
     pr = prometheus_string(pr_number)
     latest_run_id = get_latest_run_id(pr_number)
     if latest_run_id is None:
@@ -168,12 +177,14 @@ def get_ci_recap(pr_number, current_run_url, current_run_conclusion):
 
 
 def format_number(value):
+    """Format a numeric metric for compact Markdown display."""
     if value is None:
         return "n/a"
     return f"{int(value):,}" if value.is_integer() else f"{value:,.2f}"
 
 
 def format_duration(seconds):
+    """Format a duration in seconds as a short human-readable value."""
     if seconds is None:
         return "n/a"
     rounded = round(seconds)
@@ -188,6 +199,7 @@ def format_duration(seconds):
 
 
 def render_ci_badge(pr_number, dashboard_url):
+    """Render the CI dashboard badge block inserted at the top of the PR body."""
     badge_url = f"{BADGE_URL}?pr={pr_number}"
     return "\n".join(
         [
@@ -199,6 +211,7 @@ def render_ci_badge(pr_number, dashboard_url):
 
 
 def render_ci_recap(dashboard_url, recap, workflow_run, quality_failed):
+    """Render the Markdown body of the CI recap comment."""
     lines = [
         RECAP_START,
         "",
@@ -244,6 +257,7 @@ def render_ci_recap(dashboard_url, recap, workflow_run, quality_failed):
 
 
 def replace_marked_block(body, start_marker, end_marker, replacement):
+    """Replace all Markdown regions delimited by marker comments, if any exist."""
     existing_body = body or ""
     pattern = re.compile(f"{re.escape(start_marker)}[\\s\\S]*?{re.escape(end_marker)}")
     if pattern.search(existing_body):
@@ -252,6 +266,7 @@ def replace_marked_block(body, start_marker, end_marker, replacement):
 
 
 def remove_marked_block(body, start_marker, end_marker):
+    """Remove all marked Markdown regions from a body and normalize blank lines."""
     updated = replace_marked_block(body, start_marker, end_marker, "")
     if updated is None:
         return body or ""
@@ -259,6 +274,7 @@ def remove_marked_block(body, start_marker, end_marker):
 
 
 def inject_ci_badge(body, badge):
+    """Insert or replace the CI dashboard badge block in a PR body."""
     replaced = replace_marked_block(body, BADGE_START, BADGE_END, badge)
     if replaced is not None:
         return replaced
@@ -267,11 +283,13 @@ def inject_ci_badge(body, badge):
 
 
 def find_open_pr_for_sha(repo, token, head_sha):
+    """Find the open pull request whose head commit matches a workflow run SHA."""
     prs = github_paginate(f"/repos/{repo}/pulls?state=open", token)
     return next((pr for pr in prs if pr["head"]["sha"] == head_sha), None)
 
 
 def delete_old_dashboard_comments(repo, token, pr_number):
+    """Delete legacy dashboard comments created before the recap marker flow."""
     comments = github_paginate(f"/repos/{repo}/issues/{pr_number}/comments", token)
     for comment in comments:
         body = comment.get("body") or ""
@@ -281,17 +299,17 @@ def delete_old_dashboard_comments(repo, token, pr_number):
             )
 
 
-def update_or_create_ci_recap_comment(repo, token, pr_number, recap):
+def recreate_ci_recap_comment(repo, token, pr_number, recap):
+    """Delete existing recap comments and create a fresh one at the bottom of the PR timeline."""
     comments = github_paginate(f"/repos/{repo}/issues/{pr_number}/comments", token)
-    existing_comment = next((comment for comment in comments if RECAP_START in (comment.get("body") or "")), None)
-    if existing_comment is not None:
+    for comment in comments:
+        if RECAP_START not in (comment.get("body") or ""):
+            continue
         request_json(
-            f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{existing_comment['id']}",
+            f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}",
             token=token,
-            method="PATCH",
-            payload={"body": recap},
+            method="DELETE",
         )
-        return
 
     request_json(
         f"{GITHUB_API_URL}/repos/{repo}/issues/{pr_number}/comments",
@@ -302,12 +320,14 @@ def update_or_create_ci_recap_comment(repo, token, pr_number, recap):
 
 
 def quality_job_failed(repo, token, run_id):
+    """Return whether the PR CI workflow's code quality job failed."""
     jobs = github_paginate(f"/repos/{repo}/actions/runs/{run_id}/jobs", token, key="jobs")
     quality_job = next((job for job in jobs if "Check code quality" in job["name"]), None)
     return quality_job is not None and quality_job.get("conclusion") == "failure"
 
 
 def main():
+    """Entrypoint for the workflow_run-triggered GitHub Action."""
     token = os.environ["GITHUB_TOKEN"]
     repo = os.environ["GITHUB_REPOSITORY"]
     event_path = os.environ["GITHUB_EVENT_PATH"]
@@ -349,7 +369,7 @@ def main():
         method="PATCH",
         payload={"body": updated_body},
     )
-    update_or_create_ci_recap_comment(repo, token, pr["number"], recap_body)
+    recreate_ci_recap_comment(repo, token, pr["number"], recap_body)
 
 
 if __name__ == "__main__":
