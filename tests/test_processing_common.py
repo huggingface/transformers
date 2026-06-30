@@ -201,7 +201,12 @@ class ProcessorTesterMixin:
                         custom_components[attribute] = component_class.from_pretrained(cls.model_id)
 
         kwargs.update(cls.prepare_processor_dict())
-        processor = cls.processor_class.from_pretrained(model_id, **custom_components, **kwargs)
+        if needs_individual_loading:
+            # All components are already loaded; construct directly to avoid from_pretrained
+            # re-attempting to load missing components from model_id.
+            processor = cls.processor_class(**custom_components, **kwargs)
+        else:
+            processor = cls.processor_class.from_pretrained(model_id, **custom_components, **kwargs)
         return processor
 
     @classmethod
