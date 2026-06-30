@@ -645,11 +645,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "Qwen2VLModel": [
-            WeightRenaming(source_patterns=r"^model\.layers", target_patterns="model.language_model.layers"),
-            WeightRenaming(source_patterns=r"^model\.norm", target_patterns="model.language_model.norm"),
-            WeightRenaming(
-                source_patterns=r"^model\.embed_tokens", target_patterns="model.language_model.embed_tokens"
-            ),
+            PrefixChange(prefix_to_add="language_model", model_prefix="model"),
         ],
         "Qwen2VLForConditionalGeneration": [
             WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
