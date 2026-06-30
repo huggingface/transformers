@@ -199,6 +199,25 @@ def _patch_classifier_cast(_original):
     return lambda self, *args, **kwargs: None
 
 
+@register_patch("dynamo", "torch.nn.functional.scaled_dot_product_attention")
+def _patch_sdpa(original):
+    """Route SDPA through the MATH backend during tracing — CPU SDPA's flash/efficient paths
+    guard on ``Eq(batch, 1)`` (upstream https://github.com/pytorch/pytorch/issues/180202), which
+    trips ``GuardOnDataDependentSymNode`` whenever the batch dim comes from a data-dependent op
+    like ``pixel_values[bool_mask]`` (Idefics2/3 and most VLMs). The MATH backend decomposes to
+    matmul+softmax with no batch-1 dispatch, so the guard never fires. ``torch.export`` bakes the
+    decomposed ops into the graph, so this only affects the trace — there's no SDPA op left at
+    runtime to choose a backend.
+    """
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+
+    def patch(*args, **kwargs):
+        with sdpa_kernel(SDPBackend.MATH):
+            return original(*args, **kwargs)
+
+    return patch
+
+
 @register_patch(
     "dynamo",
     # Canonical definition + the public re-export.
