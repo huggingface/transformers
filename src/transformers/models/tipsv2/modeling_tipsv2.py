@@ -20,7 +20,7 @@
 
 import collections.abc
 import math
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -136,48 +136,49 @@ class Tipsv2VisionEmbeddings(nn.Module):
         - https://github.com/facebookresearch/dino/blob/main/vision_transformer.py
         - https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py
         """
-        # TODO(guarin): check if embeddings_type conversion necessary
-        embeddings_dtype = embeddings.dtype
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
 
-        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        # Skip interpolation for matching dimensions (unless tracing)
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings.to(dtype=embeddings_dtype)
+            return self.position_embeddings
 
-        class_pos_embed = self.position_embeddings[:, :1]
+        # Handle class token and patch embeddings separately
+        class_pos_embed = self.position_embeddings[:, 0]
         patch_pos_embed = self.position_embeddings[:, 1:]
-
         dim = embeddings.shape[-1]
 
-        patch_size = self.patch_size if isinstance(self.patch_size, Iterable) else (self.patch_size, self.patch_size)
-        new_height = height // patch_size[0]
-        new_width = width // patch_size[1]
+        # Calculate new dimensions
+        height = height // self.config.patch_size
+        width = width // self.config.patch_size
 
+        # Reshape for interpolation
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
-        # Interpolation kwargs different from Dinov2
-        interpolate_kwargs = {}
-        if self.config.interpolate_offset:
-            scale_height = float(new_height + self.config.interpolate_offset) / sqrt_num_positions
-            scale_width = float(new_width + self.config.interpolate_offset) / sqrt_num_positions
-            interpolate_kwargs["scale_factor"] = (scale_height, scale_width)
-        else:
-            interpolate_kwargs["size"] = (torch_int(new_height), torch_int(new_width))
-
+        # Store original dtype for restoration after interpolation
         target_dtype = patch_pos_embed.dtype
+
+        # Interpolate at float32 precision
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.to(torch.float32),
-            mode="bilinear",
-            antialias=self.config.interpolate_antialias,
-            **interpolate_kwargs,
+            patch_pos_embed.to(dtype=torch.float32),
+            size=(torch_int(height), torch_int(width)),  # Explicit size instead of scale_factor
+            mode="bilinear",  # Different from Dinov2 which uses bicubic interpolation
+            align_corners=False,
+            antialias=True,
         ).to(dtype=target_dtype)
 
+        # Validate output dimensions if not tracing
+        if not torch.jit.is_tracing():
+            if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
+                raise ValueError("Width or height does not match with the interpolated position embeddings")
+
+        # Reshape back to original format
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
 
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1).to(dtype=embeddings_dtype)
+        # Combine class and patch embeddings
+        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape

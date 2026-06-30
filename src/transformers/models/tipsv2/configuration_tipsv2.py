@@ -41,10 +41,6 @@ class Tipsv2VisionConfig(BackboneConfigMixin, PreTrainedConfig):
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
         DINOv2-with-registers compatibility flag serialized for config parity. It is not used by
         [`Tipsv2VisionModel`].
-    interpolate_antialias (`bool`, *optional*, defaults to `True`):
-        Whether to use antialiasing when interpolating vision position embeddings.
-    interpolate_offset (`float`, *optional*, defaults to `0.0`):
-        Offset to use when resizing vision position embeddings.
 
     Example:
 
@@ -81,8 +77,6 @@ class Tipsv2VisionConfig(BackboneConfigMixin, PreTrainedConfig):
     apply_layernorm: bool = True
     reshape_hidden_states: bool = True
     base_config_key = "vision_config"
-    interpolate_antialias: bool = True
-    interpolate_offset: float = 0.0
 
     def __post_init__(self, **kwargs):
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
