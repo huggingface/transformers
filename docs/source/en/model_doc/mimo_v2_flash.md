@@ -14,7 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 *This model was contributed to Hugging Face Transformers on 2026-06-30.*
-*This model was released on 2025-12-17 and added to Hugging Face Transformers on 2026-05-05.*
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
