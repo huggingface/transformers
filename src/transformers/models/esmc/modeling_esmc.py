@@ -357,14 +357,6 @@ class ESMCModel(ESMCPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         if sequence_id is not None:
-            # Chain-aware attention: a token attends only to tokens sharing its ``sequence_id``
-            # (block-diagonal), expressed as an additional ``and`` mask over the bidirectional mask.
-            # ``attention_mask`` is ignored here -- padding is encoded as ``sequence_id == -1``.
-            # Flash attention can't represent this block-diagonal mask: it would be silently dropped,
-            # letting tokens attend across chains (and to padding). So ``sequence_id`` requires a
-            # non-flash backend. This is a config-only check (no data inspection), so it stays
-            # ``torch.compile`` / ``torch.export`` friendly -- unlike inspecting the data to decide,
-            # which would either break tracing or silently miss the drop under a captured graph.
             if is_flash_attention_requested(self.config):
                 raise ValueError(
                     "`sequence_id` (chain-aware attention) is not supported with flash attention, "
