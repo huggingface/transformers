@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,17 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
+
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ..auto import AutoModel, AutoModelForCausalLM
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...cache_utils import Cache
-from ...modeling_utils import PreTrainedModel
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -31,17 +28,14 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     Wav2Vec2BaseModelOutput,
 )
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
     can_return_tuple,
 )
+from ..auto import AutoModel, AutoModelForCausalLM
+from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2Encoder, Wav2Vec2EncoderLayer, Wav2Vec2Model, Wav2Vec2PreTrainedModel
 from .configuration_omniasr import OmniASRCTCConfig, OmniASRLLMConfig
-from ..wav2vec2.modeling_wav2vec2 import (
-    Wav2Vec2PreTrainedModel,
-    Wav2Vec2EncoderLayer,
-    Wav2Vec2Encoder,
-    Wav2Vec2Model
-)
 
 
 # Different from Wav2Vec2PositionalConvEmbedding: no weight norm, has residual, uses remove_pad instead of SamePadLayer
@@ -70,7 +64,6 @@ class OmniASRPositionalConvEmbedding(nn.Module):
 
 
 class OmniASREncoderLayer(Wav2Vec2EncoderLayer):
-
     # NOTE: original: https://github.com/facebookresearch/fairseq2/blob/a1f0c565a99d3cd3e3157678b5c48653e3d439f4/src/fairseq2/models/transformer/encoder_layer.py#L141
     def forward(
         self,
@@ -105,7 +98,6 @@ class OmniASREncoderLayer(Wav2Vec2EncoderLayer):
 
 
 class OmniASREncoder(Wav2Vec2Encoder):
-
     def forward(
         self,
         hidden_states,
@@ -124,7 +116,7 @@ class OmniASREncoder(Wav2Vec2Encoder):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
@@ -171,7 +163,6 @@ class OmniASREncoder(Wav2Vec2Encoder):
 
 
 class OmniASRPreTrainedModel(Wav2Vec2PreTrainedModel):
-
     def _init_weights(self, module):
         # TODO upstream change to `Wav2Vec2PreTrainedModel` for standard layers?
         PreTrainedModel._init_weights(self, module)
@@ -232,13 +223,13 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutput]:
+    ) -> tuple | CausalLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -342,28 +333,28 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         return audio_embeds
 
+    # Original: Original: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/model.py#L141
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        input_values: Optional[torch.Tensor] = None,
-        language_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        input_values: torch.Tensor | None = None,
+        language_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutputWithPast]:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
-        Original: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/model.py#L141
-        Input syntax: audio | lid_marker | lang_id | bos | [target_text | eos]
+        language_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Language IDs for the input audio. If not provided, the model defaults to a language-agnostic mode.
         """
 
         if inputs_embeds is None:
@@ -377,7 +368,9 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
             audio_embeds = self.get_audio_features(input_values)
             dtype = audio_embeds.dtype
 
-            language_id_token_batch = torch.full((batch_size, 1), self.language_token_id, dtype=torch.long, device=device)
+            language_id_token_batch = torch.full(
+                (batch_size, 1), self.language_token_id, dtype=torch.long, device=device
+            )
             bos_batch = torch.full((batch_size, 1), self.config.bos_token_id, dtype=torch.long, device=device)
 
             if language_ids is not None:
@@ -399,7 +392,6 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
 
             seq_len = inputs_embeds.shape[1]
             attention_mask = torch.ones(batch_size, seq_len, dtype=torch.long, device=device)
-            cache_position = torch.arange(seq_len, device=device)
 
         if labels is not None:
             # Training: append target_text + eos embeddings for teacher forcing
@@ -424,7 +416,6 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -444,6 +435,7 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
             eos_batch = torch.full((batch_size, 1), self.config.eos_token_id, dtype=torch.long, device=device)
             targets = torch.cat([labels, eos_batch], dim=1)
 
+            # TODO use self.loss_function instead?
             loss = nn.functional.cross_entropy(
                 input=target_logits.reshape(-1, target_logits.size(-1)),
                 target=targets.reshape(-1),

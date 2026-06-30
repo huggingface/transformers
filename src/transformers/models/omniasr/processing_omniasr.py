@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Processor class for OmniASR."""
-
-from typing import Optional, Union
 
 import torch
 
@@ -65,9 +62,9 @@ class OmniASRProcessor(ProcessorMixin):
     def __call__(
         self,
         audio=None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput], None] = None,
-        language: Optional[Union[str, list[str]]] = None,
-        sampling_rate: Optional[int] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        language: str | list[str] | None = None,
+        sampling_rate: int | None = None,
         **kwargs: Unpack[OmniASRProcessorKwargs],
     ):
         """

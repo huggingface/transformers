@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,43 +18,43 @@ Example of config from OmniASR-CTC-300M model
 
 Wav2Vec2AsrConfig(
     encoder_config=Wav2Vec2EncoderConfig(
-        model_dim=1024, 
-        max_seq_len=4096, 
-        feature_dim=512, 
-        use_fbank=False, 
-        first_pass_dropout_p=0.0, 
-        layer_norm_features=False, 
-        feature_extractor_layer_descs=[(512, 10, 5), (512, 3, 2), (512, 3, 2), (512, 3, 2), (512, 3, 2), (512, 2, 2), (512, 2, 2)], 
-        feature_extractor_bias=True, 
-        feature_extractor_layer_norm_convs=True, 
-        feature_grad_scale=0.1, 
-        num_fbank_channels=0, 
-        fbank_stride=0, 
-        sample_fbank_every_k=0, 
-        pos_encoder_type='conv', 
-        pos_encoder_depth=1, 
-        pos_conv_kernel_size=128, 
-        num_pos_conv_groups=16, 
-        use_conformer=False, 
-        num_encoder_layers=24, 
-        num_encoder_attn_heads=16, 
-        ffn_inner_dim=4096, 
-        dropout_p=0.0, 
-        attn_dropout_p=0.0, 
-        ffn_inner_dropout_p=0.1, 
-        layer_drop_p=0.1, 
-        norm_order=<TransformerNormOrder.PRE: 1>, 
+        model_dim=1024,
+        max_seq_len=4096,
+        feature_dim=512,
+        use_fbank=False,
+        first_pass_dropout_p=0.0,
+        layer_norm_features=False,
+        feature_extractor_layer_descs=[(512, 10, 5), (512, 3, 2), (512, 3, 2), (512, 3, 2), (512, 3, 2), (512, 2, 2), (512, 2, 2)],
+        feature_extractor_bias=True,
+        feature_extractor_layer_norm_convs=True,
+        feature_grad_scale=0.1,
+        num_fbank_channels=0,
+        fbank_stride=0,
+        sample_fbank_every_k=0,
+        pos_encoder_type='conv',
+        pos_encoder_depth=1,
+        pos_conv_kernel_size=128,
+        num_pos_conv_groups=16,
+        use_conformer=False,
+        num_encoder_layers=24,
+        num_encoder_attn_heads=16,
+        ffn_inner_dim=4096,
+        dropout_p=0.0,
+        attn_dropout_p=0.0,
+        ffn_inner_dropout_p=0.1,
+        layer_drop_p=0.1,
+        norm_order=<TransformerNormOrder.PRE: 1>,
         depthwise_conv_kernel_size=0
-    ), 
-    target_vocab_size=10288, 
-    final_dropout_p=0.0, 
-    use_masking=False, 
-    temporal_mask_span_len=10, 
-    max_temporal_mask_prob=0.0, 
-    min_num_temporal_mask_spans=2, 
-    spatial_mask_span_len=64, 
-    max_spatial_mask_prob=0.0, 
-    min_num_spatial_mask_spans=2
+    ),
+    target_vocab_size=10288,
+    final_dropout_p=0.0,
+    use_masking=False,
+    temporal_mask_span_len=10,
+    max_temporal_mask_prob=0.0,
+    min_num_temporal_mask_spans=2,
+    spatial_mask_span_len=64,
+    max_spatial_mask_prob=0.0,
+    min_num_spatial_mask_spans=
 )
 
 
@@ -64,100 +63,99 @@ Example of 300m model config from OmniASR-LLM-300M v2 model
 Wav2Vec2LlamaConfig(
     wav2vec2_asr_config=Wav2Vec2AsrConfig(
         encoder_config=Wav2Vec2EncoderConfig(
-            model_dim=1024, 
-            max_seq_len=4096, 
-            feature_dim=512, 
-            use_fbank=False, 
-            first_pass_dropout_p=0.0, 
-            layer_norm_features=False, 
-            feature_extractor_layer_descs=[(512, 10, 5), (512, 3, 2), (512, 3, 2), (512, 3, 2), (512, 3, 2), (512, 2, 2), (512, 2, 2)], 
-            feature_extractor_bias=True, 
-            feature_extractor_layer_norm_convs=True, 
-            feature_grad_scale=0.1, 
-            num_fbank_channels=0, 
-            fbank_stride=0, 
-            sample_fbank_every_k=0, 
-            pos_encoder_type='conv', 
-            pos_encoder_depth=1, 
-            pos_conv_kernel_size=128, 
-            num_pos_conv_groups=16, 
-            use_conformer=False, 
-            num_encoder_layers=24, 
-            num_encoder_attn_heads=16, 
-            ffn_inner_dim=4096, 
-            dropout_p=0.0, 
-            attn_dropout_p=0.0, 
-            ffn_inner_dropout_p=0.1, 
-            layer_drop_p=0.1, 
-            norm_order=<TransformerNormOrder.PRE: 1>, 
-            depthwise_conv_kernel_size=0), 
-        target_vocab_size=9812, 
-        final_dropout_p=0.0, 
-        use_masking=False, 
-        temporal_mask_span_len=10, 
-        max_temporal_mask_prob=0.0, 
-        min_num_temporal_mask_spans=2, 
-        spatial_mask_span_len=64, 
-        max_spatial_mask_prob=0.0, 
-        min_num_spatial_mask_spans=2), 
+            model_dim=1024,
+            max_seq_len=4096,
+            feature_dim=512,
+            use_fbank=False,
+            first_pass_dropout_p=0.0,
+            layer_norm_features=False,
+            feature_extractor_layer_descs=[(512, 10, 5), (512, 3, 2), (512, 3, 2), (512, 3, 2), (512, 3, 2), (512, 2, 2), (512, 2, 2)],
+            feature_extractor_bias=True,
+            feature_extractor_layer_norm_convs=True,
+            feature_grad_scale=0.1,
+            num_fbank_channels=0,
+            fbank_stride=0,
+            sample_fbank_every_k=0,
+            pos_encoder_type='conv',
+            pos_encoder_depth=1,
+            pos_conv_kernel_size=128,
+            num_pos_conv_groups=16,
+            use_conformer=False,
+            num_encoder_layers=24,
+            num_encoder_attn_heads=16,
+            ffn_inner_dim=4096,
+            dropout_p=0.0,
+            attn_dropout_p=0.0,
+            ffn_inner_dropout_p=0.1,
+            layer_drop_p=0.1,
+            norm_order=<TransformerNormOrder.PRE: 1>,
+            depthwise_conv_kernel_size=0),
+        target_vocab_size=9812,
+        final_dropout_p=0.0,
+        use_masking=False,
+        temporal_mask_span_len=10,
+        max_temporal_mask_prob=0.0,
+        min_num_temporal_mask_spans=2,
+        spatial_mask_span_len=64,
+        max_spatial_mask_prob=0.0,
+        min_num_spatial_mask_spans=2),
     llama_config=LLaMAConfig(
-        model_dim=4096, 
-        max_seq_len=8192, 
-        vocab_size=10288, 
-        pad_idx=1, 
-
-        tied_embeddings=False, 
-        num_layers=12, 
-        num_attn_heads=8, 
-        num_key_value_heads=8, 
-        ffn_inner_dim=4096, 
-        ffn_inner_dim_scale=0.6666666666666666, 
-        ffn_inner_dim_multiplier=1.0, 
-        ffn_inner_dim_multiple_of=256, 
-        rope_theta=10000.0, 
-        use_scaled_rope=False, 
+        model_dim=4096,
+        max_seq_len=8192,
+        vocab_size=10288,
+        pad_idx=1,
+        tied_embeddings=False,
+        num_layers=12,
+        num_attn_heads=8,
+        num_key_value_heads=8,
+        ffn_inner_dim=4096,
+        ffn_inner_dim_scale=0.6666666666666666,
+        ffn_inner_dim_multiplier=1.0,
+        ffn_inner_dim_multiple_of=256,
+        rope_theta=10000.0,
+        use_scaled_rope=False,
         rope_scale=LLaMARoPEScaleConfig(
-            factor=8.0, 
-            frequency_factors=(1.0, 4.0), 
+            factor=8.0,
+            frequency_factors=(1.0, 4.0),
             original_context_length=8192),
-        dropout_p=0.1, 
-        init_std=None, 
-        init_std_scale='layer', 
-        shard_embed_dim=True), 
+        dropout_p=0.1,
+        init_std=None,
+        init_std_scale='layer',
+        shard_embed_dim=True),
     beam_search_config=Wav2Vec2LlamaBeamSearchConfig(
-        nbest=5, 
-        length_norm=False, 
-        compression_window=100, 
-        compression_threshold=4.0), 
+        nbest=5,
+        length_norm=False,
+        compression_window=100,
+        compression_threshold=4.0),
     streaming_config=Wav2Vec2LlamaStreamingConfig(
-        is_streaming=False, 
-        segment_secs=15.0, 
-        sample_rate=16000, 
-        n_context_segments=1, 
-        text_tokenizer='', 
-        min_audio_ms=25), 
-    encoder_stacking=1, 
-    frozen_encoder=1, 
-    lang_embeddings_p=0.5, 
-    language_column_name='lang', 
-    context_text_only=False, 
-    n_special_tokens=1, 
-    unk_idx=3, 
-    bos_idx=0, 
-    eos_idx=2, 
-    pad_idx=1, 
-    boh_idx=None, 
+        is_streaming=False,
+        segment_secs=15.0,
+        sample_rate=16000,
+        n_context_segments=1,
+        text_tokenizer='',
+        min_audio_ms=25),
+    encoder_stacking=1,
+    frozen_encoder=1,
+    lang_embeddings_p=0.5,
+    language_column_name='lang',
+    context_text_only=False,
+    n_special_tokens=1,
+    unk_idx=3,
+    bos_idx=0,
+    eos_idx=2,
+    pad_idx=1,
+    boh_idx=None,
     eoh_idx=None,
-    model_type=<ModelType.LLM_ASR_LID: 2>, 
+    model_type=<ModelType.LLM_ASR_LID: 2>,
     n_context_examples=0)
 
 
 """
 
-
-from typing import Union
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -166,175 +164,226 @@ DEFAULT_LANGUAGE_MAPPING = {'aae_latn': 1, 'aal_latn': 2, 'abb_latn': 3, 'abi_la
 # fmt: on
 
 
+@auto_docstring(checkpoint="bezzam/omniasr-ctc-300m-v2")
+@strict
 class OmniASRConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OmniASRConfig`]. It is used to instantiate
-    a `OmniASREncoder` model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of an OmniASR encoder model. It is used to
+    instantiate an OmniASR encoder according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
-    TODO
-    - docstrings for each parameter
-    - rename to Transformer convention
+    max_seq_len (`int`, *optional*, defaults to 4096):
+        The maximum sequence length that this model might ever be used with.
+    feature_dim (`int`, *optional*, defaults to 512):
+        Dimensionality of the features produced by the convolutional feature encoder.
+    layer_norm_features (`bool`, *optional*, defaults to `False`):
+        Whether to apply layer normalization to the extracted features.
+    feature_grad_scale (`float`, *optional*, defaults to 0.1):
+        Scale applied to the gradients of the convolutional feature encoder.
+    pos_encoder_depth (`int`, *optional*, defaults to 1):
+        Number of stacked convolutional positional encoder layers.
+    conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
+        A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
+        feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
+    conv_kernel (`tuple[int]` or `list[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 2, 2)`):
+        A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
+        length of *conv_kernel* defines the number of convolutional layers and has to match the length of
+        *conv_dim*.
+    conv_stride (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
+        A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
+        of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
+    conv_bias (`bool`, *optional*, defaults to `True`):
+        Whether the 1D convolutional layers have a bias.
+    layer_norm_pre (`bool`, *optional*, defaults to `True`):
+        Whether layer normalization is applied at the beginning of each layer (pre-norm) or after each layer's
+        residual connection (post-norm). See
+        https://github.com/facebookresearch/fairseq2/blob/a510a839e007d2b036185b7b4ca76074d287c67e/src/fairseq2/models/transformer/norm_order.py#L12
+    feat_extract_norm (`str`, *optional*, defaults to `"layer"`):
+        The norm to be applied to 1D convolutional layers in the feature encoder. One of `"group"` for group
+        normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
+        convolutional layers.
+    num_conv_pos_embeddings (`int`, *optional*, defaults to 128):
+        Number of convolutional positional embeddings. Defines the kernel size of the 1D convolutional positional
+        embeddings layer.
+    num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
+        Number of groups of the 1D convolutional positional embeddings layer.
+    first_pass_dropout_p (`float`, *optional*, defaults to 0.0):
+        Dropout probability applied during the first pass.
+    hidden_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout probability for all fully connected layers in the encoder.
+    layerdrop (`float`, *optional*, defaults to 0.1):
+        The LayerDrop probability. See the [LayerDrop paper](https://huggingface.co/papers/1909.11556) for more
+        details.
+    feat_proj_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout probability for the output of the feature encoder.
+    activation_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout ratio for activations inside the feed-forward layer.
+    feat_extract_activation (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function in the 1D convolutional layers of the feature encoder.
+    hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function in the encoder.
+    add_adapter (`bool`, *optional*, defaults to `False`):
+        Whether a convolutional adapter network should be stacked on top of the encoder.
+    use_intermediate_ffn_before_adapter (`bool`, *optional*, defaults to `False`):
+        Whether to apply an intermediate feed-forward network before the adapter. Only relevant when
+        `add_adapter=True`.
+    apply_spec_augment (`bool`, *optional*, defaults to `False`):
+        Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder.
+    mask_time_length (`int`, *optional*, defaults to 10):
+        Length of vector span along the time axis.
+    mask_time_prob (`float`, *optional*, defaults to 0.0):
+        Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. Only relevant
+        if `apply_spec_augment=True`.
+    mask_time_min_masks (`int`, *optional*, defaults to 2):
+        The minimum number of masks of length `mask_time_length` generated along the time axis.
+    mask_feature_length (`int`, *optional*, defaults to 64):
+        Length of vector span along the feature axis.
+    mask_feature_prob (`float`, *optional*, defaults to 0.0):
+        Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. Only
+        relevant if `apply_spec_augment=True`.
+    mask_feature_min_masks (`int`, *optional*, defaults to 2):
+        The minimum number of masks of length `mask_feature_length` generated along the feature axis.
 
+    Example:
+
+    ```python
+    >>> from transformers import OmniASRConfig, OmniASRModel
+
+    >>> # Initializing an OmniASR encoder configuration
+    >>> configuration = OmniASRConfig()
+
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = OmniASRModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "omniasr"
 
-    def __init__(
-        self,
-        max_seq_len=4096, 
-        feature_dim=512, 
-        use_fbank=False, 
-        layer_norm_features=False, 
-        feature_grad_scale=0.1, 
-        num_fbank_channels=0, 
-        fbank_stride=0, 
-        sample_fbank_every_k=0, 
-        pos_encoder_depth=1, 
-        use_conformer=False, 
-        depthwise_conv_kernel_size=0,
-        # NOTE: adapted to Transformer convention
-        hidden_size=1024, 
-        conv_dim=[512, 512, 512, 512, 512, 512, 512],
-        conv_kernel=[10, 3, 3, 3, 3, 2, 2],
-        conv_stride=[5, 2, 2, 2, 2, 2, 2],
-        conv_bias=True,
-        layer_norm_pre=True,
-        feat_extract_norm="layer", 
-        num_attention_heads=16,
-        num_hidden_layers=24,
-        num_conv_pos_embeddings=128,
-        num_conv_pos_embedding_groups=16,
-        intermediate_size=4096,
-        position_embeddings_type="conv",
+    max_seq_len: int = 4096
+    feature_dim: int = 512
+    layer_norm_features: bool = False
+    feature_grad_scale: float | int = 0.1
+    pos_encoder_depth: int = 1
+    hidden_size: int = 1024
+    conv_dim: list[int] | tuple[int, ...] = (512, 512, 512, 512, 512, 512, 512)
+    conv_kernel: list[int] | tuple[int, ...] = (10, 3, 3, 3, 3, 2, 2)
+    conv_stride: list[int] | tuple[int, ...] = (5, 2, 2, 2, 2, 2, 2)
+    conv_bias: bool = True
+    layer_norm_pre: bool = True
+    feat_extract_norm: str = "layer"
+    num_attention_heads: int = 16
+    num_hidden_layers: int = 24
+    num_conv_pos_embeddings: int = 128
+    num_conv_pos_embedding_groups: int = 16
+    intermediate_size: int = 4096
+    first_pass_dropout_p: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    hidden_dropout: float | int = 0.1
+    layerdrop: float | int = 0.1
+    feat_proj_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.1
+    initializer_range: float = 0.02
+    feat_extract_activation: str = "gelu"
+    layer_norm_eps: float = 1e-5
+    hidden_act: str = "gelu"
+    add_adapter: bool = False
+    use_intermediate_ffn_before_adapter: bool = False
+    apply_spec_augment: bool = False
+    mask_time_length: int = 10
+    mask_time_prob: float | int = 0.0
+    mask_time_min_masks: int = 2
+    mask_feature_length: int = 64
+    mask_feature_prob: float | int = 0.0
+    mask_feature_min_masks: int = 2
 
-        first_pass_dropout_p=0.0, # TODO not used
-        attention_dropout=0.0,
-        hidden_dropout=0.1,
-        layerdrop=0.1,
-        feat_proj_dropout=0.0,
-        activation_dropout=0.1,
-
-        # NOTE: added to be compatible with Wav2Vec2 modeling
-        initializer_range=0.02,
-        feat_extract_activation="gelu",
-        layer_norm_eps=1e-5,
-        hidden_act="gelu",
-        add_adapter=False,
-        use_intermediate_ffn_before_adapter=False,  # TODO remove?
-        # TODO keep spec agument params?
-        apply_spec_augment=False, 
-        mask_time_length=10, 
-        mask_time_prob=0.0, 
-        mask_time_min_masks=2, 
-        mask_feature_length=64, 
-        mask_feature_prob=0.0, 
-        mask_feature_min_masks=2,
-        **kwargs,
-    ):
-        self.hidden_size = hidden_size
-        self.max_seq_len = max_seq_len
-        self.feature_dim = feature_dim
-        self.use_fbank = use_fbank
-        self.first_pass_dropout_p = first_pass_dropout_p
-        self.layer_norm_features = layer_norm_features
-        self.conv_dim = conv_dim
-        self.conv_stride = conv_stride
-        self.conv_kernel = conv_kernel
-        self.conv_bias = conv_bias
-        self.feat_extract_norm = feat_extract_norm
-        self.feature_grad_scale = feature_grad_scale
-        self.num_fbank_channels = num_fbank_channels
-        self.fbank_stride = fbank_stride
-        self.sample_fbank_every_k = sample_fbank_every_k
-        self.position_embeddings_type = position_embeddings_type
-        self.pos_encoder_depth = pos_encoder_depth
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
-        self.use_conformer = use_conformer
-        self.num_hidden_layers=num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.attention_dropout = attention_dropout
-        self.hidden_dropout = hidden_dropout
-        self.layerdrop = layerdrop
-        # Whether layer normalization is applied at the beginning of each layer or after each layer's residuation connection: https://github.com/facebookresearch/fairseq2/blob/a510a839e007d2b036185b7b4ca76074d287c67e/src/fairseq2/models/transformer/norm_order.py#L12
-        self.layer_norm_pre = layer_norm_pre
-        self.depthwise_conv_kernel_size = depthwise_conv_kernel_size
-        
-        self.layer_norm_eps = layer_norm_eps
-        self.feat_proj_dropout = feat_proj_dropout
-        self.activation_dropout = activation_dropout
-        self.feat_extract_activation = feat_extract_activation
-        self.hidden_act = hidden_act
-        self.add_adapter=add_adapter
-        if use_intermediate_ffn_before_adapter and not add_adapter:
-            raise ValueError("`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`.")
-        self.use_intermediate_ffn_before_adapter = use_intermediate_ffn_before_adapter
-        
-        self.initializer_range = initializer_range
-
+    def __post_init__(self, **kwargs):
+        self.num_feat_extract_layers = len(self.conv_dim)
         # For modular with Wav2Vec2
         self.do_stable_layer_norm = False
+        super().__post_init__(**kwargs)
 
-        # SpecAugment parameters
-        self.apply_spec_augment = apply_spec_augment
-        self.mask_time_length = mask_time_length
-        self.mask_time_prob = mask_time_prob
-        self.mask_time_min_masks = mask_time_min_masks
-        self.mask_feature_length = mask_feature_length
-        self.mask_feature_prob = mask_feature_prob
-        self.mask_feature_min_masks = mask_feature_min_masks
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if (
+            (len(self.conv_stride) != self.num_feat_extract_layers)
+            or (len(self.conv_kernel) != self.num_feat_extract_layers)
+            or (len(self.conv_dim) != self.num_feat_extract_layers)
+        ):
+            raise ValueError(
+                "Configuration for convolutional layers is incorrect. It is required that `len(config.conv_dim)` =="
+                " `len(config.conv_stride)` == `len(config.conv_kernel)`, but is `len(config.conv_dim) ="
+                f" {len(self.conv_dim)}`, `len(config.conv_stride) = {len(self.conv_stride)}`,"
+                f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
+            )
+        if self.use_intermediate_ffn_before_adapter and not self.add_adapter:
+            raise ValueError("`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`.")
 
-        super().__init__(**kwargs)
 
-    @property
-    def num_feat_extract_layers(self):
-        return len(self.conv_dim)
-
-
+@auto_docstring(checkpoint="bezzam/omniasr-ctc-300m-v2")
+@strict
 class OmniASRCTCConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OmniASRForCTC`]. It is used to instantiate a
-    OmniASR-CTC model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of an [`OmniASRForCTC`]. It is used to instantiate
+    an OmniASR-CTC model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
+
+    encoder_config (`Union[dict, OmniASRConfig]`, *optional*):
+        The config object or dictionary of the encoder.
+    vocab_size (`int`, *optional*, defaults to 10288):
+        Vocabulary size of the model, i.e. the number of CTC output tokens.
+    unk_token_id (`int`, *optional*, defaults to 3):
+        The id of the *unknown* token.
+    ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+        Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+        instance of [`OmniASRForCTC`].
+    ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
+        Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+        occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+        of [`OmniASRForCTC`].
+
+    Example:
+
+    ```python
+    >>> from transformers import OmniASRForCTC, OmniASRCTCConfig
+
+    >>> # Initializing an OmniASR-CTC configuration
+    >>> configuration = OmniASRCTCConfig()
+
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = OmniASRForCTC(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "omniasr_ctc"
     sub_configs = {"encoder_config": OmniASRConfig}
 
-    def __init__(
-        self,
-        encoder_config=None,
-        vocab_size=10288,
-        # TODO check token ids, took from Wav2Vec2
-        bos_token_id=0,
-        pad_token_id=1,
-        eos_token_id=2,
-        unk_token_id=3,
-        **kwargs,
-    ):
-        
-        if isinstance(encoder_config, dict):
-            encoder_config = OmniASRConfig(**encoder_config)
-        elif encoder_config is None:
-            encoder_config = OmniASRConfig()
-        self.encoder_config = encoder_config
+    encoder_config: dict | PreTrainedConfig | None = None
+    vocab_size: int = 10288
+    unk_token_id: int = 3
+    ctc_loss_reduction: str = "mean"
+    ctc_zero_infinity: bool = False
+    # TODO check token ids, took from Wav2Vec2
+    bos_token_id: int | None = 0
+    pad_token_id: int | None = 1
+    eos_token_id: int | None = 2
 
-        self.vocab_size = vocab_size
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = OmniASRConfig(**self.encoder_config)
+        elif self.encoder_config is None:
+            self.encoder_config = OmniASRConfig()
         self.initializer_range = self.encoder_config.initializer_range
-        self.unk_token_id = unk_token_id
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
     @classmethod
     def from_encoder_config(cls, encoder_config: OmniASRConfig, **kwargs):
@@ -352,36 +401,56 @@ class OmniASRCTCConfig(PreTrainedConfig):
         return self.encoder_config.hidden_size
 
 
+@auto_docstring(checkpoint="bezzam/omniasr-llm-300m-v2")
+@strict
 class OmniASRLLMConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OmniASRForConditionalGeneration`]. It is used to
-    instantiate an OmniASRForConditionalGeneration model according to the specified arguments, defining the model
+    This is the configuration class to store the configuration of a [`OmniASRForConditionalGeneration`]. It is used
+    to instantiate an OmniASRForConditionalGeneration model according to the specified arguments, defining the model
     architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
-        
-    TODO
-    - docstrings for each parameter
+    encoder_config (`Union[dict, OmniASRConfig]`, *optional*):
+        The config object or dictionary of the encoder.
+    text_config (`Union[dict, PreTrainedConfig]`, *optional*):
+        The config object or dictionary of the text decoder (a Llama model by default).
+    encoder_stacking (`int`, *optional*, defaults to 1):
+        Number of consecutive encoder frames stacked together before being projected to the text decoder. Used by
+        the Zero-Shot variant, see
+        https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1024
+    unk_token_id (`int`, *optional*, defaults to 3):
+        The id of the *unknown* token.
+    num_special_tokens (`int`, *optional*, defaults to 1):
+        Number of special tokens in the vocabulary.
+    language_mapping (`dict`, *optional*):
+        Mapping from language code to the corresponding language embedding index. Defaults to the full set of
+        languages supported by OmniASR.
+    language_embedding_probability (`float`, *optional*, defaults to 0.5):
+        Probability of using the language embedding during training.
+    language_token_id (`int`, *optional*, defaults to 9218):
+        The id of the language token.
 
-    TODO encoder_stacking used by Zero-Shot variant
-    https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1024
+    Example:
+
+    ```python
+    >>> from transformers import OmniASRForConditionalGeneration, OmniASRLLMConfig
+
+    >>> # Initializing an OmniASR-LLM configuration
+    >>> configuration = OmniASRLLMConfig()
+
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = OmniASRForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "omniasr_llm"
     sub_configs = {"encoder_config": OmniASRConfig, "text_config": AutoConfig}
 
-    # TODO change to omniasr vals
-    # from other repo: https://github.com/harikc456/wav2vec2_llama_hf/blob/6153f04a7d3357d49601323fc1f7f4364bce6735/convert_to_hf.py#L237
-    # TODO default to 7bv2?
-    """
-    LLaMAConfig(model_dim=4096, max_seq_len=8192, vocab_size=10288, pad_idx=1, tied_embeddings=False, num_layers=12,            
-        num_attn_heads=8, num_key_value_heads=8, ffn_inner_dim=4096, ffn_inner_dim_scale=0.6666666666666666,                        
-        ffn_inner_dim_multiplier=1.0, ffn_inner_dim_multiple_of=256, rope_theta=10000.0, use_scaled_rope=False,                     
-        rope_scale=LLaMARoPEScaleConfig(factor=8.0, frequency_factors=(1.0, 4.0), original_context_length=8192), dropout_p=0.1,     
-        init_std=None, init_std_scale='layer', shard_embed_dim=True)  
-    """
     _default_text_config_kwargs = {
         "vocab_size": 10288,
         "hidden_size": 4096,
@@ -389,67 +458,45 @@ class OmniASRLLMConfig(PreTrainedConfig):
         "num_key_value_heads": 8,
         "rope_theta": 10000.0,
         "rms_norm_eps": 1e-05,
-        
-        # "max_position_embeddings": 8192,
         "intermediate_size": 2816,
     }
 
-    def __init__(
-        self,
-        encoder_config=None,
-        text_config=None,
-        encoder_stacking=1,
-        bos_token_id=0,
-        pad_token_id=1,
-        eos_token_id=2,
-        unk_token_id=3,
-        num_special_tokens=1,
-        language_mapping=None,
-        language_embedding_probability=0.5,
-        language_token_id=9218,
-        **kwargs,
-    ):
-        
-        if isinstance(encoder_config, dict):
-            encoder_config = OmniASRConfig(**encoder_config)
-        elif encoder_config is None:
-            encoder_config = OmniASRConfig()
-        self.encoder_config = encoder_config
+    encoder_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    encoder_stacking: int = 1
+    unk_token_id: int = 3
+    num_special_tokens: int = 1
+    language_mapping: dict | None = None
+    language_embedding_probability: float | int = 0.5
+    language_token_id: int = 9218
+    bos_token_id: int | None = 0
+    pad_token_id: int | None = 1
+    eos_token_id: int | None = 2
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **text_config}
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = OmniASRConfig(**self.encoder_config)
+        elif self.encoder_config is None:
+            self.encoder_config = OmniASRConfig()
+
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
+                **{**self._default_text_config_kwargs, **self.text_config}
             )
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["llama"](**self._default_text_config_kwargs)
-        self.text_config = text_config
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["llama"](**self._default_text_config_kwargs)
 
-        self.vocab_size = text_config.vocab_size
+        self.vocab_size = self.text_config.vocab_size
         self.initializer_range = self.encoder_config.initializer_range
-        self.unk_token_id = unk_token_id
-        self.encoder_stacking = encoder_stacking
-        if language_mapping is None:
-            language_mapping = DEFAULT_LANGUAGE_MAPPING
-        self.language_mapping = language_mapping
-        self.language_embedding_probability = language_embedding_probability
-
-        # TODO redundant? don't need num_special_tokens if we know all that are set?
-        self.num_special_tokens = num_special_tokens
-        self.language_token_id = language_token_id
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        if self.language_mapping is None:
+            self.language_mapping = DEFAULT_LANGUAGE_MAPPING
+        super().__post_init__(**kwargs)
 
     @property
     def num_language_embeddings(self):
         # TODO or + self.num_special_tokens? (see with zero shot model)
         return len(self.language_mapping) + 1
-
 
 
 __all__ = ["OmniASRCTCConfig", "OmniASRLLMConfig", "OmniASRConfig"]

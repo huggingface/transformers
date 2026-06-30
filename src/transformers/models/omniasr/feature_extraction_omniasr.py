@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -30,9 +28,6 @@ logger = logging.get_logger(__name__)
 class OmniASRFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a OmniASR feature extractor.
-
-    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
-    most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         feature_size (`int`, *optional*, defaults to 1):
@@ -101,14 +96,14 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy = False,
+        max_length: int | None = None,
         truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
+        pad_to_multiple_of: int | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -165,7 +160,6 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
-            padding_value (`float`, *optional*, defaults to 0.0):
         """
 
         if sampling_rate is not None:

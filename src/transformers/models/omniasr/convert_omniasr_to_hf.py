@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,35 +63,30 @@ Original model checkpoints are saved under:  ~/.cache/fairseq2/assets/
 """
 
 import argparse
-import json
 import os
-import torch
 import urllib.request
 
-from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
-from omnilingual_asr.models.wav2vec2_llama.config import Wav2Vec2LlamaConfig, ModelType, Wav2Vec2LlamaStreamingConfig
+import torch
+from fairseq2.models.hub import load_model
 from fairseq2.models.llama import LLaMAConfig
+from fairseq2.models.transformer.norm_order import TransformerNormOrder
 from fairseq2.models.wav2vec2.asr.config import Wav2Vec2AsrConfig
 from fairseq2.models.wav2vec2.config import Wav2Vec2Config
-from fairseq2.models.hub import load_model
-from fairseq2.runtime.dependency import get_dependency_resolver
 from fairseq2.runtime.config_registry import get_config
-from fairseq2.models.transformer.norm_order import TransformerNormOrder
+from fairseq2.runtime.dependency import get_dependency_resolver
+from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
+from omnilingual_asr.models.wav2vec2_llama.config import ModelType, Wav2Vec2LlamaConfig, Wav2Vec2LlamaStreamingConfig
 
 from transformers import (
-    LlamaConfig,
-    OmniASRCTCConfig,
-    OmniASRLLMConfig,
-    OmniASRConfig,
-    OmniASRForCTC,
-    OmniASRForConditionalGeneration,
-    OmniASRModel,
-    Wav2Vec2CTCTokenizer,
-    ParakeetTokenizerFast,
-    SeamlessM4TTokenizer,
-    Wav2Vec2FeatureExtractor,
-    OmniASRFeatureExtractor,
     LasrTokenizer,
+    LlamaConfig,
+    OmniASRConfig,
+    OmniASRCTCConfig,
+    OmniASRFeatureExtractor,
+    OmniASRForConditionalGeneration,
+    OmniASRForCTC,
+    OmniASRLLMConfig,
+    OmniASRModel,
     logging,
 )
 from transformers.models.omniasr.processing_omniasr import OmniASRProcessor
@@ -146,20 +140,14 @@ llm_convert_list = [
 
 """
 LLM model also has:
-(encoder_proj): Linear(input_dim=1024, output_dim=4096, bias=True)                                                                           
+(encoder_proj): Linear(input_dim=1024, output_dim=4096, bias=True)
 (text_frontend): StandardEmbedding(num_embeddings=10289, embed_dim=4096)
 (llama_decoder): StandardTransformerLMDecoder(
-(lang_embeddings): StandardEmbedding(num_embeddings=1694, embed_dim=4096)  
+(lang_embeddings): StandardEmbedding(num_embeddings=1694, embed_dim=4096)
 """
 
 
-def _convert_model(
-    original_model,
-    hf_model,
-    encoder_convert_list,
-    decoder_convert_list=None,
-    verbose=False
-):
+def _convert_model(original_model, hf_model, encoder_convert_list, decoder_convert_list=None, verbose=False):
     """
     ValueError: 1 extra keys found: {'lang_embeddings.weight'}
     """
@@ -191,7 +179,7 @@ def _convert_model(
                         print("Converting key:", new_key, " to ", new_key.replace(old_layer_name, new_layer_name))
                     new_key = new_key.replace(old_layer_name, new_layer_name)
             state_dict[new_key] = state_dict.pop(k)
-        
+
         # Rearrange Q/K projection weights for RoPE compatibility (interleaved -> half-split)
         # Based on convert_pe_audio_video_to_hf.py and convert_perception_lm_weights_to_hf.py
         num_heads = 8
@@ -208,7 +196,9 @@ def _convert_model(
             elif "language_model.model.layers" in k and ".self_attn.k_proj.weight" in k:
                 weight = state_dict[k]
                 dim1, dim2 = weight.shape
-                state_dict[k] = weight.view(num_key_value_heads, head_dim // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+                state_dict[k] = (
+                    weight.view(num_key_value_heads, head_dim // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+                )
                 if verbose:
                     print(f"Permuted {k} for RoPE: {weight.shape} -> {state_dict[k].shape}")
 
@@ -225,7 +215,9 @@ def _convert_model(
         tgt_shape = hf_model.state_dict()[lm_head_key].shape
         if src_shape[0] < tgt_shape[0]:
             pad_rows = tgt_shape[0] - src_shape[0]
-            padding = torch.zeros(pad_rows, src_shape[1], dtype=state_dict[lm_head_key].dtype, device=state_dict[lm_head_key].device)
+            padding = torch.zeros(
+                pad_rows, src_shape[1], dtype=state_dict[lm_head_key].dtype, device=state_dict[lm_head_key].device
+            )
             state_dict[lm_head_key] = torch.cat([state_dict[lm_head_key], padding], dim=0)
             logger.info(f"Padded {lm_head_key} from {list(src_shape)} to {list(state_dict[lm_head_key].shape)}")
 
@@ -254,9 +246,10 @@ def param_count(model):
 
 @torch.no_grad()
 def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
-
     if not torch.cuda.is_available():
-        logger.warning("CUDA is not available, conversion will be done on CPU but it is STRONGLY recommended to use GPU for proper removal of weight norm.")
+        logger.warning(
+            "CUDA is not available, conversion will be done on CPU but it is STRONGLY recommended to use GPU for proper removal of weight norm."
+        )
         device = torch.device("cpu")
     else:
         device = torch.device("cuda")
@@ -305,7 +298,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 
         if "LLM" in model_card:
             # load additional configuration for LLM, beam search, streaming
-            
+
             # v2: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L257
             # v1: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L229
             # v2 and v1 are same except for vocab size which we can get programmatically
@@ -321,9 +314,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
                 rope_theta=10_000.0,
                 dropout_p=0.1,
             )
-            original_config_llm = Wav2Vec2LlamaConfig(
-                wav2vec2_asr_config=original_config, llama_config=llama_config
-            )
+            original_config_llm = Wav2Vec2LlamaConfig(wav2vec2_asr_config=original_config, llama_config=llama_config)
             original_config_llm.lang_embeddings_p = 0.5
             original_config_llm.n_special_tokens = 1
             original_config_llm.model_type = ModelType.LLM_ASR_LID
@@ -347,7 +338,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
                 vocab_size = 9812
                 original_config_llm.llama_config.vocab_size = vocab_size
                 original_config_llm.wav2vec2_asr_config.target_vocab_size = vocab_size
-    
+
     elif "W2V" in model_card:
         # https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_ssl/config.py
         original_config = get_config(resolver, Wav2Vec2Config, "large_lv60k")
@@ -396,18 +387,18 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     feat_extract_norm = "layer" if original_config.encoder_config.feature_extractor_layer_norm_convs else "group"
     encoder_config = OmniASRConfig(
         # TODO clean up unused and make Transformers compatible
-        max_seq_len=original_config.encoder_config.max_seq_len, 
-        feature_dim=original_config.encoder_config.feature_dim, 
-        use_fbank=original_config.encoder_config.use_fbank, 
-        first_pass_dropout_p=original_config.encoder_config.first_pass_dropout_p, 
+        max_seq_len=original_config.encoder_config.max_seq_len,
+        feature_dim=original_config.encoder_config.feature_dim,
+        use_fbank=original_config.encoder_config.use_fbank,
+        first_pass_dropout_p=original_config.encoder_config.first_pass_dropout_p,
         layer_norm_features=original_config.encoder_config.layer_norm_features,
-        feature_grad_scale=original_config.encoder_config.feature_grad_scale, 
-        num_fbank_channels=original_config.encoder_config.num_fbank_channels, 
-        fbank_stride=original_config.encoder_config.fbank_stride, 
-        sample_fbank_every_k=original_config.encoder_config.sample_fbank_every_k, 
-        pos_encoder_depth=original_config.encoder_config.pos_encoder_depth, 
-        use_conformer=original_config.encoder_config.use_conformer, 
-        # dropout_p=original_config.encoder_config.dropout_p, 
+        feature_grad_scale=original_config.encoder_config.feature_grad_scale,
+        num_fbank_channels=original_config.encoder_config.num_fbank_channels,
+        fbank_stride=original_config.encoder_config.fbank_stride,
+        sample_fbank_every_k=original_config.encoder_config.sample_fbank_every_k,
+        pos_encoder_depth=original_config.encoder_config.pos_encoder_depth,
+        use_conformer=original_config.encoder_config.use_conformer,
+        # dropout_p=original_config.encoder_config.dropout_p,
         depthwise_conv_kernel_size=original_config.encoder_config.depthwise_conv_kernel_size,
         # NOTE (ebezzam): below are modified to Transformer convention
         hidden_size=original_config.encoder_config.model_dim,
@@ -418,14 +409,14 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         feat_extract_norm=feat_extract_norm,
         layer_norm_pre=layer_norm_pre,
         attention_dropout=original_config.encoder_config.attn_dropout_p,
-        num_hidden_layers=original_config.encoder_config.num_encoder_layers, 
-        num_attention_heads=original_config.encoder_config.num_encoder_attn_heads, 
+        num_hidden_layers=original_config.encoder_config.num_encoder_layers,
+        num_attention_heads=original_config.encoder_config.num_encoder_attn_heads,
         num_conv_pos_embeddings=original_config.encoder_config.pos_conv_kernel_size,
         num_conv_pos_embedding_groups=original_config.encoder_config.num_pos_conv_groups,
         hidden_dropout=original_config.encoder_config.ffn_inner_dropout_p,
         activation_dropout=original_config.encoder_config.ffn_inner_dropout_p,
         intermediate_size=original_config.encoder_config.ffn_inner_dim,
-        position_embeddings_type=original_config.encoder_config.pos_encoder_type, 
+        position_embeddings_type=original_config.encoder_config.pos_encoder_type,
         # final_dropout=original_config.final_dropout_p,  # TODO 0 so remove?
         layerdrop=original_config.encoder_config.layer_drop_p,
         # NOTE (ebezzam) do we keep specaugment params?
@@ -449,16 +440,15 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         )
         hf_model = OmniASRForCTC(config)
     elif "LLM" in model_card:
-
         """
-        (ffn): GLUFeedForwardNetwork(                                                                                       
-          inner_dim_scale=0.666667, inner_dim_to_multiple=256                                                               
-          (gate_proj): Linear(input_dim=4096, output_dim=2816, bias=False, init_fn=init_projection)                         
-          (gate_activation): SiLU()  
-          (inner_proj): Linear(input_dim=4096, output_dim=2816, bias=False, init_fn=init_projection)                        
-          (inner_dropout): Dropout(p=0.1, inplace=False)                                                                    
-          (output_proj): Linear(input_dim=2816, output_dim=4096, bias=False, init_fn=init_projection)                       
-        ) 
+        (ffn): GLUFeedForwardNetwork(
+          inner_dim_scale=0.666667, inner_dim_to_multiple=256
+          (gate_proj): Linear(input_dim=4096, output_dim=2816, bias=False, init_fn=init_projection)
+          (gate_activation): SiLU()
+          (inner_proj): Linear(input_dim=4096, output_dim=2816, bias=False, init_fn=init_projection)
+          (inner_dropout): Dropout(p=0.1, inplace=False)
+          (output_proj): Linear(input_dim=2816, output_dim=4096, bias=False, init_fn=init_projection)
+        )
         """
         # Compute Llama config
         # -- Compute intermediate_size according to original: https://github.com/facebookresearch/fairseq2/blob/main/src/fairseq2/models/transformer/ffn.py#L274-L283
@@ -508,9 +498,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         hf_model = OmniASRForConditionalGeneration(config)
     elif "W2V" in model_card:
         # TODO not working
-        config = OmniASRConfig(
-            **encoder_config.to_dict()
-        )
+        config = OmniASRConfig(**encoder_config.to_dict())
         hf_model = OmniASRModel(config)
     else:
         raise ValueError(f"Unsupported model type, got {model_card}")
@@ -532,7 +520,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 
     # 4) Prepare processor (feature extraction and tokenizer)
     feature_extractor = OmniASRFeatureExtractor(
-    # feature_extractor = Wav2Vec2FeatureExtractor(
+        # feature_extractor = Wav2Vec2FeatureExtractor(
         # TODO check vals
         feature_size=1,
         sampling_rate=16000,
@@ -592,7 +580,9 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     language_mapping = None
     if "LLM" in model_card:
         language_mapping = original_model.lang_mapping
-    processor = OmniASRProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer, language_mapping=language_mapping)
+    processor = OmniASRProcessor(
+        feature_extractor=feature_extractor, tokenizer=tokenizer, language_mapping=language_mapping
+    )
 
     # 5) Upload to hub
     if repo_id:
@@ -608,6 +598,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 
     # TODO try loading model
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_card", default=None, type=str, help="Name of original model in omnilingual-asr")
@@ -616,8 +607,4 @@ if __name__ == "__main__":
     # Original defaults to bfloat16: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/inference/pipeline.py#L157
     args = parser.parse_args()
 
-    convert_omniasr_checkpoint(
-        args.model_card,
-        args.repo_id,
-        args.bfloat16
-    )
+    convert_omniasr_checkpoint(args.model_card, args.repo_id, args.bfloat16)
