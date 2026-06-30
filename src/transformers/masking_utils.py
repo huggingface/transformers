@@ -668,9 +668,10 @@ def flash_attention_mask(
     if attention_mask is not None:
         # Here we need to slice from the right if using sliding or chunked (for full attention, this is equivalent to doing nothing)
         attention_mask = attention_mask[:, -kv_length:]
-        # We only return an actual mask if there is at least 1 padding token, otherwise we return `None` and use `is_causal` in FA2
-        # (note that the attention_mask is a boolean dtype here)
-        if attention_mask.all():
+        # We only return an actual mask if there is at least 1 padding token AND the length is the same as the kv_length (it can only
+        # be smaller, if and only if we use a StaticCache, in which case we need a mask to properly slice k/v), otherwise we return
+        # `None` and use `is_causal` in FA2 (note that the attention_mask is a boolean dtype here)
+        if attention_mask.shape[1] == kv_length and attention_mask.all():
             attention_mask = None
 
     return attention_mask
@@ -857,10 +858,8 @@ def _preprocess_mask_arguments(
     if past_key_values is not None:
         q_offset = past_key_values.get_seq_length()
         # To avoid graph breaks, StaticLayer returns a tensor instead of an int -> this has no impact on the ops, but
-        # we need the correct device. We also reshape to a 0-dim scalar: `get_seq_length` may return a 1-element
-        # tensor, which would broadcast the per-index flex `mask_mod` result to shape (1,) and produce a 5D block
-        # mask that `create_block_mask` cannot unpack.
-        q_offset = q_offset.reshape(()).to(inputs_embeds.device) if isinstance(q_offset, torch.Tensor) else q_offset
+        # we need the correct device
+        q_offset = q_offset.to(inputs_embeds.device) if isinstance(q_offset, torch.Tensor) else q_offset
         kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, layer_idx)
     # Otherwise, we infer based on our input
     else:
