@@ -273,13 +273,20 @@ def prepare_img():
 @require_torch
 @require_vision
 class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
+    model_id = "google/tipsv2-b14-dpt"
+
+    # TODO: remove before merge
+    revision = "refs/pr/1"
+
     @cached_property
     def default_image_processor(self):
-        return Tipsv2DptImageProcessor.from_pretrained("google/tipsv2-b14-dpt")
+        return Tipsv2DptImageProcessor.from_pretrained(self.model_id, revision=self.revision)
 
     @slow
     def test_inference_model(self):
-        model = Tipsv2DptForDensePrediction.from_pretrained("google/tipsv2-b14-dpt", device_map=torch_device).eval()
+        model = Tipsv2DptForDensePrediction.from_pretrained(
+            self.model_id, revision=self.revision, device_map=torch_device
+        ).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -377,7 +384,9 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_depth_estimation(self):
-        model = Tipsv2DptForDepthEstimation.from_pretrained("google/tipsv2-b14-dpt", device_map=torch_device).eval()
+        model = Tipsv2DptForDepthEstimation.from_pretrained(
+            self.model_id, revision=self.revision, device_map=torch_device
+        ).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -421,7 +430,9 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_normal_estimation(self):
-        model = Tipsv2DptForNormalEstimation.from_pretrained("google/tipsv2-b14-dpt", device_map=torch_device).eval()
+        model = Tipsv2DptForNormalEstimation.from_pretrained(
+            self.model_id, revision=self.revision, device_map=torch_device
+        ).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -466,7 +477,7 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_semantic_segmentation(self):
         model = Tipsv2DptForSemanticSegmentation.from_pretrained(
-            "google/tipsv2-b14-dpt", device_map=torch_device
+            self.model_id, revision=self.revision, device_map=torch_device
         ).eval()
 
         image = prepare_img()

@@ -417,14 +417,16 @@ def prepare_img():
 @require_torch
 @require_vision
 class Tipsv2ModelIntegrationTest(unittest.TestCase):
+    model_id = "google/tipsv2-b14"
+
     @cached_property
     def default_processor(self):
-        return Tipsv2Processor.from_pretrained("google/tipsv2-b14")
+        return Tipsv2Processor.from_pretrained(self.model_id)
 
     @slow
     @require_sentencepiece
     def test_inference(self):
-        model = Tipsv2Model.from_pretrained("google/tipsv2-b14", device_map=torch_device).eval()
+        model = Tipsv2Model.from_pretrained(self.model_id, device_map=torch_device).eval()
 
         text_queries = ["two cats on a sofa", "a cat lying down", "a dog on a couch", "an empty room"]
         processor = self.default_processor
