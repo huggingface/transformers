@@ -35,6 +35,7 @@ permissions:
 # we will pin once the feature is stable.
 jobs:
   triage:
+    if: github.repository == 'huggingface/transformers'
     uses: huggingface/transformers-ci/.github/workflows/integration-failure-triage.yml@main # main
     with:
       dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
