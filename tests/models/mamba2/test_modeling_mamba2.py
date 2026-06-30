@@ -418,7 +418,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         tokenizer = self.tokenizer
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16)
         model.to(torch_device)
         input_ids = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt")["input_ids"].to(
             torch_device
@@ -450,7 +450,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
@@ -480,18 +480,18 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
-        batched_gen = model.generate(**tokenized_prompts, max_new_tokens=30, use_cache=True)
+        batched_gen = model.generate(**tokenized_prompts, max_new_tokens=30, use_cache=False)
         batched_output = tokenizer.batch_decode(batched_gen, skip_special_tokens=True)
 
         # individual generation
 
         for index_gen, individual_prompt in enumerate(prompt):
             inputs = tokenizer(individual_prompt, return_tensors="pt", padding="longest").to(torch_device)
-            individual_gen = model.generate(**inputs, max_new_tokens=30, use_cache=True)
+            individual_gen = model.generate(**inputs, max_new_tokens=30, use_cache=False)
             individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
 
@@ -508,7 +508,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
         with torch.autocast(device_type=torch_device, dtype=dtype):
             with torch.no_grad():
-                mixer = Mamba2Mixer(config, layer_idx=0).to(torch_device)
+                mixer = Mamba2Mixer(config, layer_idx=0).to(torch_device).to(dtype)
                 hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device=torch_device)
 
                 mixer.train()
