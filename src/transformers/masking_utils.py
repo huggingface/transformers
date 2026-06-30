@@ -1560,7 +1560,8 @@ def create_masks_for_generate(
         if any(layer_type not in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING for layer_type in layer_patterns):
             return attention_mask
         if len(layer_patterns) == 1:
-            return LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[next(iter(layer_patterns))](**mask_kwargs)
+            single_pattern = next(iter(layer_patterns))
+            return {single_pattern: LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[single_pattern](**mask_kwargs)}
         causal_masks = {}
         for layer_pattern in layer_patterns:
             causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
