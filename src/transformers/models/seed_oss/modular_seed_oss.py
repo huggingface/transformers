@@ -14,7 +14,6 @@
 """PyTorch SeedOss model."""
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -42,7 +41,7 @@ from .configuration_seed_oss import SeedOssConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ByteDance-Seed/SeedOss-36B"
+_CHECKPOINT_FOR_DOC = "ByteDance-Seed/Seed-OSS-36B-Instruct"
 
 
 class SeedOssRMSNorm(LlamaRMSNorm):
@@ -99,9 +98,8 @@ class SeedOssAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -115,13 +113,11 @@ class SeedOssAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -169,8 +165,8 @@ class SeedOssForCausalLM(LlamaForCausalLM):
         ```python
         >>> from transformers import AutoTokenizer, SeedOssForCausalLM
 
-        >>> model = SeedOssForCausalLM.from_pretrained("ByteDance-Seed/SeedOss-36B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("ByteDance-Seed/SeedOss-36B")
+        >>> model = SeedOssForCausalLM.from_pretrained("ByteDance-Seed/Seed-OSS-36B-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ByteDance-Seed/Seed-OSS-36B-Instruct")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

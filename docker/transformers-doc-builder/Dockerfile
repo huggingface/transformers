@@ -4,7 +4,11 @@ LABEL maintainer="Hugging Face"
 RUN apt update
 RUN git clone https://github.com/huggingface/transformers
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip && python3 -m pip install --no-cache-dir git+https://github.com/huggingface/doc-builder ./transformers[dev]
+RUN python3 -m pip install --no-cache-dir --upgrade pip && python3 -m pip install --no-cache-dir ./transformers[dev]
+
+# We want to use the latest doc-builder when building docs
+RUN python3 -m pip install -U git+https://github.com/huggingface/doc-builder.git@main
+
 RUN apt-get -y update && apt-get install -y libsndfile1-dev && apt install -y tesseract-ocr
 
 # Torch needs to be installed before deepspeed

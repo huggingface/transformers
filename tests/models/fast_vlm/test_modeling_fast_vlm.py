@@ -27,7 +27,9 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_vision,
     slow,
@@ -171,11 +173,8 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"image-to-text": FastVlmForConditionalGeneration, "image-text-to-text": FastVlmForConditionalGeneration}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-text-to-text": FastVlmForConditionalGeneration} if is_torch_available() else {}
+    skip_test_image_features_output_shape = True  # FastVLM uses index -3 for hidden_size instead of -1
 
     _is_composite = True
 
@@ -207,7 +206,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
 
             # remove one image but leave all the image tokens in text
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-2:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
             # simulate the multi-image/single set of placeholders case by concatenating
@@ -216,7 +215,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
 
             # two images and one set of image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
             # two images and two sets of image tokens don't raise an error
@@ -226,6 +225,19 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     @unittest.skip("Timm can't be initialized on meta")
     def test_can_be_initialized_on_meta(self):
         pass
+
+    @unittest.skip("Cannot set output_attentions on timm models.")
+    def test_get_image_features_attentions(self):
+        pass
+
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        # For models that rely on timm for their vision backend, it's hard to infer how many layers the model has
+        # from the timm config alone. So, we're just hardcoding the expected number of hidden states here.
+        return 2
 
 
 @require_torch
@@ -246,7 +258,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt = "user\n<image>\nWhat are the things I should be cautious about when I visit this place?\nassistant"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device)
+        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, dtype=model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=20)
         expected_decoded_texts = "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, there are a few things you should be cautious about:\n\n1. **"  # fmt: skip
@@ -259,6 +271,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @require_vision
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_batch(self):
         model = FastVlmForConditionalGeneration.from_pretrained(
             "KamilaMila/FastVLM-0.5B", device_map=torch_device, dtype=torch.bfloat16
@@ -271,20 +284,30 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
+        self.processor.tokenizer.padding_side = "left"
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
-            torch_device
+            torch_device,
+            dtype=model.dtype,
         )
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
-            "user\n\nWhat is this?\nassistant\nThe image depicts two cats lying on a pink surface, which could be a couch or a"
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a tabby, lying on a pink surface",
+                ],
+                ("xpu", None): [
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a kitten, resting on a pink surface.",
+                ],
+            }
+        )
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+            EXPECTED_DECODED_TEXT.get_expectation(),
         )
 
     def test_generation_no_images(self):

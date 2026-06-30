@@ -180,6 +180,87 @@ qwen3_schema = {
     },
 }
 
+re_sub_schema = {
+    "type": "object",
+    "properties": {
+        "role": {"const": "assistant"},
+        "thinking": {"type": "string"},
+        "content": {"type": "string"},
+        "tool_calls": {
+            "x-regex-iterator": r"<\|tool_call>(.*?)<tool_call\|>",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "function"},
+                    "function": {
+                        "type": "object",
+                        "x-regex": r"call\:(?P<name>\w+)(?P<arguments>\{.*\})",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                            },
+                            "arguments": {
+                                "type": "object",
+                                "x-regex-key-value": r'(?P<key>\w+):(?P<value><\|"\|>.*?<\|"\|>|[^,}]+)',
+                                "additionalProperties": {
+                                    "x-regex-substitutions": [[r'^<\|"\|>|<\|"\|>$', ""]],
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<content>(?:(?!\<\|tool_call\>).)+)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?",
+}
+
+gemma4_schema = {
+    "type": "object",
+    "properties": {
+        "role": {"const": "assistant"},
+        "thinking": {"type": "string"},
+        "content": {"type": "string"},
+        "tool_calls": {
+            "x-regex-iterator": r"<\|tool_call>(.*?)<tool_call\|>",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "function"},
+                    "function": {
+                        "type": "object",
+                        "x-regex": r"call\:(?P<name>\w+)(?P<arguments>\{.*\})",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                            },
+                            "arguments": {
+                                "type": "object",
+                                "x-parser": "gemma4-tool-call",
+                                "additionalProperties": {},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<content>(?:(?!\<\|tool_call\>).)+)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?",
+}
+
+prefix_items_schema = {
+    # Not intended to be "realistic", just checks that prefixItems can handle a heterogeneous array
+    "x-regex-iterator": r"<block>(.*?)<\/block>",
+    "type": "array",
+    "prefixItems": [
+        {"type": "string"},
+        {"type": "integer"},
+        {"type": "string"},
+    ],
+}
+
 
 @require_jmespath
 class ChatSchemaParserTest(unittest.TestCase):
@@ -201,12 +282,13 @@ class ChatSchemaParserTest(unittest.TestCase):
         self.assertEqual(tokenizer_parsed_chat, parsed_chat)
 
     def test_batched_inputs(self):
+        # Batched parsing returns one parsed dict per item, mirroring the input shape.
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
         tokenizer.response_schema = cohere_schema
-        parsed_chat = tokenizer.parse_response(model_out)
-        self.assertEqual(tokenizer.parse_response([model_out]), [parsed_chat])
-        self.assertEqual(tokenizer.parse_response([model_out] * 2), [parsed_chat] * 2)
+        single = tokenizer.parse_response(model_out)
+        self.assertEqual(tokenizer.parse_response([model_out]), [single])
+        self.assertEqual(tokenizer.parse_response([model_out] * 2), [single, single])
 
     def test_token_id_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")  # Need an actual tokenizer to encode
@@ -215,8 +297,9 @@ class ChatSchemaParserTest(unittest.TestCase):
         parsed_chat = tokenizer.parse_response(model_out)
         tokenized_out = tokenizer(model_out).input_ids
         self.assertEqual(tokenizer.parse_response(tokenized_out), parsed_chat)
+        # Batched token-id inputs return a list of parsed dicts, one per sequence
         self.assertEqual(tokenizer.parse_response([tokenized_out]), [parsed_chat])
-        self.assertEqual(tokenizer.parse_response([tokenized_out] * 2), [parsed_chat] * 2)
+        self.assertEqual(tokenizer.parse_response([tokenized_out] * 2), [parsed_chat, parsed_chat])
 
     def test_numpy_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")  # Need an actual tokenizer to encode
@@ -224,6 +307,8 @@ class ChatSchemaParserTest(unittest.TestCase):
         tokenizer.response_schema = cohere_schema
         parsed_chat = tokenizer.parse_response(model_out)
         tokenized_out = tokenizer(model_out, return_tensors="np").input_ids
+        # A single (1D) sequence works; 2D (batched) input returns a list of parsed dicts
+        self.assertEqual(tokenizer.parse_response(tokenized_out[0]), parsed_chat)
         self.assertEqual(tokenizer.parse_response(tokenized_out), [parsed_chat])
 
     def test_tensor_inputs(self):
@@ -232,6 +317,8 @@ class ChatSchemaParserTest(unittest.TestCase):
         tokenizer.response_schema = cohere_schema
         parsed_chat = tokenizer.parse_response(model_out)
         tokenized_out = tokenizer(model_out, return_tensors="pt").input_ids
+        # A single (1D) sequence works; 2D (batched) input returns a list of parsed dicts
+        self.assertEqual(tokenizer.parse_response(tokenized_out[0]), parsed_chat)
         self.assertEqual(tokenizer.parse_response(tokenized_out), [parsed_chat])
 
     def test_cohere_template(self):
@@ -377,3 +464,166 @@ class ChatSchemaParserTest(unittest.TestCase):
                 ],
             },
         )
+
+    def test_re_sub_schema(self):
+        """Test that a schema doing re substitutions to enable JSON parsing works."""
+        model_out = '<|channel>thought\nThe user is asking for the current temperature in Paris. I should check the available tools to see if there\'s a function that can provide this information.<channel|><|tool_call>call:get_current_temperature{detail_level:0,location:<|"|>Paris, France<|"|>,unit:<|"|>celsius<|"|>}<tool_call|><|tool_response>'
+        parsed = recursive_parse(model_out, re_sub_schema)
+        self.assertEqual(
+            parsed,
+            {
+                "role": "assistant",
+                "thinking": "The user is asking for the current temperature in Paris. I should check the available tools to see if there's a function that can provide this information.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_current_temperature",
+                            "arguments": {"detail_level": "0", "location": "Paris, France", "unit": "celsius"},
+                        },
+                    }
+                ],
+            },
+        )
+
+    def test_gemma4_tool_call(self):
+        model_out = '<|channel>thought\nThe user is asking for the current temperature in Paris. I should check the available tools to see if there\'s a function that can provide this information.<channel|><|tool_call>call:get_current_temperature{detail_level:0,location:<|"|>Paris, France<|"|>,unit:<|"|>celsius<|"|>}<tool_call|><|tool_response>'
+        parsed = recursive_parse(model_out, gemma4_schema)
+        self.assertEqual(
+            parsed,
+            {
+                "role": "assistant",
+                "thinking": "The user is asking for the current temperature in Paris. I should check the available tools to see if there's a function that can provide this information.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_current_temperature",
+                            "arguments": {"detail_level": 0, "location": "Paris, France", "unit": "celsius"},
+                        },
+                    }
+                ],
+            },
+        )
+
+    def test_gemma4_complex_tool_call(self):
+        model_out = (
+            "<|channel>thought\nLet me call the tool.<channel|>"
+            '<|tool_call>call:foo{bool_value:true,list_value:[<|"|>foo<|"|>,<|"|>bar<|"|>],'
+            'null_value:null,number_value:1,string_value:<|"|>foo<|"|>,'
+            'struct_value:{foo:<|"|>bar<|"|>}}<tool_call|>'
+        )
+        parsed = recursive_parse(model_out, gemma4_schema)
+        self.assertEqual(
+            parsed,
+            {
+                "role": "assistant",
+                "thinking": "Let me call the tool.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "foo",
+                            "arguments": {
+                                "bool_value": True,
+                                "list_value": ["foo", "bar"],
+                                "null_value": None,
+                                "number_value": 1,
+                                "string_value": "foo",
+                                "struct_value": {"foo": "bar"},
+                            },
+                        },
+                    }
+                ],
+            },
+        )
+
+    def test_required_fields_present(self):
+        """Test that required fields pass validation when present in the output."""
+        schema = {
+            "type": "object",
+            "required": ["role", "content"],
+            "properties": {
+                "role": {"const": "assistant"},
+                "content": {"type": "string", "x-regex": r"<response>(.*?)</response>"},
+                "thinking": {"type": "string", "x-regex": r"<think>(.*?)</think>"},
+            },
+        }
+        model_out = "<think>Let me think.</think><response>Hello!</response>"
+        parsed = recursive_parse(model_out, schema)
+        self.assertEqual(
+            parsed,
+            {"role": "assistant", "content": "Hello!", "thinking": "Let me think."},
+        )
+
+    def test_required_field_missing_raises(self):
+        """Test that a missing required field raises ValueError with a helpful message."""
+        schema = {
+            "type": "object",
+            "required": ["role", "content"],
+            "properties": {
+                "role": {"const": "assistant"},
+                "content": {"type": "string", "x-regex": r"<response>(.*?)</response>"},
+                "thinking": {"type": "string", "x-regex": r"<think>(.*?)</think>"},
+            },
+        }
+        # This output has thinking but no <response> tags, so content will be missing
+        model_out = "<think>Let me think about this.</think>Some plain text without response tags"
+        with self.assertRaises(ValueError) as cm:
+            recursive_parse(model_out, schema)
+        self.assertIn("content", str(cm.exception))
+        self.assertIn("missing", str(cm.exception).lower())
+
+    def test_required_not_enforced_when_absent(self):
+        """Test that schemas without 'required' still silently omit missing fields."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "role": {"const": "assistant"},
+                "content": {"type": "string", "x-regex": r"<response>(.*?)</response>"},
+                "thinking": {"type": "string", "x-regex": r"<think>(.*?)</think>"},
+            },
+        }
+        # No <response> tags, but content is not required — should succeed
+        model_out = "<think>Just thinking.</think>"
+        parsed = recursive_parse(model_out, schema)
+        self.assertEqual(parsed, {"role": "assistant", "thinking": "Just thinking."})
+
+    def test_prefix_items(self):
+        model_out = "<block>hello</block><block>42</block><block>world</block>"
+        parsed = recursive_parse(model_out, prefix_items_schema)
+        self.assertEqual(parsed, ["hello", 42, "world"])
+
+    def test_prefix_items_wrong_length_raises(self):
+        model_out = "<block>hello</block><block>42</block>"
+        with self.assertRaises(ValueError):
+            recursive_parse(model_out, prefix_items_schema)
+
+    def test_prefix_items_wrong_type_raises(self):
+        model_out = "<block>hello</block><block>world</block><block>42</block>"
+        with self.assertRaises(ValueError):
+            recursive_parse(model_out, prefix_items_schema)
+
+    def test_type_any_passthrough(self):
+        """Test that type 'any' passes content through without transformation."""
+        schema = {
+            "type": "object",
+            "x-regex": r"<data>(?P<value>.*?)</data>",
+            "properties": {
+                "value": {"type": "any"},
+            },
+        }
+        model_out = "<data>some arbitrary content 123</data>"
+        parsed = recursive_parse(model_out, schema)
+        self.assertEqual(parsed, {"value": "some arbitrary content 123"})
+
+    def test_type_any_in_additional_properties(self):
+        """Test that type 'any' works in additionalProperties, matching the docs example."""
+        schema = {
+            "type": "object",
+            "x-parser": "json",
+            "additionalProperties": {"type": "any"},
+        }
+        node_content = '{"location": "San Francisco, CA", "units": "celsius"}'
+        parsed = recursive_parse(node_content, schema)
+        self.assertEqual(parsed, {"location": "San Francisco, CA", "units": "celsius"})

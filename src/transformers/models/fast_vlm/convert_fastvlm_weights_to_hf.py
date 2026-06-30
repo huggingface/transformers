@@ -15,8 +15,9 @@ import argparse
 import glob
 import os
 import re
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from huggingface_hub import snapshot_download
 from PIL import Image
@@ -183,8 +184,9 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     conversation = [{"role": "user", "content": [{"type": "text", "text": "What are these?"}, {"type": "image"}]}]
     prompt = tokenizer.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
 
-    image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    raw_image = Image.open(requests.get(image_file, stream=True).raw)
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    with httpx.stream("GET", url) as response:
+        raw_image = Image.open(BytesIO(response.read()))
     inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to("cuda")
     inputs = {k: (v.to(torch.bfloat16) if v.dtype == torch.float32 else v) for k, v in inputs.items()}
 

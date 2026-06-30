@@ -23,7 +23,8 @@ import os
 import warnings
 from collections.abc import Sequence
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
+from urllib.parse import urlparse
 
 import httpx
 import numpy as np
@@ -37,6 +38,7 @@ from .utils import (
     is_torchcodec_available,
     requires_backends,
 )
+from .utils.generic import retry
 
 
 if TYPE_CHECKING:
@@ -57,96 +59,234 @@ if is_torchcodec_available():
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
 
 
-def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
+@retry(exceptions=(httpx.HTTPError,))
+def _fetch_audio_bytes(url: str, timeout: float | None = 10.0) -> bytes:
+    """Fetch audio bytes from a URL with automatic retry and exponential backoff."""
+    response = httpx.get(url, follow_redirects=True, timeout=timeout)
+    response.raise_for_status()
+    return response.content
+
+
+_NEEDS_TORCHCODEC = "Install torchcodec>=0.3.0 (`pip install torchcodec`) to load audio from this source."
+
+
+TORCHCODEC_ONLY_FILETYPES = frozenset(
+    {
+        "3gp",
+        "aac",
+        "ac3",
+        "amr",
+        "avi",
+        "flv",
+        "m4a",
+        "m4v",
+        "mkv",
+        "mov",
+        "mp4",
+        "mpg",
+        "ogv",
+        "sox",
+        "ts",
+        "webm",
+        "wma",
+        "wmv",
+        "wv",
+    }
+)
+
+
+def _format_from_source(audio: str) -> "str | None":
+    """Best-effort format token from the source *string* — the file extension (paths and URLs) or
+    the media subtype (`data:` URIs) — without resolving or decoding it. Returns None when the
+    string carries no hint, e.g. a raw base64 payload."""
+    if audio.startswith("data:"):
+        media_type = audio[len("data:") :].split(",", 1)[0].split(";", 1)[0]
+        return media_type.rpartition("/")[2].removeprefix("x-") or None
+    path = urlparse(audio).path if audio.startswith(("http://", "https://")) else audio
+    return os.path.splitext(path)[1].lstrip(".").lower() or None
+
+
+def get_audio_filetype(data: bytes) -> str:
+    """Identify a file's container/codec from its magic bytes.
+
+    A few extensions are byte-identical in their headers and collapse to a canonical type:
+    ``wavex`` -> ``wav`` and ``m4v``/``hevc.mp4`` -> ``mp4`` (all carry the ``isom`` ftyp brand).
+
+    Raises ValueError if the bytes match no supported filetype.
+    """
+    head = data[:64]
+
+    # Containers that host several filetypes -> sniff a bit deeper.
+    if head[4:8] == b"ftyp":  # ISO-BMFF: m4v & hevc share the 'isom' brand -> mp4
+        brand = head[8:12]
+        return (
+            "3gp" if brand[:3] == b"3gp" else "m4a" if brand[:3] == b"M4A" else "mov" if brand[:2] == b"qt" else "mp4"
+        )
+    if head[:4] == b"RIFF" and head[8:12] in (b"WAVE", b"AVI "):
+        return "wav" if head[8:12] == b"WAVE" else "avi"
+    if head[:4] == b"riff" and head[4:8] == bytes.fromhex("2e91cf11"):  # Wave64
+        return "w64"
+    if head[:4] == bytes.fromhex("1a45dfa3"):  # EBML: Matroska vs WebM
+        return "webm" if b"webm" in head else "mkv"
+    if head[:4] == b"OggS":  # OGG: Opus / Theora (ogv) / Vorbis (ogg)
+        page = data[:128]
+        return "opus" if b"OpusHead" in page else "ogv" if b"theora" in page else "ogg"
+    if head[:16] == bytes.fromhex("3026b2758e66cf11a6d900aa0062ce6c"):  # ASF
+        return "wmv" if bytes.fromhex("c0ef19bc4d5bcf11a8fd00805f5c442b") in data else "wma"
+    if head[:1] == b"\xff" and len(head) > 1 and head[1] & 0xE0 == 0xE0:  # MPEG/AAC sync
+        if head[1] & 0xF6 == 0xF0:  # ADTS layer bits 00 -> AAC
+            return "aac"
+        layer = head[1] >> 1 & 0x3  # MPEG audio layer field (II -> mp2, III -> mp3)
+        if layer in (0b10, 0b01):
+            return "mp2" if layer == 0b10 else "mp3"
+    if head[:1] == b"\x47" and len(data) > 188 and data[188] == 0x47:
+        return "ts"
+    if head[:4] == b"FORM" and head[8:12] in (b"AIFF", b"AIFC"):
+        return "aiff"
+
+    # Single fixed-signature formats, keyed by their leading bytes.
+    signatures = {
+        b"fLaC": "flac",
+        b"RF64": "rf64",
+        b"caff": "caf",
+        b".snd": "au",
+        b"#!AMR": "amr",
+        b"wvpk": "wv",
+        b".SoX": "sox",
+        b"XoS.": "sox",
+        b"Creative Voice File": "voc",
+        b"\x64\xa3\x01\x00": "sf",
+        b"\x00\x01\xa3\x64": "sf",
+        b"\x0b\x77": "ac3",
+        b"\x00\x00\x01\xba": "mpg",
+        b"FLV": "flv",
+        b"ID3": "mp3",
+    }
+    for sig, filetype in signatures.items():
+        if head.startswith(sig):
+            return filetype
+
+    raise ValueError("not supported filetype")
+
+
+def _resolve_audio_source(audio: str, timeout: float | None = None) -> "str | bytes":
+    """Resolve an audio source string to a local file path or raw bytes for a decoder.
+
+    Accepts `http(s)://` URLs (fetched with retry), local file paths (returned unchanged),
+    and base64 strings (optionally wrapped as a `data:...` URI).
+    """
+    if audio.startswith(("http://", "https://")):
+        return _fetch_audio_bytes(audio, timeout=timeout)
+    if os.path.isfile(audio):
+        return audio
+    # Not a URL or a local path — assume base64, optionally wrapped as a `data:<media-type>;base64,` URI
+    if audio.startswith("data:"):
+        audio = audio.split(",", 1)[1]
+    try:
+        return base64.b64decode(audio)
+    except Exception as e:
+        raise ValueError(
+            "Incorrect audio source. Must be a valid URL starting with `http://` or `https://`, "
+            f"a valid path to an audio file, or a base64 encoded string. Got {audio}. Failed with {e}"
+        )
+
+
+def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backend: str = "auto") -> np.ndarray:
     """
     Loads `audio` to an np.ndarray object.
 
     Args:
         audio (`str` or `np.ndarray`):
-            The audio to be loaded to the numpy array format.
+            The audio to be loaded to the numpy array format. If a `str`, it can be an `http(s)://`
+            URL, a local file path, or a base64-encoded string (optionally wrapped as a
+            `data:<media-type>;base64,` URI).
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate to be used when loading the audio. It should be same as the
             sampling rate the model you will be using further was trained with.
         timeout (`float`, *optional*):
             The timeout value in seconds for the URL request.
+        backend (`str`, *optional*, defaults to `"auto"`):
+            Decoding backend: `"auto"` uses torchcodec when available (>=0.3.0) and falls back to
+            librosa; `"torchcodec"` or `"librosa"` force that backend (and error if it is missing).
 
     Returns:
         `np.ndarray`: A numpy array representing the audio.
     """
-    if isinstance(audio, str):
-        # Try to load with `torchcodec` but do not enforce users to install it. If not found
-        # fallback to `librosa`. If using an audio-only model, most probably `torchcodec` won't be
-        # needed. Do not raise any errors if not installed or versions do not match
-        if is_torchcodec_available() and TORCHCODEC_VERSION >= version.parse("0.3.0"):
-            audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate)
-        else:
-            audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)
-    elif not isinstance(audio, np.ndarray):
+    if isinstance(audio, np.ndarray):
+        return audio
+    if not isinstance(audio, str):
         raise TypeError(
-            "Incorrect format used for `audio`. Should be an url linking to an audio, a local path, or numpy array."
+            "Incorrect format used for `audio`. Should be a numpy array or a `str`: an `http(s)://` URL, "
+            "a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI)."
         )
-    return audio
+
+    # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.
+    if backend == "auto":
+        use_torchcodec = is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION
+    elif backend in ("torchcodec", "librosa"):
+        use_torchcodec = backend == "torchcodec"
+    else:
+        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', or 'librosa'.")
+
+    # 1. Identify the format from the source string (extension / `data:` media type), without fetching.
+    filetype = _format_from_source(audio)
+    # 2. With librosa as the only backend, fail fast and clearly on a format it cannot decode.
+    if not use_torchcodec and filetype in TORCHCODEC_ONLY_FILETYPES:
+        raise RuntimeError(
+            f"The audio source is a '{filetype}' file, which librosa cannot decode. {_NEEDS_TORCHCODEC}"
+        )
+
+    # 3. Resolve to local path or bytes; sniff format for raw base64 payloads before passing to librosa.
+    source = _resolve_audio_source(audio, timeout=timeout)
+    if not use_torchcodec and filetype is None and isinstance(source, bytes):
+        try:
+            filetype = get_audio_filetype(source)
+        except ValueError:
+            filetype = None
+        if filetype in TORCHCODEC_ONLY_FILETYPES:
+            raise RuntimeError(
+                f"The audio source is a '{filetype}' file, which librosa cannot decode. {_NEEDS_TORCHCODEC}"
+            )
+
+    # 4. Decode with the selected backend (`requires_backends` raises a clear error if it is missing).
+    if use_torchcodec:
+        requires_backends(load_audio, ["torchcodec"])
+        from torchcodec.decoders import AudioDecoder
+
+        # `num_channels=1` matches what most models expect and librosa's default.
+        return AudioDecoder(source, sample_rate=sampling_rate, num_channels=1).get_all_samples().data[0].numpy()
+
+    requires_backends(load_audio, ["librosa"])
+    return librosa.load(BytesIO(source) if isinstance(source, bytes) else source, sr=sampling_rate)[0]
 
 
-def load_audio_torchcodec(audio: Union[str, np.ndarray], sampling_rate=16000) -> np.ndarray:
-    """
-    Loads `audio` to an np.ndarray object using `torchcodec`.
-
-    Args:
-        audio (`str` or `np.ndarray`):
-            The audio to be loaded to the numpy array format.
-        sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate to be used when loading the audio. It should be same as the
-            sampling rate the model you will be using further was trained with.
-
-    Returns:
-        `np.ndarray`: A numpy array representing the audio.
-    """
-    # Lazy import so that issues in torchcodec compatibility don't crash the whole library
-    requires_backends(load_audio_torchcodec, ["torchcodec"])
-    from torchcodec.decoders import AudioDecoder
-
-    # Set `num_channels` to `1` which is what most models expects and the default in librosa
-    decoder = AudioDecoder(audio, sample_rate=sampling_rate, num_channels=1)
-    audio = decoder.get_all_samples().data[0].numpy()  # NOTE: feature extractors don't accept torch tensors
-    return audio
+def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
+    """Deprecated. Use [`load_audio`] instead (equivalent to `backend="torchcodec"`)."""
+    warnings.warn(
+        "`load_audio_torchcodec` is deprecated and will be removed in a future version. "
+        'Use `load_audio(..., backend="torchcodec")` instead.',
+        FutureWarning,
+    )
+    return load_audio(audio, sampling_rate=sampling_rate, timeout=timeout, backend="torchcodec")
 
 
-def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
-    """
-    Loads `audio` to an np.ndarray object using `librosa`.
-
-    Args:
-        audio (`str` or `np.ndarray`):
-            The audio to be loaded to the numpy array format.
-        sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate to be used when loading the audio. It should be same as the
-            sampling rate the model you will be using further was trained with.
-        timeout (`float`, *optional*):
-            The timeout value in seconds for the URL request.
-
-    Returns:
-        `np.ndarray`: A numpy array representing the audio.
-    """
-    requires_backends(load_audio_librosa, ["librosa"])
-
-    # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
-    if audio.startswith("http://") or audio.startswith("https://"):
-        audio = librosa.load(
-            BytesIO(httpx.get(audio, follow_redirects=True, timeout=timeout).content), sr=sampling_rate
-        )[0]
-    elif os.path.isfile(audio):
-        audio = librosa.load(audio, sr=sampling_rate)[0]
-    return audio
+def load_audio_librosa(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
+    """Deprecated. Use [`load_audio`] instead (equivalent to `backend="librosa"`)."""
+    warnings.warn(
+        "`load_audio_librosa` is deprecated and will be removed in a future version. "
+        'Use `load_audio(..., backend="librosa")` instead.',
+        FutureWarning,
+    )
+    return load_audio(audio, sampling_rate=sampling_rate, timeout=timeout, backend="librosa")
 
 
 def load_audio_as(
     audio: str,
     return_format: str,
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
     force_mono: bool = False,
-    sampling_rate: Optional[int] = None,
-) -> Union[str, dict[str, Any], io.BytesIO, None]:
+    sampling_rate: int | None = None,
+) -> str | dict[str, Any] | io.BytesIO | None:
     """
     Load audio from either a local file path or URL and return in specified format.
 
@@ -166,7 +306,6 @@ def load_audio_as(
             - `dict`: Dictionary with 'data' (base64 encoded audio data) and 'format' keys (if return_format="dict")
             - `io.BytesIO`: BytesIO object containing audio data (if return_format="buffer")
     """
-    # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
     requires_backends(load_audio_as, ["librosa"])
 
     if return_format not in ["base64", "dict", "buffer"]:
@@ -176,9 +315,7 @@ def load_audio_as(
         # Load audio bytes from URL or file
         audio_bytes = None
         if audio.startswith(("http://", "https://")):
-            response = httpx.get(audio, follow_redirects=True, timeout=timeout)
-            response.raise_for_status()
-            audio_bytes = response.content
+            audio_bytes = _fetch_audio_bytes(audio, timeout=timeout)
         elif os.path.isfile(audio):
             with open(audio, "rb") as audio_file:
                 audio_bytes = audio_file.read()
@@ -232,7 +369,11 @@ def conv1d_output_length(module: "torch.nn.Conv1d", input_length: int) -> int:
 
 
 def is_valid_audio(audio):
-    return is_numpy_array(audio) or is_torch_tensor(audio)
+    return (
+        is_numpy_array(audio)
+        or is_torch_tensor(audio)
+        or (isinstance(audio, (list, tuple)) and isinstance(audio[0], float))
+    )
 
 
 def is_valid_list_of_audio(audio):
@@ -240,7 +381,7 @@ def is_valid_list_of_audio(audio):
 
 
 def make_list_of_audio(
-    audio: Union[list[AudioInput], AudioInput],
+    audio: list[AudioInput] | AudioInput,
 ) -> AudioInput:
     """
     Ensure that the output is a list of audio.
@@ -261,7 +402,31 @@ def make_list_of_audio(
     raise ValueError("Invalid input type. Must be a single audio or a list of audio")
 
 
-def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
+def make_list_of_audio_chat_template(
+    audio: list[AudioInput] | AudioInput | str | list[str],
+) -> AudioInput:
+    """
+    Ensure that the output is a list of audio. Unlike `make_list_of_audio`, this function also accepts a URL string or
+    local path, as accepted by chat templates.
+
+    Args:
+        audio (`Union[list[AudioInput], AudioInput]`):
+            The input audio. Can be a URL string, local path, numpy/torch array,  or a list of these.
+    Returns:
+        list: A list of audio.
+    """
+
+    # Handle string inputs
+    if isinstance(audio, str):
+        return [audio]
+    if isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
+        return list(audio)
+
+    # Handle numpy/torch array inputs
+    return make_list_of_audio(audio)
+
+
+def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
     """
     Convert frequency from hertz to mels.
 
@@ -297,7 +462,7 @@ def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
     return mels
 
 
-def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
+def mel_to_hertz(mels: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
     """
     Convert frequency from mels to hertz.
 
@@ -333,7 +498,7 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
     return freq
 
 
-def hertz_to_octave(freq: Union[float, np.ndarray], tuning: float = 0.0, bins_per_octave: int = 12):
+def hertz_to_octave(freq: float | np.ndarray, tuning: float = 0.0, bins_per_octave: int = 12):
     """
     Convert frequency from hertz to fractional octave numbers.
     Adapted from *librosa*.
@@ -381,8 +546,8 @@ def chroma_filter_bank(
     num_chroma: int,
     sampling_rate: int,
     tuning: float = 0.0,
-    power: Optional[float] = 2.0,
-    weighting_parameters: Optional[tuple[float, float]] = (5.0, 2.0),
+    power: float | None = 2.0,
+    weighting_parameters: tuple[float, float] | None = (5.0, 2.0),
     start_at_c_chroma: bool = True,
 ):
     """
@@ -457,7 +622,7 @@ def mel_filter_bank(
     min_frequency: float,
     max_frequency: float,
     sampling_rate: int,
-    norm: Optional[str] = None,
+    norm: str | None = None,
     mel_scale: str = "htk",
     triangularize_in_mel_space: bool = False,
 ) -> np.ndarray:
@@ -562,7 +727,7 @@ def window_function(
     window_length: int,
     name: str = "hann",
     periodic: bool = True,
-    frame_length: Optional[int] = None,
+    frame_length: int | None = None,
     center: bool = True,
 ) -> np.ndarray:
     """
@@ -621,25 +786,25 @@ def window_function(
     return padded_window
 
 
-# TODO This method does not support batching yet as we are mainly focused on inference.
+# Note: This method processes a single waveform. For batch processing, use spectrogram_batch().
 def spectrogram(
     waveform: np.ndarray,
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
-    fft_length: Optional[int] = None,
-    power: Optional[float] = 1.0,
+    fft_length: int | None = None,
+    power: float | None = 1.0,
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
     dither: float = 0.0,
-    preemphasis: Optional[float] = None,
-    mel_filters: Optional[np.ndarray] = None,
+    preemphasis: float | None = None,
+    mel_filters: np.ndarray | None = None,
     mel_floor: float = 1e-10,
-    log_mel: Optional[str] = None,
+    log_mel: str | None = None,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
     remove_dc_offset: bool = False,
     dtype: np.dtype = np.float32,
 ) -> np.ndarray:
@@ -838,19 +1003,19 @@ def spectrogram_batch(
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
-    fft_length: Optional[int] = None,
-    power: Optional[float] = 1.0,
+    fft_length: int | None = None,
+    power: float | None = 1.0,
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
     dither: float = 0.0,
-    preemphasis: Optional[float] = None,
-    mel_filters: Optional[np.ndarray] = None,
+    preemphasis: float | None = None,
+    mel_filters: np.ndarray | None = None,
     mel_floor: float = 1e-10,
-    log_mel: Optional[str] = None,
+    log_mel: str | None = None,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
     remove_dc_offset: bool = False,
     dtype: np.dtype = np.float32,
 ) -> list[np.ndarray]:
@@ -1048,7 +1213,7 @@ def power_to_db(
     spectrogram: np.ndarray,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
 ) -> np.ndarray:
     """
     Converts a power spectrogram to the decibel scale. This computes `10 * log10(spectrogram / reference)`, using basic
@@ -1099,7 +1264,7 @@ def power_to_db_batch(
     spectrogram: np.ndarray,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
 ) -> np.ndarray:
     """
     Converts a batch of power spectrograms to the decibel scale. This computes `10 * log10(spectrogram / reference)`,
@@ -1148,7 +1313,7 @@ def amplitude_to_db(
     spectrogram: np.ndarray,
     reference: float = 1.0,
     min_value: float = 1e-5,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
 ) -> np.ndarray:
     """
     Converts an amplitude spectrogram to the decibel scale. This computes `20 * log10(spectrogram / reference)`, using
@@ -1194,7 +1359,7 @@ def amplitude_to_db(
 
 
 def amplitude_to_db_batch(
-    spectrogram: np.ndarray, reference: float = 1.0, min_value: float = 1e-5, db_range: Optional[float] = None
+    spectrogram: np.ndarray, reference: float = 1.0, min_value: float = 1e-5, db_range: float | None = None
 ) -> np.ndarray:
     """
     Converts a batch of amplitude spectrograms to the decibel scale. This computes `20 * log10(spectrogram / reference)`,

@@ -234,18 +234,6 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(past_key_values.layers[layer_idx].keys.shape, expected_key_shape)
             self.assertEqual(past_key_values.layers[layer_idx].values.shape, expected_value_shape)
 
-    @unittest.skip("MoE experts may not receive gradients with small test data")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip("MoE experts may not receive gradients with small test data")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip("MoE experts may not receive gradients with small test data")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip("LongcatFlash router uses weight.type() directly in forward which prevents offloading")
     def test_cpu_offload(self):
         pass
@@ -364,7 +352,7 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
         ).to(self.model.device)
 
         with torch.no_grad():
-            outputs = self.model.generate(inputs, max_new_tokens=10, do_sample=False)
+            outputs = self.model.generate(inputs["input_ids"], max_new_tokens=10, do_sample=False)
 
         response = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
         expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig年车龄juanaheast稍achaotingupebarebones"
@@ -382,7 +370,7 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
         inputs = tokenizer.apply_chat_template(chat, tokenize=True, add_generation_prompt=True, return_tensors="pt")
 
         with torch.no_grad():
-            outputs = model.generate(inputs, max_new_tokens=3, do_sample=False)
+            outputs = model.generate(inputs["input_ids"], max_new_tokens=3, do_sample=False)
 
         response = tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
         expected_output = "[Round 0] USER:Paris is... ASSISTANT:Paris is..."

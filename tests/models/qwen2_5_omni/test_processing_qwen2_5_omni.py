@@ -1,8 +1,7 @@
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.0 (the "License"),
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -47,6 +46,10 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5OmniProcessor
     model_id = "Qwen/Qwen2.5-Omni-7B"
 
+    video_unstructured_max_length = 690
+    video_text_kwargs_max_length = 690
+    video_text_kwargs_override_max_length = 690
+
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
@@ -58,7 +61,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_video_processor(cls):
         video_processor_class = cls._get_component_class_from_processor("video_processor")
         return video_processor_class.from_pretrained(
-            cls.model_id, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
+            cls.model_id, size={"shortest_edge": 12 * 12, "longest_edge": 28 * 28}
         )
 
     def prepare_audio_inputs(self, batch_size: int = 3):
@@ -218,7 +221,9 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5760)
+        # Qwen pixel values are flattened, verify length matches video_grid_thw
+        expected_video_tokens = sum(thw[0] * thw[1] * thw[2] for thw in out_dict_with_video["video_grid_thw"])
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), expected_video_tokens)
 
         # Load with `fps` arg
         fps = 1
@@ -230,7 +235,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5760)
+        expected_video_tokens = sum(thw[0] * thw[1] * thw[2] for thw in out_dict_with_video["video_grid_thw"])
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), expected_video_tokens)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -251,7 +257,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 17280)
+        expected_video_tokens = sum(thw[0] * thw[1] * thw[2] for thw in out_dict_with_video["video_grid_thw"])
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), expected_video_tokens)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -273,7 +280,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2904)
+        expected_video_tokens = sum(thw[0] * thw[1] * thw[2] for thw in out_dict_with_video["video_grid_thw"])
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), expected_video_tokens)
 
         # When the inputs are frame URLs/paths we expect that those are already
         # sampled and will raise an error is asked to sample again.
@@ -346,4 +354,6 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.videos_input_name]), 145912)  # 1 video in the conversation
+        # Qwen pixel values are flattened, verify length matches video_grid_thw
+        expected_video_tokens = sum(thw[0] * thw[1] * thw[2] for thw in out_dict["video_grid_thw"])
+        self.assertEqual(len(out_dict[self.videos_input_name]), expected_video_tokens)  # 1 video in the conversation

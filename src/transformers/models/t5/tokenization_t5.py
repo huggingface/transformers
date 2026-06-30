@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 T5 Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +14,8 @@
 """Tokenization class for model T5."""
 
 import re
-from typing import Optional, Union
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -72,10 +70,11 @@ class T5Tokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
+        vocab: str | list[tuple[str, float]] | None = None,
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        _spm_precompiled_charsmap=None,
         extra_ids=100,
         additional_special_tokens=None,
         **kwargs,
@@ -118,7 +117,8 @@ class T5Tokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = None
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
@@ -126,7 +126,6 @@ class T5Tokenizer(TokenizersBackend):
                 pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
             ]
         )
-
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         super().__init__(

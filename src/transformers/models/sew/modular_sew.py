@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 ASAPP Inc. and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """PyTorch SEW model."""
 
 import math
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -27,6 +25,7 @@ from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ...utils.generic import is_flash_attention_requested
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
     Wav2Vec2EncoderLayer,
@@ -168,7 +167,7 @@ class SEWEncoder(nn.Module):
 
         if attention_mask is not None:
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            if self.config._attn_implementation == "flash_attention_2":
+            if is_flash_attention_requested(self.config):
                 # make sure padded tokens output 0
                 hidden_states[~expand_attention_mask] = 0.0
                 # 2d mask is passed through the layers
@@ -176,23 +175,23 @@ class SEWEncoder(nn.Module):
             else:
                 # make sure padded tokens output 0
                 hidden_states[~expand_attention_mask] = 0.0
-                input_lengths = (attention_mask.long()).sum(-1)
-                # apply pooling formula to get real output_lengths
-                output_lengths = input_lengths // self.config.squeeze_factor
-                max_encoder_length = hidden_states.shape[1] // self.config.squeeze_factor
-                attention_ids = (
-                    torch.arange(0, max_encoder_length, device=output_lengths.device)
-                    .view(1, -1)
-                    .expand(output_lengths.shape[0], -1)
+                # Pool the attention mask to match the pooled hidden_states shape.
+                # max_pool1d avoids torch.arange(max_encoder_length) which bakes
+                # the sequence length as a constant during ONNX export.
+                attention_mask = (
+                    nn.functional.max_pool1d(
+                        attention_mask.float().unsqueeze(1),
+                        kernel_size=self.config.squeeze_factor,
+                        stride=self.config.squeeze_factor,
+                    )
+                    .squeeze(1)
+                    .long()
                 )
-                attention_mask = (attention_ids < output_lengths.view(-1, 1)).long()
 
-                # extend attention_mask
+                # extend attention_mask — keep {batch,1,1,seq} so the key-seq dimension
+                # stays symbolic during ONNX export (no square seq×seq materialization).
                 attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
                 attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-                attention_mask = attention_mask.expand(
-                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-                )
 
         n_input_timesteps = hidden_states.shape[1]
 
@@ -287,7 +286,7 @@ class SEWPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             init.zeros_(module.bias)
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
         Computes the output length of the convolutional layers
         """
@@ -304,15 +303,11 @@ class SEWPreTrainedModel(PreTrainedModel):
 
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-        batch_size = attention_mask.shape[0]
-
-        attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-        # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
-        return attention_mask
+        # Build the feature mask via arange broadcast comparison.  This keeps feature_vector_length
+        # as a symbolic SymInt in torch.export / torch.onnx.export (ONNX Range op), avoiding the
+        # data-dependent scatter + cumsum pattern that bakes the length as a constant.
+        attention_ids = torch.arange(feature_vector_length, device=attention_mask.device)
+        return attention_ids.unsqueeze(0) < output_lengths.unsqueeze(1)
 
 
 @auto_docstring
@@ -340,8 +335,8 @@ class SEWModel(SEWPreTrainedModel):
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        mask_time_indices: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
@@ -386,14 +381,14 @@ class SEWModel(SEWPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        mask_time_indices: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -403,7 +398,7 @@ class SEWModel(SEWPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)

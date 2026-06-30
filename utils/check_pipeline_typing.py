@@ -3,6 +3,14 @@ import re
 from transformers.pipelines import SUPPORTED_TASKS, Pipeline
 
 
+CHECKER_CONFIG = {
+    "name": "pipeline_typing",
+    "label": "Pipeline type hints",
+    "cache_globs": ["src/transformers/pipelines/__init__.py"],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
+}
+
 HEADER = """
 # fmt: off
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
@@ -24,7 +32,7 @@ FOOTER = """
 # fmt: on
 """
 
-TASK_PATTERN = "task: Optional[str] = None"
+TASK_PATTERN = "task: str | None = None"
 
 
 def main(pipeline_file_path: str, fix_and_overwrite: bool = False):

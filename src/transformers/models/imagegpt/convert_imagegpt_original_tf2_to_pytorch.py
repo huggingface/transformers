@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -67,7 +66,7 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
             )
             or name[-1] == "_step"
         ):
-            logger.info("Skipping {}".format("/".join(name)))
+            logger.info(f"Skipping {'/'.join(name)}")
             continue
 
         pointer = model

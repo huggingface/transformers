@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_mlcd.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -31,7 +29,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_mlcd import MLCDVisionConfig
 
 
@@ -60,37 +59,8 @@ class MLCDRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, num_patches_height: int, num_patches_width: int) -> torch.Tensor:
-        """
-        Calculate the Rotary Position Embedding (RoPE) for MLCDVisionModel based on the grid size.
-
-        Args:
-            num_patches_height (int): Number of patches in the height dimension.
-            num_patches_width (int): Number of patches in the width dimension.
-
-        Returns:
-            torch.Tensor: Rotary positional embeddings for the given grid size.
-        """
-        # Generate position IDs for height and width dimensions
-        hpos_ids = (
-            torch.arange(num_patches_height, device=self.inv_freq.device).unsqueeze(1).expand(-1, num_patches_width)
-        )
-        wpos_ids = (
-            torch.arange(num_patches_width, device=self.inv_freq.device).unsqueeze(0).expand(num_patches_height, -1)
-        )
-
-        # Flatten and stack the position IDs
-        pos_ids = torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1)
-
-        # Generate the full rotary positional embeddings for the maximum grid size
-        max_grid_size = max(num_patches_height, num_patches_width)
-        seq = torch.arange(max_grid_size, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        rotary_pos_emb_full = torch.outer(seq, self.inv_freq)
-
-        # Select and flatten the embeddings based on the position IDs
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-
-        return rotary_pos_emb
+    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
+        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class MLCDVisionEmbeddings(nn.Module):
@@ -174,7 +144,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -184,8 +154,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -242,11 +211,6 @@ class MLCDAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
         self.is_causal = False
@@ -261,9 +225,9 @@ class MLCDAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
         batch_size, seq_length = hidden_states.shape[:-1]
 
@@ -282,9 +246,9 @@ class MLCDAttention(nn.Module):
         key_states = key_states.permute(0, 2, 1, 3).contiguous()
         value_states = value_states.permute(0, 2, 1, 3).contiguous()
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -318,7 +282,7 @@ class MLCDEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
         """
@@ -371,9 +335,9 @@ class MLCDEncoder(nn.Module):
         self,
         inputs_embeds: torch.FloatTensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -406,7 +370,8 @@ class MLCDEncoder(nn.Module):
 @auto_docstring
 class MLCDPreTrainedModel(PreTrainedModel):
     config: MLCDVisionConfig
-    base_model_prefix = "mlcd"
+    base_model_prefix = "vision_model"
+    _no_split_modules = ["MLCDEncoderLayer"]
     supports_gradient_checkpointing = True
     accepts_loss_kwargs = False
     _supports_flash_attn = True
@@ -441,7 +406,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             init.normal_(module.fc1.weight, std=fc_std)
             init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, MLCDVisionTransformer):
+        elif isinstance(module, MLCDVisionModel):
             factor = self.config.initializer_factor
             pos_emb_std = (module.config.hidden_size // module.config.num_attention_heads // 2) ** -0.5 * factor
             init.normal_(module.class_pos_emb, mean=0.0, std=pos_emb_std)
@@ -455,10 +420,19 @@ class MLCDPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-class MLCDVisionTransformer(nn.Module):
+@auto_docstring(
+    custom_intro="""
+    The vision model from M_L_C_D without any head or projection on top.
+    """
+)
+class MLCDVisionModel(MLCDPreTrainedModel):
+    config: MLCDVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _input_embed_layer = "patch_embedding"
+
     def __init__(self, config: MLCDVisionConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         embed_dim = config.hidden_size
 
         self.embeddings = MLCDVisionEmbeddings(config)
@@ -467,20 +441,53 @@ class MLCDVisionTransformer(nn.Module):
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.vision_rotary_embedding = MLCDRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
+        self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        Example:
+
+        ```python
+        >>> import httpx
+        >>> from io import BytesIO
+        >>> from PIL import Image
+        >>> from transformers import AutoProcessor, MLCDVisionModel
+        >>> model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
+        >>> processor = AutoProcessor.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs, output_attentions=True)
+
+        >>> features = outputs.last_hidden_state
+        >>> print(f"Extracted features shape: {features.shape}")
+        >>> print(f"Number of attention layers: {len(outputs.attentions)}")
+        >>> print(f"Attention shape: {outputs.attentions[0].shape}")
+        ```"""
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         num_patches_height = pixel_values.shape[-2] // self.config.patch_size
         num_patches_width = pixel_values.shape[-1] // self.config.patch_size
-        rotary_pos_emb = self.vision_rotary_embedding(num_patches_height, num_patches_width)
-        rotary_pos_emb = rotary_pos_emb.to(self.class_pos_emb.device)
+        hpos_ids = (
+            torch.arange(num_patches_height, device=pixel_values.device).unsqueeze(1).expand(-1, num_patches_width)
+        )
+        wpos_ids = (
+            torch.arange(num_patches_width, device=pixel_values.device).unsqueeze(0).expand(num_patches_height, -1)
+        )
+        pos_ids = torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1)
+        rotary_pos_emb = self.vision_rotary_embedding(pos_ids)
         rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
@@ -501,61 +508,6 @@ class MLCDVisionTransformer(nn.Module):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-        )
-
-
-@auto_docstring(
-    custom_intro="""
-    The vision model from M_L_C_D without any head or projection on top.
-    """
-)
-class MLCDVisionModel(MLCDPreTrainedModel):
-    config: MLCDVisionConfig
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = ["MLCDEncoderLayer"]
-
-    def __init__(self, config: MLCDVisionConfig):
-        super().__init__(config)
-        self.vision_model = MLCDVisionTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
-        r"""
-        Example:
-
-        ```python
-        >>> import requests
-        >>> from PIL import Image
-        >>> from transformers import AutoProcessor, MLCDVisionModel
-        >>> model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
-        >>> processor = AutoProcessor.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs, output_attentions=True)
-
-        >>> features = outputs.last_hidden_state
-        >>> print(f"Extracted features shape: {features.shape}")
-        >>> print(f"Number of attention layers: {len(outputs.attentions)}")
-        >>> print(f"Attention shape: {outputs.attentions[0].shape}")
-        ```"""
-        return self.vision_model(
-            pixel_values=pixel_values,
-            **kwargs,
         )
 
 

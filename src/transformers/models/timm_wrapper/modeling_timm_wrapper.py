@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,6 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -29,16 +27,14 @@ from .configuration_timm_wrapper import TimmWrapperConfig
 if is_timm_available():
     import timm
 
-    from ...integrations.timm import _maybe_reinit_non_persistent_buffer
 
-
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output class for models TimmWrapperModel, containing the last hidden states, an optional pooled output,
     and optional hidden states.
     """
 )
+@dataclass
 class TimmWrapperModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor`):
@@ -53,9 +49,9 @@ class TimmWrapperModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_kwargs):
@@ -116,8 +112,27 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        # Also, reinit all non-persistemt buffers if any!
-        _maybe_reinit_non_persistent_buffer(module)
+        # Also, reinit all non-persistent buffers if any!
+        if hasattr(module, "init_non_persistent_buffers"):
+            module.init_non_persistent_buffers()
+        elif (
+            hasattr(module, "_get_pos_embed_values")
+            and hasattr(module, "feat_shape")
+            and module.feat_shape is not None
+        ):
+            module.pos_embed = module._get_pos_embed_values(
+                feat_shape=module.feat_shape,
+                device=module.pos_embed.device if module.pos_embed is not None else None,
+                dtype=module.pos_embed.dtype if module.pos_embed is not None else torch.float32,
+            )
+        elif isinstance(module, nn.BatchNorm2d):
+            # TimmWrapper always creates models with pretrained=False, so buffers are never pre-loaded
+            # Always initialize buffers (handles both meta device and to_empty() cases)
+            running_mean = getattr(module, "running_mean", None)
+            if running_mean is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """
@@ -163,12 +178,13 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, list[int]]] = None,
-        return_dict: Optional[bool] = None,
-        do_pooling: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | list[int] | None = None,
+        return_dict: bool | None = None,
+        do_pooling: bool | None = None,
+        use_cache: bool | None = None,
         **kwargs,
-    ) -> Union[TimmWrapperModelOutput, tuple[Tensor, ...]]:
+    ) -> TimmWrapperModelOutput | tuple[Tensor, ...]:
         r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
@@ -209,7 +225,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -227,7 +243,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
                 "different architecture or updating the timm package to a compatible version."
             )
 
-        pixel_values = pixel_values.to(self.device)
+        pixel_values = pixel_values.to(self.device, self.dtype)
 
         if self.features_only:
             last_hidden_state = self.timm_model.forward(pixel_values, **kwargs)
@@ -288,12 +304,12 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, list[int]]] = None,
-        return_dict: Optional[bool] = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | list[int] | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[ImageClassifierOutput, tuple[Tensor, ...]]:
+    ) -> ImageClassifierOutput | tuple[Tensor, ...]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -336,7 +352,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         >>> top5_probabilities, top5_class_indices = torch.topk(logits.softmax(dim=1) * 100, k=5)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

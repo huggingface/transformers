@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,6 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_deterministic_for_xpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -35,7 +33,6 @@ if is_torch_available():
     import torch
 
     from transformers import Lfm2MoeConfig, Lfm2MoeForCausalLM, Lfm2MoeModel
-    from transformers.models.lfm2_moe.modeling_lfm2_moe import Lfm2MoeHybridConvCache
 
 
 class Lfm2MoeModelTester(CausalLMModelTester):
@@ -47,10 +44,14 @@ class Lfm2MoeModelTester(CausalLMModelTester):
     def __init__(
         self,
         parent,
+        num_dense_layers=1,
+        num_hidden_layers=2,
         layer_types=["full_attention", "conv"],
     ):
         super().__init__(parent)
         self.layer_types = layer_types
+        self.num_dense_layers = num_dense_layers
+        self.num_hidden_layers = num_hidden_layers
 
 
 @require_torch
@@ -68,34 +69,17 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2MoeForCausalLM if is_torch_available() else None
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Lfm2MoeHybridConvCache)
+    def _get_conv_state_shape(self, batch_size: int, config):
+        return (batch_size, config.hidden_size, config.conv_L_cache)
 
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        attention_shape = (batch_size, num_heads, seq_length, head_dim)
-        conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
-
-        for i in range(config.num_hidden_layers):
-            if config.layer_types[i] == "full_attention":
-                self.assertEqual(past_key_values.key_cache[i].shape, attention_shape)
-                self.assertEqual(past_key_values.value_cache[i].shape, attention_shape)
-            else:
-                self.assertEqual(past_key_values.conv_cache[i].shape, conv_shape)
-
-    def _check_caches_are_equal(self, cache1: Lfm2MoeHybridConvCache, cache2: Lfm2MoeHybridConvCache):
-        if not isinstance(cache1, Lfm2MoeHybridConvCache) or not isinstance(cache2, Lfm2MoeHybridConvCache):
-            raise ValueError("The wrong cache is being used!")
-
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_cache[idx], cache2.conv_cache[idx])
+    def test_assisted_generation_rejected_as_stateful(self):
+        """Lfm2Moe is a conv/attention hybrid (stateful), so assisted / prompt-lookup decoding must be rejected
+        with a clear error instead of silently producing wrong text (it cannot roll back its conv state)."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Lfm2MoeForCausalLM(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"][:1]  # batch size 1, so prompt lookup would otherwise run
+        with self.assertRaisesRegex(ValueError, "stateful"):
+            model.generate(input_ids, max_new_tokens=3, do_sample=False, prompt_lookup_num_tokens=2)
 
     def test_attention_outputs(self):
         """Lfm2Moe alternates between attention and short-conv layers."""
@@ -141,7 +125,6 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 @slow
 class Lfm2MoeIntegrationTest(unittest.TestCase):
     @classmethod
@@ -160,7 +143,10 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = Lfm2MoeForCausalLM.from_pretrained(
-                "LiquidAI/LFM2-8B-A1B", device_map="auto", dtype=torch.bfloat16
+                "LiquidAI/LFM2-8B-A1B",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                experts_implementation="eager",
             )
         return cls.model
 

@@ -33,7 +33,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Swin2SRImageProcessor
+    from transformers import Swin2SRImageProcessorPil
 
 
 class Swin2SRModelTester:
@@ -160,14 +160,9 @@ class Swin2SRModelTester:
 @require_torch
 class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"image-feature-extraction": Swin2SRModel, "image-to-image": Swin2SRForImageSuperResolution}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-feature-extraction": Swin2SRModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = Swin2SRModelTester(self)
@@ -199,24 +194,20 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Swin2SR does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Swin2SR does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     def test_model_get_set_embeddings(self):
@@ -296,7 +287,7 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 @slow
 class Swin2SRModelIntegrationTest(unittest.TestCase):
     def test_inference_image_super_resolution_head(self):
-        processor = Swin2SRImageProcessor()
+        processor = Swin2SRImageProcessorPil()
         model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-classical-sr-x2-64").to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -315,7 +306,7 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_fp16(self):
-        processor = Swin2SRImageProcessor()
+        processor = Swin2SRImageProcessorPil()
         model = Swin2SRForImageSuperResolution.from_pretrained(
             "caidas/swin2SR-classical-sr-x2-64", dtype=torch.float16
         ).to(torch_device)

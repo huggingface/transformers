@@ -71,8 +71,6 @@
 #       title: تصنيف الصور بدون تدريب
 #     - local: tasks/monocular_depth_estimation
 #       title: تقدير العمق
-#     - local: tasks/image_to_image
-#       title: صورة إلى صورة
 #     - local: tasks/image_feature_extraction
 #       title: استخراج ميزات الصورة
 #     - local: tasks/mask_generation

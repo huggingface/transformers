@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 The [GPT-QModel](https://github.com/ModelCloud/GPTQModel) project (Python package `gptqmodel`) implements the GPTQ algorithm, a post-training quantization technique where each row of the weight matrix is quantized independently to find a version of the weights that minimizes the error. These weights are quantized to int4, but they're restored to fp16 on the fly during inference. This can save memory usage by 4x because the int4 weights are dequantized in a fused kernel rather than a GPU's global memory. Inference is also faster because a lower bitwidth takes less time to communicate.
 
-AutoGPTQ is no longer supported in Transformers. Install GPT-QModel] instead.
+AutoGPTQ is no longer supported in Transformers. Install GPT-QModel instead.
 
 Install Accelerate, Transformers and Optimum first.
 
@@ -26,7 +26,7 @@ Install Accelerate, Transformers and Optimum first.
 pip install --upgrade accelerate optimum transformers
 ```
 
-Then run the command below to install GPT-QModel].
+Then run the command below to install GPT-QModel.
 
 ```bash
 pip install gptqmodel --no-build-isolation
@@ -107,13 +107,13 @@ from transformers import AutoModelForCausalLM, GPTQConfig
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config=GPTQConfig(bits=4, backend="marlin"))
 ```
 
-## GPT-QModel]
+## GPT-QModel
 
-GPT-QModel] is the actively maintained backend for GPTQ in Transformers. It was originally forked from AutoGPTQ, but has since diverged with significant improvements such as faster quantization, lower memory usage, and more accurate defaults.
+GPT-QModel is the actively maintained backend for GPTQ in Transformers. It was originally forked from AutoGPTQ, but has since diverged with significant improvements such as faster quantization, lower memory usage, and more accurate defaults.
 
-GPT-QModel] provides asymmetric quantization which can potentially lower quantization errors compared to symmetric quantization. It is not backward compatible with legacy AutoGPTQ checkpoints, and not all kernels (Marlin) support asymmetric quantization.
+GPT-QModel provides asymmetric quantization which can potentially lower quantization errors compared to symmetric quantization. It is not backward compatible with legacy AutoGPTQ checkpoints, and not all kernels (Marlin) support asymmetric quantization.
 
-GPT-QModel] also has broader support for the latest LLM models, multimodal models (Qwen2-VL and Ovis1.6-VL), platforms (Linux, macOS, Windows 11), and hardware (AMD ROCm, Apple Silicon, Intel/AMD CPUs, and Intel Datacenter Max/Arc GPUs, etc.).
+GPT-QModel also has broader support for the latest LLM models, multimodal models (Qwen2-VL and Ovis1.6-VL), platforms (Linux, macOS, Windows 11), and hardware (AMD ROCm, Apple Silicon, Intel/AMD CPUs, and Intel Datacenter Max/Arc GPUs, etc.).
 
 The Marlin kernels are also updated for A100 GPUs and other kernels are updated to include auto-padding for legacy models and models with non-uniform in/out-features.
 

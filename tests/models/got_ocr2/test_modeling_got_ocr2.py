@@ -147,7 +147,6 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     )
     pipeline_model_mapping = (
         {
-            "image-to-text": GotOcr2ForConditionalGeneration,
             "image-text-to-text": GotOcr2ForConditionalGeneration,
             "any-to-any": GotOcr2ForConditionalGeneration,
         }

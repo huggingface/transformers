@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Meta Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +15,6 @@
 Processor class for Chameleon.
 """
 
-from typing import Optional, Union
-
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import (
@@ -30,9 +25,17 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring
 
 
 class ChameleonTextKwargs(TextKwargs, total=False):
+    """
+    return_for_text_completion (`bool`, *optional*, defaults to `False`):
+        Whether the processed text is intended for text completion tasks. When `True`, the processor does not
+        append the separator token (`sep_token`) to the end of the prompt, which is typically used for chat
+        mode. When `False`, the separator token is appended for proper chat formatting.
+    """
+
     return_for_text_completion: bool
 
 
@@ -50,26 +53,19 @@ class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class ChameleonProcessor(ProcessorMixin):
-    r"""
-    Constructs a Chameleon processor which wraps a Chameleon image processor and a Chameleon tokenizer into a single
-    processor.
+    valid_processor_kwargs = ChameleonProcessorKwargs
 
-    [`ChameleonProcessor`] offers all the functionalities of [`ChameleonImageProcessor`] and [`LlamaTokenizerFast`].
-    See the [`~ChameleonProcessor.__call__`] and [`~ChameleonProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`ChameleonImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`]):
-            The tokenizer is a required input.
+    def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
+        r"""
         image_seq_length (`int`, *optional*, defaults to 1024):
             Sequence length of one image embedding.
         image_token (`str`, *optional*, defaults to `"<image>"`):
             The special token used to indicate image in the text.
-    """
+        """
+        super().__init__(image_processor, tokenizer)
 
-    def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         self.image_seq_length = image_seq_length
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
@@ -80,37 +76,19 @@ class ChameleonProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
         self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
-        self.image_ids = [self.image_token_id, self.image_start_token_id, self.image_end_token_id]
 
-        super().__init__(image_processor, tokenizer)
+    @property
+    def image_token_ids(self) -> list[int]:
+        return [self.image_token_id, self.image_start_token_id, self.image_end_token_id]
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[ChameleonProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -120,46 +98,17 @@ class ChameleonProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-
         if isinstance(text, str):
             text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-        if text is None and images is None:
-            raise ValueError("You must provide either text or images")
 
-        output_kwargs = self._merge_kwargs(
-            ChameleonProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        return_for_text_completion = output_kwargs["text_kwargs"].pop("return_for_text_completion", False)
+        # special Chameleon treatment to add sep for chat mode
+        text = [f"{sample}{self.tokenizer.sep_token}" for sample in text]
+        model_inputs = super().__call__(images=images, text=text, **kwargs)
+        return model_inputs
 
-        # Replace the image token with the expanded image token sequence
-        prompt_strings = []
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         one_img_tokens = self.image_start_token + (self.image_token * self.image_seq_length) + self.image_end_token
-        for sample in text:
-            sample = sample.replace(self.image_token, one_img_tokens)
-            if not return_for_text_completion:
-                sample += self.tokenizer.sep_token  # special Chameleon treatment to add sep for chat mode
-            prompt_strings.append(sample)
-
-        image_inputs = {}
-        if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
-
-        if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+        return one_img_tokens
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

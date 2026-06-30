@@ -84,13 +84,13 @@ are [SpeechT5](model_doc/speecht5), [FastSpeech2Conformer](model_doc/fastspeech2
 
 The remainder of this guide illustrates how to:
 
-1. Fine-tune [SpeechT5](../model_doc/speecht5) that was originally trained on English speech on the Dutch (`nl`) language subset of the [VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli) dataset.
+1. Fine-tune [SpeechT5](../model_doc/speecht5) that was originally trained on English speech on the Dutch (`nl`) language subset of the [VoxPopuli](https://huggingface.co/datasets/qmeeus/voxpopuli) dataset.
 2. Use your refined model for inference in one of two ways: using a pipeline or directly.
 
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install datasets soundfile speechbrain accelerate
+pip install transformers datasets soundfile librosa torchcodec speechbrain accelerate
 ```
 
 Install 🤗Transformers from source as not all the SpeechT5 features have been merged into an official release yet:
@@ -125,7 +125,7 @@ We encourage you to log in to your Hugging Face account to upload and share your
 
 ## Load the dataset
 
-[VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli) is a large-scale multilingual speech corpus consisting of
+[VoxPopuli](https://huggingface.co/datasets/qmeeus/voxpopuli) is a large-scale multilingual speech corpus consisting of
 data sourced from 2009-2020 European Parliament event recordings. It contains labelled audio-transcription data for 15
 European languages. In this guide, we are using the Dutch language subset, feel free to pick another subset.
 
@@ -139,7 +139,7 @@ Let's load the data:
 ```py
 >>> from datasets import load_dataset, Audio
 
->>> dataset = load_dataset("facebook/voxpopuli", "nl", split="train")
+>>> dataset = load_dataset("qmeeus/voxpopuli", "nl", split="train")
 >>> len(dataset)
 20968
 ```
@@ -170,9 +170,7 @@ Start by cleaning up the text data. You'll need the tokenizer part of the proces
 >>> tokenizer = processor.tokenizer
 ```
 
-The dataset examples contain `raw_text` and `normalized_text` features. When deciding which feature to use as the text input,
-consider that the SpeechT5 tokenizer doesn't have any tokens for numbers. In `normalized_text` the numbers are written
-out as text. Thus, it is a better fit, and we recommend using    `normalized_text` as input text.
+The dataset examples contain a `text` feature with the transcription. Note that the SpeechT5 tokenizer doesn't have any tokens for numbers, so any numbers in the text will be converted to `<unk>` tokens. If your dataset contains numbers, consider normalizing them to their written form.
 
 Because SpeechT5 was trained on the English language, it may not recognize certain characters in the Dutch dataset. If
 left as is, these characters will be converted to `<unk>` tokens. However, in Dutch, certain characters like `à` are
@@ -186,7 +184,7 @@ the mapping function.
 
 ```py
 >>> def extract_all_chars(batch):
-...     all_text = " ".join(batch["normalized_text"])
+...     all_text = " ".join(batch["text"])
 ...     vocab = list(set(all_text))
 ...     return {"vocab": [vocab], "all_text": [all_text]}
 
@@ -230,7 +228,7 @@ valid tokens. Note that spaces are already replaced by `▁` in the tokenizer an
 
 >>> def cleanup_text(inputs):
 ...     for src, dst in replacements:
-...         inputs["normalized_text"] = inputs["normalized_text"].replace(src, dst)
+...         inputs["text"] = inputs["text"].replace(src, dst)
 ...     return inputs
 
 
@@ -354,7 +352,7 @@ It should also add the speaker embeddings as an additional input.
 ...     audio = example["audio"]
 
 ...     example = processor(
-...         text=example["normalized_text"],
+...         text=example["text"],
 ...         audio_target=audio["array"],
 ...         sampling_rate=audio["sampling_rate"],
 ...         return_attention_mask=False,
@@ -517,7 +515,7 @@ only look at the loss:
 ...     save_steps=1000,
 ...     eval_steps=1000,
 ...     logging_steps=25,
-...     report_to=["tensorboard"],
+...     report_to="trackio",
 ...     load_best_model_at_end=True,
 ...     greater_is_better=False,
 ...     label_names=["labels"],

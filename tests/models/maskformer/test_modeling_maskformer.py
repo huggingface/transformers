@@ -45,7 +45,7 @@ if is_torch_available():
     from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
 
     if is_vision_available():
-        from transformers import MaskFormerImageProcessor
+        from transformers import MaskFormerImageProcessorPil
 
 if is_vision_available():
     from PIL import Image
@@ -208,7 +208,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     test_missing_keys = False
     zero_init_hidden_state = True
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = MaskFormerModelTester(self)
@@ -245,6 +244,12 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_maskformer_instance_segmentation_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_maskformer_instance_segmentation_head_model(*config_and_inputs)
+
+    @unittest.skip(
+        reason="MaskFormer loads only the decoder from DETR and needs 2-3 conversion from the whole mapping"
+    )
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
 
     @unittest.skip(reason="MaskFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -450,25 +455,32 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_backbone_selection(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-        config.backbone_config = None
-        config.backbone_kwargs = {"out_indices": [1, 2, 3]}
-        config.use_pretrained_backbone = True
+        config_dict = config.to_dict()
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [1, 2, 3]}
+        config_dict["use_pretrained_backbone"] = True
 
         # Load a timm backbone
         # We can't load transformer checkpoint with timm backbone, as we can't specify features_only and out_indices
-        config.backbone = "resnet18"
-        config.use_timm_backbone = True
+        config_dict["backbone"] = "resnet18"
+        config_dict["use_timm_backbone"] = True
+        config = config.__class__(**config_dict)
 
         for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
+            model = model_class(copy.deepcopy(config)).to(torch_device).eval()
             if model.__class__.__name__ == "MaskFormerModel":
                 self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
             elif model.__class__.__name__ == "MaskFormerForUniversalSegmentation":
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
 
         # Load a HF backbone
-        config.backbone = "microsoft/resnet-18"
-        config.use_timm_backbone = False
+        config_dict = config.to_dict()
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [1, 2, 3]}
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone"] = "microsoft/resnet-18"
+        config_dict["use_timm_backbone"] = False
+        config = config.__class__(**config_dict)
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
@@ -493,7 +505,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            MaskFormerImageProcessor.from_pretrained("facebook/maskformer-swin-small-coco")
+            MaskFormerImageProcessorPil.from_pretrained("facebook/maskformer-swin-small-coco")
             if is_vision_available()
             else None
         )

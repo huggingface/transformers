@@ -14,7 +14,6 @@
 """PyTorch xLSTM Model."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -25,7 +24,10 @@ from ... import initialization as init
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_xlstm_available
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_xlstm_available
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_xlstm import xLSTMConfig
 
 
@@ -50,7 +52,7 @@ else:
 
     external_xlstm = False
 
-    def soft_cap(values: torch.Tensor, cap_value: Optional[Union[float, torch.Tensor]] = None) -> torch.Tensor:
+    def soft_cap(values: torch.Tensor, cap_value: float | torch.Tensor | None = None) -> torch.Tensor:
         """
         Soft caps a tensor to a value.
 
@@ -74,13 +76,13 @@ else:
         matV: torch.Tensor,
         vecB: torch.Tensor,
         vecI: torch.Tensor,
-        matC_states: Optional[torch.Tensor] = None,
-        vecN_states: Optional[torch.Tensor] = None,
-        scaMinter_states: Optional[torch.Tensor] = None,
-        matC_initial: Optional[torch.Tensor] = None,
-        vecN_initial: Optional[torch.Tensor] = None,
-        scaMinter_initial: Optional[torch.Tensor] = None,
-        qk_scale: Optional[float] = None,
+        matC_states: torch.Tensor | None = None,
+        vecN_states: torch.Tensor | None = None,
+        scaMinter_states: torch.Tensor | None = None,
+        matC_initial: torch.Tensor | None = None,
+        vecN_initial: torch.Tensor | None = None,
+        scaMinter_initial: torch.Tensor | None = None,
+        qk_scale: float | None = None,
         chunk_size: int = 64,
         num_chunks: int = 1,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -177,12 +179,13 @@ else:
         _device = matQ.device
         nc = num_chunks
         batch_size, nh, dqk, dhv = matC_states.shape
-        matC_k_states = matC_states.view(batch_size, nh, nc, dqk // nc, dhv)
-        vecN_k_states = vecN_states.view(batch_size, nh, nc, dqk // nc)
+        dhqk = dqk // nc
+        matC_k_states = matC_states.view(batch_size, nh, nc, dhqk, dhv)
+        vecN_k_states = vecN_states.view(batch_size, nh, nc, dhqk)
         scaMinter_k_states = scaMinter_states
 
-        matQ = matQ.view(batch_size, nh, nc, chunk_size, dqk)
-        matK = matK.view(batch_size, nh, nc, chunk_size, dqk)
+        matQ = matQ.view(batch_size, nh, nc, chunk_size, dhqk)
+        matK = matK.view(batch_size, nh, nc, chunk_size, dhqk)
         matV = matV.view(batch_size, nh, nc, chunk_size, dhv)
 
         ltr = torch.tril(
@@ -233,7 +236,7 @@ else:
 
         # we need the denominator and the overall max state for the backward pass
         vecN_out = vecDenom_max_common.reshape(batch_size, nh, nc * chunk_size)
-        vecM_out = vecM_k_combine(batch_size, nh, nc * chunk_size)
+        vecM_out = vecM_k_combine.reshape(batch_size, nh, nc * chunk_size)
         return matH_out, vecN_out, vecM_out
 
     def mlstm_chunkwise_fw(
@@ -242,10 +245,10 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        cstate: Optional[torch.Tensor] = None,
-        nstate: Optional[torch.Tensor] = None,
-        mstate: Optional[torch.Tensor] = None,
-        qk_scale: Optional[float] = None,
+        cstate: torch.Tensor | None = None,
+        nstate: torch.Tensor | None = None,
+        mstate: torch.Tensor | None = None,
+        qk_scale: float | None = None,
         return_last_states: bool = False,
         return_all_states: bool = False,
         chunk_size: int = 64,
@@ -254,8 +257,8 @@ else:
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
     ]:
         batch_size, nh, sequence_length, dhqk = query.shape
         if sequence_length % chunk_size != 0:
@@ -323,14 +326,14 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         chunk_size: int = 64,
         **kwargs,
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         batch_size, nh, sequence_length, dhqk = query.shape
         if sequence_length % chunk_size != 0:
             raise ValueError(f"Sequence length {sequence_length} is not divisible by chunk size {chunk_size}.")
@@ -426,10 +429,10 @@ else:
         scaI_act = torch.exp(igate - scaM_state_new)
 
         vecQ_scaled = query * (dhqk ** (-0.5))
-        matC_state_new = scaF_act[:, :, :, None] * matC_old + scaI_act[:, :, :, None] * (
+        matC_state_new = scaF_act[:, :, :, None] * matC_old.clone() + scaI_act[:, :, :, None] * (
             key[:, :, :, None] @ value[:, :, None, :]
         )
-        vecN_state_new = scaF_act * vecN_old + scaI_act * key
+        vecN_state_new = scaF_act * vecN_old.clone() + scaI_act * key
         h_num = vecQ_scaled[:, :, None, :] @ matC_state_new.to(dtype=dtype_qkv)
         h_num = h_num.squeeze(2).to(dtype=dtype_state)
 
@@ -451,9 +454,9 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         dtype_state: torch.dtype = torch.float32,
@@ -462,8 +465,8 @@ else:
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
     ]:
         batch_size, nh, sequence_length, dhqk = query.shape
         dhv = value.shape[-1]
@@ -525,15 +528,15 @@ else:
         value: torch.Tensor,
         fgate: torch.Tensor,
         igate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         autocast_kernel_dtype: torch.dtype = torch.bfloat16,
         chunk_size: int = 64,
         **kwargs,
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         if return_last_states:
             raise ValueError(
                 "We are padding zeros, so we cannot return last states,",
@@ -589,15 +592,15 @@ else:
         value: torch.Tensor,
         fgate: torch.Tensor,
         igate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = True,
         eps: float = 1e-6,
         autocast_kernel_dtype: torch.dtype = torch.bfloat16,
         chunk_size: int = 64,
         enable_logging: bool = False,
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """This function computes the last hidden state and matH outputs of the mLSTM, independently of the sequence length.
 
         For this it uses three kernels:
@@ -778,12 +781,12 @@ else:
             value: torch.Tensor,
             igate: torch.Tensor,
             fgate: torch.Tensor,
-            c_initial: Optional[torch.Tensor] = None,
-            n_initial: Optional[torch.Tensor] = None,
-            m_initial: Optional[torch.Tensor] = None,
-            return_last_states: bool = False,
-            mode: Optional[Literal["train", "inference"]] = None,
-        ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+            c_initial: torch.Tensor | None = None,
+            n_initial: torch.Tensor | None = None,
+            m_initial: torch.Tensor | None = None,
+            return_last_states: bool | None = None,
+            mode: Literal["train", "inference"] | None = None,
+        ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
             """Forward pass of the mLSTM backend.
 
             Depending on the configured mode, this method will call the appropriate kernel function.
@@ -978,7 +981,7 @@ else:
             batch_size, sequence_length, nh, DH = x.shape
             if nh != self.num_heads:
                 raise ValueError(f"Expected {self.num_heads} heads, got {nh}, input shape: {x.shape}")
-            if DH != self.head_dim:
+            if self.head_dim != DH:
                 raise ValueError(f"Expected {self.head_dim} head dimension, got {DH}, input shape: {x.shape}")
 
             x = self._layer_normalize(x)
@@ -1103,8 +1106,8 @@ else:
             )
 
         def forward(
-            self, x: torch.Tensor, state: Optional[mLSTMLayerStateType] = None
-        ) -> tuple[torch.Tensor, Optional[mLSTMLayerStateType]]:
+            self, x: torch.Tensor, state: mLSTMLayerStateType | None = None
+        ) -> tuple[torch.Tensor, mLSTMLayerStateType | None]:
             if x.ndim != 3:
                 raise ValueError(f"Input must have shape [batch_size, sequence_length, HD], got {x.shape}")
             batch_size, sequence_length, _ = x.shape
@@ -1190,9 +1193,7 @@ else:
             )
             self.ffn = xLSTMFeedForward(config)
 
-        def forward(
-            self, x: torch.Tensor, state: Optional[mLSTMStateType] = None
-        ) -> tuple[torch.Tensor, mLSTMStateType]:
+        def forward(self, x: torch.Tensor, state: mLSTMStateType | None = None) -> tuple[torch.Tensor, mLSTMStateType]:
             x_mlstm = self.norm_mlstm(x)
             x_mlstm, state = self.mlstm_layer(x_mlstm, state)
             x = x + x_mlstm
@@ -1239,6 +1240,9 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["xLSTMBlock"]
     supports_gradient_checkpointing = True
     _is_stateful = True
+    _can_record_outputs = {
+        "hidden_states": xLSTMBlock,
+    }
 
     def _module_name_map(self, module):
         for name, mod in self.named_modules():
@@ -1319,7 +1323,7 @@ class xLSTMCache:
             The device on which the cache should be initialized. Should be the same as the layer.
 
     Attributes:
-        seqlen_offset: int
+        seqlen_offset: torch.Tensor
         dtype: torch.dtype
 
     Example:
@@ -1344,10 +1348,14 @@ class xLSTMCache:
         config: xLSTMConfig,
         max_batch_size: int,
         dtype: torch.dtype = torch.bfloat16,
-        device: Optional[str] = None,
+        device: str | None = None,
         **kwargs,
     ):
-        self.seqlen_offset = 0
+        # Follows the static-cache convention (`StaticLayer.cumulative_length` in cache_utils.py):
+        # compile/export-friendly caches store the position counter as a tensor, not a Python int,
+        # so it stays a tensor leaf in the cache pytree across `+= shape[i]` operations rather
+        # than getting promoted to a SymInt during dynamic-shape tracing.
+        self.seqlen_offset = torch.tensor([0], dtype=int, device=device)
         self.dtype = dtype
         self.config = config
         self.rnn_state = {
@@ -1374,8 +1382,8 @@ class xLSTMCache:
         }
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class xLSTMOutput(ModelOutput):
     r"""
     cache_params (`xLSTMCache`):
@@ -1383,16 +1391,16 @@ class xLSTMOutput(ModelOutput):
         avoid providing the old `input_ids`.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor]
-    cache_params: Optional[xLSTMCache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None
+    cache_params: xLSTMCache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
 class xLSTMModel(xLSTMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        # use embbeding_dim and num_blocks once here to make use of them
+        # use embedding_dim and num_blocks once here to make use of them
         self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
         self.blocks = nn.ModuleList([xLSTMBlock(config) for _ in range(config.num_blocks)])
         self.out_norm = xLSTMRMSNorm(config.hidden_size, eps=config.norm_eps)
@@ -1406,27 +1414,26 @@ class xLSTMModel(xLSTMPreTrainedModel):
     def set_input_embeddings(self, new_embedding):
         self.embeddings = new_embedding
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.LongTensor] = None,
-        cache_params: Optional[xLSTMCache] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        **kwargs,
-    ) -> Union[tuple, xLSTMOutput]:
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.LongTensor | None = None,
+        cache_params: xLSTMCache | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | xLSTMOutput:
         r"""
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
-        if self.gradient_checkpointing and self.training and use_cache:
-            use_cache = False
+        # Resolved here (not just by @capture_outputs) because the chunked inference path below
+        # is incompatible with hidden state collection and we need the value to pick the right branch.
+        output_hidden_states = kwargs.get("output_hidden_states")
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1470,7 +1477,6 @@ class xLSTMModel(xLSTMPreTrainedModel):
                     offset += self.config.max_inference_chunksize
                 hidden_states = final_state
         else:
-            all_hidden_states = () if output_hidden_states else None
             for layer_idx, xlstm_block in enumerate(self.blocks):
                 hidden_states, rnn_state = xlstm_block(
                     hidden_states,
@@ -1483,26 +1489,19 @@ class xLSTMModel(xLSTMPreTrainedModel):
                         cache_params.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
                     cache_params.rnn_state_initial = False
 
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (hidden_states,)
-
         if use_cache:
             cache_params.seqlen_offset += inputs_embeds.shape[1]
 
         hidden_states = self.out_norm(hidden_states)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
         return xLSTMOutput(
             last_hidden_state=hidden_states,
             cache_params=cache_params,
-            hidden_states=all_hidden_states,
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class xLSTMCausalLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -1514,10 +1513,10 @@ class xLSTMCausalLMOutput(ModelOutput):
         avoid providing the old `input_ids`.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    cache_params: Optional[xLSTMCache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    cache_params: xLSTMCache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
@@ -1541,50 +1540,17 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        attention_mask=None,  # not used but needed, otherwise generate complains when passing tokenizer inputs
-        inputs_embeds=None,
-        use_cache=None,
-        cache_params: Optional[xLSTMCache] = None,
-        **kwargs,
-    ):
-        if use_cache and cache_params is not None:
-            # If the first cache position is non-zero, we assume we are in generation mode.
-            # Thus, the cache_params state is assumed to be the state before the last token
-            # (lastly generated token), and all previous tokens are already ingested.
-            # This should as well support generation from scratch with the [BOS] token inserted first.
-            input_ids = input_ids[:, -1:]
-            if inputs_embeds is not None:
-                inputs_embeds = inputs_embeds[:, -1:]
-
-        if inputs_embeds is not None and cache_params is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update({"cache_params": cache_params, "use_cache": use_cache})
-
-        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
-        for key, value in kwargs.items():
-            if key not in model_inputs:
-                model_inputs[key] = value
-
-        return model_inputs
-
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_params: Optional[xLSTMCache] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        **kwargs,
-    ) -> Union[tuple, xLSTMCausalLMOutput]:
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        cache_params: xLSTMCache | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | xLSTMCausalLMOutput:
         r"""
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
@@ -1594,7 +1560,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
             cache_params=cache_params,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_hidden_states=output_hidden_states,
             **kwargs,
         )
         hidden_states = xlstm_outputs[0]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,8 @@
 # limitations under the License.
 
 import enum
-from typing import Any, Optional, Union, overload
+import re
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -160,6 +160,7 @@ class AnyToAnyPipeline(Pipeline):
         continue_final_message=None,
         skip_special_tokens=None,
         generation_mode=None,
+        processor_kwargs=None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
         forward_kwargs = {}
@@ -172,12 +173,15 @@ class AnyToAnyPipeline(Pipeline):
             preprocess_params["timeout"] = timeout
         if continue_final_message is not None:
             preprocess_params["continue_final_message"] = continue_final_message
+        if processor_kwargs is not None:
+            preprocess_params["processor_kwargs"] = processor_kwargs
 
         # Forward kwargs
         forward_kwargs["generate_kwargs"] = generate_kwargs or {}
         if generation_mode is not None and generation_mode != "text":
             forward_kwargs["generate_kwargs"]["generation_mode"] = generation_mode
-        if kwargs.get("load_audio_from_video"):
+        # Qwen-Omni models need to know the origin of audio, to align mm position ids
+        if kwargs.get("load_audio_from_video") and re.search(r"qwen\domni", self.model.__class__.__name__.lower()):
             forward_kwargs["generate_kwargs"]["use_audio_in_video"] = True
         if stop_sequence is not None:
             if isinstance(stop_sequence, str):
@@ -234,38 +238,31 @@ class AnyToAnyPipeline(Pipeline):
     @overload
     def __call__(
         self,
-        text: Optional[str] = None,
-        images: Optional[Union[str, "Image.Image"]] = None,
-        videos: Optional[Union[str, "np.ndarray", "torch.Tensor"]] = None,
-        audio: Optional[Union[str, "np.ndarray"]] = None,
+        text: str | None = None,
+        images: Union[str, "Image.Image"] | None = None,
+        videos: Union[str, "np.ndarray", "torch.Tensor"] | None = None,
+        audio: Union[str, "np.ndarray"] | None = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]: ...
 
     @overload
     def __call__(
         self,
-        text: Optional[list[str]] = None,
-        images: Optional[Union[list[str], list["Image.Image"]]] = None,
-        videos: Optional[Union[list[str], list["np.ndarray"], list["torch.Tensor"]]] = None,
-        audio: Optional[Union[list[str], list["np.ndarray"]]] = None,
+        text: list[str] | None = None,
+        images: list[str] | list["Image.Image"] | None = None,
+        videos: list[str] | list["np.ndarray"] | list["torch.Tensor"] | None = None,
+        audio: list[str] | list["np.ndarray"] | None = None,
         **kwargs: Any,
     ) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
-        text: Union[str, list[str], list[dict]],
-        images: Optional[
-            Union[
-                str,
-                list[str],
-                list[list[str]],
-                ImageInput,
-            ]
-        ] = None,
-        videos: Optional[Union[str, list[str], VideoInput]] = None,
-        audio: Optional[Union[str, list[str], AudioInput]] = None,
+        text: str | list[str] | list[dict],
+        images: str | list[str] | list[list[str]] | ImageInput | None = None,
+        videos: str | list[str] | VideoInput | None = None,
+        audio: str | list[str] | AudioInput | None = None,
         **kwargs,
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    ) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Generate a text given text and optionally multimodal data passed as inputs.
 
@@ -322,10 +319,10 @@ class AnyToAnyPipeline(Pipeline):
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key (cannot
             return a combination of both `generated_text` and `generated_token_ids`):
 
-            - **generated_text** (`str`, present when `return_text=True` and `generation_mode="text") -- The generated text.
-            - **generated_audio** (`np.ndarray`, present when `generation_mode="audio") -- The generated audio.
-            - **generated_image** (`PIL.Image.Image`, present when `generation_mode="image") -- The generated image.
-            - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True` and `generation_mode="text") -- The token
+            - **generated_text** (`str`, present when `return_text=True` and `generation_mode="text"`) -- The generated text.
+            - **generated_audio** (`np.ndarray`, present when `generation_mode="audio"`) -- The generated audio.
+            - **generated_image** (`PIL.Image.Image`, present when `generation_mode="image"`) -- The generated image.
+            - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True` and `generation_mode="text"`) -- The token
                 ids of the generated text.
             - **input_text** (`str`) -- The input text.
         """
@@ -367,8 +364,21 @@ class AnyToAnyPipeline(Pipeline):
             if continue_final_message is None:
                 continue_final_message = inputs.messages[-1]["role"] == "assistant"
 
+            # Processor kwargs are passed separately from jinja kwargs to chat template
+            # but it was added only in https://github.com/huggingface/transformers/pull/44881
+            processor_kwargs = processing_kwargs.pop("processor_kwargs", None) or {}
+
+            chat_template_kwargs = {
+                "continue_final_message": continue_final_message,
+                "return_tensors": "pt",
+                "tokenize": True,
+                "return_dict": True,
+                "add_generation_prompt": not continue_final_message,
+                "processor_kwargs": processor_kwargs,
+                **processing_kwargs,
+            }
+
             # Handle Mistral tokenizer which does not accept processing kwargs
-            chat_template_kwargs = {"add_generation_prompt": not continue_final_message, **processing_kwargs}
             if self.processor.tokenizer.__class__.__name__ == "MistralCommonBackend":
                 chat_template_kwargs = {
                     k: v for k, v in chat_template_kwargs.items() if k in ["padding", "truncation", "max_length"]
@@ -376,10 +386,6 @@ class AnyToAnyPipeline(Pipeline):
 
             model_inputs = self.processor.apply_chat_template(
                 inputs.messages,
-                continue_final_message=continue_final_message,
-                return_tensors="pt",
-                tokenize=True,
-                return_dict=True,
                 **chat_template_kwargs,
             ).to(dtype=self.dtype)
             model_inputs["text"] = inputs
@@ -393,16 +399,15 @@ class AnyToAnyPipeline(Pipeline):
             inputs = inputs.copy()  # avoid in-place changes if users passed dict
             text = inputs.pop("text")
 
-            # Feature extractor do not load audio files and expect a decode array
-            if "audio" in inputs and hasattr(self.processor, "feature_extractor"):
+            # Feature extractor do not load audio files and expect a decoded array
+            if inputs.get("audio", None) is not None and hasattr(self.processor, "feature_extractor"):
                 inputs["audio"] = self.processor.feature_extractor.fetch_audio(inputs["audio"])
 
         # If batched text inputs, we set padding to True unless specified otherwise
+        processor_kwargs = processing_kwargs.pop("processor_kwargs", None) or processing_kwargs
         if isinstance(text, (list, tuple)) and len(text) > 1:
-            processing_kwargs.setdefault("padding", True)
-
-        # Multimodal data is loaded in preprocessors so we pass all ipnuts directly to `self.processor`
-        model_inputs = self.processor(text=text, **inputs, return_tensors="pt", **processing_kwargs).to(
+            processor_kwargs.setdefault("padding", True)
+        model_inputs = self.processor(text=text, **inputs, return_tensors="pt", **processor_kwargs).to(
             dtype=self.dtype
         )
         model_inputs["text"] = text
@@ -440,6 +445,8 @@ class AnyToAnyPipeline(Pipeline):
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
+        if getattr(self.tokenizer, "response_template", None) or getattr(self.tokenizer, "response_schema", None):
+            skip_special_tokens = False
         generation_mode = postprocess_kwargs["generation_mode"] or "text"
         if generation_mode == "image" and hasattr(self.model, "decode_image_tokens"):
             generated_sequence = self.model.decode_image_tokens(generated_sequence.to(self.model.device))
@@ -468,7 +475,7 @@ class AnyToAnyPipeline(Pipeline):
             generated_outputs = new_generated_texts
         if return_type == ReturnType.FULL_TEXT:
             full_texts = []
-            for prompt_text, generated_text in zip(input_texts, generated_outputs):
+            for prompt_text, generated_text, decoded_input in zip(input_texts, generated_outputs, decoded_inputs):
                 if isinstance(prompt_text, str):
                     generated_text = prompt_text + generated_text
                 elif isinstance(prompt_text, Chat):
@@ -488,9 +495,17 @@ class AnyToAnyPipeline(Pipeline):
                         ]
                     else:
                         # When we're not starting from a prefill, the output is a new assistant message
-                        generated_text = list(prompt_text.messages) + [
-                            {"role": "assistant", "content": generated_text}
-                        ]
+                        if getattr(self.tokenizer, "response_template", None) is not None:
+                            # New-style templates need to see the prompt as `prefix`, because chat
+                            # templates often pre-write part of the assistant message (e.g. an
+                            # opening <think> tag), which affects parsing.
+                            assistant_message = self.tokenizer.parse_response(generated_text, prefix=decoded_input)
+                        elif getattr(self.tokenizer, "response_schema", None) is not None:
+                            # Legacy schemas parse the generated text alone and don't support `prefix`
+                            assistant_message = self.tokenizer.parse_response(generated_text)
+                        else:
+                            assistant_message = {"role": "assistant", "content": generated_text}
+                        generated_text = list(prompt_text.messages) + [assistant_message]
                 full_texts.append(generated_text)
             generated_outputs = full_texts
 

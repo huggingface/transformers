@@ -208,10 +208,9 @@ class PeAudioVideoEncoderTester:
 class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PeAudioVideoEncoder,)
     additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     _is_composite = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = PeAudioVideoEncoderTester(self)
@@ -226,12 +225,12 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="PeAudioVideoEncoder does not have usual input embeddings")
-    def test_model_get_set_embeddings(self):
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
-    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
-    def test_initialization(self):
+    @unittest.skip(reason="PeAudioVideoEncoder does not have usual input embeddings")
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip("PeAudioVideoEncoder does not have language_model, vision_tower, multi_modal_projector.")
@@ -258,10 +257,6 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip("#TODO @eustlb this should be fixed tho")
     def test_save_load(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapperModel does not support model parallelism")
-    def test_model_parallelism(self):
         pass
 
     @unittest.skip(reason="@eustlb this is not really expected")

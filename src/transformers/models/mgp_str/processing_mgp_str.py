@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +18,7 @@ from transformers.utils import is_torch_available
 from transformers.utils.generic import ExplicitEnum
 
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 from ...utils.import_utils import requires
 
 
@@ -36,20 +36,8 @@ SUPPORTED_ANNOTATION_FORMATS = (DecodeType.CHARACTER, DecodeType.BPE, DecodeType
 
 
 @requires(backends=("sentencepiece",))
+@auto_docstring
 class MgpstrProcessor(ProcessorMixin):
-    r"""
-    Constructs a MGP-STR processor which wraps an image processor and MGP-STR tokenizers into a single
-
-    [`MgpstrProcessor`] offers all the functionalities of `ViTImageProcessor`] and [`MgpstrTokenizer`]. See the
-    [`~MgpstrProcessor.__call__`] and [`~MgpstrProcessor.batch_decode`] for more information.
-
-    Args:
-        image_processor (`ViTImageProcessor`, *optional*):
-            An instance of `ViTImageProcessor`. The image processor is a required input.
-        tokenizer ([`MgpstrTokenizer`], *optional*):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         self.char_tokenizer = tokenizer
         self.bpe_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -57,13 +45,8 @@ class MgpstrProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
-        """
-        When used in normal mode, this method forwards all its arguments to ViTImageProcessor's
-        [`~ViTImageProcessor.__call__`] and returns its output. This method also forwards the `text` and `kwargs`
-        arguments to MgpstrTokenizer's [`~MgpstrTokenizer.__call__`] if `text` is not `None` to encode the text. Please
-        refer to the docstring of the above methods for more information.
-        """
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 

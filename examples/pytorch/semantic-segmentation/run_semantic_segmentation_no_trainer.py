@@ -30,7 +30,6 @@ import argparse
 import json
 import math
 import os
-import warnings
 from functools import partial
 from pathlib import Path
 
@@ -100,11 +99,6 @@ def parse_args():
     )
     parser.add_argument(
         "--do_reduce_labels",
-        action="store_true",
-        help="Whether or not to reduce all labels by 1 and replace background by 255.",
-    )
-    parser.add_argument(
-        "--reduce_labels",
         action="store_true",
         help="Whether or not to reduce all labels by 1 and replace background by 255.",
     )
@@ -230,14 +224,6 @@ def parse_args():
             raise ValueError(
                 "Need an `output_dir` to create a repo when `--push_to_hub` or `with_tracking` is specified."
             )
-
-    # Deprecation
-    if args.reduce_labels:
-        args.do_reduce_labels = args.reduce_labels
-        warnings.warn(
-            "The `reduce_labels` argument is deprecated and will be removed in v4.45. Please use `do_reduce_labels` instead.",
-            FutureWarning,
-        )
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)

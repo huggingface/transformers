@@ -44,7 +44,7 @@ model = AutoModelForMultimodalLM.from_pretrained(
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-3B")
 ```
 
-These models typically include a [chat template](./chat_templating) to structure conversations across modalities. Inputs can mix images, text, audio, or other supported formats in a single turn. Outputs may also vary (e.g., text generation or audio generation), depending on the configuration.
+These models typically include a [chat template](../chat_templating) to structure conversations across modalities. Inputs can mix images, text, audio, or other supported formats in a single turn. Outputs may also vary (e.g., text generation or audio generation), depending on the configuration.
 
 Below is an example providing a "text + audio" input and requesting a text response.
 

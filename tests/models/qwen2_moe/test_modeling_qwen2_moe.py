@@ -119,7 +119,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = Qwen2MoeForCausalLM.from_pretrained(
-                "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16
+                "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16, experts_implementation="eager"
             )
         return cls.model
 
@@ -229,7 +229,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
-        set_seed(0)
+        set_seed(42)
         generated_ids = model.generate(
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=assistant_model
         )

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,23 +16,20 @@ import json
 import os
 import warnings
 from collections.abc import Callable
-from copy import deepcopy
 from functools import partial
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
-from huggingface_hub import create_repo, is_offline_mode
+from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
-from .image_processing_utils import (
-    BatchFeature,
-    get_size_dict,
-)
-from .image_processing_utils_fast import BaseImageProcessorFast
+from .image_processing_backends import TorchvisionBackend
+from .image_processing_utils import BatchFeature
 from .image_utils import (
     ChannelDimension,
     SizeDict,
+    is_vision_available,
     validate_kwargs,
 )
 from .processing_utils import Unpack, VideosKwargs
@@ -50,7 +46,7 @@ from .utils import (
     logging,
     safe_load_json_file,
 )
-from .utils.hub import cached_file
+from .utils.hub import cached_file, hf_api
 from .utils.import_utils import requires
 from .video_utils import (
     VideoInput,
@@ -69,7 +65,10 @@ if is_torch_available():
     import torch
 
 if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
+    import torchvision.transforms.v2.functional as tvF
+
+if is_vision_available():
+    from .image_utils import PILImageResampling
 
 
 logger = logging.get_logger(__name__)
@@ -148,7 +147,7 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
     BASE_VIDEO_PROCESSOR_DOCSTRING,
 )
 @requires(backends=("vision", "torchvision"))
-class BaseVideoProcessor(BaseImageProcessorFast):
+class BaseVideoProcessor(TorchvisionBackend):
     _auto_class = None
 
     resample = None
@@ -173,35 +172,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     model_input_names = ["pixel_values_videos"]
 
     def __init__(self, **kwargs: Unpack[VideosKwargs]) -> None:
-        super().__init__()
-
-        kwargs.pop("processor_class", None)
-
-        # Additional attributes without default values
-        for key, value in kwargs.items():
-            try:
-                setattr(self, key, value)
-            except AttributeError as err:
-                logger.error(f"Can't set {key} with value {value} for {self}")
-                raise err
-
-        # Prepare size related keys and turn then into `SizeDict`
-        size = kwargs.pop("size", self.size)
-        self.size = (
-            get_size_dict(size=size, default_to_square=kwargs.pop("default_to_square", self.default_to_square))
-            if size is not None
-            else None
-        )
-        crop_size = kwargs.pop("crop_size", self.crop_size)
-        self.crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
-
-        # Save valid kwargs in a list for further processing
-        self.model_valid_processing_keys = list(self.valid_kwargs.__annotations__.keys())
-        for key in self.model_valid_processing_keys:
-            if kwargs.get(key) is not None:
-                setattr(self, key, kwargs[key])
-            else:
-                setattr(self, key, deepcopy(getattr(self, key, None)))
+        super().__init__(**kwargs)
 
     def __call__(self, videos, **kwargs) -> BatchFeature:
         return self.preprocess(videos, **kwargs)
@@ -221,7 +192,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             `torch.Tensor`: The converted video.
         """
 
-        video = F.grayscale_to_rgb(video)
+        video = tvF.grayscale_to_rgb(video)
         if video.shape[-3] == 3 or not (video[..., 3, :, :] < 255).any():
             return video
 
@@ -234,8 +205,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        num_frames: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
         **kwargs,
     ):
         """
@@ -287,9 +258,9 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     def _decode_and_sample_videos(
         self,
         videos: VideoInput,
-        video_metadata: Union[VideoMetadata, dict],
-        do_sample_frames: Optional[bool] = None,
-        sample_indices_fn: Optional[Callable] = None,
+        video_metadata: VideoMetadata | dict,
+        do_sample_frames: bool | None = None,
+        sample_indices_fn: Callable | None = None,
     ) -> list["torch.Tensor"]:
         """
         Decode input videos and sample frames if needed.
@@ -312,7 +283,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             if isinstance(videos[0], list):
                 # Videos sometimes are passed as a list of image URLs, especially through templates
                 videos = [
-                    torch.stack([F.pil_to_tensor(image) for image in images], dim=0)
+                    torch.stack([self.process_image(image) for image in images], dim=0)
                     for images in self.fetch_images(videos)
                 ]
                 if do_sample_frames:
@@ -327,8 +298,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     def _prepare_input_videos(
         self,
         videos: VideoInput,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        device: Optional[str] = None,
+        input_data_format: str | ChannelDimension | None = None,
+        device: str | None = None,
     ) -> list["torch.Tensor"]:
         """
         Prepare the input videos for processing.
@@ -337,7 +308,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         for video in videos:
             # `make_batched_videos` always returns a 4D array per video
             if isinstance(video, np.ndarray):
-                # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
+                # not using tvF.to_tensor as it doesn't handle (C, H, W) numpy arrays
                 video = torch.from_numpy(video).contiguous()
 
             # Infer the channel dimension format if not provided
@@ -388,7 +359,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         )
         videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device)
 
-        kwargs = self._further_process_kwargs(**kwargs)
+        kwargs = self._standardize_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
 
         # Pop kwargs that are not needed in _preprocess
@@ -406,15 +377,15 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing
@@ -424,7 +395,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(stacked_videos, size=size, interpolation=interpolation)
+                stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 
@@ -448,11 +419,11 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     @classmethod
     def from_pretrained(
         cls,
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ):
@@ -468,7 +439,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 - a path to a *directory* containing a video processor file saved using the
                   [`~video_processing_utils.VideoProcessorBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved video processor JSON *file*, e.g.,
+                - a path to a saved video processor JSON *file*, e.g.,
                   `./my_model_directory/video_preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model video processor should be cached if the
@@ -544,7 +515,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         return cls.from_dict(video_processor_dict, **kwargs)
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
         Save an video processor object to the directory `save_directory`, so that it can be re-loaded using the
         [`~video_processing_utils.VideoProcessorBase.from_pretrained`] class method.
@@ -567,7 +538,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -594,7 +565,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
     @classmethod
     def get_video_processor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
@@ -737,25 +708,21 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         """
         video_processor_dict = video_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-
-        # The `size` parameter is a dict and was previously an int or tuple in feature extractors.
-        # We set `size` here directly to the `video_processor_dict` so that it is converted to the appropriate
-        # dict within the video processor and isn't overwritten if `size` is passed in as a kwarg.
-        if "size" in kwargs and "size" in video_processor_dict:
-            video_processor_dict["size"] = kwargs.pop("size")
-        if "crop_size" in kwargs and "crop_size" in video_processor_dict:
-            video_processor_dict["crop_size"] = kwargs.pop("crop_size")
-
+        video_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
         video_processor = cls(**video_processor_dict)
 
-        # Update video_processor with kwargs if needed
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(video_processor, key):
-                setattr(video_processor, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
+        # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
+        extra_keys = []
+        for key in reversed(list(kwargs.keys())):
+            if hasattr(video_processor, key) and key not in cls.valid_kwargs.__annotations__:
+                setattr(video_processor, key, kwargs.pop(key, None))
+                extra_keys.append(key)
+        if extra_keys:
+            logger.warning_once(
+                f"Image processor {cls.__name__}: kwargs {extra_keys} were applied for backward compatibility. "
+                f"To avoid this warning, add them to valid_kwargs: create a custom TypedDict extending "
+                f"ImagesKwargs with these keys and set it as the `valid_kwargs` class attribute."
+            )
 
         logger.info(f"Video processor {video_processor}")
         if return_unused_kwargs:
@@ -770,19 +737,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         Returns:
             `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
-        output = deepcopy(self.__dict__)
-        filtered_dict = {}
-        for key, value in output.items():
-            if value is None:
-                class_default = getattr(type(self), key, "NOT_FOUND")
-                # Keep None if user explicitly set it (class default is non-None)
-                if class_default != "NOT_FOUND" and class_default is not None:
-                    filtered_dict[key] = value
-            else:
-                filtered_dict[key] = value
-
-        filtered_dict.pop("model_valid_processing_keys", None)
-        filtered_dict.pop("_valid_kwargs_names", None)
+        filtered_dict = super().to_dict()
+        filtered_dict.pop("image_processor_type", None)
         filtered_dict["video_processor_type"] = self.__class__.__name__
 
         return filtered_dict
@@ -802,7 +758,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 
@@ -817,7 +773,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     @classmethod
-    def from_json_file(cls, json_file: Union[str, os.PathLike]):
+    def from_json_file(cls, json_file: str | os.PathLike):
         """
         Instantiates a video processor of type [`~video_processing_utils.VideoProcessorBase`] from the path to a JSON
         file of parameters.
@@ -861,7 +817,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         cls._auto_class = auto_class
 
-    def fetch_videos(self, video_url_or_urls: Union[str, list[str], list[list[str]]], sample_indices_fn=None):
+    def fetch_videos(self, video_url_or_urls: str | list[str] | list[list[str]], sample_indices_fn=None):
         """
         Convert a single or a list of urls into the corresponding `np.array` objects.
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 DPR Authors, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """PyTorch DPR model for Open Domain Question Answering."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -39,12 +37,12 @@ logger = logging.get_logger(__name__)
 ##########
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`DPRQuestionEncoder`].
     """
 )
+@dataclass
 class DPRContextEncoderOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
@@ -54,16 +52,16 @@ class DPRContextEncoderOutput(ModelOutput):
     """
 
     pooler_output: torch.FloatTensor
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`DPRQuestionEncoder`].
     """
 )
+@dataclass
 class DPRQuestionEncoderOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
@@ -73,16 +71,16 @@ class DPRQuestionEncoderOutput(ModelOutput):
     """
 
     pooler_output: torch.FloatTensor
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`DPRQuestionEncoder`].
     """
 )
+@dataclass
 class DPRReaderOutput(ModelOutput):
     r"""
     start_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
@@ -95,10 +93,10 @@ class DPRReaderOutput(ModelOutput):
     """
 
     start_logits: torch.FloatTensor
-    end_logits: Optional[torch.FloatTensor] = None
-    relevance_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    end_logits: torch.FloatTensor | None = None
+    relevance_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -123,14 +121,14 @@ class DPREncoder(DPRPreTrainedModel):
     def forward(
         self,
         input_ids: Tensor,
-        attention_mask: Optional[Tensor] = None,
-        token_type_ids: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
+        attention_mask: Tensor | None = None,
+        token_type_ids: Tensor | None = None,
+        inputs_embeds: Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
         **kwargs,
-    ) -> Union[BaseModelOutputWithPooling, tuple[Tensor, ...]]:
+    ) -> BaseModelOutputWithPooling | tuple[Tensor, ...]:
         outputs = self.bert_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -178,12 +176,12 @@ class DPRSpanPredictor(DPRPreTrainedModel):
         self,
         input_ids: Tensor,
         attention_mask: Tensor,
-        inputs_embeds: Optional[Tensor] = None,
+        inputs_embeds: Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
         **kwargs,
-    ) -> Union[DPRReaderOutput, tuple[Tensor, ...]]:
+    ) -> DPRReaderOutput | tuple[Tensor, ...]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         n_passages, sequence_length = input_ids.size() if input_ids is not None else inputs_embeds.size()[:2]
         # feed encoder
@@ -277,15 +275,15 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[Tensor] = None,
-        attention_mask: Optional[Tensor] = None,
-        token_type_ids: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+        token_type_ids: Tensor | None = None,
+        inputs_embeds: Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[DPRContextEncoderOutput, tuple[Tensor, ...]]:
+    ) -> DPRContextEncoderOutput | tuple[Tensor, ...]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. To match pretraining, DPR input sequence should be
@@ -328,7 +326,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -383,15 +381,15 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[Tensor] = None,
-        attention_mask: Optional[Tensor] = None,
-        token_type_ids: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+        token_type_ids: Tensor | None = None,
+        inputs_embeds: Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[DPRQuestionEncoderOutput, tuple[Tensor, ...]]:
+    ) -> DPRQuestionEncoderOutput | tuple[Tensor, ...]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. To match pretraining, DPR input sequence should be
@@ -434,7 +432,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -490,14 +488,14 @@ class DPRReader(DPRPretrainedReader):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[Tensor] = None,
-        attention_mask: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+        inputs_embeds: Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[DPRReaderOutput, tuple[Tensor, ...]]:
+    ) -> DPRReaderOutput | tuple[Tensor, ...]:
         r"""
         input_ids (`tuple[torch.LongTensor]` of shapes `(n_passages, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. It has to be a sequence triplet with 1) the question
@@ -540,7 +538,7 @@ class DPRReader(DPRPretrainedReader):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")

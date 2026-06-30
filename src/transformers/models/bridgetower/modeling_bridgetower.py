@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -39,7 +37,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
@@ -48,12 +47,12 @@ logger = logging.get_logger(__name__)
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`BridgeTowerModel`].
     """
 )
+@dataclass
 class BridgeTowerModelOutput(ModelOutput):
     r"""
     text_features (`torch.FloatTensor` of shape `(batch_size, text_sequence_length, hidden_size)`):
@@ -65,19 +64,19 @@ class BridgeTowerModelOutput(ModelOutput):
         token), respectively, after further processing through layers used for auxiliary pretraining tasks.
     """
 
-    text_features: Optional[torch.FloatTensor] = None
-    image_features: Optional[torch.FloatTensor] = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    text_features: torch.FloatTensor | None = None
+    image_features: torch.FloatTensor | None = None
+    pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of ['BridgeTowerForContrastiveLearning']
     """
 )
+@dataclass
 class BridgeTowerContrastiveOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -95,13 +94,13 @@ class BridgeTowerContrastiveOutput(ModelOutput):
         sequence_length)`.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    text_embeds: Optional[tuple[torch.FloatTensor]] = None
-    image_embeds: Optional[tuple[torch.FloatTensor]] = None
-    cross_embeds: Optional[tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    text_embeds: tuple[torch.FloatTensor] | None = None
+    image_embeds: tuple[torch.FloatTensor] | None = None
+    cross_embeds: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 class BridgeTowerResidualAttention(nn.Module):
@@ -139,7 +138,7 @@ class BridgeTowerResidualAttention(nn.Module):
             key_padding_mask=attention_mask,
         )[0]
 
-    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor | None = None):
         residual_state = hidden_state + self.attention(self.ln_1(hidden_state), attention_mask)
         hidden_state = self.ln_2(residual_state)
         for layer in self.mlp.values():
@@ -163,7 +162,7 @@ class BridgeTowerTransformer(nn.Module):
             )
         self.stop_gradient = config.stop_gradient
 
-    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor | None = None):
         hidden_states = []
         for block in self.resblocks:
             hidden_state = block(hidden_state, attention_mask)
@@ -409,8 +408,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -421,7 +420,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -462,9 +460,8 @@ class BridgeTowerSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -482,16 +479,11 @@ class BridgeTowerSelfAttention(nn.Module):
                 current_past_key_values = past_key_values.self_attention_cache
 
             # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            key_layer, value_layer = current_past_key_values.update(
-                key_layer,
-                value_layer,
-                self.layer_idx,
-                {"cache_position": cache_position},
-            )
+            key_layer, value_layer = current_past_key_values.update(key_layer, value_layer, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -535,20 +527,18 @@ class BridgeTowerCrossAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = encoder_hidden_states.shape[1]
+        input_shape = hidden_states.shape[:-1]
 
-        q_input_shape = (bsz, tgt_len, -1, self.attention_head_size)
-        kv_input_shape = (bsz, src_len, -1, self.attention_head_size)
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
 
         # get query proj
-        query_layer = self.query(hidden_states).view(*q_input_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
         if past_key_values is not None and is_updated:
@@ -556,8 +546,9 @@ class BridgeTowerCrossAttention(nn.Module):
             key_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
             value_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].values
         else:
-            key_layer = self.key(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_layer = self.value(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+            kv_shape = (*encoder_hidden_states.shape[:-1], -1, self.attention_head_size)
+            key_layer = self.key(encoder_hidden_states).view(kv_shape).transpose(1, 2)
+            value_layer = self.value(encoder_hidden_states).view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all states to the cache
@@ -567,9 +558,9 @@ class BridgeTowerCrossAttention(nn.Module):
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 past_key_values.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -581,7 +572,7 @@ class BridgeTowerCrossAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return attn_output, attn_weights
 
 
@@ -597,11 +588,10 @@ class BridgeTowerAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
@@ -610,7 +600,6 @@ class BridgeTowerAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attention_output = self.output(attention_output, hidden_states)
@@ -700,19 +689,16 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
-        outputs = ()
-        self_attention_output, self_attn_weights = self.attention(
+    ) -> torch.Tensor:
+        self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attention_output = self_attention_output
@@ -724,7 +710,7 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
                     " by setting `config.add_cross_attention=True`"
                 )
 
-            cross_attention_output, cross_attn_weights = self.crossattention(
+            cross_attention_output, _ = self.crossattention(
                 self_attention_output,
                 None,  # attention_mask
                 encoder_hidden_states,
@@ -733,15 +719,11 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
                 **kwargs,
             )
             attention_output = cross_attention_output
-            outputs = (cross_attn_weights,)
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        return outputs + (
-            layer_output,
-            self_attn_weights,
-        )
+        return layer_output
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -761,46 +743,26 @@ class BridgeTowerTextEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-
-        for i, layer_module in enumerate(self.layer):
-            layer_outputs = layer_module(
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
+        for layer_module in self.layer:
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -830,10 +792,10 @@ class BridgeTowerTextEmbeddings(nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if position_ids is None:
@@ -858,7 +820,7 @@ class BridgeTowerTextEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
-                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
+                buffered_token_type_ids = self.token_type_ids.to(position_ids.device).expand(position_ids.shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
                 token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
             else:
@@ -918,7 +880,12 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
+    _can_record_outputs = {
+        "hidden_states": BridgeTowerTextLayer,
+        "attentions": BridgeTowerSelfAttention,
+        "cross_attentions": BridgeTowerCrossAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -1011,61 +978,35 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     # NOTE: bridgetower with its multimodality has a more complicated scheme making records harder
     # for now we skip the copies from bert but stay close to the original
     # copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
+        if not self.config.is_decoder:
             use_cache = False
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if input_ids is not None:
-            device = input_ids.device
-            input_shape = input_ids.shape
-        else:
-            device = inputs_embeds.device
-            input_shape = inputs_embeds.shape[:-1]
-
-        seq_length = input_shape[1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -1080,7 +1021,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -1091,9 +1031,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
             position_ids=position_ids,
             **kwargs,
         )
@@ -1104,9 +1041,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )
 
     # Copied from transformers.models.bert.modeling_bert.BertModel._create_attention_masks
@@ -1116,28 +1050,26 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         encoder_attention_mask,
         embedding_output,
         encoder_hidden_states,
-        cache_position,
         past_key_values,
     ):
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=embedding_output,
+                inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
                 past_key_values=past_key_values,
             )
         else:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=embedding_output,
+                inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
             )
 
         if encoder_attention_mask is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=embedding_output,
+                inputs_embeds=embedding_output,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
@@ -1213,37 +1145,38 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
+    def _apply_text_transform(self, hidden_states: torch.Tensor, layer_idx: int) -> torch.Tensor:
+        if self.config.share_cross_modal_transformer_layers:
+            return self.cross_modal_text_transform(hidden_states)
+        return self.cross_modal_text_transform[layer_idx](hidden_states)
+
+    def _apply_image_transform(self, hidden_states: torch.Tensor, layer_idx: int) -> torch.Tensor:
+        if self.config.share_cross_modal_transformer_layers:
+            return self.cross_modal_image_transform(hidden_states)
+        return self.cross_modal_image_transform[layer_idx](hidden_states)
+
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        image_embeds: Optional[torch.FloatTensor] = None,
-        image_token_type_idx: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        image_embeds: torch.FloatTensor | None = None,
+        image_token_type_idx: int | None = None,
+        labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
-        **kwargs,
-    ) -> Union[tuple[torch.Tensor], BridgeTowerModelOutput]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor] | BridgeTowerModelOutput:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
         image_token_type_idx (`int`, *optional*):
             - The token type ids for images.
-        output_hidden_states (`bool`, *optional*):
-            If set to `True`, hidden states are returned as a list containing the hidden states of text, image, and
-            cross-modal components respectively. i.e. `(hidden_states_text, hidden_states_image,
-            hidden_states_cross_modal)` where each element is a list of the hidden states of the corresponding
-            modality. `hidden_states_txt/img` are a list of tensors corresponding to unimodal hidden states and
-            `hidden_states_cross_modal` is a list of tuples containing `cross_modal_text_hidden_states` and
-            `cross_modal_image_hidden_states` of each brdige layer.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels are currently not supported.
 
@@ -1252,11 +1185,13 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> # prepare image and text
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "hello world"
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base")
         >>> model = BridgeTowerModel.from_pretrained("BridgeTower/bridgetower-base")
@@ -1266,33 +1201,28 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         >>> outputs.keys()
         odict_keys(['text_features', 'image_features', 'pooler_output'])
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        all_hidden_states_text = () if output_hidden_states else None
-        all_hidden_states_image = () if output_hidden_states else None
-        all_hidden_states_cross = () if output_hidden_states else None
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
+        all_hidden_states_text = []
+        all_hidden_states_image = []
+        all_hidden_states_cross = []
+        all_self_attentions = []
 
         if inputs_embeds is not None and input_ids is None:
             raise NotImplementedError(
                 "BridgeTowerModel does not use `inputs_embeds`.  Make sure to pass in `input_ids` instead."
             )
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        image_token_type_idx = image_token_type_idx if image_token_type_idx else 1
+        image_token_type_idx = image_token_type_idx or 1
         input_shape = input_ids.size()
         text_embeds = self.text_model.embeddings(input_ids=input_ids)
-
-        if output_hidden_states:
-            all_hidden_states_text += (text_embeds,)
+        all_hidden_states_text.append(text_embeds)
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, dtype=torch.long, device=input_ids.device)
-        extend_text_masks = self.text_model.get_extended_attention_mask(attention_mask, input_shape).to(
-            input_ids.device
+
+        extend_text_masks = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=text_embeds[:, 0:1, :],  # weird case where the mask always wants q_len == 1
+            attention_mask=attention_mask,
         )
 
         # The split_index determines how many layers of the uni-modal encoder are applied before the cross-modal encoder
@@ -1300,10 +1230,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         # Run the first 'split_index' layers of the textual encoder
         for layer in self.text_model.encoder.layer[:split_index]:
-            text_embeds = layer(text_embeds, extend_text_masks)[0]
-
-            if output_hidden_states:
-                all_hidden_states_text += (text_embeds,)
+            text_embeds = layer(text_embeds, extend_text_masks)
+            all_hidden_states_text.append(text_embeds)
 
         if image_embeds is None:
             image_embeds = self.vision_model.visual.forward_pre(
@@ -1313,19 +1241,17 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             # Permute as BridgeTowerResidualAttention has batch_first=True
             image_embeds = image_embeds.permute(1, 0, 2)
 
-        if output_hidden_states:
-            all_hidden_states_image += (image_embeds,)
+        all_hidden_states_image.append(image_embeds)
 
         # Run the first 'split_index' layers of the visual encoder
         for block in self.vision_model.visual.transformer.resblocks[:split_index]:
             image_embeds = block(image_embeds)
-            if output_hidden_states:
-                all_hidden_states_image += (image_embeds,)
+            all_hidden_states_image.append(image_embeds)
 
         image_embeds_with_ln = self.vision_model.visual.forward_post(image_embeds.type(self.vision_model.dtype))
 
         # first layer is a special case because we don't have the output from the cross-encoder yet
-        cross_modal_text = self.cross_modal_text_transform(text_embeds)
+        cross_modal_text = self._apply_text_transform(text_embeds, layer_idx=0)
 
         text_token_type_embeddings = self.token_type_embeddings(
             torch.zeros(1, dtype=torch.long, device=input_ids.device)
@@ -1333,7 +1259,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         cross_modal_text = self.cross_modal_text_layernorm(cross_modal_text + text_token_type_embeddings)
 
-        image_embeds_with_ln = self.cross_modal_image_transform(image_embeds_with_ln)
+        image_embeds_with_ln = self._apply_image_transform(image_embeds_with_ln, layer_idx=0)
         image_token_type_embeddings = self.token_type_embeddings(
             torch.full((1,), image_token_type_idx, dtype=torch.long, device=input_ids.device)
         ).expand_as(image_embeds_with_ln)
@@ -1346,8 +1272,10 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             dtype=torch.long,
             device=input_ids.device,
         )
-        extend_image_masks = self.text_model.get_extended_attention_mask(pixel_mask, pixel_mask.size()).to(
-            input_ids.device
+        extend_image_masks = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=cross_modal_image,
+            attention_mask=pixel_mask,
         )
 
         layer_outputs_text = self.cross_modal_text_layers[0](
@@ -1355,7 +1283,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             cross_modal_image,
             attention_mask=extend_text_masks,
             encoder_attention_mask=extend_image_masks,
-            output_attentions=output_attentions,
         )
         cross_text_features = layer_outputs_text[0]
 
@@ -1364,27 +1291,24 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             cross_modal_text,
             attention_mask=extend_image_masks,
             encoder_attention_mask=extend_text_masks,
-            output_attentions=output_attentions,
         )
         cross_image_features = layer_outputs_image[0]
 
-        if output_hidden_states:
-            all_hidden_states_cross += ((cross_text_features, cross_image_features),)
+        all_hidden_states_cross.append((cross_text_features, cross_image_features))
 
-        if output_attentions:
-            all_self_attentions += ((layer_outputs_text[1], layer_outputs_image[1]),)
+        all_self_attentions.append((layer_outputs_text[1], layer_outputs_image[1]))
 
         link_layer_index = 0
 
         #  Each of the top 6 layers of the visual and textual encoders ([split_index:]) is connected to each layer of
         #  the cross-modal encoder via bridge layers, which brings bottom-up alignment and fusion to the cross-modal encoder.
         for i in range(split_index, len(self.text_model.encoder.layer)):
-            text_embeds = self.text_model.encoder.layer[i](text_embeds, extend_text_masks)[0]
+            text_embeds = self.text_model.encoder.layer[i](text_embeds, extend_text_masks)
             image_embeds = self.vision_model.visual.transformer.resblocks[i](image_embeds).type(
                 self.vision_model.dtype
             )
             image_embeds_with_ln = (
-                self.cross_modal_image_transform(self.vision_model.visual.forward_post(image_embeds))
+                self._apply_image_transform(self.vision_model.visual.forward_post(image_embeds), link_layer_index + 1)
                 + image_token_type_embeddings
             )
 
@@ -1392,8 +1316,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             image_link_tower = self.cross_modal_image_link_tower[link_layer_index]
 
             # Bridge layers for textual and visual encoders
+            transformed_text_embeds = self._apply_text_transform(text_embeds, link_layer_index + 1)
             cross_text_features_ = text_link_tower(
-                self.cross_modal_text_transform(text_embeds) + text_token_type_embeddings,
+                transformed_text_embeds + text_token_type_embeddings,
                 cross_text_features,
                 extend_text_masks,
             )
@@ -1405,7 +1330,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 cross_image_features_,
                 attention_mask=extend_text_masks,
                 encoder_attention_mask=extend_image_masks,
-                output_attentions=output_attentions,
             )
             cross_text_features = layer_outputs_text[0]
 
@@ -1414,40 +1338,31 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 cross_text_features_,
                 attention_mask=extend_image_masks,
                 encoder_attention_mask=extend_text_masks,
-                output_attentions=output_attentions,
             )
             cross_image_features = layer_outputs_image[0]
 
             link_layer_index += 1
 
-            if output_hidden_states:
-                all_hidden_states_text += (text_embeds,)
-                all_hidden_states_image += (image_embeds,)
-                all_hidden_states_cross += ((cross_text_features, cross_image_features),)
+            all_hidden_states_text.append(text_embeds)
+            all_hidden_states_image.append(image_embeds)
+            all_hidden_states_cross.append((cross_text_features, cross_image_features))
 
-            if output_attentions:
-                all_self_attentions += ((layer_outputs_text[1], layer_outputs_image[1]),)
+            all_self_attentions.append((layer_outputs_text[1], layer_outputs_image[1]))
 
         #  Concatenate the cls token of the text and image features to get the final represtation
         text_features, image_features = cross_text_features, cross_image_features
         cls_features = self.get_cls_features(text_features, image_features)
 
-        if output_hidden_states:
-            all_hidden_states = (all_hidden_states_text, all_hidden_states_image, all_hidden_states_cross)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [text_features, image_features, cls_features, all_hidden_states, all_self_attentions]
-                if v is not None
-            )
-
         return BridgeTowerModelOutput(
             text_features=text_features,
             image_features=image_features,
             pooler_output=cls_features,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            hidden_states=(
+                tuple(all_hidden_states_text),
+                tuple(all_hidden_states_image),
+                tuple(all_hidden_states_cross),
+            ),
+            attentions=tuple(all_self_attentions),
         )
 
     def get_cls_features(self, text_features, image_features):
@@ -1523,22 +1438,20 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.mlm_score.decoder = new_embeddings
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        image_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> Union[MaskedLMOutput, tuple[torch.FloatTensor]]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        image_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MaskedLMOutput:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
@@ -1553,10 +1466,12 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000360943.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> text = "a <mask> looking out of the window"
 
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
@@ -1573,31 +1488,24 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         >>> print(results)
         .a cat looking out of the window.
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.bridgetower(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        mlm_logits = self.mlm_score(outputs.text_features if return_dict else outputs[0])
+        mlm_logits = self.mlm_score(outputs.text_features)
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
 
             labels = labels.to(mlm_logits.device)
             masked_lm_loss = loss_fct(mlm_logits.view(-1, self.config.text_config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = tuple(mlm_logits)
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -1624,22 +1532,20 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        image_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> Union[SequenceClassifierOutput, tuple[torch.FloatTensor]]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        image_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutput:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
@@ -1652,11 +1558,13 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
 
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForImageAndTextRetrieval
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
 
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
@@ -1670,22 +1578,18 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         ...     outputs = model(**encoding)
         ...     scores[text] = outputs.logits[0, 1].item()
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.bridgetower(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        pooler_output = outputs.pooler_output if return_dict else outputs[2]
+        pooler_output = outputs.pooler_output
 
         logits = self.itm_score(pooler_output)
 
@@ -1695,10 +1599,6 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
 
             labels = labels.to(logits.device)
             itm_loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = tuple(logits)
-            return ((itm_loss,) + output) if itm_loss is not None else output
 
         return SequenceClassifierOutput(
             loss=itm_loss,
@@ -1737,22 +1637,20 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        image_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = True,
-        return_dict: Optional[bool] = None,
-        return_loss: Optional[bool] = None,
-        **kwargs,
-    ) -> Union[BridgeTowerContrastiveOutput, tuple[torch.FloatTensor]]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        image_embeds: torch.FloatTensor | None = None,
+        return_loss: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BridgeTowerContrastiveOutput:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
@@ -1764,7 +1662,8 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
 
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForContrastiveLearning
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
 
@@ -1773,7 +1672,14 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
         ... ]
         >>> texts = ["two dogs in a car", "two cats sleeping on a couch"]
-        >>> images = [Image.open(requests.get(url, stream=True).raw) for url in image_urls]
+
+        >>> with httpx.stream("GET", urls[0]) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
+        >>> with httpx.stream("GET", urls[1]) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
+        >>> images = [image1, image2]
 
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
         >>> model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
@@ -1790,25 +1696,20 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         >>> print("Loss with swapped images", round(loss_swapped.item(), 4))
         Loss with swapped images 2.126
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        kwargs.setdefault("output_hidden_states", True)
         outputs = self.bridgetower(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=True,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        pooler_output = outputs.pooler_output if return_dict else outputs[2]
-        hidden_states_txt, hidden_states_img, hidden_states_cross_modal = (
-            outputs.hidden_states if return_dict else outputs[3]
-        )
+        pooler_output = outputs.pooler_output
+        hidden_states_txt, hidden_states_img, hidden_states_cross_modal = outputs.hidden_states
 
         text_embeds = hidden_states_txt[-1]
         image_embeds = hidden_states_img[-1]
@@ -1844,10 +1745,6 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             text_to_cross_loss = nn.functional.cross_entropy(logits_text_to_cross, labels)
             image_to_cross_loss = nn.functional.cross_entropy(logits_image_to_cross, labels)
             itc_loss = (text_to_image_loss + text_to_cross_loss + image_to_cross_loss) / 3.0
-
-        if not return_dict:
-            output = (logits, text_embeds, image_embeds, cross_embeds) + outputs[3:]
-            return ((itc_loss,) + output) if itc_loss is not None else output
 
         return BridgeTowerContrastiveOutput(
             loss=itc_loss,

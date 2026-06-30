@@ -27,7 +27,7 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
-        return image_processor_class(do_center_crop=False)
+        return image_processor_class()
 
     @classmethod
     def _setup_tokenizer(cls):

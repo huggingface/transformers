@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-09-23 and added to Hugging Face Transformers on 2025-09-15.*
+*This model was published in HF papers on 2025-02-19 and contributed to Hugging Face Transformers on 2025-09-15.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
 </div>
@@ -31,13 +30,12 @@ Model usage
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
+```python
+from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+
 
 model = Qwen3VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-VL",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -85,6 +83,10 @@ print(output_text)
 
 [[autodoc]] Qwen3VLConfig
 
+## Qwen3VLVisionConfig
+
+[[autodoc]] Qwen3VLVisionConfig
+
 ## Qwen3VLTextConfig
 
 [[autodoc]] Qwen3VLTextConfig
@@ -92,6 +94,7 @@ print(output_text)
 ## Qwen3VLProcessor
 
 [[autodoc]] Qwen3VLProcessor
+    - __call__
 
 ## Qwen3VLVideoProcessor
 
@@ -111,8 +114,12 @@ print(output_text)
 
 [[autodoc]] Qwen3VLModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Qwen3VLForConditionalGeneration
 
 [[autodoc]] Qwen3VLForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

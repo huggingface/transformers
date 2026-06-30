@@ -24,7 +24,7 @@ This guide demonstrates how you can distill a [fine-tuned ViT model](https://hug
 Let's install the libraries needed for distillation and evaluating the process.
 
 ```bash
-pip install transformers datasets accelerate tensorboard evaluate --upgrade
+pip install transformers datasets accelerate tensorboard evaluate trackio --upgrade
 ```
 
 In this example, we are using the `merve/beans-vit-224` model as teacher model. It's an image classification model, based on `google/vit-base-patch16-224-in21k` fine-tuned on beans dataset. We will distill this model to a randomly initialized MobileNetV2.
@@ -114,10 +114,11 @@ training_args = TrainingArguments(
     save_strategy="epoch",
     load_best_model_at_end=True,
     metric_for_best_model="accuracy",
-    report_to="tensorboard",
     push_to_hub=True,
     hub_strategy="every_save",
     hub_model_id=repo_name,
+    report_to="trackio",
+    run_name="distillation",
     )
 
 num_labels = len(processed_datasets["train"].features["labels"].names)

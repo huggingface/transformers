@@ -18,11 +18,14 @@ import copy
 import json
 import math
 import os
-import warnings
-from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
+from collections.abc import Sequence
+from dataclasses import MISSING, dataclass, fields
+from functools import wraps
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
 
-from huggingface_hub import create_repo
+from huggingface_hub.dataclasses import strict
 from packaging import version
+from typing_extensions import dataclass_transform
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
@@ -35,6 +38,7 @@ from .utils import (
     cached_file,
     copy_func,
     extract_commit_hash,
+    hf_api,
     is_torch_available,
     logging,
 )
@@ -55,6 +59,82 @@ _FLOAT_TAG_KEY = "__float__"
 _FLOAT_TAG_VALUES = {"Infinity": float("inf"), "-Infinity": float("-inf"), "NaN": float("nan")}
 
 
+ALLOWED_LAYER_TYPES = (
+    "full_attention",
+    "sliding_attention",
+    "chunked_attention",
+    "compressed_sparse_attention",  # CSA, used in deepseek_v4
+    "heavily_compressed_attention",  # HCA, used in deepseek_v4
+    "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
+    "conv",  # used in LFMv2
+    "sparse",
+    "dense",
+    "hybrid",  # layers that combine attention + mamba in a single block (zamba2, falcon_h1)
+    "moe",  # for nemotron_h, which uses either attention, mamba or moe
+    "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
+    # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning)
+    "linear_attention",
+)
+
+
+# Legacy ``layer_types`` strings → current ``linear_attention`` / ``full_attention`` convention.
+# Configs call ``remap_legacy_layer_types`` in their ``__post_init__`` so checkpoints stored on
+# the Hub with the old names (``mamba``, ``attention``) load transparently.
+_LEGACY_LAYER_TYPE_REMAP = {
+    "mamba": "linear_attention",
+    "attention": "full_attention",
+}
+
+
+def remap_legacy_layer_types(layer_types: list[str]) -> list[str]:
+    """Apply legacy → current layer-type name mapping."""
+    return [_LEGACY_LAYER_TYPE_REMAP.get(t, t) for t in layer_types]
+
+
+# copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
+def wrap_init_to_accept_kwargs(cls: dataclass):
+    # Get the original dataclass-generated __init__
+    original_init = cls.__init__
+
+    @wraps(original_init)
+    def __init__(self, *args, **kwargs: Any) -> None:
+        # Extract only the fields that are part of the dataclass
+        dataclass_fields = {f.name for f in fields(cls)}
+        standard_kwargs = {k: v for k, v in kwargs.items() if k in dataclass_fields}
+
+        # We need to call bare `__init__` without `__post_init__` but the `original_init` of
+        # any dataclas contains a call to post-init at the end (without kwargs)
+        if len(args) > 0:
+            raise ValueError(
+                f"{cls.__name__} accepts only keyword arguments, but found `{len(args)}` positional args."
+            )
+
+        for f in fields(cls):  # type: ignore
+            if f.name in standard_kwargs:
+                setattr(self, f.name, standard_kwargs[f.name])
+            elif f.default is not MISSING:
+                setattr(self, f.name, f.default)
+            elif f.default_factory is not MISSING:
+                setattr(self, f.name, f.default_factory())
+            else:
+                raise TypeError(f"Missing required field - '{f.name}'")
+
+        # Pass any additional kwargs to `__post_init__` and let the object
+        # decide whether to set the attr or use for different purposes (e.g. BC checks)
+        additional_kwargs = {}
+        for name, value in kwargs.items():
+            if name not in dataclass_fields:
+                additional_kwargs[name] = value
+
+        self.__post_init__(**additional_kwargs)
+
+    cls.__init__ = __init__
+    return cls
+
+
+@dataclass_transform(kw_only_default=True)
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # no-format
     r"""
@@ -82,6 +162,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
       naming of attributes.
     - **base_model_tp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
       parallel plan applied to the sub-module when `model.tensor_parallel` is called.
+    - **base_model_fsdp_plan** (`dict[Any, str]`) -- A dict that maps sub-modules of a base model to an FSDP2
+      sharding strategy (e.g. `"free_full_weight"` / `"keep_full_weight"`). Keys can be wildcard module paths
+      (e.g. `"layers.*"`) or tuples of paths (grouped into a single `fully_shard` call).
     - **base_model_pp_plan** (`dict[str, tuple[list[str]]]`) -- A dict that maps child-modules of a base model to a
       pipeline parallel plan that enables users to place the child-module on the appropriate device.
 
@@ -115,16 +198,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             Whether or not the model should return a [`~transformers.utils.ModelOutput`] instead of a plain tuple.
         is_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as an encoder/decoder or not.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
-            decoder-only or encoder-only architectures.
-        cross_attention_hidden_size (`bool`, *optional*):
-            The hidden size of the cross-attention layer in case the model is used as a decoder in an encoder-decoder
-            setting and the cross-attention hidden dimension differs from `self.config.hidden_size`.
-        add_cross_attention (`bool`, *optional*, defaults to `False`):
-            Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
-            that can be used as decoder models within the [`EncoderDecoderModel`] class, which consists of all models
-            in `AUTO_MODELS_FOR_CAUSAL_LM`.
         chunk_size_feed_forward (`int`, *optional*, defaults to `0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
@@ -135,43 +208,18 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         architectures (`list[str]`, *optional*):
             Model architectures that can be used with the model pretrained weights.
-        finetuning_task (`str`, *optional*):
-            Name of the task used to fine-tune the model.
         id2label (`dict[int, str]`, *optional*):
             A map from index (for instance prediction index, or target index) to label.
         label2id (`dict[str, int]`, *optional*):
             A map from label to index for the model.
         num_labels (`int`, *optional*):
             Number of labels to use in the last layer added to the model, typically for a classification task.
-        task_specific_params (`dict[str, Any]`, *optional*):
-            Additional keyword arguments to store for the current task.
         problem_type (`str`, *optional*):
             Problem type for `XxxForSequenceClassification` models. Can be one of `"regression"`,
             `"single_label_classification"` or `"multi_label_classification"`.
 
-        > Parameters linked to the tokenizer
-
-        tokenizer_class (`str`, *optional*):
-            The name of the associated tokenizer class to use (if none is set, will use the tokenizer associated to the
-            model by default).
-        prefix (`str`, *optional*):
-            A specific prompt that should be added at the beginning of each text before calling the model.
-        bos_token_id (`int`, *optional*):
-            The id of the _beginning-of-stream_ token.
-        pad_token_id (`int`, *optional*):
-            The id of the _padding_ token.
-        eos_token_id (`int`, *optional*):
-            The id of the _end-of-stream_ token.
-        decoder_start_token_id (`int`, *optional*):
-            If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
-        sep_token_id (`int`, *optional*):
-            The id of the _separation_ token.
-
         > PyTorch specific parameters
 
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
-            model has a output word embedding layer.
         dtype (`str`, *optional*):
             The `dtype` of the weights. This attribute can be used to initialize the model to a non-default `dtype`
             (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
@@ -179,139 +227,81 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             `float16` weights.
     """
 
-    model_type: str = ""
-    base_config_key: str = ""
-    sub_configs: dict[str, type["PreTrainedConfig"]] = {}
-    has_no_defaults_at_init: bool = False
-    attribute_map: dict[str, str] = {}
-    base_model_tp_plan: Optional[dict[str, Any]] = None
-    base_model_pp_plan: Optional[dict[str, tuple[list[str]]]] = None
-    base_model_ep_plan: Optional[dict[str, tuple[list[str]]]] = None
-    _auto_class: Optional[str] = None
+    # Class attributes that we don't want to save or have in `self.__dict__`
+    # They are not supposed to be set/changed by users. Each field is set when
+    # creating a model class
+    base_config_key: ClassVar[str] = ""
+    sub_configs: ClassVar[dict[str, type["PreTrainedConfig"]]] = {}
+    has_no_defaults_at_init: ClassVar[bool] = False
+    keys_to_ignore_at_inference: ClassVar[list[str]] = []
+    attribute_map: ClassVar[dict[str, str]] = {}
+    base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
+    base_model_fsdp_plan: ClassVar[dict[Any, str] | None] = None
+    base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
+    base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
+    _auto_class: ClassVar[str | None] = None
 
-    def __setattr__(self, key, value):
-        if key in super().__getattribute__("attribute_map"):
-            key = super().__getattribute__("attribute_map")[key]
-        super().__setattr__(key, value)
+    # Attributes set internally when saving and used to infer model
+    # class for `Auto` mapping
+    model_type: ClassVar[str] = ""
+    transformers_version: str | None = None
+    architectures: list[str] | None = None
 
-    def __getattribute__(self, key):
-        if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
-            key = super().__getattribute__("attribute_map")[key]
-        return super().__getattribute__(key)
+    # Common attributes for all models
+    output_hidden_states: bool | None = False
+    return_dict: bool | None = True
+    dtype: Union[str, "torch.dtype"] | None = None
+    chunk_size_feed_forward: int = 0
+    is_encoder_decoder: bool = False
 
-    def __init__(
-        self,
-        *,
-        # All models common arguments
-        output_hidden_states: bool = False,
-        output_attentions: bool = False,
-        return_dict: bool = True,
-        dtype: Optional[Union[str, "torch.dtype"]] = None,
-        # Common arguments
-        tie_word_embeddings: bool = True,
-        chunk_size_feed_forward: int = 0,
-        is_encoder_decoder: bool = False,
-        is_decoder: bool = False,
-        cross_attention_hidden_size: Optional[int] = None,
-        add_cross_attention: bool = False,
-        # Fine-tuning task arguments
-        architectures: Optional[list[str]] = None,
-        finetuning_task: Optional[str] = None,
-        id2label: Optional[dict[int, str]] = None,
-        label2id: Optional[dict[str, int]] = None,
-        num_labels: Optional[int] = None,
-        task_specific_params: Optional[dict[str, Any]] = None,
-        problem_type: Optional[str] = None,
-        # Tokenizer kwargs
-        tokenizer_class: Optional[str] = None,
-        prefix: Optional[str] = None,
-        bos_token_id: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
-        sep_token_id: Optional[int] = None,
-        decoder_start_token_id: Optional[int] = None,
-        **kwargs,
-    ):
-        # Validation for some arguments
-        if label2id is not None and not isinstance(label2id, dict):
-            raise ValueError("Argument label2id should be a dictionary.")
-        if id2label is not None and not isinstance(id2label, dict):
-            raise ValueError("Argument id2label should be a dictionary.")
-        if num_labels is not None and id2label is not None and len(id2label) != num_labels:
-            logger.warning(
-                f"You passed `num_labels={num_labels}` which is incompatible to "
-                f"the `id2label` map of length `{len(id2label)}`."
-            )
-        if problem_type is not None and problem_type not in (
-            "regression",
-            "single_label_classification",
-            "multi_label_classification",
-        ):
-            raise ValueError(
-                f"The config parameter `problem_type` was not understood: received {problem_type} "
-                "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
-            )
+    # Fine-tuning task arguments
+    id2label: dict[int, str] | dict[str, str] | None = None
+    label2id: dict[str, int] | dict[str, str] | None = None
+    problem_type: Literal["regression", "single_label_classification", "multi_label_classification"] | None = None
+
+    def __post_init__(self, **kwargs):
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
         # Do not warn, as it would otherwise always be triggered since most configs on the hub have `torch_dtype`
         if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
             # If both are provided, keep `dtype`
-            dtype = dtype if dtype is not None else torch_dtype
-        if dtype is not None and isinstance(dtype, str) and is_torch_available():
+            self.dtype = self.dtype if self.dtype is not None else torch_dtype
+        if self.dtype is not None and isinstance(self.dtype, str) and is_torch_available():
             # we will start using self.dtype in v5, but to be consistent with
             # from_pretrained's dtype arg convert it to an actual torch.dtype object
             import torch
 
-            dtype = getattr(torch, dtype)
+            self.dtype = getattr(torch, self.dtype)
+
+        # Keep the default value of `num_labels=2` in case users have saved a classifier with 2 labels
+        # Our configs prev wouldn't save `id2label` for 2 labels because it is the default. In all other
+        # cases we expect the config dict to have an `id2label` field if it's a clf model, or not otherwise
+        if self.id2label is None:
+            self.num_labels = kwargs.get("num_labels", self.num_labels if self.num_labels is not None else 2)
+        else:
+            if kwargs.get("num_labels") is not None and len(self.id2label) != kwargs.get("num_labels"):
+                logger.warning(
+                    f"You passed `num_labels={kwargs.get('num_labels')}` which is incompatible to "
+                    f"the `id2label` map of length `{len(self.id2label)}`."
+                )
+            # Keys are always strings in JSON so convert ids to int
+            self.id2label = {int(key): value for key, value in self.id2label.items()}
+
+        if self.problem_type == "single_label_classification" and self.num_labels == 1:
+            raise ValueError(
+                '`problem_type="single_label_classification"` requires `num_labels > 1`. For binary '
+                'classification use `num_labels=2`, or use `problem_type="regression"` for a '
+                "single-output regression head."
+            )
 
         # BC for rotary embeddings. We will pop out legacy keys from kwargs and rename to new format
         if hasattr(self, "rope_parameters"):
-            ignore_keys_at_rope_validation = kwargs.pop("ignore_keys_at_rope_validation", None)
-            kwargs = self.convert_rope_params_to_dict(
-                ignore_keys_at_rope_validation=ignore_keys_at_rope_validation, **kwargs
+            kwargs = self.convert_rope_params_to_dict(**kwargs)
+        elif kwargs.get("rope_scaling") and kwargs.get("rope_theta"):
+            logger.warning(
+                f"{self.__class__.__name__} got `key=rope_scaling` in kwargs but hasn't set it as attribute. "
+                "For RoPE standardization you need to set `self.rope_parameters` in model's config. "
             )
-
-        # Attributes common for all models
-        self.return_dict = return_dict
-        self.output_hidden_states = output_hidden_states
-        self.dtype = dtype
-        self._output_attentions = output_attentions  # has public property
-
-        # Less common kwargs, only used by some models
-        if "tie_encoder_decoder" in kwargs:
-            tie_encoder_decoder = kwargs.pop("tie_encoder_decoder")
-            tie_word_embeddings = tie_encoder_decoder or tie_word_embeddings
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.chunk_size_feed_forward = chunk_size_feed_forward
-
-        # Encoder-decoder models attributes
-        self.is_encoder_decoder = is_encoder_decoder
-        self.is_decoder = is_decoder  # used in encoder-decoder models to differentiate encoder from decoder
-        self.cross_attention_hidden_size = cross_attention_hidden_size
-        self.add_cross_attention = add_cross_attention
-
-        # Fine-tuning task attributes
-        self.architectures = architectures
-        self.finetuning_task = finetuning_task
-        self.id2label = id2label
-        self.label2id = label2id
-        self.task_specific_params = task_specific_params
-        self.problem_type = problem_type
-
-        if self.id2label is None:
-            self._create_id_label_maps(num_labels if num_labels is not None else 2)
-        else:
-            # Keys are always strings in JSON so convert ids to int here.
-            self.id2label = {int(key): value for key, value in self.id2label.items()}
-
-        # Tokenizer attributes
-        self.tokenizer_class = tokenizer_class
-        self.prefix = prefix
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.sep_token_id = sep_token_id
-        self.decoder_start_token_id = decoder_start_token_id
+            kwargs = self.convert_rope_params_to_dict(**kwargs)
 
         # Parameters for sequence generation saved in the config are popped instead of loading them.
         for parameter_name in GenerationConfig._get_default_generation_params().keys():
@@ -321,39 +311,58 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
         self._commit_hash = kwargs.pop("_commit_hash", None)
 
-        # Attention implementation to use, if relevant (it sets it recursively on sub-configs)
-        self._attn_implementation = kwargs.pop("attn_implementation", None)
-
-        # Drop the transformers version info
-        self.transformers_version = kwargs.pop("transformers_version", None)
-
-        # Deal with gradient checkpointing
-        if kwargs.get("gradient_checkpointing", False):
-            warnings.warn(
-                "Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 "
-                "Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the "
-                "`Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`."
-            )
+        # Attention/Experts implementation to use, if relevant (it sets it recursively on sub-configs)
+        self._output_attentions: bool | None = kwargs.pop("output_attentions", False)
+        self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
+        self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
-            try:
-                setattr(self, key, value)
-            except AttributeError as err:
-                logger.error(f"Can't set {key} with value {value} for {self}")
-                raise err
+            # Check this to avoid deserializing problematic fields from hub configs - they should use the public field
+            if key not in ("_attn_implementation_internal", "_experts_implementation_internal"):
+                try:
+                    setattr(self, key, value)
+                except AttributeError as err:
+                    logger.error(f"Can't set {key} with value {value} for {self}")
+                    raise err
 
-    def _create_id_label_maps(self, num_labels: int):
-        self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
-        self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
+    def __init_subclass__(cls, *args, **kwargs):
+        super().__init_subclass__(*args, **kwargs)
+        cls_has_custom_init = "__init__" in cls.__dict__
+        # kw_only=True ensures fields without defaults in subclasses can follow
+        # parent fields that have defaults (Python dataclass ordering rule).
+        # Config fields are always passed as keyword arguments, so this is safe.
+        cls = dataclass(cls, repr=False, kw_only=True)
+
+        if not cls_has_custom_init:
+            # Wrap all subclasses to accept arbitrary kwargs for BC
+            # only if the subclass has no custom `__init__`. Most
+            # remote code has an init defined, but some model are not
+            # See https://huggingface.co/hmellor/Ilama-3.2-1B/blob/main/configuration_ilama.py
+            cls = wrap_init_to_accept_kwargs(cls)
 
     @property
-    def name_or_path(self) -> Optional[str]:
+    def name_or_path(self) -> str | None:
         return getattr(self, "_name_or_path", None)
 
     @name_or_path.setter
     def name_or_path(self, value):
         self._name_or_path = str(value)  # Make sure that name_or_path is a string (for JSON encoding)
+
+    @property
+    def num_labels(self) -> int:
+        """
+        `int`: The number of labels for classification models.
+        """
+        return len(self.id2label) if self.id2label is not None else None
+
+    @num_labels.setter
+    def num_labels(self, num_labels: int):
+        # we do not store `num_labels` attribute in config, but instead
+        # compute it based on the length of the `id2label` map
+        if self.id2label is None or self.num_labels != num_labels:
+            self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
+            self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
     @property
     def output_attentions(self):
@@ -373,27 +382,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 f"{self._attn_implementation}. Please set it to 'eager' instead."
             )
         self._output_attentions = value
-
-    @property
-    def use_return_dict(self) -> bool:
-        """
-        `bool`: Whether or not return [`~utils.ModelOutput`] instead of tuples.
-        """
-        return self.return_dict
-
-    @property
-    def num_labels(self) -> int:
-        """
-        `int`: The number of labels for classification models.
-        """
-        return len(self.id2label)
-
-    @num_labels.setter
-    def num_labels(self, num_labels: int):
-        # we do not store `num_labels` attribute in config, but instead
-        # compute it based on the length of the `id2label` map
-        if self.id2label is None or self.num_labels != num_labels:
-            self._create_id_label_maps(num_labels)
 
     @property
     def _attn_implementation(self):
@@ -418,14 +406,101 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 subconfig._attn_implementation = sub_implementation
 
     @property
+    def _experts_implementation(self):
+        return self._experts_implementation_internal
+
+    @_experts_implementation.setter
+    def _experts_implementation(self, value: str | dict | None):
+        """We set it recursively on the sub-configs as well"""
+        # Set if for current config
+        current_moe = getattr(self, "_experts_implementation", None)
+        experts_implementation = value if not isinstance(value, dict) else value.get("", current_moe)
+        self._experts_implementation_internal = experts_implementation
+
+        # Set it recursively on the subconfigs
+        for subconfig_key in self.sub_configs:
+            subconfig = getattr(self, subconfig_key, None)
+            if subconfig is not None:
+                current_subconfig_moe = getattr(subconfig, "_experts_implementation", None)
+                sub_implementation = (
+                    value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_moe)
+                )
+                subconfig._experts_implementation = sub_implementation
+
+    @property
     def torch_dtype(self):
         logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
         return self.dtype
+
+    @property
+    def use_return_dict(self):
+        logger.warning_once("`use_return_dict` is deprecated! Use `return_dict` instead!")
+        return self.return_dict
 
     @torch_dtype.setter
     def torch_dtype(self, value):
         logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
         self.dtype = value
+
+    def __setattr__(self, key, value):
+        if key in super().__getattribute__("attribute_map"):
+            key = super().__getattribute__("attribute_map")[key]
+        super().__setattr__(key, value)
+
+    def __getattribute__(self, key):
+        if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
+            key = super().__getattribute__("attribute_map")[key]
+        return super().__getattribute__(key)
+
+    def validate_output_attentions(self):
+        if self.output_attentions and self._attn_implementation not in ["eager", None]:
+            raise ValueError(
+                "The `output_attentions` attribute is not supported when using the `attn_implementation` set to "
+                f"{self._attn_implementation}. Please set it to 'eager' instead."
+            )
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if (
+            hasattr(self, "head_dim")
+            and hasattr(self, "num_heads")
+            and hasattr(self, "embed_dim")
+            and self.head_dim * self.num_heads != self.embed_dim
+        ):
+            raise ValueError(
+                f"The embed_dim ({self.embed_dim}) is not a multiple of the number of attention "
+                f"heads ({self.num_heads})."
+            )
+
+    def validate_token_ids(self):
+        """Part of `@strict`-powered validation. Validates the contents of the special tokens."""
+        text_config = self.get_text_config(decoder=True)
+        vocab_size = getattr(text_config, "vocab_size", None)
+        if vocab_size is not None:
+            # Check for all special tokens, e..g. pad_token_id, image_token_id, audio_token_id
+            for name in text_config:
+                value = getattr(text_config, name)
+                if name.endswith("_token_id") and isinstance(value, int) and not 0 <= value < vocab_size:
+                    # Can't be an exception until we can load configs that fail validation: several configs on the Hub
+                    # store invalid special tokens, e.g. `pad_token_id=-1`
+                    logger.warning_once(
+                        f"Model config: {name} must be `None` or an integer within the vocabulary (between 0 "
+                        f"and {vocab_size - 1}), got {value}. This may result in unexpected behavior."
+                    )
+
+    def validate_layer_type(self):
+        """Check that `layer_types` is correctly defined."""
+        for layer_types in ["layer_types", "mlp_layer_types"]:
+            layers = getattr(self, layer_types, None)
+            if not (layers is not None and hasattr(self, "num_hidden_layers")):
+                return
+            elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
+                raise ValueError(f"The `{layer_types}` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
+            elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
+                raise ValueError(
+                    f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of `{layer_types}` "
+                    f"({len(layers)})"
+                )
 
     @property
     def rope_scaling(self):
@@ -465,7 +540,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.
@@ -480,6 +555,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 
+        # Strict validation at save-time: prevent bad patterns from propagating
+        # Using `strict` decorator guarantees that `self.validate` exists , but not all
+        # model config might have the decorator added
+        if hasattr(self, "validate"):
+            self.validate()
         self.to_json_file(output_config_file, use_diff=True)
         logger.info(f"Configuration saved in {output_config_file}")
 
@@ -514,7 +594,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                   huggingface.co.
                 - a path to a *directory* containing a configuration file saved using the
                   [`~PreTrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
-                - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
+                - a path to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
@@ -594,8 +674,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             # raise warning only if we still can't see a match in `model_type`
             if config_dict["model_type"] != cls.model_type:
                 logger.warning(
-                    f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                    f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+                    f"You are using a model of type `{config_dict['model_type']}` to instantiate a model of type "
+                    f"`{cls.model_type}`. This may be expected if you are loading a checkpoint that shares a subset "
+                    f"of the architecture (e.g., loading a `sam2_video` checkpoint into `Sam2Model`), but is otherwise "
+                    f"not supported and can yield errors. Please verify that the checkpoint is compatible with the "
+                    f"model you are instantiating."
                 )
 
         return cls.from_dict(config_dict, **kwargs)
@@ -722,6 +805,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if "model_type" not in config_dict and is_timm_config_dict(config_dict):
             config_dict["model_type"] = "timm_wrapper"
 
+        # Some checkpoints may contain the wrong model_type in the config file.
+        # Allow the user to override it but warn them that it might not work.
+        if "model_type" in kwargs and config_dict["model_type"] != kwargs["model_type"]:
+            logger.warning(
+                f"{configuration_file} has 'model_type={config_dict['model_type']}' but you overrode "
+                f"it with 'model_type={kwargs['model_type']}'. This may lead to unexpected behavior."
+            )
+            config_dict["model_type"] = kwargs["model_type"]
+
         return config_dict, kwargs
 
     @classmethod
@@ -742,48 +834,44 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             [`PreTrainedConfig`]: The configuration object instantiated from those parameters.
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-        # Those arguments may be passed along for our internal telemetry.
-        # We remove them so they don't appear in `return_unused_kwargs`.
-        kwargs.pop("_from_auto", None)
-        kwargs.pop("_from_pipeline", None)
+
         # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
-            kwargs["_commit_hash"] = config_dict["_commit_hash"]
+            kwargs.setdefault("_commit_hash", config_dict["_commit_hash"])
 
-        # For BC on the old `torch_dtype`
-        if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
-            logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
-            # If both are present, use `dtype`
-            kwargs["dtype"] = kwargs.get("dtype", torch_dtype)
-
-        # We remove it from kwargs so that it does not appear in `return_unused_kwargs`.
-        config_dict["attn_implementation"] = kwargs.pop("attn_implementation", None)
+        # To remove arg here are those passed along for our internal telemetry but we still need to remove them
+        to_remove = ["_from_auto", "_from_pipeline"]
+        valid_fields = [
+            "num_labels",
+            "attn_implementation",
+            "experts_implementation",
+            "output_attentions",
+            "torch_dtype",
+            "dtype",
+            "name_or_path",
+        ]
+        for key, value in kwargs.items():
+            if key in valid_fields:
+                if key not in ["torch_dtype", "dtype"]:
+                    config_dict[key] = value
+                    to_remove.append(key)
+                elif value != "auto":
+                    config_dict[key] = value
 
         config = cls(**config_dict)
 
-        # Update config with kwargs if needed
-        if "num_labels" in kwargs and "id2label" in kwargs:
-            num_labels = kwargs["num_labels"]
-            id2label = kwargs["id2label"] if kwargs["id2label"] is not None else []
-            if len(id2label) != num_labels:
-                raise ValueError(
-                    f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
-                    f"{kwargs['id2label']}. Since those arguments are inconsistent with each other, you should remove "
-                    "one of them."
-                )
-        to_remove = []
         for key, value in kwargs.items():
             if hasattr(config, key):
                 current_attr = getattr(config, key)
                 # To authorize passing a custom subconfig as kwarg in models that have nested configs.
-                # We need to update only custom kwarg values instead and keep other attributes in subconfig.
+                # We need to update only custom kwarg values instead and keep other attr in subconfig.
                 if isinstance(current_attr, PreTrainedConfig) and isinstance(value, dict):
                     current_attr_updated = current_attr.to_dict()
                     current_attr_updated.update(value)
                     value = current_attr.__class__(**current_attr_updated)
                 setattr(config, key, value)
-                if key != "dtype":
-                    to_remove.append(key)
+                to_remove.append(key)
+
         for key in to_remove:
             kwargs.pop(key, None)
 
@@ -948,11 +1036,27 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
 
+        # Pop "kwargs" since they are unpacked and set in the post init
+        output.pop("kwargs", None)
+
+        if "distributed_config" in output and hasattr(output["distributed_config"], "to_dict"):
+            output["distributed_config"] = output["distributed_config"].to_dict()
+
+        def to_list(value):
+            if isinstance(value, tuple):
+                value = [to_list(item) for item in value]
+            return value
+
         for key, value in output.items():
             # Deal with nested configs like CLIP
             if isinstance(value, PreTrainedConfig):
                 value = value.to_dict()
                 del value["transformers_version"]
+
+            # Some models have defaults as tuples because dataclass
+            # doesn't allow mutables. Let's convert back to `list``
+            elif isinstance(value, tuple):
+                value = to_list(value)
 
             output[key] = value
 
@@ -1074,20 +1178,22 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         Checks and removes if there are any keys in the dict that should not be serialized when saving the config.
         Runs recursive check on the dict, to remove from all sub configs.
         """
-        if "_auto_class" in d:
-            del d["_auto_class"]
+
+        for key_to_remove in [
+            "_is_quantized",
+            "_auto_class",
+            "_commit_hash",
+            "_attn_implementation_internal",
+            "_experts_implementation_internal",
+            "ignore_keys_at_rope_validation",
+            "base_model_tp_plan",
+            "base_model_pp_plan",
+        ]:
+            d.pop(key_to_remove, None)
+
         if "_output_attentions" in d:
             d["output_attentions"] = d.pop("_output_attentions")
-        if "_commit_hash" in d:
-            del d["_commit_hash"]
-        if "_attn_implementation_internal" in d:
-            del d["_attn_implementation_internal"]
-        # Do not serialize `base_model_tp_plan` for now
-        if "base_model_tp_plan" in d:
-            del d["base_model_tp_plan"]
-        # Do not serialize `base_model_pp_plan` for now
-        if "base_model_pp_plan" in d:
-            del d["base_model_pp_plan"]
+
         for value in d.values():
             if isinstance(value, dict):
                 self._remove_keys_not_serialized(value)
@@ -1116,11 +1222,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     def _get_generation_parameters(self) -> dict[str, Any]:
         """
-        Gets the non-default generation parameters on the PreTrainedConfig instance
+        Checks if there are generation parameters in `PreTrainedConfig` instance. Note that
+        we should not save generation params in PreTrainedConfig, and we will raise error
+        if there are any.
         """
         generation_params = {}
         default_config = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
         for key in GenerationConfig._get_default_generation_params().keys():
+            if key == "use_cache":
+                continue  # common key for most models
             if hasattr(self, key) and getattr(self, key) is not None and key not in default_config:
                 generation_params[key] = getattr(self, key)
 
@@ -1176,12 +1286,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # handle legacy models with flat config structure, when we only want one of the configs
         if not return_both and len(valid_text_config_names) == 0 and config_to_return.is_encoder_decoder:
             config_to_return = copy.deepcopy(config_to_return)
-            prefix_to_discard = "encoder" if decoder else "decoder"
             prefix_to_keep = "decoder" if decoder else "encoder"
             for key in config_to_return.to_dict():
-                # NOTE: We don't want to discard the key if it is mapped from a different attribute name at read time
-                if key.startswith(prefix_to_discard) and key not in config_to_return.attribute_map.values():
-                    delattr(config_to_return, key)
+                # NOTE: We can't discard keys because:
+                # 1) we can't truly delete a cls attribute on a dataclass; 2) we can't set the value to `None` due to
+                # strict validation. So we just keep it as is, since there are only a couple old models falling in this condition
                 if key.startswith(prefix_to_keep):
                     # [encoder/decoder]_layers -> num_hidden_layers
                     if key == prefix_to_keep + "_layers":
@@ -1265,24 +1374,14 @@ if PreTrainedConfig.push_to_hub.__doc__ is not None:
 PretrainedConfig = PreTrainedConfig
 
 
-ALLOWED_ATTENTION_LAYER_TYPES = (
-    "full_attention",
-    "sliding_attention",
-    "chunked_attention",
-    "linear_attention",  # used in minimax
-)
+def layer_type_validation(layer_types: list[str], num_hidden_layers: int | None = None, attention: bool = True):
+    logger.warning(
+        "`layer_type_validation` is deprecated and will be removed in v5.20. "
+        "Use `PreTrainedConfig.validate_layer_type` instead"
+    )
 
-ALLOWED_MLP_LAYER_TYPES = (
-    "sparse",
-    "dense",
-)
-
-
-def layer_type_validation(layer_types: list[str], num_hidden_layers: Optional[int] = None, attention: bool = True):
-    """Check that `layer_types` is correctly defined."""
-    allowed_layer_types = ALLOWED_ATTENTION_LAYER_TYPES if attention else ALLOWED_MLP_LAYER_TYPES
-    if not all(layer_type in allowed_layer_types for layer_type in layer_types):
-        raise ValueError(f"The `layer_types` entries must be in {allowed_layer_types}")
+    if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
+        raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
     if num_hidden_layers is not None and num_hidden_layers != len(layer_types):
         raise ValueError(
             f"`num_hidden_layers` ({num_hidden_layers}) must be equal to the number of layer types "

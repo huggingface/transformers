@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ import json
 from collections import OrderedDict
 from functools import partial
 from pathlib import Path
-from typing import Optional
 
 import timm
 import torch
@@ -80,7 +78,7 @@ def convert_weight_and_push(
         print(f"Pushed {checkpoint_name}")
 
 
-def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = None, push_to_hub: bool = True):
+def convert_weights_and_push(save_directory: Path, model_name: str | None = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
     expected_shape = (1, num_labels)

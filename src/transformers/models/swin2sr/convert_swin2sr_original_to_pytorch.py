@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,9 @@
 """Convert Swin2SR checkpoints from the original repository. URL: https://github.com/mv-lab/swin2sr"""
 
 import argparse
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from PIL import Image
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
@@ -176,7 +176,8 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
 
     # verify values
     url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
     processor = Swin2SRImageProcessor()
     # pixel_values = processor(image, return_tensors="pt").pixel_values
 

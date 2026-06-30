@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,7 @@
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import math
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 from torch import Tensor, nn
@@ -354,8 +353,8 @@ class FSMTEncoder(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -474,7 +473,7 @@ class DecoderLayer(nn.Module):
         causal_mask=None,
         decoder_padding_mask=None,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         residual = x
 
@@ -486,7 +485,6 @@ class DecoderLayer(nn.Module):
             key_padding_mask=decoder_padding_mask,
             attn_mask=causal_mask,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -501,7 +499,6 @@ class DecoderLayer(nn.Module):
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -552,13 +549,13 @@ class FSMTDecoder(nn.Module):
         encoder_padding_mask: torch.Tensor,
         decoder_padding_mask: torch.Tensor,
         decoder_causal_mask: torch.Tensor,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
+        inputs_embeds: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        output_attentions: bool | None = False,
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
+        **kwargs,
     ):
         """
         Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
@@ -635,7 +632,6 @@ class FSMTDecoder(nn.Module):
                 layer_state=past_key_values,
                 causal_mask=decoder_causal_mask,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             if output_attentions:
@@ -705,13 +701,13 @@ class Attention(nn.Module):
     def forward(
         self,
         query,
-        key: Optional[Tensor],
-        key_padding_mask: Optional[Tensor] = None,
-        layer_state: Optional[Cache] = None,
-        attn_mask: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> tuple[Tensor, Optional[Tensor]]:
+        key: Tensor | None,
+        key_padding_mask: Tensor | None = None,
+        layer_state: Cache | None = None,
+        attn_mask: Tensor | None = None,
+        output_attentions: bool | None = False,
+        **kwargs,
+    ) -> tuple[Tensor, Tensor | None]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
         tgt_len, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
@@ -742,10 +738,7 @@ class Attention(nn.Module):
 
             if layer_state is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not self.encoder_decoder_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if self.encoder_decoder_attention:
                     layer_state.is_updated[self.layer_idx] = True
@@ -831,20 +824,19 @@ class FSMTModel(PretrainedFSMTModel):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
+    ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -868,7 +860,7 @@ class FSMTModel(PretrainedFSMTModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # make masks if user doesn't supply
         if not use_cache and input_ids is not None:
@@ -918,7 +910,6 @@ class FSMTModel(PretrainedFSMTModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -967,22 +958,21 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], Seq2SeqLMOutput]:
+    ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1018,7 +1008,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         "Machine learning is great, isn't it?"
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             use_cache = False
@@ -1036,7 +1026,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         lm_logits = outputs[0]
 
@@ -1131,8 +1120,8 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     def forward(
         self,
         input,
-        incremental_state: Optional[Any] = None,
-        timestep: Optional[Tensor] = None,
+        incremental_state: Any | None = None,
+        timestep: Tensor | None = None,
     ):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input.shape[:2]

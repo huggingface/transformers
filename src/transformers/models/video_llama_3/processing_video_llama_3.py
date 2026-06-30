@@ -17,16 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Union
-
-import numpy as np
-
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
-from ...video_utils import VideoInput
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -42,20 +34,9 @@ class VideoLlama3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class VideoLlama3Processor(ProcessorMixin):
-    r"""
-    Constructs a VideoLLaMA3 processor which wraps a VideoLLaMA3 image processor and a Qwen2 tokenizer into a single processor.
-    [`VideoLlama3Processor`] offers all the functionalities of [`VideoLlama3ImageProcessor`] and [`Qwen2Tokenizer`]. See the
-    [`~VideoLlama3Processor.__call__`] and [`~VideoLlama3Processor.decode`] for more information.
-    Args:
-        image_processor ([`VideoLlama3ImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`Qwen2Tokenizer`], *optional*):
-            The tokenizer is a required input.
-        video_processor ([`VideoLlama3VideoProcessor`], *optional*):
-            The video processor is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-    """
+    valid_processor_kwargs = VideoLlama3ProcessorKwargs
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
@@ -72,127 +53,36 @@ class VideoLlama3Processor(ProcessorMixin):
         )
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-    def __call__(
-        self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos: VideoInput = None,
-        **kwargs: Unpack[VideoLlama3ProcessorKwargs],
-    ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwargs` arguments to
-        VideoLlama3ImageProcessor's [`~VideoLlama3ImageProcessor.__call__`] if `vision_infos` is not `None`.
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        merge_length = self.image_processor.merge_size**2
+        num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
+        return self.image_token * num_image_tokens
 
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
-                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        num_video_tokens = [
+            grid_thw.prod() // merge_size**2
+            for grid_thw, merge_size in zip(video_inputs["video_grid_thw"], video_inputs["video_merge_sizes"])
+        ]
+        video_compression_masks = video_inputs["video_compression_mask"].split(num_video_tokens)
+        metadata = video_inputs["video_metadata"][video_idx]
 
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+        if metadata.fps is None:
+            logger.warning_once(
+                "VideoLLaMA3 requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                "Defaulting to `fps=1`. Please provide `video_metadata` for more accurate results."
+            )
+        metadata.fps = 1 if metadata.fps is None else metadata.fps
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
-            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            VideoLlama3ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
+        frame_compression_masks = video_compression_masks[video_idx].split(
+            len(video_compression_masks[video_idx]) // len(metadata.timestamps)
         )
+        num_frame_tokens = [x.sum() for x in frame_compression_masks]
+        video_placeholder = [
+            f"Time {t:.1f}s:" + self.video_token * n for n, t in zip(num_frame_tokens, metadata.timestamps)
+        ]
 
-        image_inputs = videos_inputs = {}
-        if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
-            image_merge_sizes = image_inputs["image_merge_sizes"]
-        else:
-            image_grid_thw = image_merge_sizes = []
-
-        if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            num_video_tokens = [
-                grid_thw.prod() // merge_size**2
-                for grid_thw, merge_size in zip(videos_inputs["video_grid_thw"], videos_inputs["video_merge_sizes"])
-            ]
-            video_compression_masks = videos_inputs["video_compression_mask"].split(num_video_tokens)
-            if not kwargs.get("return_metadata"):
-                video_metadata = videos_inputs.pop("video_metadata")
-            else:
-                video_metadata = videos_inputs["video_metadata"]
-            timestamps = []
-            for metadata in video_metadata:
-                if metadata.fps is None:
-                    logger.warning_once(
-                        "VideoLLaMA4 requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
-                        "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
-                        "Defaulting to `fps=1`. Please provide `video_metadata` for more accurate results."
-                    )
-                metadata.fps = 1 if metadata.fps is None else metadata.fps
-                timestamps.append(metadata.timestamps)
-        else:
-            video_compression_masks = timestamps = []
-
-        if not isinstance(text, list):
-            text = [text]
-
-        text = text.copy()  # below lines change text in-place
-
-        if images is not None:
-            image_index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    num_image_tokens = image_grid_thw[image_index].prod() // (image_merge_sizes[image_index] ** 2)
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    image_index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
-        if videos is not None:
-            video_index = 0
-            for i in range(len(text)):
-                while self.video_token in text[i]:
-                    frame_compression_masks = video_compression_masks[video_index].split(
-                        len(video_compression_masks[video_index]) // len(timestamps[video_index])
-                    )
-                    num_frame_tokens = [x.sum() for x in frame_compression_masks]
-                    frame_prompts = [
-                        f"Time {t:.1f}s:" + "<|placeholder|>" * n
-                        for n, t in zip(num_frame_tokens, timestamps[video_index])
-                    ]
-                    text[i] = text[i].replace(self.video_token, ",".join(frame_prompts), 1)
-                    video_index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.video_token)
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
-
-        if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+        return ",".join(video_placeholder)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """

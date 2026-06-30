@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Facebook Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Tokenization class for SpeechT5."""
 
-from typing import Any, Optional
+from typing import Any
 
 from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils import logging
@@ -83,7 +82,7 @@ class SpeechT5Tokenizer(SentencePieceBackend):
         unk_token="<unk>",
         pad_token="<pad>",
         normalize=False,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
         self.normalize = normalize
@@ -130,7 +129,7 @@ class SpeechT5Tokenizer(SentencePieceBackend):
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -143,7 +142,7 @@ class SpeechT5Tokenizer(SentencePieceBackend):
         return ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. SpeechT5 does not

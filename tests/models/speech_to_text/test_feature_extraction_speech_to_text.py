@@ -15,34 +15,20 @@
 
 import itertools
 import os
-import random
 import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import Speech2TextFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_torch,
+    require_torchaudio,
+)
 
+from ...test_processing_common import floats_list
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
-
-
-global_rng = random.Random()
-
-
-# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
 
 
 @require_torch

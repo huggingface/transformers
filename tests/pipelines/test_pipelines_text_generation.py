@@ -285,6 +285,85 @@ class TextGenerationPipelineTests(unittest.TestCase):
         parsed_message = outputs[0]["generated_text"][-1]
         self.assertEqual(parsed_message, {"first_word": "factors", "last_word": "factors"})
 
+    @require_torch
+    def test_small_chat_model_with_response_template_prefix(self):
+        # When the chat template pre-writes the start of the assistant message (here, an
+        # opening <think> block), the pipeline must pass the prompt to `parse_response` as
+        # `prefix=` so that generated text is correctly routed into the prefilled region.
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+        text_generator.tokenizer.chat_template = (
+            "{% for message in messages %}"
+            "{{ '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n' }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}{{ '<|im_start|>assistant\n<think>\n' }}{% endif %}"
+        )
+        text_generator.tokenizer.response_template = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|im_start|>assistant\n",
+            "fields": {
+                "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+                "content": {"close": "<|im_end|>", "content": "text"},
+            },
+        }
+        chat = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        outputs = text_generator(chat, do_sample=False, max_new_tokens=10)
+        parsed_message = outputs[0]["generated_text"][-1]
+        # The tiny model never emits </think>, so everything it generates stays inside the
+        # `thinking` region opened by the chat template in the prompt. Without `prefix=`,
+        # the parser would never see the opening <think> and would mis-route the generated
+        # text into `content` instead.
+        self.assertEqual(parsed_message["role"], "assistant")
+        self.assertIn("thinking", parsed_message)
+        self.assertNotIn("content", parsed_message)
+        self.assertIsInstance(parsed_message["thinking"], str)
+        self.assertGreater(len(parsed_message["thinking"]), 0)
+
+    @require_torch
+    def test_return_full_text_false_with_chat_template(self):
+        """Regression test for #45854: return_full_text=False must not include prompt when using chat template."""
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+        chat = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        outputs = text_generator(chat, do_sample=False, max_new_tokens=10, return_full_text=False)
+        generated = outputs[0]["generated_text"]
+
+        # Must return plain string, not a list of message dicts
+        self.assertIsInstance(generated, str)
+        # Must not contain the prompt content
+        self.assertNotIn("This is a test", generated)
+        self.assertNotIn("This is a system message.", generated)
+
+    @require_torch
+    def test_return_full_text_true_with_chat_template(self):
+        """return_full_text=True (default) must still return full chat list with chat template."""
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+        chat = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        outputs = text_generator(chat, do_sample=False, max_new_tokens=10, return_full_text=True)
+        generated = outputs[0]["generated_text"]
+
+        # Must return list of message dicts including original messages
+        self.assertIsInstance(generated, list)
+        roles = [m["role"] for m in generated]
+        self.assertIn("user", roles)
+        self.assertIn("assistant", roles)
+
     def get_test_pipeline(
         self,
         model,
@@ -297,9 +376,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = TextGenerationPipeline(
             model=model,
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-            processor=processor,
             dtype=dtype,
             max_new_tokens=5,
         )

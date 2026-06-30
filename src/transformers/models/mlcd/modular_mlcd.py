@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
@@ -24,7 +23,6 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import check_model_inputs
 from ..clip.modeling_clip import (
     CLIPMLP,
     CLIPAttention,
@@ -32,7 +30,6 @@ from ..clip.modeling_clip import (
     CLIPEncoderLayer,
     CLIPVisionEmbeddings,
     CLIPVisionModel,
-    CLIPVisionTransformer,
 )
 from ..llama.modeling_llama import eager_attention_forward
 from ..qwen2_vl.modeling_qwen2_vl import VisionRotaryEmbedding, apply_rotary_pos_emb_vision
@@ -41,45 +38,12 @@ from ..qwen2_vl.modeling_qwen2_vl import VisionRotaryEmbedding, apply_rotary_pos
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="DeepGlint-AI/mlcd-vit-bigG-patch14-336")
+@strict
 class MLCDVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MLCDVisionModel`]. It is used to instantiate a MLCD
-    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the vision encoder of the MLCD
-    [DeepGlint-AI/mlcd-vit-bigG-patch14-336](https://huggingface.co/DeepGlint-AI/mlcd-vit-bigG-patch14-336) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1664):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 8192):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        projection_dim (`int`, *optional*, defaults to 1024):
-            Dimensionality of text and vision projection layers.
-        num_hidden_layers (`int`, *optional*, defaults to 48):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        image_size (`int`, *optional*, defaults to 336):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
+    num_key_value_groups (`int`, *optional*, defaults to 1):
+        Number of key-value groups used in Attention.
 
     Example:
 
@@ -99,38 +63,19 @@ class MLCDVisionConfig(PreTrainedConfig):
     model_type = "mlcd_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=1664,
-        intermediate_size=8192,
-        num_hidden_layers=48,
-        num_attention_heads=16,
-        num_key_value_groups=1,
-        num_channels=3,
-        image_size=336,
-        patch_size=14,
-        hidden_act="gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_groups = num_key_value_groups
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
+    hidden_size: int = 1664
+    intermediate_size: int = 8192
+    num_hidden_layers: int = 48
+    num_attention_heads: int = 16
+    num_key_value_groups: int = 1
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 336
+    patch_size: int | list[int] | tuple[int, int] = 14
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-5
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
+    initializer_factor: float = 1.0
 
 
 class MLCDMLP(CLIPMLP):
@@ -138,37 +83,7 @@ class MLCDMLP(CLIPMLP):
 
 
 class MLCDRotaryEmbedding(VisionRotaryEmbedding):
-    def forward(self, num_patches_height: int, num_patches_width: int) -> torch.Tensor:
-        """
-        Calculate the Rotary Position Embedding (RoPE) for MLCDVisionModel based on the grid size.
-
-        Args:
-            num_patches_height (int): Number of patches in the height dimension.
-            num_patches_width (int): Number of patches in the width dimension.
-
-        Returns:
-            torch.Tensor: Rotary positional embeddings for the given grid size.
-        """
-        # Generate position IDs for height and width dimensions
-        hpos_ids = (
-            torch.arange(num_patches_height, device=self.inv_freq.device).unsqueeze(1).expand(-1, num_patches_width)
-        )
-        wpos_ids = (
-            torch.arange(num_patches_width, device=self.inv_freq.device).unsqueeze(0).expand(num_patches_height, -1)
-        )
-
-        # Flatten and stack the position IDs
-        pos_ids = torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1)
-
-        # Generate the full rotary positional embeddings for the maximum grid size
-        max_grid_size = max(num_patches_height, num_patches_width)
-        seq = torch.arange(max_grid_size, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        rotary_pos_emb_full = torch.outer(seq, self.inv_freq)
-
-        # Select and flatten the embeddings based on the position IDs
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-
-        return rotary_pos_emb
+    pass
 
 
 class MLCDVisionEmbeddings(CLIPVisionEmbeddings):
@@ -206,9 +121,9 @@ class MLCDAttention(CLIPAttention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
 
         # Each of shape: [batch_size, seq_length, num_heads, head_dim]
@@ -226,9 +141,9 @@ class MLCDAttention(CLIPAttention):
         key_states = key_states.permute(0, 2, 1, 3).contiguous()
         value_states = value_states.permute(0, 2, 1, 3).contiguous()
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -258,7 +173,7 @@ class MLCDEncoderLayer(CLIPEncoderLayer):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
         """
@@ -308,9 +223,9 @@ class MLCDEncoder(CLIPEncoder):
         self,
         inputs_embeds: torch.FloatTensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -343,7 +258,8 @@ class MLCDEncoder(CLIPEncoder):
 @auto_docstring
 class MLCDPreTrainedModel(PreTrainedModel):
     config: MLCDVisionConfig
-    base_model_prefix = "mlcd"
+    base_model_prefix = "vision_model"
+    _no_split_modules = ["MLCDEncoderLayer"]
     supports_gradient_checkpointing = True
     accepts_loss_kwargs = False
     _supports_flash_attn = True
@@ -378,7 +294,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             init.normal_(module.fc1.weight, std=fc_std)
             init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, MLCDVisionTransformer):
+        elif isinstance(module, MLCDVisionModel):
             factor = self.config.initializer_factor
             pos_emb_std = (module.config.hidden_size // module.config.num_attention_heads // 2) ** -0.5 * factor
             init.normal_(module.class_pos_emb, mean=0.0, std=pos_emb_std)
@@ -392,25 +308,54 @@ class MLCDPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-class MLCDVisionTransformer(CLIPVisionTransformer):
+class MLCDVisionModel(CLIPVisionModel):
     def __init__(self, config: MLCDVisionConfig):
         super().__init__(config)
         self.vision_rotary_embedding = MLCDRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
 
-    @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        Example:
+
+        ```python
+        >>> import httpx
+        >>> from io import BytesIO
+        >>> from PIL import Image
+        >>> from transformers import AutoProcessor, MLCDVisionModel
+        >>> model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
+        >>> processor = AutoProcessor.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs, output_attentions=True)
+
+        >>> features = outputs.last_hidden_state
+        >>> print(f"Extracted features shape: {features.shape}")
+        >>> print(f"Number of attention layers: {len(outputs.attentions)}")
+        >>> print(f"Attention shape: {outputs.attentions[0].shape}")
+        ```"""
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         num_patches_height = pixel_values.shape[-2] // self.config.patch_size
         num_patches_width = pixel_values.shape[-1] // self.config.patch_size
-        rotary_pos_emb = self.vision_rotary_embedding(num_patches_height, num_patches_width)
-        rotary_pos_emb = rotary_pos_emb.to(self.class_pos_emb.device)
+        hpos_ids = (
+            torch.arange(num_patches_height, device=pixel_values.device).unsqueeze(1).expand(-1, num_patches_width)
+        )
+        wpos_ids = (
+            torch.arange(num_patches_width, device=pixel_values.device).unsqueeze(0).expand(num_patches_height, -1)
+        )
+        pos_ids = torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1)
+        rotary_pos_emb = self.vision_rotary_embedding(pos_ids)
         rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
@@ -431,42 +376,6 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-        )
-
-
-class MLCDVisionModel(CLIPVisionModel):
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
-        r"""
-        Example:
-
-        ```python
-        >>> import requests
-        >>> from PIL import Image
-        >>> from transformers import AutoProcessor, MLCDVisionModel
-        >>> model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
-        >>> processor = AutoProcessor.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs, output_attentions=True)
-
-        >>> features = outputs.last_hidden_state
-        >>> print(f"Extracted features shape: {features.shape}")
-        >>> print(f"Number of attention layers: {len(outputs.attentions)}")
-        >>> print(f"Attention shape: {outputs.attentions[0].shape}")
-        ```"""
-        return self.vision_model(
-            pixel_values=pixel_values,
-            **kwargs,
         )
 
 

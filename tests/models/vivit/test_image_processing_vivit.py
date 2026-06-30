@@ -98,7 +98,7 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VivitImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        super().setUp()
+        self.image_processing_classes = {"pil": VivitImageProcessor} if is_vision_available() else {}
         self.image_processor_tester = VivitImageProcessingTester(self)
 
     @property
@@ -234,3 +234,7 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(
             tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
         )
+
+    @unittest.skip("VivitImageProcessor has not been refactored to use the new image processing backend architecture")
+    def test_override_instance_attributes_does_not_affect_other_instances(self):
+        pass

@@ -19,7 +19,6 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, Quanto
 from transformers.testing_utils import (
     require_accelerate,
     require_optimum_quanto,
-    require_read_token,
     require_torch_accelerator,
     slow,
     torch_device,
@@ -306,7 +305,6 @@ class QuantoQuantizationActivationTest(unittest.TestCase):
 @require_torch_accelerator
 class QuantoKVCacheQuantizationTest(unittest.TestCase):
     @slow
-    @require_read_token
     def test_quantized_cache(self):
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) time and space are not absolute, but are relative to the observer, and 2) the laws of physics are the same everywhere in the universe. This means that the speed of light is",

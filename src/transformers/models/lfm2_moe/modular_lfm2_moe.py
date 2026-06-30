@@ -11,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...masking_utils import create_causal_mask
+from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -27,14 +27,14 @@ from ...utils.import_utils import is_causal_conv1d_available
 from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
     Lfm2DecoderLayer,
-    Lfm2HybridConvCache,
     Lfm2MLP,
     Lfm2RotaryEmbedding,
     Lfm2ShortConv,
 )
 from ..llama.modeling_llama import LlamaForCausalLM, LlamaPreTrainedModel, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralModel
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeTopKRouter
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_lfm2_moe import Lfm2MoeConfig
 
 
@@ -60,7 +60,7 @@ class Lfm2MoeRotaryEmbedding(Lfm2RotaryEmbedding):
 
 
 class Lfm2MoeMLP(Lfm2MLP):
-    def __init__(self, config: Lfm2MoeConfig, intermediate_size: Optional[int] = None):
+    def __init__(self, config: Lfm2MoeConfig, intermediate_size: int | None = None):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
@@ -72,52 +72,20 @@ class Lfm2MoeMLP(Lfm2MLP):
 class Lfm2MoeExperts(Qwen2MoeExperts):
     def __init__(self, config):
         super().__init__(config)
-        del self.act_fn
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = F.silu(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
-
-        return final_hidden_states
+        self.act_fn = F.silu
 
 
-class Lfm2MoeSparseMoeBlock(nn.Module):
+class Lfm2MoeTopKRouter(Qwen2MoeTopKRouter):
     def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
+        super().__init__(config)
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.norm_topk_prob = config.norm_topk_prob
         self.use_expert_bias = config.use_expert_bias
 
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        self.experts = Lfm2MoeExperts(config)
-        if self.use_expert_bias:
-            self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
-
-    def route_tokens_to_experts(self, router_logits):
+    def forward(self, hidden_states, expert_bias=None):
+        router_logits = F.linear(hidden_states, self.weight)
         routing_weights = router_logits.sigmoid()
         if self.use_expert_bias:
-            scores_for_routing = routing_weights + self.expert_bias
+            scores_for_routing = routing_weights + expert_bias
             _, selected_experts = torch.topk(scores_for_routing, k=self.top_k, dim=-1)
             routing_weights = torch.gather(routing_weights, dim=1, index=selected_experts).type_as(router_logits)
         else:
@@ -126,19 +94,23 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         if self.norm_topk_prob:
             routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-6)
         routing_weights = routing_weights * self.routed_scaling_factor
-        return selected_experts, routing_weights
+        return router_logits, routing_weights, selected_experts
+
+
+class Lfm2MoeSparseMoeBlock(Qwen3MoeSparseMoeBlock):
+    def __init__(self, config):
+        super().__init__(config)
+        self.use_expert_bias = config.use_expert_bias
+        if self.use_expert_bias:
+            self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        router_logits = self.gate(hidden_states_reshaped)
-        selected_experts, routing_weights = self.route_tokens_to_experts(router_logits)
+        expert_bias = self.expert_bias if self.use_expert_bias else None
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped, expert_bias)
         final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-
-
-class Lfm2MoeHybridConvCache(Lfm2HybridConvCache):
-    pass
 
 
 class Lfm2MoeAttention(Lfm2Attention):
@@ -160,7 +132,7 @@ class Lfm2MoeDecoderLayer(Lfm2DecoderLayer):
 
 
 class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = False
+    _is_stateful = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -168,6 +140,8 @@ class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
         if isinstance(module, Lfm2MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Lfm2MoeTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Lfm2MoeSparseMoeBlock):
             if module.use_expert_bias:
                 init.zeros_(module.expert_bias)
@@ -183,13 +157,12 @@ class Lfm2MoeModel(MixtralModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Lfm2MoeHybridConvCache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -199,43 +172,36 @@ class Lfm2MoeModel(MixtralModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            batch_size = inputs_embeds.shape[0]
-            past_key_values = Lfm2MoeHybridConvCache(
-                config=self.config, max_batch_size=batch_size, dtype=self.dtype, device=self.device
-            )
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
+            past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        # Skip masking for decoding stage. We check shape here to be compile-friendly
-        linear_attention = attention_mask if inputs_embeds.shape[1] != 1 else None
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "conv": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
         position_embeddings = self.pos_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            layer_mask = causal_mask if decoder_layer.is_attention_layer else linear_attention
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

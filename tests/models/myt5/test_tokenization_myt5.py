@@ -85,7 +85,7 @@ class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "Tomlim/myt5-base"
     test_rust_tokenizer = False
 
-    def get_tokenizer(cls, **kwargs) -> MyT5Tokenizer:
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> MyT5Tokenizer:
         return cls.tokenizer_class.from_pretrained("Tomlim/myt5-base", **kwargs)
 
     @unittest.skip(reason="inputs cannot be pretokenized as ids depend on whole input string")

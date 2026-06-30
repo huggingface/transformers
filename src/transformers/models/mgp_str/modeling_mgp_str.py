@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Alibaba Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -25,50 +23,16 @@ from torch import nn
 from ... import initialization as init
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring
 from .configuration_mgp_str import MgpstrConfig
 
 
-logger = logging.get_logger(__name__)
-
-
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Mgpstr
-class MgpstrDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
     """
 )
+@dataclass
 class MgpstrModelOutput(ModelOutput):
     r"""
     logits (`tuple(torch.FloatTensor)` of shape `(batch_size, config.num_character_labels)`):
@@ -86,10 +50,10 @@ class MgpstrModelOutput(ModelOutput):
         heads.
     """
 
-    logits: Optional[tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    a3_attentions: Optional[tuple[torch.FloatTensor]] = None
+    logits: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    a3_attentions: tuple[torch.FloatTensor] | None = None
 
 
 class MgpstrEmbeddings(nn.Module):
@@ -189,13 +153,38 @@ class MgpstrAttention(nn.Module):
         return (context_layer, attention_probs)
 
 
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->MgpStrDropPath
+class MgpStrDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 class MgpstrLayer(nn.Module):
     def __init__(self, config: MgpstrConfig, drop_path=None):
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = MgpstrAttention(config)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = MgpstrDropPath(drop_path) if drop_path is not None else nn.Identity()
+        self.drop_path = MgpStrDropPath(drop_path) if drop_path is not None else nn.Identity()
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_dim = int(config.hidden_size * config.mlp_ratio)
         self.mlp = MgpstrMlp(config, mlp_hidden_dim)
@@ -319,16 +308,16 @@ class MgpstrModel(MgpstrPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], BaseModelOutput]:
+    ) -> tuple[torch.FloatTensor] | BaseModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -382,12 +371,12 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_a3_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_a3_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], MgpstrModelOutput]:
+    ) -> tuple[torch.FloatTensor] | MgpstrModelOutput:
         r"""
         output_a3_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of a3 modules. See `a3_attentions` under returned tensors
@@ -400,12 +389,14 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         ...     MgpstrProcessor,
         ...     MgpstrForSceneTextRecognition,
         ... )
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> # load image from the IIIT-5k dataset
         >>> url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
 
         >>> processor = MgpstrProcessor.from_pretrained("alibaba-damo/mgp-str-base")
         >>> pixel_values = processor(images=image, return_tensors="pt").pixel_values
@@ -422,7 +413,7 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         mgp_outputs = self.mgp_str(
             pixel_values,

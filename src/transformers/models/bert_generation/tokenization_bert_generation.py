@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Tokenization class for model BertGeneration."""
 
-from typing import Any, Optional
+from typing import Any
 
 from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils import logging
@@ -81,7 +80,7 @@ class BertGenerationTokenizer(SentencePieceBackend):
         unk_token="<unk>",
         pad_token="<pad>",
         sep_token="<::::>",
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs

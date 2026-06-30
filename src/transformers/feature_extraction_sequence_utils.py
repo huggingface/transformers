@@ -15,8 +15,6 @@
 Sequence feature extraction class for common feature extractors to preprocess sequences.
 """
 
-from typing import Optional, Union
-
 import numpy as np
 
 from .audio_utils import is_valid_audio, load_audio
@@ -52,19 +50,17 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def pad(
         self,
-        processed_features: Union[
-            BatchFeature,
-            list[BatchFeature],
-            dict[str, BatchFeature],
-            dict[str, list[BatchFeature]],
-            list[dict[str, BatchFeature]],
-        ],
-        padding: Union[bool, str, PaddingStrategy] = True,
-        max_length: Optional[int] = None,
+        processed_features: BatchFeature
+        | list[BatchFeature]
+        | dict[str, BatchFeature]
+        | dict[str, list[BatchFeature]]
+        | list[dict[str, BatchFeature]],
+        padding: bool | str | PaddingStrategy = True,
+        max_length: int | None = None,
         truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        pad_to_multiple_of: int | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
     ) -> BatchFeature:
         """
         Pad input values / input vectors or a batch of input values / input vectors up to predefined length or to the
@@ -173,7 +169,10 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         for key, value in processed_features.items():
             if isinstance(value[0], (int, float)):
                 processed_features[key] = to_numpy(value)
-            else:
+            elif not isinstance(value, np.ndarray):
+                # An already-batched numpy array can be used as-is; splitting it
+                # into a list of per-example arrays is pure overhead and is very
+                # slow for large inputs (e.g. long audio).
                 processed_features[key] = [to_numpy(v) for v in value]
 
         # Convert padding_strategy in PaddingStrategy
@@ -224,11 +223,11 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _pad(
         self,
-        processed_features: Union[dict[str, np.ndarray], BatchFeature],
-        max_length: Optional[int] = None,
+        processed_features: dict[str, np.ndarray] | BatchFeature,
+        max_length: int | None = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        return_attention_mask: bool | None = None,
     ) -> dict:
         """
         Pad inputs (on left/right and up to predefined length or max length in the batch)
@@ -296,10 +295,10 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _truncate(
         self,
-        processed_features: Union[dict[str, np.ndarray], BatchFeature],
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        truncation: Optional[bool] = None,
+        processed_features: dict[str, np.ndarray] | BatchFeature,
+        max_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        truncation: bool | None = None,
     ):
         """
         Truncate inputs to predefined length or max length in the batch
@@ -369,17 +368,19 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         return padding_strategy
 
-    def fetch_audio(self, audio_url_or_urls: Union[str, list[str], list[list[str]]]):
+    def fetch_audio(self, audio_url_or_urls: str | list[str] | list[list[str]], sampling_rate: int | None = None):
         """
         Convert a single or a list of urls into the corresponding `np.ndarray` objects.
 
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        if isinstance(audio_url_or_urls, list):
-            return [self.fetch_audio(x) for x in audio_url_or_urls]
+        # Accepted input types for `raw_audio`: "np.ndarray | list[float] | list[np.ndarray] | list[list[float]]"
+        sampling_rate = sampling_rate if sampling_rate else self.sampling_rate
+        if isinstance(audio_url_or_urls, list) and not isinstance(audio_url_or_urls[0], float):
+            return [self.fetch_audio(x, sampling_rate=sampling_rate) for x in audio_url_or_urls]
         elif isinstance(audio_url_or_urls, str):
-            return load_audio(audio_url_or_urls)
+            return load_audio(audio_url_or_urls, sampling_rate=sampling_rate)
         elif is_valid_audio(audio_url_or_urls):
             return audio_url_or_urls
         else:

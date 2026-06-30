@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -151,7 +150,7 @@ class ColQwen2ForRetrievalModelTester:
         )
 
         # Hardcoded image grid size: do not change unless you modified image size or patch size!
-        image_grid_thw = torch.tensor([1, 4, 4]).repeat(self.batch_size, 1)
+        image_grid_thw = torch.tensor([1, 4, 4], device=torch_device).repeat(self.batch_size, 1)
 
         # NOTE: The following adjustment ensures correct behavior with DDP on multiple GPUs.
         # Line is copied from `src/transformers/models/colqwen2/processing_colqwen2.py`
@@ -202,6 +201,8 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ColQwen2ForRetrieval,) if is_torch_available() else ()
 
     test_resize_embeddings = True
+    test_torch_exportable = False
+    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = ColQwen2ForRetrievalModelTester(self)
@@ -265,6 +266,12 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**inputs, return_dict=True)
 
             self.assertIsInstance(outputs, ColQwen2ForRetrievalOutput)
+
+    @unittest.skip(
+        reason="Conversions applied to underlying VLM saved in legacy format. Colqwen2 doesn't match any of those regexes!"
+    )
+    def test_reverse_loading_mapping(self, **kwargs):
+        pass
 
     @unittest.skip(reason="Some undefined behavior encountered with test versions of Qwen2-VL. Skip for now.")
     def test_model_parallelism(self):

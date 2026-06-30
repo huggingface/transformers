@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-02-20 and added to Hugging Face Transformers on 2025-02-21.*
+*This model was published in HF papers on 2025-02-20 and contributed to Hugging Face Transformers on 2025-02-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-            <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+                <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
             <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -42,27 +41,29 @@ The example below demonstrates zero-shot classification with [`Pipeline`] or the
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 
-pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip2-base-patch16-224", device=0, dtype=torch.bfloat16)
+pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip2-base-patch16-224", device=0)
 pipeline(image, candidate_labels=candidate_labels)
 ```
 
 </hfoption>
 <hfoption id="AutoModel (FixRes)">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+from transformers import AutoModel, AutoProcessor
+
+
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", device_map="auto", attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -86,13 +87,15 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 </hfoption>
 <hfoption id="AutoModel (NaFlex)">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("google/siglip2-base-patch16-naflex", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+from transformers import AutoModel, AutoProcessor
+
+
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-naflex", device_map="auto", attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-naflex")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -118,14 +121,16 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModel, BitsAndBytesConfig
+
+from transformers import AutoModel, AutoProcessor, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
-model = AutoModel.from_pretrained("google/siglip2-large-patch16-512", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -145,7 +150,71 @@ logits_per_image = outputs.logits_per_image
 probs = torch.sigmoid(logits_per_image)
 print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 ```
+## Text embeddings and retrieval
 
+SigLIP2 can be used to generate text embeddings for retrieval or similarity-based tasks (for example, product or caption retrieval).
+
+For best results, the same text preprocessing used during training must be applied. When loading SigLIP2 checkpoints via [AutoProcessor], this preprocessing is handled automatically by the processor.
+
+### Default text preprocessing (handled automatically)
+
+For SigLIP2 models, the processor applies the following defaults for text inputs:
+- **Lowercasing** all input text
+- **Fixed padding and truncation**: `padding="max_length"`, `max_length=64`, `truncation=True`
+
+These defaults ensure consistent and correct text embeddings. Overriding them may lead to degraded retrieval quality.
+
+### Example: computing text embeddings
+
+```python
+import torch
+
+from transformers import AutoModel, AutoProcessor
+
+
+model_id = "google/siglip2-so400m-patch14-384"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModel.from_pretrained(model_id).eval( device_map="auto")
+
+texts = [
+    "HOME084 Timbangan Badan Digital Kaca Transparan 28CM Body Scale Personal Scale",
+    "26cm Timbangan Badan digital personal scale weight",
+    "33cm Timbangan Badan digital personal scale weight",
+]
+
+# NOTE: lowercasing and padding/truncation to length 64 are applied automatically by the processor pipeline.
+inputs = processor(text=texts, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    text_features = model.get_text_features(**inputs)
+
+# Normalize embeddings for cosine similarity
+text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
+```
+### Text-only usage: Siglip2Tokenizer
+
+If you are encoding text without a processor (for example, via [AutoTokenizer]), use [Siglip2Tokenizer].
+
+- Siglip2Tokenizer applies lowercasing at the tokenizer backend level (matching SigLIP2 training time normalization), while keeping the same tokenization as the original tokenizer.
+
+- When using the tokenizer directly, you should explicitly apply the same padding/truncation settings as used during training (e.g. max_length=64):
+
+
+```python
+from transformers import Siglip2Tokenizer
+
+
+model_id = "google/siglip2-so400m-patch14-384"
+tokenizer = Siglip2Tokenizer.from_pretrained(model_id)
+
+inputs = tokenizer(
+    ["HELLO WORLD"],
+    padding="max_length",
+    truncation=True,
+    max_length=64,
+    return_tensors="pt",
+)
+```
 ## Notes
 
 - Training is supported for DDP and FSDP on single-node multi-accelerator setups. However, it does not use [torch.distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) utilities which may limit the scalability of batch size.
@@ -165,8 +234,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
     model = SiglipModel.from_pretrained(
         "google/siglip2-so400m-patch14-384",
         attn_implementation="flash_attention_2",
-        dtype=torch.float16,
-        device_map=device,
+        device_map="auto",
     )
     ```
 
@@ -187,14 +255,15 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 [[autodoc]] Siglip2ImageProcessor
     - preprocess
 
-## Siglip2ImageProcessorFast
+## Siglip2ImageProcessorPil
 
-[[autodoc]] Siglip2ImageProcessorFast
+[[autodoc]] Siglip2ImageProcessorPil
     - preprocess
 
 ## Siglip2Processor
 
 [[autodoc]] Siglip2Processor
+    - __call__
 
 ## Siglip2Model
 
@@ -217,3 +286,8 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 
 [[autodoc]] Siglip2ForImageClassification
     - forward
+
+## Siglip2Tokenizer
+
+[[autodoc]] Siglip2Tokenizer
+    - __call__

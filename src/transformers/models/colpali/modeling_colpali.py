@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +14,17 @@
 """PyTorch ColPali model"""
 
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from torch import nn
 
-from transformers import AutoModelForImageTextToText
+from transformers import AutoModel
 
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from .configuration_colpali import ColPaliConfig
 
 
@@ -58,12 +57,12 @@ class ColPaliPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.weight[module.padding_idx])
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for ColPali embeddings output.
     """
 )
+@dataclass
 class ColPaliForRetrievalOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -80,12 +79,12 @@ class ColPaliForRetrievalOutput(ModelOutput):
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    embeddings: Optional[torch.Tensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    embeddings: torch.Tensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -103,19 +102,14 @@ class ColPaliForRetrievalOutput(ModelOutput):
     """
 )
 class ColPaliForRetrieval(ColPaliPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "vlm.language_model.model": "vlm.model.language_model",
-        "vlm.vision_tower": "vlm.model.vision_tower",
-        "vlm.multi_modal_projector": "vlm.model.multi_modal_projector",
-        "vlm.language_model.lm_head": "vlm.lm_head",
-    }
+    base_model_prefix = "vlm"
 
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
         self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
-        self.vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
+        self.vlm = AutoModel.from_config(config.vlm_config)
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
@@ -129,30 +123,22 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> ColPaliForRetrievalOutput:
         if pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = kwargs.pop("output_hidden_states", None)
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vlm_output = self.vlm.model(
+        vlm_output = self.vlm(
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
             output_hidden_states=True,
-            return_dict=True,
-            output_attentions=output_attentions,
             **kwargs,
         )
         vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
@@ -175,37 +161,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
             attentions=vlm_output.attentions,
             image_hidden_states=vlm_image_hidden_states,
         )
-
-    def get_input_embeddings(self):
-        return self.vlm.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.vlm.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.vlm.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.vlm.set_output_embeddings(new_embeddings)
-
-    def resize_token_embeddings(
-        self,
-        new_num_tokens: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        mean_resizing: bool = True,
-    ) -> nn.Embedding:
-        model_embeds = self.vlm.resize_token_embeddings(
-            new_num_tokens=new_num_tokens,
-            pad_to_multiple_of=pad_to_multiple_of,
-            mean_resizing=mean_resizing,
-        )
-
-        self.config.vlm_config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vlm_config.vocab_size = model_embeds.num_embeddings
-        self.vlm.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-
-        return model_embeds
 
 
 __all__ = [

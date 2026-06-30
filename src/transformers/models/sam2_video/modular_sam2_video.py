@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,12 +17,13 @@ import math
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import Tensor
 from tqdm import tqdm
 
@@ -39,7 +39,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import OutputRecorder, TransformersKwargs
+from ...utils.generic import TransformersKwargs
+from ...utils.output_capturing import OutputRecorder
 from ...video_utils import VideoInput
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..sam2.configuration_sam2 import (
@@ -70,101 +71,88 @@ class Sam2VideoMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
+@strict
 class Sam2VideoConfig(PreTrainedConfig):
     r"""
-    [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
-    SAM2 model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
-    configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
-    [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (Union[`dict`, `Sam2VisionConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam2VisionConfig`].
-        prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam2PromptEncoderConfig`].
-        mask_decoder_config (Union[`dict`, `Sam2MaskDecoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam2MaskDecoderConfig`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation for parameter initialization.
-        num_maskmem (`int`, *optional*, defaults to 7):
-            The number of memory slots for the mask memory.
-        image_size (`int`, *optional*, defaults to 1024):
-            The size of the input images.
-        sigmoid_scale_for_mem_enc (`float`, *optional*, defaults to 20.0):
-            Scale factor for the sigmoid function in the memory encoder.
-        sigmoid_bias_for_mem_enc (`float`, *optional*, defaults to -10.0):
-            Bias for the sigmoid function in the memory encoder.
-        enable_occlusion_spatial_embedding (`bool`, *optional*, defaults to `True`):
-            Whether to enable spatial embedding for occlusions.
-        multimask_output_in_sam (`bool`, *optional*, defaults to `True`):
-            Whether to output multiple masks from the SAM head.
-        multimask_min_pt_num (`int`, *optional*, defaults to 0):
-            The minimum number of points to trigger multimask output.
-        multimask_max_pt_num (`int`, *optional*, defaults to 1):
-            The maximum number of points to trigger multimask output.
-        multimask_output_for_tracking (`bool`, *optional*, defaults to `True`):
-            Whether to use multimask output for tracking.
-        max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
-            The maximum number of object pointers in the encoder.
-        max_cond_frame_num (`int`, *optional*, defaults to -1):
-            Maximum number of conditioning frames to use in memory attention. Set to -1 to use all conditioning frames.
-        enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
-            Whether to enable temporal positional encoding for object pointers.
-        memory_attention_hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the memory attention hidden states.
-        memory_attention_num_layers (`int`, *optional*, defaults to 4):
-            The number of layers in the memory attention module.
-        memory_attention_num_attention_heads (`int`, *optional*, defaults to 1):
-            Number of attention heads for each attention layer in the memory attention.
-        memory_attention_downsample_rate (`int`, *optional*, defaults to 1):
-            The downsample rate for the attention layers.
-        memory_attention_feed_forward_hidden_size (`int`, *optional*, defaults to 2048):
-            The dimension of the feedforward network in the memory attention module.
-        memory_attention_feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the feedforward network in the memory attention module.
-        memory_attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the memory attention module.
-        memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-            The Rope theta parameter.
-        memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[64, 64]`):
-            The feature sizes for the Rope positional encoding.
-        memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
-                The dropout rate for the Rope positional encoding.
-        memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the memory encoder hidden states.
-        memory_encoder_output_channels (`int`, *optional*, defaults to 64):
-            The number of output channels for the memory encoder.
-        mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
-            The dimension of the mask downsampler embedding.
-        mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
-            The kernel size for the mask downsampler.
-        mask_downsampler_stride (`int`, *optional*, defaults to 2):
-            The stride for the mask downsampler.
-        mask_downsampler_padding (`int`, *optional*, defaults to 1):
-            The padding for the mask downsampler.
-        mask_downsampler_total_stride (`int`, *optional*, defaults to 16):
-            The total stride for the mask downsampler.
-        mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the mask downsampler.
-        memory_fuser_num_layers (`int`, *optional*, defaults to 2):
-            The number of layers in the memory fuser.
-        memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
-            The dimension of the embedding layer in the memory fuser.
-        memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
-            The dimension of the intermediate layer in the memory fuser.
-        memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
-            The kernel size for the memory fuser.
-        memory_fuser_padding (`int`, *optional*, defaults to 3):
-            The padding for the memory fuser.
-        memory_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
-            The initial value for the layer scale in the memory fuser.
-        memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the memory fuser.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam2PromptEncoderConfig`].
+    mask_decoder_config (Union[`dict`, `Sam2MaskDecoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam2MaskDecoderConfig`].
+    initializer_range (`float`, *optional*, defaults to 0.02):
+        Standard deviation for parameter initialization.
+    num_maskmem (`int`, *optional*, defaults to 7):
+        The number of memory slots for the mask memory.
+    sigmoid_scale_for_mem_enc (`float`, *optional*, defaults to 20.0):
+        Scale factor for the sigmoid function in the memory encoder.
+    sigmoid_bias_for_mem_enc (`float`, *optional*, defaults to -10.0):
+        Bias for the sigmoid function in the memory encoder.
+    enable_occlusion_spatial_embedding (`bool`, *optional*, defaults to `True`):
+        Whether to enable spatial embedding for occlusions.
+    multimask_output_in_sam (`bool`, *optional*, defaults to `True`):
+        Whether to output multiple masks from the SAM head.
+    multimask_min_pt_num (`int`, *optional*, defaults to 0):
+        The minimum number of points to trigger multimask output.
+    multimask_max_pt_num (`int`, *optional*, defaults to 1):
+        The maximum number of points to trigger multimask output.
+    multimask_output_for_tracking (`bool`, *optional*, defaults to `True`):
+        Whether to use multimask output for tracking.
+    max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
+        The maximum number of object pointers in the encoder.
+    max_cond_frame_num (`int`, *optional*, defaults to -1):
+        Maximum number of conditioning frames to use in memory attention. Set to -1 to use all conditioning frames.
+    enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
+        Whether to enable temporal positional encoding for object pointers.
+    memory_attention_hidden_size (`int`, *optional*, defaults to 256):
+        Dimensionality of the memory attention hidden states.
+    memory_attention_num_layers (`int`, *optional*, defaults to 4):
+        The number of layers in the memory attention module.
+    memory_attention_num_attention_heads (`int`, *optional*, defaults to 1):
+        Number of attention heads for each attention layer in the memory attention.
+    memory_attention_downsample_rate (`int`, *optional*, defaults to 1):
+        The downsample rate for the attention layers.
+    memory_attention_feed_forward_hidden_size (`int`, *optional*, defaults to 2048):
+        The dimension of the feedforward network in the memory attention module.
+    memory_attention_feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function in the feedforward network in the memory attention module.
+    memory_attention_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout rate for the memory attention module.
+    memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
+        The Rope theta parameter.
+    memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[64, 64]`):
+        The feature sizes for the Rope positional encoding.
+    memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout rate for the Rope positional encoding.
+    memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
+        Dimensionality of the memory encoder hidden states.
+    memory_encoder_output_channels (`int`, *optional*, defaults to 64):
+        The number of output channels for the memory encoder.
+    mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
+        The dimension of the mask downsampler embedding.
+    mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
+        The kernel size for the mask downsampler.
+    mask_downsampler_stride (`int`, *optional*, defaults to 2):
+        The stride for the mask downsampler.
+    mask_downsampler_padding (`int`, *optional*, defaults to 1):
+        The padding for the mask downsampler.
+    mask_downsampler_total_stride (`int`, *optional*, defaults to 16):
+        The total stride for the mask downsampler.
+    mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function in the mask downsampler.
+    memory_fuser_num_layers (`int`, *optional*, defaults to 2):
+        The number of layers in the memory fuser.
+    memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
+        The dimension of the embedding layer in the memory fuser.
+    memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
+        The dimension of the intermediate layer in the memory fuser.
+    memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
+        The kernel size for the memory fuser.
+    memory_fuser_padding (`int`, *optional*, defaults to 3):
+        The padding for the memory fuser.
+    memory_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
+        The initial value for the layer scale in the memory fuser.
+    memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function in the memory fuser..
 
     Example:
 
@@ -202,117 +190,70 @@ class Sam2VideoConfig(PreTrainedConfig):
         "mask_decoder_config": Sam2VideoMaskDecoderConfig,
     }
 
-    def __init__(
-        self,
-        vision_config=None,
-        prompt_encoder_config=None,
-        mask_decoder_config=None,
-        initializer_range=0.02,
-        num_maskmem=7,
-        image_size=1024,
-        sigmoid_scale_for_mem_enc=20.0,
-        sigmoid_bias_for_mem_enc=-10.0,
-        enable_occlusion_spatial_embedding=True,
-        multimask_output_in_sam=True,
-        multimask_min_pt_num=0,
-        multimask_max_pt_num=1,
-        multimask_output_for_tracking=True,
-        max_object_pointers_in_encoder=16,
-        max_cond_frame_num=-1,
-        enable_temporal_pos_encoding_for_object_pointers=True,
-        # memory attention
-        memory_attention_hidden_size=256,
-        memory_attention_num_layers=4,
-        memory_attention_num_attention_heads=1,
-        memory_attention_downsample_rate=1,
-        memory_attention_feed_forward_hidden_size=2048,
-        memory_attention_feed_forward_hidden_act="relu",
-        memory_attention_dropout=0.1,
-        memory_attention_rope_theta=10000,
-        memory_attention_rope_feat_sizes=None,
-        memory_attention_rope_dropout=0.1,
-        # memory encoder
-        memory_encoder_hidden_size=256,
-        memory_encoder_output_channels=64,
-        mask_downsampler_embed_dim=256,
-        mask_downsampler_kernel_size=3,
-        mask_downsampler_stride=2,
-        mask_downsampler_padding=1,
-        mask_downsampler_total_stride=16,
-        mask_downsampler_hidden_act="gelu",
-        memory_fuser_num_layers=2,
-        memory_fuser_embed_dim=256,
-        memory_fuser_intermediate_dim=1024,
-        memory_fuser_kernel_size=7,
-        memory_fuser_padding=3,
-        memory_fuser_layer_scale_init_value=1e-6,
-        memory_fuser_hidden_act="gelu",
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    vision_config: dict | PreTrainedConfig | None = None
+    prompt_encoder_config: dict | PreTrainedConfig | None = None
+    mask_decoder_config: dict | PreTrainedConfig | None = None
+    initializer_range: float = 0.02
+    num_maskmem: int = 7
+    image_size: int | list[int] | tuple[int, int] = 1024
+    sigmoid_scale_for_mem_enc: float = 20.0
+    sigmoid_bias_for_mem_enc: float = -10.0
+    enable_occlusion_spatial_embedding: bool = True
+    multimask_output_in_sam: bool = True
+    multimask_min_pt_num: int = 0
+    multimask_max_pt_num: int = 1
+    multimask_output_for_tracking: bool = True
+    max_object_pointers_in_encoder: int = 16
+    max_cond_frame_num: int = -1
+    enable_temporal_pos_encoding_for_object_pointers: bool = True
+    memory_attention_hidden_size: int = 256
+    memory_attention_num_layers: int = 4
+    memory_attention_num_attention_heads: int = 1
+    memory_attention_downsample_rate: int = 1
+    memory_attention_feed_forward_hidden_size: int = 2048
+    memory_attention_feed_forward_hidden_act: str = "relu"
+    memory_attention_dropout: float | int = 0.1
+    memory_attention_rope_theta: int = 10000
+    memory_attention_rope_feat_sizes: list[int] | None = None
+    memory_attention_rope_dropout: float | int = 0.1
+    memory_encoder_hidden_size: int = 256
+    memory_encoder_output_channels: int = 64
+    mask_downsampler_embed_dim: int = 256
+    mask_downsampler_kernel_size: int = 3
+    mask_downsampler_stride: int = 2
+    mask_downsampler_padding: int = 1
+    mask_downsampler_total_stride: int = 16
+    mask_downsampler_hidden_act: str = "gelu"
+    memory_fuser_num_layers: int = 2
+    memory_fuser_embed_dim: int = 256
+    memory_fuser_intermediate_dim: int = 1024
+    memory_fuser_kernel_size: int = 7
+    memory_fuser_padding: int = 3
+    memory_fuser_layer_scale_init_value: float = 1e-6
+    memory_fuser_hidden_act: str = "gelu"
 
-        vision_config = vision_config if vision_config is not None else {}
-        prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
-        mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
-        memory_attention_rope_feat_sizes = (
-            [64, 64] if memory_attention_rope_feat_sizes is None else memory_attention_rope_feat_sizes
+    def __post_init__(self, **kwargs):
+        self.memory_attention_rope_feat_sizes = (
+            [64, 64] if self.memory_attention_rope_feat_sizes is None else self.memory_attention_rope_feat_sizes
         )
 
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "sam2_vision_model")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        if isinstance(prompt_encoder_config, Sam2VideoPromptEncoderConfig):
-            prompt_encoder_config = prompt_encoder_config.to_dict()
-        if isinstance(mask_decoder_config, Sam2VideoMaskDecoderConfig):
-            mask_decoder_config = mask_decoder_config.to_dict()
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "sam2_vision_model")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["sam2_vision_model"]()
 
-        self.vision_config = vision_config
-        self.prompt_encoder_config = Sam2VideoPromptEncoderConfig(**prompt_encoder_config)
-        self.mask_decoder_config = Sam2VideoMaskDecoderConfig(**mask_decoder_config)
+        if isinstance(self.prompt_encoder_config, dict):
+            self.prompt_encoder_config = Sam2VideoPromptEncoderConfig(**self.prompt_encoder_config)
+        elif self.prompt_encoder_config is None:
+            self.prompt_encoder_config = Sam2VideoPromptEncoderConfig()
 
-        self.initializer_range = initializer_range
-        self.num_maskmem = num_maskmem  # default 1 input frame + 6 previous frames
-        self.image_size = image_size
-        self.sigmoid_scale_for_mem_enc = sigmoid_scale_for_mem_enc
-        self.sigmoid_bias_for_mem_enc = sigmoid_bias_for_mem_enc
-        self.multimask_output_in_sam = multimask_output_in_sam
-        self.multimask_min_pt_num = multimask_min_pt_num
-        self.multimask_max_pt_num = multimask_max_pt_num
-        self.multimask_output_for_tracking = multimask_output_for_tracking
-        self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
-        self.max_cond_frame_num = max_cond_frame_num
-        # The next 4 are True for sam2.1 and False for sam2
-        self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
-        self.enable_temporal_pos_encoding_for_object_pointers = enable_temporal_pos_encoding_for_object_pointers
+        if isinstance(self.mask_decoder_config, dict):
+            self.mask_decoder_config = Sam2VideoPromptEncoderConfig(**self.mask_decoder_config)
+        elif self.mask_decoder_config is None:
+            self.mask_decoder_config = Sam2VideoMaskDecoderConfig()
 
-        # memory attention
-        self.memory_attention_hidden_size = memory_attention_hidden_size
-        self.memory_attention_num_layers = memory_attention_num_layers
-        self.memory_attention_num_attention_heads = memory_attention_num_attention_heads
-        self.memory_attention_downsample_rate = memory_attention_downsample_rate
-        self.memory_attention_feed_forward_hidden_size = memory_attention_feed_forward_hidden_size
-        self.memory_attention_feed_forward_hidden_act = memory_attention_feed_forward_hidden_act
-        self.memory_attention_dropout = memory_attention_dropout
-        self.memory_attention_rope_theta = memory_attention_rope_theta
-        self.memory_attention_rope_feat_sizes = memory_attention_rope_feat_sizes
-        self.memory_attention_rope_dropout = memory_attention_rope_dropout
-
-        # memory encoder
-        self.memory_encoder_hidden_size = memory_encoder_hidden_size
-        self.memory_encoder_output_channels = memory_encoder_output_channels
-        self.mask_downsampler_embed_dim = mask_downsampler_embed_dim
-        self.mask_downsampler_kernel_size = mask_downsampler_kernel_size
-        self.mask_downsampler_stride = mask_downsampler_stride
-        self.mask_downsampler_padding = mask_downsampler_padding
-        self.mask_downsampler_total_stride = mask_downsampler_total_stride
-        self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
-        self.memory_fuser_num_layers = memory_fuser_num_layers
-        self.memory_fuser_embed_dim = memory_fuser_embed_dim
-        self.memory_fuser_intermediate_dim = memory_fuser_intermediate_dim
-        self.memory_fuser_kernel_size = memory_fuser_kernel_size
-        self.memory_fuser_padding = memory_fuser_padding
-        self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
-        self.memory_fuser_hidden_act = memory_fuser_hidden_act
+        super().__post_init__(**kwargs)
 
 
 class Sam2VideoInferenceCache:
@@ -320,8 +261,8 @@ class Sam2VideoInferenceCache:
 
     def __init__(
         self,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
+        inference_device: torch.device | str = "cpu",
+        inference_state_device: torch.device | str = "cpu",
         max_vision_features_cache_size: int = 1,
     ):
         self.inference_device = inference_device
@@ -346,7 +287,7 @@ class Sam2VideoInferenceCache:
                 cached[key] = value
         self._vision_features[frame_idx] = cached
 
-    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
+    def get_vision_features(self, frame_idx: int) -> dict | None:
         """Get cached vision features, automatically moved to inference device."""
         if frame_idx not in self._vision_features:
             return None
@@ -392,13 +333,13 @@ class Sam2VideoInferenceSession:
 
     def __init__(
         self,
-        video: Optional[torch.FloatTensor] = None,
-        video_height: Optional[int] = None,
-        video_width: Optional[int] = None,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
-        video_storage_device: Union[torch.device, str] = "cpu",
-        dtype: Union[torch.dtype, str] = "float32",
+        video: torch.FloatTensor | None = None,
+        video_height: int | None = None,
+        video_width: int | None = None,
+        inference_device: torch.device | str = "cpu",
+        inference_state_device: torch.device | str = "cpu",
+        video_storage_device: torch.device | str = "cpu",
+        dtype: torch.dtype | str = "float32",
         max_vision_features_cache_size: int = 1,
     ):
         # store as a dictionary to avoid double memory allocation with torch.cat when adding new frames
@@ -438,7 +379,7 @@ class Sam2VideoInferenceSession:
         self.obj_with_new_inputs = []
 
     @property
-    def num_frames(self) -> Optional[int]:
+    def num_frames(self) -> int | None:
         return len(self.processed_frames) if self.processed_frames is not None else None
 
     # Object management
@@ -478,7 +419,7 @@ class Sam2VideoInferenceSession:
         device_inputs = {}
         for key, value in inputs.items():
             if isinstance(value, torch.Tensor):
-                device_inputs[key] = value.to(self.inference_device, non_blocking=True)
+                device_inputs[key] = value.to(self.inference_device, non_blocking=False)
             else:
                 device_inputs[key] = value
         self.point_inputs_per_obj[obj_idx][frame_idx] = device_inputs
@@ -502,8 +443,8 @@ class Sam2VideoInferenceSession:
         self,
         obj_idx: int,
         frame_idx: int,
-        output_key: Optional[str] = None,
-        output_value: Optional[Union[torch.Tensor, dict]] = None,
+        output_key: str | None = None,
+        output_value: torch.Tensor | dict | None = None,
         is_conditioning_frame: bool = True,
     ):
         """
@@ -562,7 +503,7 @@ class Sam2VideoInferenceSession:
         return value
 
     # Video frame management
-    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: Optional[int] = None) -> int:
+    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: int | None = None) -> int:
         """Add new frame with automatic device placement."""
         pixel_values = pixel_values.to(self.video_storage_device, dtype=self.dtype, non_blocking=True)
         if pixel_values.dim() == 4:
@@ -608,26 +549,8 @@ class Sam2VideoInferenceSession:
 
 
 class Sam2VideoProcessor(Sam2Processor):
-    r"""
-    Constructs a SAM2 processor which wraps a SAM2 image processor and an 2D points & Bounding boxes processor into a
-    single processor.
-
-    [`Sam2VideoProcessor`] offers all the functionalities of [`Sam2ImageProcessorFast`] and [`Sam2VideoProcessor`]. See the docstring of
-    [`~Sam2ImageProcessorFast.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
-
-    Args:
-        image_processor (`Sam2ImageProcessorFast`):
-            An instance of [`Sam2ImageProcessorFast`].
-        video_processor (`Sam2VideoVideoProcessor`):
-            An instance of [`Sam2VideoVideoProcessor`].
-        target_size (`int`, *optional*):
-            The target size (target_size, target_size) to which the image will be resized.
-        point_pad_value (`int`, *optional*, defaults to -10):
-            The value used for padding input points.
-    """
-
     def __init__(
-        self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
+        self, image_processor, video_processor, target_size: int | None = None, point_pad_value: int = -10, **kwargs
     ):
         ProcessorMixin.__init__(self, image_processor, video_processor, **kwargs)
         self.point_pad_value = point_pad_value
@@ -635,11 +558,11 @@ class Sam2VideoProcessor(Sam2Processor):
 
     def init_video_session(
         self,
-        video: Optional[VideoInput] = None,
+        video: VideoInput | None = None,
         inference_device: Union[str, "torch.device"] = "cpu",
-        inference_state_device: Optional[Union[str, "torch.device"]] = None,
-        processing_device: Optional[Union[str, "torch.device"]] = None,
-        video_storage_device: Optional[Union[str, "torch.device"]] = None,
+        inference_state_device: Union[str, "torch.device"] | None = None,
+        processing_device: Union[str, "torch.device"] | None = None,
+        video_storage_device: Union[str, "torch.device"] | None = None,
         max_vision_features_cache_size: int = 1,
         dtype: torch.dtype = torch.float32,
     ):
@@ -690,12 +613,12 @@ class Sam2VideoProcessor(Sam2Processor):
         self,
         inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
-        obj_ids: Union[list[int], int],
-        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
-        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
-        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
-        input_masks: Optional[Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]]] = None,
-        original_size: Optional[tuple[int, int]] = None,
+        obj_ids: list[int] | int,
+        input_points: list[list[list[list[float]]]] | torch.Tensor | None = None,
+        input_labels: list[list[list[int]]] | torch.Tensor | None = None,
+        input_boxes: list[list[list[float]]] | torch.Tensor | None = None,
+        input_masks: np.ndarray | torch.Tensor | list[np.ndarray] | list[torch.Tensor] | None = None,
+        original_size: tuple[int, int] | None = None,
         clear_old_inputs: bool = True,
     ) -> Sam2VideoInferenceSession:
         """
@@ -753,10 +676,10 @@ class Sam2VideoProcessor(Sam2Processor):
         inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
         obj_ids: list[int],
-        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
-        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
-        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
-        original_size: Optional[tuple[int, int]] = None,
+        input_points: list[list[list[list[float]]]] | torch.Tensor | None = None,
+        input_labels: list[list[list[int]]] | torch.Tensor | None = None,
+        input_boxes: list[list[list[float]]] | torch.Tensor | None = None,
+        original_size: tuple[int, int] | None = None,
         clear_old_inputs: bool = True,
     ) -> Sam2VideoInferenceSession:
         """
@@ -862,7 +785,7 @@ class Sam2VideoProcessor(Sam2Processor):
         inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
         obj_ids: list[int],
-        input_masks: Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]],
+        input_masks: np.ndarray | torch.Tensor | list[np.ndarray] | list[torch.Tensor],
     ):
         """
         Add new mask to a frame and add them to the inference session.
@@ -965,12 +888,12 @@ class Sam2VideoImageSegmentationOutput(Sam2ImageSegmentationOutput):
         A tensor representing the object pointer, used for tracking in videos. Only used for Sam2VideoModel.
     """
 
-    high_res_masks: Optional[torch.FloatTensor] = None
-    object_pointer: Optional[torch.FloatTensor] = None
+    high_res_masks: torch.FloatTensor | None = None
+    object_pointer: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
+@dataclass
 class Sam2VideoSegmentationOutput(ModelOutput):
     r"""
     object_ids (`list[int]`, *optional*):
@@ -983,10 +906,10 @@ class Sam2VideoSegmentationOutput(ModelOutput):
         The frame index of the video.
     """
 
-    object_ids: Optional[list[int]] = None
-    pred_masks: Optional[torch.FloatTensor] = None
-    object_score_logits: Optional[torch.FloatTensor] = None
-    frame_idx: Optional[int] = None
+    object_ids: list[int] | None = None
+    pred_masks: torch.FloatTensor | None = None
+    object_score_logits: torch.FloatTensor | None = None
+    frame_idx: int | None = None
 
 
 @auto_docstring
@@ -996,7 +919,7 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "video"
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_attention_backend = True
 
     @torch.no_grad()
@@ -1136,7 +1059,7 @@ class Sam2VideoRoPEAttention(nn.Module):
     def __init__(
         self,
         config: Sam2VideoConfig,
-        kv_in_dim: Optional[int] = None,
+        kv_in_dim: int | None = None,
         rope_k_repeat=False,
     ):
         super().__init__()
@@ -1181,9 +1104,9 @@ class Sam2VideoRoPEAttention(nn.Module):
             query, key, cos, sin, repeat_freqs_k=self.rope_k_repeat, num_k_exclude_rope=num_k_exclude_rope
         )
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1267,8 +1190,8 @@ class Sam2VideoMemoryAttention(nn.Module):
         self,
         current_vision_features: torch.Tensor,
         memory: torch.Tensor,
-        current_vision_position_embeddings: Optional[Tensor] = None,
-        memory_posision_embeddings: Optional[Tensor] = None,
+        current_vision_position_embeddings: Tensor | None = None,
+        memory_posision_embeddings: Tensor | None = None,
         num_object_pointer_tokens: int = 0,
     ):
         """
@@ -1418,7 +1341,9 @@ class Sam2VideoMemoryEncoder(nn.Module):
         self.mask_downsampler = Sam2VideoMaskDownSampler(config)
         self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
         self.memory_fuser = Sam2VideoMemoryFuser(config)
-        self.position_encoding = Sam2VideoPositionEmbeddingSine(num_pos_feats=output_channels // 2, normalize=True)
+        self.position_encoding = Sam2VideoPositionEmbeddingSine(
+            num_position_features=output_channels // 2, normalize=True
+        )
         self.projection = nn.Conv2d(hidden_size, output_channels, kernel_size=1)
 
     def forward(
@@ -1508,10 +1433,10 @@ class Sam2VideoModel(Sam2Model):
     @torch.no_grad()
     def get_prompt_embeddings(
         self,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         r"""
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
@@ -1553,7 +1478,9 @@ class Sam2VideoModel(Sam2Model):
         else:
             # Compute features using image encoder
             image_batch = inference_session.get_frame(frame_idx).unsqueeze(0)  # Add batch dimension
-            vision_feats, vision_pos_embeds, _, _ = self.get_image_features(image_batch)
+            image_outputs = self.get_image_features(image_batch, return_dict=True)
+            vision_feats = image_outputs.fpn_hidden_states
+            vision_pos_embeds = image_outputs.fpn_position_encoding
             # Cache features
             inference_session.cache.cache_vision_features(
                 frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
@@ -1568,15 +1495,15 @@ class Sam2VideoModel(Sam2Model):
 
     def _single_frame_forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
+        image_embeddings: torch.FloatTensor | None = None,
         multimask_output: bool = True,
-        attention_similarity: Optional[torch.FloatTensor] = None,
-        target_embedding: Optional[torch.FloatTensor] = None,
+        attention_similarity: torch.FloatTensor | None = None,
+        target_embedding: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam2VideoImageSegmentationOutput:
         """
@@ -1658,10 +1585,10 @@ class Sam2VideoModel(Sam2Model):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
-                pixel_values,
-                **kwargs,
-            )
+            image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            feature_maps = image_outputs.fpn_hidden_states
+            vision_hidden_states = image_outputs.hidden_states
+            vision_attentions = image_outputs.attentions
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -2151,7 +2078,7 @@ class Sam2VideoModel(Sam2Model):
                 num_object_pointer_tokens = object_pointers.shape[0]
 
         # Step 4: Concatenate all retrieved memories and their positional embeddings
-        combined_memory = torch.cat(memories_to_concatenate, dim=0)
+        combined_memory = torch.cat(memories_to_concatenate, dim=0).to(dtype=inference_session.dtype)
         combined_memory_positional_embeddings = torch.cat(memory_positional_embeddings_to_concatenate, dim=0)
 
         # Step 5: Forward through the memory attention mechanism
@@ -2165,11 +2092,11 @@ class Sam2VideoModel(Sam2Model):
 
         # Reshape from (Batch, H*W, Channels) to (Batch, Channels, Height, Width)
         conditioned_feature_map = (
-            conditioned_feature_map_flat.squeeze(1).permute(0, 2, 1).view(batch_size, num_channels, height, width)
+            conditioned_feature_map_flat.squeeze(1).transpose(1, 2).view(batch_size, num_channels, height, width)
         )
         return conditioned_feature_map
 
-    def _use_multimask(self, is_init_cond_frame: bool, point_inputs: Optional[dict]) -> bool:
+    def _use_multimask(self, is_init_cond_frame: bool, point_inputs: dict | None) -> bool:
         """Whether to use multimask output in the SAM head."""
         num_pts = 0 if point_inputs is None else point_inputs["point_labels"].size(2)
         multimask_output = (
@@ -2186,10 +2113,10 @@ class Sam2VideoModel(Sam2Model):
         obj_idx: int,
         batch_size: int,
         is_init_cond_frame: bool,
-        point_inputs: Optional[torch.Tensor],
-        mask_inputs: Optional[torch.Tensor],
+        point_inputs: torch.Tensor | None,
+        mask_inputs: torch.Tensor | None,
         reverse: bool,
-        prev_sam_mask_logits: Optional[torch.Tensor] = None,
+        prev_sam_mask_logits: torch.Tensor | None = None,
         streaming: bool = False,
     ) -> dict[str, Any]:
         """
@@ -2336,6 +2263,7 @@ class Sam2VideoModel(Sam2Model):
             ].expand(*maskmem_features.shape)
 
         # convert to bfloat16 to save memory, and for consistency with the original implementation
+        # flatten from BxCxHxW to HWxBxC
         maskmem_features = maskmem_features.to(torch.bfloat16).flatten(2).permute(2, 0, 1)
         maskmem_pos_enc = maskmem_pos_enc.to(pred_masks_high_res.dtype).flatten(2).permute(2, 0, 1)
 
@@ -2346,8 +2274,8 @@ class Sam2VideoModel(Sam2Model):
     def forward(
         self,
         inference_session: Sam2VideoInferenceSession,
-        frame_idx: Optional[int] = None,
-        frame: Optional[torch.Tensor] = None,
+        frame_idx: int | None = None,
+        frame: torch.Tensor | None = None,
         reverse: bool = False,
         run_mem_encoder: bool = True,
         **kwargs,
@@ -2533,8 +2461,8 @@ class Sam2VideoModel(Sam2Model):
     def propagate_in_video_iterator(
         self,
         inference_session: Sam2VideoInferenceSession,
-        start_frame_idx: Optional[int] = None,
-        max_frame_num_to_track: Optional[int] = None,
+        start_frame_idx: int | None = None,
+        max_frame_num_to_track: int | None = None,
         reverse: bool = False,
         show_progress_bar: bool = False,
     ) -> Iterator[Sam2VideoSegmentationOutput]:

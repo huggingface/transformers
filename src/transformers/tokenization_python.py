@@ -415,6 +415,9 @@ class PythonBackend(PreTrainedTokenizerBase):
 
         self.tokens_trie = Trie()
 
+        # Initialize total_vocab_size early to avoid issues if get_vocab() is called early (custom tokenizers)
+        self.total_vocab_size = 0
+
         # 2. init `_added_tokens_decoder` if child class did not
         if not hasattr(self, "_added_tokens_decoder"):
             self._added_tokens_decoder: dict[int, AddedToken] = {}
@@ -430,7 +433,7 @@ class PythonBackend(PreTrainedTokenizerBase):
 
         # 5. Special tokens mask configuration
         # Patterns: "none", "cls_sep", "eos", "bos", "bos_eos", "cls_double_sep", "prefix_suffix"
-        self.special_tokens_pattern = kwargs.pop("special_tokens_pattern", "cls_sep")
+        self.special_tokens_pattern = kwargs.pop("special_tokens_pattern", None)
 
         # 6. Set backend to "custom" if not already set (for direct PreTrainedTokenizer subclasses)
         if "backend" not in kwargs:
@@ -439,9 +442,6 @@ class PythonBackend(PreTrainedTokenizerBase):
         # 7. init the parent class
         super().__init__(**kwargs)
 
-        if self._added_tokens_decoder:
-            self._update_total_vocab_size()
-
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # V5: the order of addition follows self.SPECIAL_TOKENS_ATTRIBUTES, then extra special tokens
         # Note: _add_tokens will automatically skip tokens that are already in the base vocab
@@ -449,7 +449,6 @@ class PythonBackend(PreTrainedTokenizerBase):
             [token for token in self.all_special_tokens if token not in self._added_tokens_encoder],
             special_tokens=True,
         )
-        self._update_total_vocab_size()
 
     @property
     def is_fast(self) -> bool:
@@ -501,6 +500,9 @@ class PythonBackend(PreTrainedTokenizerBase):
         """
         Size of the full vocabulary with the added tokens.
         """
+        # Lazy evaluation: compute if not already set (e.g., during initialization)
+        if self.total_vocab_size == 0:
+            self._update_total_vocab_size()
         return self.total_vocab_size
 
     def _update_total_vocab_size(self):
@@ -685,8 +687,13 @@ class PythonBackend(PreTrainedTokenizerBase):
         raise NotImplementedError
 
     def _convert_token_to_id_with_added_voc(self, token):
-        if token in self.added_tokens_encoder:
-            return self.added_tokens_encoder[token]
+        # Use the cached `_added_tokens_encoder` dict rather than the
+        # `added_tokens_encoder` property, which rebuilds and re-sorts the full
+        # added-token mapping on every access. Going through the property here
+        # made `convert_tokens_to_ids` O(T * N * logN) for a tokenizer with N
+        # added tokens (regression from the v5 tokenizer refactor, #40936).
+        if token in self._added_tokens_encoder:
+            return self._added_tokens_encoder[token]
         return self._convert_token_to_id(token)
 
     def _convert_token_to_id(self, token):
@@ -881,30 +888,62 @@ class PythonBackend(PreTrainedTokenizerBase):
         """
         if self.special_tokens_pattern == "cls_sep":
             # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] seq1 [SEP]
+            if self.cls_token_id is None and self.sep_token_id is None:
+                raise ValueError(
+                    "Cannot add special tokens following 'cls_sep' pattern because one or several special tokens "
+                    f"are not defined (cls_token_id={self.cls_token_id}; sep_token_id={self.sep_token_id})"
+                    "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
+                )
             if token_ids_1 is None:
                 return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id] + token_ids_1 + [self.sep_token_id]
 
         elif self.special_tokens_pattern == "eos":
             # seq0 [EOS] or seq0 [EOS] seq1 [EOS]
+            if self.eos_token_id is None:
+                raise ValueError(
+                    "Cannot add special tokens following 'eos' pattern because eos token is not defined "
+                    f"(eos_token_id={self.eos_token_id})."
+                    "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
+                )
             if token_ids_1 is None:
                 return token_ids_0 + [self.eos_token_id]
             return token_ids_0 + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
         elif self.special_tokens_pattern == "bos":
             # [BOS] seq0 or [BOS] seq0 [BOS] seq1
+            if self.bos_token_id is None:
+                raise ValueError(
+                    "Cannot add special tokens following 'bos' pattern because bos token is not defined "
+                    f"(bos_token_id={self.bos_token_id})."
+                    "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
+                )
             if token_ids_1 is None:
                 return [self.bos_token_id] + token_ids_0
             return [self.bos_token_id] + token_ids_0 + [self.bos_token_id] + token_ids_1
 
         elif self.special_tokens_pattern == "bos_eos":
             # [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
+            if self.bos_token_id is None and self.eos_token_id is None:
+                raise ValueError(
+                    "Cannot add special tokens following 'bos_eos' pattern because one or several special tokens "
+                    f"are not defined (bos_token_id={self.bos_token_id}; eos_token_id={self.eos_token_id})"
+                    "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
+                )
+                return token_ids_0 if token_ids_1 is None else token_ids_0 + token_ids_1
+
             if token_ids_1 is None:
                 return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
             return [self.bos_token_id] + token_ids_0 + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
         elif self.special_tokens_pattern == "cls_double_sep":
             # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
+            if self.cls_token_id is None and self.sep_token_id is None:
+                raise ValueError(
+                    "Cannot add special tokens following 'cls_double_sep' pattern because one or several special tokens "
+                    f"are not defined (cls_token_id={self.cls_token_id}; sep_token_id={self.sep_token_id})"
+                    "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
+                )
             if token_ids_1 is None:
                 return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
             return (
@@ -1036,9 +1075,11 @@ class PythonBackend(PreTrainedTokenizerBase):
             )
 
         tokens = []
+        # self.all_special_ids is an @property which may be slow, so only compute it once before the loop
+        ids_to_skip = set(self.all_special_ids) if skip_special_tokens else set()
         for index in ids:
             index = int(index)
-            if skip_special_tokens and index in self.all_special_ids:
+            if index in ids_to_skip:
                 continue
             tokens.append(
                 self._added_tokens_decoder[index].content
@@ -1074,23 +1115,7 @@ class PythonBackend(PreTrainedTokenizerBase):
             else self.clean_up_tokenization_spaces
         )
         if clean_up_tokenization_spaces:
-            # Call custom cleanup method if it exists (e.g., for CLVP's [SPACE] token replacement)
-            if hasattr(self, "clean_up_tokenization") and callable(self.clean_up_tokenization):
-                text = self.clean_up_tokenization(text)
-            else:
-                # Otherwise apply standard cleanup
-                text = (
-                    text.replace(" .", ".")
-                    .replace(" ?", "?")
-                    .replace(" !", "!")
-                    .replace(" ,", ",")
-                    .replace(" ' ", "'")
-                    .replace(" n't", "n't")
-                    .replace(" 'm", "'m")
-                    .replace(" 's", "'s")
-                    .replace(" 've", "'ve")
-                    .replace(" 're", "'re")
-                )
+            text = self.clean_up_tokenization(text)
 
         return text
 

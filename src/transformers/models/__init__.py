@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from .canine import *
     from .chameleon import *
     from .chinese_clip import *
+    from .chmv2 import *
     from .clap import *
     from .clip import *
     from .clipseg import *
@@ -67,13 +68,17 @@ if TYPE_CHECKING:
     from .codegen import *
     from .cohere import *
     from .cohere2 import *
+    from .cohere2_moe import *
     from .cohere2_vision import *
+    from .cohere_asr import *
+    from .colmodernvbert import *
     from .colpali import *
     from .colqwen2 import *
     from .conditional_detr import *
     from .convbert import *
     from .convnext import *
     from .convnextv2 import *
+    from .cosmos3_reasoner import *
     from .cpm import *
     from .cpmant import *
     from .csm import *
@@ -88,11 +93,15 @@ if TYPE_CHECKING:
     from .deberta import *
     from .deberta_v2 import *
     from .decision_transformer import *
+    from .deepseek_ocr2 import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
+    from .deepseek_v4 import *
+    from .deepseek_v32 import *
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
+    from .deimv2 import *
     from .deit import *
     from .deprecated import *
     from .depth_anything import *
@@ -101,6 +110,7 @@ if TYPE_CHECKING:
     from .dia import *
     from .dialogpt import *
     from .diffllama import *
+    from .diffusion_gemma import *
     from .dinat import *
     from .dinov2 import *
     from .dinov2_with_registers import *
@@ -121,12 +131,17 @@ if TYPE_CHECKING:
     from .emu3 import *
     from .encodec import *
     from .encoder_decoder import *
+    from .eomt import *
+    from .eomt_dinov3 import *
     from .ernie import *
     from .ernie4_5 import *
     from .ernie4_5_moe import *
+    from .ernie4_5_vl_moe import *
     from .esm import *
     from .evolla import *
     from .exaone4 import *
+    from .exaone4_5 import *
+    from .exaone_moe import *
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
@@ -145,13 +160,23 @@ if TYPE_CHECKING:
     from .gemma2 import *
     from .gemma3 import *
     from .gemma3n import *
+    from .gemma4 import *
+    from .gemma4_assistant import *
+    from .gemma4_unified import *
+    from .gemma4_unified_assistant import *
     from .git import *
     from .glm import *
     from .glm4 import *
     from .glm4_moe import *
+    from .glm4_moe_lite import *
     from .glm4v import *
     from .glm4v_moe import *
     from .glm46v import *
+    from .glm_image import *
+    from .glm_moe_dsa import *
+    from .glm_ocr import *
+    from .glmasr import *
+    from .glmga import *
     from .glpn import *
     from .got_ocr2 import *
     from .gpt2 import *
@@ -163,7 +188,9 @@ if TYPE_CHECKING:
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *
+    from .granite4_vision import *
     from .granite_speech import *
+    from .granite_speech_plus import *
     from .granitemoe import *
     from .granitemoehybrid import *
     from .granitemoeshared import *
@@ -173,9 +200,13 @@ if TYPE_CHECKING:
     from .herbert import *
     from .hgnet_v2 import *
     from .hiera import *
+    from .higgs_audio_v2 import *
+    from .higgs_audio_v2_tokenizer import *
     from .hubert import *
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
+    from .hy_v3 import *
+    from .hyperclovax import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -186,11 +217,15 @@ if TYPE_CHECKING:
     from .instructblip import *
     from .instructblipvideo import *
     from .internvl import *
+    from .jais2 import *
     from .jamba import *
     from .janus import *
     from .jetmoe import *
+    from .jina_embeddings_v3 import *
     from .kosmos2 import *
+    from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
+    from .laguna import *
     from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *
@@ -213,6 +248,7 @@ if TYPE_CHECKING:
     from .longformer import *
     from .longt5 import *
     from .luke import *
+    from .lw_detr import *
     from .lxmert import *
     from .m2m_100 import *
     from .mamba import *
@@ -225,17 +261,25 @@ if TYPE_CHECKING:
     from .mbart50 import *
     from .megatron_bert import *
     from .megatron_gpt2 import *
+    from .mellum import *
+    from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
+    from .minicpm3 import *
+    from .minicpmv4_6 import *
     from .minimax import *
+    from .minimax_m2 import *
+    from .minimax_m3_vl import *
     from .ministral import *
     from .ministral3 import *
     from .mistral import *
     from .mistral3 import *
+    from .mistral4 import *
     from .mixtral import *
     from .mlcd import *
     from .mllama import *
     from .mluke import *
+    from .mm_grounding_dino import *
     from .mobilebert import *
     from .mobilenet_v1 import *
     from .mobilenet_v2 import *
@@ -243,29 +287,36 @@ if TYPE_CHECKING:
     from .mobilevitv2 import *
     from .modernbert import *
     from .modernbert_decoder import *
+    from .modernvbert import *
     from .moonshine import *
+    from .moonshine_streaming import *
     from .moshi import *
     from .mpnet import *
     from .mpt import *
     from .mra import *
     from .mt5 import *
+    from .musicflamingo import *
     from .musicgen import *
     from .musicgen_melody import *
     from .mvp import *
     from .myt5 import *
     from .nanochat import *
     from .nemotron import *
+    from .nemotron_h import *
     from .nllb import *
     from .nllb_moe import *
+    from .nomic_bert import *
     from .nougat import *
     from .nystromformer import *
     from .olmo import *
     from .olmo2 import *
     from .olmo3 import *
+    from .olmo_hybrid import *
     from .olmoe import *
     from .omdet_turbo import *
     from .oneformer import *
     from .openai import *
+    from .openai_privacy_filter import *
     from .opt import *
     from .ovis2 import *
     from .owlv2 import *
@@ -275,6 +326,9 @@ if TYPE_CHECKING:
     from .parakeet import *
     from .patchtsmixer import *
     from .patchtst import *
+    from .pe_audio import *
+    from .pe_audio_video import *
+    from .pe_video import *
     from .pegasus import *
     from .pegasus_x import *
     from .perceiver import *
@@ -285,16 +339,31 @@ if TYPE_CHECKING:
     from .phi4_multimodal import *
     from .phimoe import *
     from .phobert import *
+    from .pi0 import *
+    from .pi0_fast import *
     from .pix2struct import *
     from .pixio import *
     from .pixtral import *
     from .plbart import *
     from .poolformer import *
     from .pop2piano import *
+    from .pp_chart2table import *
+    from .pp_doclayout_v2 import *
+    from .pp_doclayout_v3 import *
+    from .pp_lcnet import *
+    from .pp_lcnet_v3 import *
+    from .pp_lcnet_v4 import *
+    from .pp_ocrv5_mobile_det import *
+    from .pp_ocrv5_server_det import *
+    from .pp_ocrv6_medium_det import *
+    from .pp_ocrv6_small_det import *
+    from .pp_ocrv6_small_rec import *
+    from .pp_ocrv6_tiny_rec import *
     from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *
     from .pvt_v2 import *
+    from .qianfan_ocr import *
     from .qwen2 import *
     from .qwen2_5_omni import *
     from .qwen2_5_vl import *
@@ -302,6 +371,8 @@ if TYPE_CHECKING:
     from .qwen2_moe import *
     from .qwen2_vl import *
     from .qwen3 import *
+    from .qwen3_5 import *
+    from .qwen3_5_moe import *
     from .qwen3_moe import *
     from .qwen3_next import *
     from .qwen3_omni_moe import *
@@ -313,6 +384,7 @@ if TYPE_CHECKING:
     from .regnet import *
     from .rembert import *
     from .resnet import *
+    from .rf_detr import *
     from .roberta import *
     from .roberta_prelayernorm import *
     from .roc_bert import *
@@ -323,9 +395,13 @@ if TYPE_CHECKING:
     from .sam import *
     from .sam2 import *
     from .sam2_video import *
+    from .sam3 import *
+    from .sam3_lite_text import *
     from .sam3_tracker import *
     from .sam3_tracker_video import *
+    from .sam3_video import *
     from .sam_hq import *
+    from .sapiens2 import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .seed_oss import *
@@ -336,8 +412,11 @@ if TYPE_CHECKING:
     from .shieldgemma2 import *
     from .siglip import *
     from .siglip2 import *
+    from .slanet import *
+    from .slanext import *
     from .smollm3 import *
     from .smolvlm import *
+    from .solar_open import *
     from .speech_encoder_decoder import *
     from .speech_to_text import *
     from .speecht5 import *
@@ -360,6 +439,7 @@ if TYPE_CHECKING:
     from .textnet import *
     from .time_series_transformer import *
     from .timesfm import *
+    from .timesfm2_5 import *
     from .timesformer import *
     from .timm_backbone import *
     from .timm_wrapper import *
@@ -371,10 +451,14 @@ if TYPE_CHECKING:
     from .unispeech_sat import *
     from .univnet import *
     from .upernet import *
+    from .uvdoc import *
     from .vaultgemma import *
+    from .vibevoice_asr import *
     from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
+    from .videomt import *
+    from .videoprism import *
     from .vilt import *
     from .vipllava import *
     from .vision_encoder_decoder import *
@@ -391,6 +475,7 @@ if TYPE_CHECKING:
     from .vivit import *
     from .vjepa2 import *
     from .voxtral import *
+    from .voxtral_realtime import *
     from .wav2vec2 import *
     from .wav2vec2_bert import *
     from .wav2vec2_conformer import *
@@ -400,6 +485,7 @@ if TYPE_CHECKING:
     from .whisper import *
     from .x_clip import *
     from .xcodec import *
+    from .xcodec2 import *
     from .xglm import *
     from .xlm import *
     from .xlm_roberta import *
@@ -409,6 +495,7 @@ if TYPE_CHECKING:
     from .xmod import *
     from .yolos import *
     from .yoso import *
+    from .youtu import *
     from .zamba import *
     from .zamba2 import *
     from .zoedepth import *

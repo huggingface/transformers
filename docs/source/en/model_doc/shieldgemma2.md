@@ -14,7 +14,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-01 and added to Hugging Face Transformers on 2025-03-20.*
+*This model was published in HF papers on 2025-04-01 and contributed to Hugging Face Transformers on 2025-03-20.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # ShieldGemma 2
 
@@ -33,15 +40,17 @@ This model was contributed by [Ryan Mullins](https://huggingface.co/RyanMullins)
 ## Usage Example
 
 - ShieldGemma 2 provides a Processor that accepts a list of `images` and an optional list of `policies` as input, and constructs a batch of prompts as the product of these two lists using the provided chat template.
-- You can extend ShieldGemma's built-in in policies with the `custom_policies` argument to the Processor. Using the same key as one of the built-in policies will overwrite that policy with your custom definition.
+- You can extend ShieldGemma's built-in policies with the `custom_policies` argument to the Processor. Using the same key as one of the built-in policies will overwrite that policy with your custom definition.
 - ShieldGemma 2 does not support the image cropping capabilities used by Gemma 3.
 
 ### Classification against Built-in Policies
 
 ```python
-from PIL import Image
 import requests
+from PIL import Image
+
 from transformers import AutoProcessor, ShieldGemma2ForImageClassification
+
 
 model_id = "google/shieldgemma-2-4b-it"
 model = ShieldGemma2ForImageClassification.from_pretrained(model_id, device_map="auto")
@@ -59,9 +68,11 @@ print(output.probabilities)
 ### Classification against Custom Policies
 
 ```python
-from PIL import Image
 import requests
+from PIL import Image
+
 from transformers import AutoProcessor, ShieldGemma2ForImageClassification
+
 
 model_id = "google/shieldgemma-2-4b-it"
 model = ShieldGemma2ForImageClassification.from_pretrained(model_id, device_map="auto")
@@ -71,8 +82,8 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 
 custom_policies = {
-    "key_a": "descrition_a",
-    "key_b": "descrition_b",
+    "key_a": "description_a",
+    "key_b": "description_b",
 }
 
 inputs = processor(
@@ -89,6 +100,7 @@ print(output.probabilities)
 ## ShieldGemma2Processor
 
 [[autodoc]] ShieldGemma2Processor
+    - __call__
 
 ## ShieldGemma2Config
 

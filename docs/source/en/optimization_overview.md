@@ -135,7 +135,7 @@ print(model._tp_plan)
 
 ## Continuous batching
 
-[Continuous batching](./continuous_batching) maximizes throughput by keeping the GPU busy with dynamic scheduling and chunked prefill. [Serving](./serving.md) applications use it to process multiple incoming requests concurrently.
+[Continuous batching](./continuous_batching) maximizes throughput by keeping the GPU busy with dynamic scheduling and chunked prefill. [Serving](./serve-cli/serving) applications use it to process multiple incoming requests concurrently.
 
 Use [`~ContinuousMixin.generate_batch`] to enable continuous batching.
 

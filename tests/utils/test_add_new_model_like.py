@@ -90,8 +90,8 @@ class TestAddNewModelLike(unittest.TestCase):
             ("modeling_llama.py", True),
             ("tokenization_llama.py", False),
             ("tokenization_llama_fast.py", False),
+            ("image_processing_llama_pil.py", False),
             ("image_processing_llama.py", False),
-            ("image_processing_llama_fast.py", False),
             ("video_processing_llama.py", False),
             ("feature_extraction_llama.py", False),
             ("processing_llama.py", False),
@@ -103,7 +103,6 @@ class TestAddNewModelLike(unittest.TestCase):
             new_lowercase_name="my_test",
             new_model_paper_name="MyTest",
             filenames_to_add=filenames_to_add,
-            create_fast_image_processor=False,
         )
 
         # First assert that all files were created correctly
@@ -124,11 +123,7 @@ class TestAddNewModelLike(unittest.TestCase):
         )
         self.assertInFile(
             '("my_test", "MyTestConfig"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
-        )
-        self.assertInFile(
-            '("my_test", "MyTest"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
+            os.path.join(self.MODEL_PATH, "auto", "auto_mappings.py"),
         )
         self.assertInFile(
             '("my_test", "MyTestModel"),\n',
@@ -159,7 +154,6 @@ class TestAddNewModelLike(unittest.TestCase):
         # directly from it
         EXPECTED_MODULAR = textwrap.dedent(
             f"""
-            # coding=utf-8
             # Copyright {CURRENT_YEAR} the HuggingFace Team. All rights reserved.
             #
             # Licensed under the Apache License, Version 2.0 (the "License");
@@ -253,7 +247,6 @@ class TestAddNewModelLike(unittest.TestCase):
 
         EXPECTED_INIT = textwrap.dedent(
             f"""
-            # coding=utf-8
             # Copyright {CURRENT_YEAR} the HuggingFace Team. All rights reserved.
             #
             # Licensed under the Apache License, Version 2.0 (the "License");
@@ -371,8 +364,8 @@ class TestAddNewModelLike(unittest.TestCase):
             ("modeling_phi4_multimodal.py", True),
             ("tokenization_phi4_multimodal.py", False),
             ("tokenization_phi4_multimodal_fast.py", False),
-            ("image_processing_phi4_multimodal.py", False),
-            ("image_processing_phi4_multimodal_fast.py", True),
+            ("image_processing_phi4_multimodal_pil.py", False),
+            ("image_processing_phi4_multimodal.py", True),
             ("video_processing_phi4_multimodal.py", False),
             ("feature_extraction_phi4_multimodal.py", True),
             ("processing_phi4_multimodal.py", True),
@@ -384,7 +377,6 @@ class TestAddNewModelLike(unittest.TestCase):
             new_lowercase_name="my_test2",
             new_model_paper_name="MyTest2",
             filenames_to_add=filenames_to_add,
-            create_fast_image_processor=False,
         )
 
         # First assert that all files were created correctly
@@ -393,7 +385,7 @@ class TestAddNewModelLike(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "modular_my_test2.py")))
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "modeling_my_test2.py")))
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "configuration_my_test2.py")))
-        self.assertTrue(os.path.isfile(os.path.join(model_repo, "image_processing_my_test2_fast.py")))
+        self.assertTrue(os.path.isfile(os.path.join(model_repo, "image_processing_my_test2.py")))
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "feature_extraction_my_test2.py")))
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "processing_my_test2.py")))
         self.assertTrue(os.path.isfile(os.path.join(model_repo, "__init__.py")))
@@ -410,11 +402,7 @@ class TestAddNewModelLike(unittest.TestCase):
         )
         self.assertInFile(
             '("my_test2", "MyTest2Config"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
-        )
-        self.assertInFile(
-            '("my_test2", "MyTest2"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "configuration_auto.py"),
+            os.path.join(self.MODEL_PATH, "auto", "auto_mappings.py"),
         )
         self.assertInFile(
             '("my_test2", "MyTest2Model"),\n',
@@ -425,16 +413,16 @@ class TestAddNewModelLike(unittest.TestCase):
             os.path.join(self.MODEL_PATH, "auto", "modeling_auto.py"),
         )
         self.assertInFile(
-            '("my_test2", (None, "MyTest2ImageProcessorFast")),\n',
-            os.path.join(self.MODEL_PATH, "auto", "image_processing_auto.py"),
+            '("my_test2", {"torchvision": "MyTest2ImageProcessor"}),\n',
+            os.path.join(self.MODEL_PATH, "auto", "auto_mappings.py"),
         )
         self.assertInFile(
             '("my_test2", "MyTest2FeatureExtractor"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "feature_extraction_auto.py"),
+            os.path.join(self.MODEL_PATH, "auto", "auto_mappings.py"),
         )
         self.assertInFile(
             '("my_test2", "MyTest2Processor"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "processing_auto.py"),
+            os.path.join(self.MODEL_PATH, "auto", "auto_mappings.py"),
         )
         self.assertInFile(
             "- local: model_doc/my_test2\n        title: MyTest2\n",
@@ -445,7 +433,6 @@ class TestAddNewModelLike(unittest.TestCase):
         # directly from it
         EXPECTED_MODULAR = textwrap.dedent(
             f"""
-            # coding=utf-8
             # Copyright {CURRENT_YEAR} the HuggingFace Team. All rights reserved.
             #
             # Licensed under the Apache License, Version 2.0 (the "License");
@@ -466,8 +453,8 @@ class TestAddNewModelLike(unittest.TestCase):
                 Phi4MultimodalVisionConfig,
             )
             from ..phi4_multimodal.feature_extraction_phi4_multimodal import Phi4MultimodalFeatureExtractor
-            from ..phi4_multimodal.image_processing_phi4_multimodal_fast import (
-                Phi4MultimodalImageProcessorFast,
+            from ..phi4_multimodal.image_processing_phi4_multimodal import (
+                Phi4MultimodalImageProcessor,
                 Phi4MultimodalImageProcessorKwargs,
             )
             from ..phi4_multimodal.modeling_phi4_multimodal import (
@@ -641,7 +628,7 @@ class TestAddNewModelLike(unittest.TestCase):
                 pass
 
 
-            class MyTest2ImageProcessorFast(Phi4MultimodalImageProcessorFast):
+            class MyTest2ImageProcessor(Phi4MultimodalImageProcessor):
                 pass
 
 
@@ -668,7 +655,7 @@ class TestAddNewModelLike(unittest.TestCase):
                 "MyTest2PreTrainedModel",
                 "MyTest2Model",
                 "MyTest2ForCausalLM",
-                "MyTest2ImageProcessorFast",
+                "MyTest2ImageProcessor",
                 "MyTest2FeatureExtractor",
                 "MyTest2Processor",
             ]
@@ -678,7 +665,6 @@ class TestAddNewModelLike(unittest.TestCase):
 
         EXPECTED_INIT = textwrap.dedent(
             f"""
-            # coding=utf-8
             # Copyright {CURRENT_YEAR} the HuggingFace Team. All rights reserved.
             #
             # Licensed under the Apache License, Version 2.0 (the "License");
@@ -702,7 +688,7 @@ class TestAddNewModelLike(unittest.TestCase):
             if TYPE_CHECKING:
                 from .configuration_my_test2 import *
                 from .feature_extraction_my_test2 import *
-                from .image_processing_my_test2_fast import *
+                from .image_processing_my_test2 import *
                 from .modeling_my_test2 import *
                 from .processing_my_test2 import *
             else:
@@ -804,9 +790,9 @@ class TestAddNewModelLike(unittest.TestCase):
 
             [[autodoc]] MyTest2ForCausalLM
 
-            ## MyTest2ImageProcessorFast
+            ## MyTest2ImageProcessor
 
-            [[autodoc]] MyTest2ImageProcessorFast
+            [[autodoc]] MyTest2ImageProcessor
 
             ## MyTest2FeatureExtractor
 

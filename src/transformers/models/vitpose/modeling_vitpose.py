@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 University of Sydney and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +14,16 @@
 """PyTorch VitPose model."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
 from ... import initialization as init
+from ...backbone_utils import load_backbone
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
-from ...utils.backbone_utils import load_backbone
 from ...utils.generic import can_return_tuple
 from .configuration_vitpose import VitPoseConfig
 
@@ -35,12 +33,12 @@ logger = logging.get_logger(__name__)
 # General docstring
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of pose estimation models.
     """
 )
+@dataclass
 class VitPoseEstimatorOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -53,10 +51,10 @@ class VitPoseEstimatorOutput(ModelOutput):
         (also called feature maps) of the model at the output of each stage.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    heatmaps: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    heatmaps: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -68,7 +66,7 @@ class VitPosePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]):
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -101,18 +99,20 @@ def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
 
     if output_flipped.ndim != 4:
         raise ValueError("output_flipped should be [batch_size, num_keypoints, height, width]")
+
     batch_size, num_keypoints, height, width = output_flipped.shape
     channels = 1
     if target_type == "combined-target":
         channels = 3
+        output_flipped = output_flipped.clone()  # clone to avoid mutation of output_flipped argument
         output_flipped[:, 1::3, ...] = -output_flipped[:, 1::3, ...]
     output_flipped = output_flipped.reshape(batch_size, -1, channels, height, width)
     output_flipped_back = output_flipped.clone()
 
     # Swap left-right parts
-    for left, right in flip_pairs.tolist():
-        output_flipped_back[:, left, ...] = output_flipped[:, right, ...]
-        output_flipped_back[:, right, ...] = output_flipped[:, left, ...]
+    left_indices, right_indices = flip_pairs.unbind(-1)
+    output_flipped_back[:, left_indices, ...] = output_flipped[:, right_indices, ...]
+    output_flipped_back[:, right_indices, ...] = output_flipped[:, left_indices, ...]
     output_flipped_back = output_flipped_back.reshape((batch_size, num_keypoints, height, width))
     # Flip horizontally
     output_flipped_back = output_flipped_back.flip(-1)
@@ -134,7 +134,7 @@ class VitPoseSimpleDecoder(nn.Module):
             config.backbone_config.hidden_size, config.num_labels, kernel_size=3, stride=1, padding=1
         )
 
-    def forward(self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor, flip_pairs: torch.Tensor | None = None) -> torch.Tensor:
         # Transform input: ReLU + upsample
         hidden_state = self.activation(hidden_state)
         hidden_state = self.upsampling(hidden_state)
@@ -167,7 +167,7 @@ class VitPoseClassicDecoder(nn.Module):
 
         self.conv = nn.Conv2d(256, config.num_labels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None):
+    def forward(self, hidden_state: torch.Tensor, flip_pairs: torch.Tensor | None = None):
         hidden_state = self.deconv1(hidden_state)
         hidden_state = self.batchnorm1(hidden_state)
         hidden_state = self.relu1(hidden_state)
@@ -213,9 +213,9 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        dataset_index: Optional[torch.Tensor] = None,
-        flip_pairs: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        dataset_index: torch.Tensor | None = None,
+        flip_pairs: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VitPoseEstimatorOutput:
         r"""
@@ -232,13 +232,15 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         >>> from transformers import AutoImageProcessor, VitPoseForPoseEstimation
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> processor = AutoImageProcessor.from_pretrained("usyd-community/vitpose-base-simple")
         >>> model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
         >>> inputs = processor(image, boxes=boxes, return_tensors="pt")
 

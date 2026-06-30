@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,7 @@ Use from the root of the repo with:
 python utils/check_docstrings.py
 ```
 
-for a check that will error in case of inconsistencies (used by `make repo-consistency`).
+for a check that will error in case of inconsistencies (used by `make check-repo`).
 
 To auto-fix issues run:
 
@@ -29,7 +28,7 @@ To auto-fix issues run:
 python utils/check_docstrings.py --fix_and_overwrite
 ```
 
-which is used by `make fix-copies` (note that this fills what it cans, you might have to manually fill information
+which is used by `make fix-repo` (note that this fills what it cans, you might have to manually fill information
 like argument descriptions).
 """
 
@@ -49,15 +48,37 @@ from typing import Any
 from check_repo import ignore_undocumented
 from git import Repo
 
+from transformers import logging
 from transformers.utils import direct_transformers_import
 from transformers.utils.auto_docstring import (
+    ConfigArgs,
     ImageProcessorArgs,
     ModelArgs,
     ModelOutputArgs,
+    ProcessorArgs,
     get_args_doc_from_source,
     parse_docstring,
     set_min_indent,
 )
+
+
+CHECKER_CONFIG = {
+    "name": "docstrings",
+    "label": "Docstring formatting",
+    # Approximate: at runtime the checker also introspects the live transformers module for
+    # @auto_docstring-decorated objects. These globs cover the files it reads via glob.glob().
+    "cache_globs": [
+        "src/transformers/models/**/modeling_*.py",
+        "src/transformers/models/**/modular_*.py",
+        "src/transformers/models/**/configuration_*.py",
+        "src/transformers/models/**/processing_*.py",
+        "src/transformers/models/**/image_processing_*_fast.py",
+    ],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
+}
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -77,6 +98,12 @@ class DecoratedItem:
     has_init: bool = False  # Whether the class has an __init__ method
     init_def_line: int | None = None  # 1-based line number of __init__ def (if has_init)
     is_model_output: bool = False  # Whether the class inherits from ModelOutput
+    is_processor: bool = False  # Whether the class inherits from ProcessorMixin
+    is_config: bool = False  # Whether the class inherits from PreTrainedConfig
+
+    # Name fields – used to match the item against the corresponding modular_*.py source
+    name: str = ""  # class or function name
+    class_name: str | None = None  # enclosing class name (None for top-level items)
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -99,12 +126,10 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = {
-    "ApertusConfig",
     "Mxfp4Config",
-    "Qwen3OmniMoeConfig",
-    "Exaone4Config",
-    "SmolLM3Config",
-    "Gemma3nVisionConfig",
+    "GlmAsrProcessor",
+    "AudioFlamingo3Processor",
+    "FourOverSixConfig",
     "Llama4Processor",
     # Deprecated
     "InputExample",
@@ -114,19 +139,9 @@ OBJECTS_TO_IGNORE = {
     "AlbertModel",
     "AlbertTokenizerFast",
     "AlignTextModel",
-    "AlignVisionConfig",
-    "AudioClassificationPipeline",
-    "AutoformerConfig",
-    "AutomaticSpeechRecognitionPipeline",
-    "BarkCoarseConfig",
-    "BarkConfig",
-    "BarkFineConfig",
-    "BarkSemanticConfig",
-    "BartConfig",
     "BartTokenizerFast",
     "BarthezTokenizerFast",
     "BeitModel",
-    "BertConfig",
     "BertJapaneseTokenizer",
     "CohereTokenizer",
     "DebertaTokenizer",
@@ -163,182 +178,103 @@ OBJECTS_TO_IGNORE = {
     "CodeLlamaTokenizerFast",
     "BertModel",
     "BertTokenizerFast",
-    "BigBirdConfig",
     "BigBirdForQuestionAnswering",
     "BigBirdModel",
-    "BigBirdPegasusConfig",
     "BigBirdTokenizerFast",
     "BitImageProcessor",
-    "BlenderbotConfig",
-    "BlenderbotSmallConfig",
     "BlenderbotSmallTokenizerFast",
     "BlenderbotTokenizerFast",
-    "Blip2VisionConfig",
-    "BlipTextConfig",
-    "BlipVisionConfig",
-    "BloomConfig",
-    "BLTConfig",
-    "BLTPatcherConfig",
-    "BridgeTowerTextConfig",
-    "BridgeTowerVisionConfig",
     "BrosModel",
-    "CamembertConfig",
     "CamembertModel",
     "CamembertTokenizerFast",
     "CanineModel",
     "CanineTokenizer",
     "ChineseCLIPTextModel",
-    "ClapTextConfig",
-    "ConditionalDetrConfig",
     "ConditionalDetrImageProcessor",
-    "ConvBertConfig",
     "ConvBertTokenizerFast",
-    "ConvNextConfig",
-    "ConvNextV2Config",
     "CpmAntTokenizer",
-    "CvtConfig",
     "CvtModel",
     "DeiTImageProcessor",
     "DPRReaderTokenizer",
     "DPRReaderTokenizerFast",
     "DPTModel",
-    "Data2VecAudioConfig",
-    "Data2VecTextConfig",
     "Data2VecTextModel",
     "Data2VecVisionModel",
     "DataCollatorForLanguageModeling",
-    "DebertaConfig",
-    "DebertaV2Config",
     "DebertaV2Tokenizer",
     "DebertaV2TokenizerFast",
-    "DecisionTransformerConfig",
-    "DeformableDetrConfig",
     "DeformableDetrImageProcessor",
     "DeiTModel",
     "DepthEstimationPipeline",
-    "DetaConfig",
     "DetaImageProcessor",
-    "DetrConfig",
     "DetrImageProcessor",
     "DinatModel",
-    "DINOv3ConvNextConfig",
-    "DINOv3ViTConfig",
-    "DistilBertConfig",
     "DistilBertTokenizerFast",
     "DocumentQuestionAnsweringPipeline",
     "DonutSwinModel",
     "EarlyStoppingCallback",
-    "EfficientFormerConfig",
     "EfficientFormerImageProcessor",
-    "EfficientNetConfig",
-    "ElectraConfig",
     "ElectraTokenizerFast",
     "EncoderDecoderModel",
     "ErnieMModel",
     "ErnieModel",
     "ErnieMTokenizer",
-    "EsmConfig",
     "EsmModel",
-    "FNetConfig",
     "FNetModel",
     "FNetTokenizerFast",
-    "FSMTConfig",
     "FeatureExtractionPipeline",
     "FillMaskPipeline",
-    "FlaubertConfig",
-    "FlavaConfig",
     "FlavaForPreTraining",
     "FlavaImageModel",
     "FlavaImageProcessor",
     "FlavaMultimodalModel",
-    "FlavaTextConfig",
     "FlavaTextModel",
     "FocalNetModel",
     "FunnelTokenizerFast",
-    "GPTBigCodeConfig",
-    "GPTJConfig",
-    "GPTNeoXConfig",
-    "GPTNeoXJapaneseConfig",
     "GPTNeoXTokenizerFast",
-    "GPTSanJapaneseConfig",
-    "GitConfig",
-    "GitVisionConfig",
-    "Glm4vVisionConfig",
-    "Glm4vMoeVisionConfig",
-    "GraphormerConfig",
-    "GroupViTTextConfig",
-    "GroupViTVisionConfig",
     "HerbertTokenizerFast",
-    "HubertConfig",
     "HubertForCTC",
-    "IBertConfig",
     "IBertModel",
-    "IdeficsConfig",
     "IdeficsProcessor",
     "IJepaModel",
     "ImageClassificationPipeline",
     "ImageFeatureExtractionPipeline",
-    "ImageGPTConfig",
     "ImageSegmentationPipeline",
     "ImageTextToTextPipeline",
     "AnyToAnyPipeline",
-    "ImageToImagePipeline",
-    "ImageToTextPipeline",
-    "InformerConfig",
-    "JukeboxPriorConfig",
     "JukeboxTokenizer",
-    "LEDConfig",
     "LEDTokenizerFast",
-    "LasrEncoderConfig",
     "LasrFeatureExtractor",
     "LasrTokenizer",
     "LayoutLMForQuestionAnswering",
     "LayoutLMTokenizerFast",
-    "LayoutLMv2Config",
     "LayoutLMv2ForQuestionAnswering",
     "LayoutLMv2TokenizerFast",
-    "LayoutLMv3Config",
     "LayoutLMv3ImageProcessor",
     "LayoutLMv3TokenizerFast",
     "LayoutXLMTokenizerFast",
-    "LevitConfig",
-    "LiltConfig",
     "LiltModel",
-    "LongT5Config",
-    "LongformerConfig",
     "LongformerModel",
     "LongformerTokenizerFast",
     "LukeModel",
     "LukeTokenizer",
     "LxmertTokenizerFast",
-    "M2M100Config",
     "M2M100Tokenizer",
     "MarkupLMProcessor",
     "MaskGenerationPipeline",
     "MBart50TokenizerFast",
-    "MBartConfig",
     "MCTCTFeatureExtractor",
-    "MPNetConfig",
     "MPNetModel",
     "MPNetTokenizerFast",
-    "MT5Config",
     "MT5TokenizerFast",
-    "MarianConfig",
     "MarianTokenizer",
-    "MarkupLMConfig",
     "MarkupLMModel",
     "MarkupLMTokenizer",
     "MarkupLMTokenizerFast",
-    "Mask2FormerConfig",
-    "MaskFormerConfig",
     "MaxTimeCriteria",
-    "MegaConfig",
     "MegaModel",
-    "MegatronBertConfig",
     "MegatronBertForPreTraining",
     "MegatronBertModel",
-    "MLCDVisionConfig",
-    "MobileBertConfig",
     "MobileBertModel",
     "MobileBertTokenizerFast",
     "MobileNetV1ImageProcessor",
@@ -348,174 +284,104 @@ OBJECTS_TO_IGNORE = {
     "MobileViTModel",
     "MobileViTV2Model",
     "MLukeTokenizer",
-    "MraConfig",
-    "MusicgenDecoderConfig",
     "MusicgenForConditionalGeneration",
     "MusicgenMelodyForConditionalGeneration",
-    "MvpConfig",
     "MvpTokenizerFast",
     "MT5Tokenizer",
     "NatModel",
     "NerPipeline",
-    "NezhaConfig",
     "NezhaModel",
-    "NllbMoeConfig",
     "NllbTokenizer",
     "NllbTokenizerFast",
-    "NystromformerConfig",
-    "OPTConfig",
     "ObjectDetectionPipeline",
     "OneFormerProcessor",
-    "OpenAIGPTTokenizerFast",
-    "OpenLlamaConfig",
-    "PLBartConfig",
-    "ParakeetCTCConfig",
-    "LasrCTCConfig",
-    "PegasusConfig",
     "PegasusTokenizer",
     "PegasusTokenizerFast",
-    "PegasusXConfig",
     "PerceiverImageProcessor",
     "PerceiverModel",
     "PerceiverTokenizer",
-    "PersimmonConfig",
     "Pipeline",
-    "Pix2StructConfig",
-    "Pix2StructTextConfig",
     "PLBartTokenizer",
-    "Pop2PianoConfig",
     "PreTrainedTokenizer",
     "PreTrainedTokenizerBase",
     "PreTrainedTokenizerFast",
     "PrefixConstrainedLogitsProcessor",
-    "ProphetNetConfig",
-    "QDQBertConfig",
     "QDQBertModel",
-    "QuestionAnsweringPipeline",
-    "RagConfig",
     "RagModel",
     "RagRetriever",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
-    "ReformerConfig",
     "ReformerTokenizerFast",
-    "RegNetConfig",
-    "RemBertConfig",
     "RemBertModel",
     "RemBertTokenizer",
     "RemBertTokenizerFast",
-    "RetriBertConfig",
     "RetriBertTokenizerFast",
-    "RoCBertConfig",
     "RoCBertModel",
     "RoCBertTokenizer",
-    "RoFormerConfig",
-    "RobertaConfig",
     "RobertaModel",
-    "RobertaPreLayerNormConfig",
     "RobertaPreLayerNormModel",
     "RobertaTokenizerFast",
-    "SEWConfig",
-    "SEWDConfig",
     "SEWDForCTC",
     "SEWForCTC",
-    "SamConfig",
-    "SamPromptEncoderConfig",
-    "SamHQConfig",
-    "SamHQPromptEncoderConfig",
-    "SeamlessM4TConfig",  # use of unconventional markdown
-    "SeamlessM4Tv2Config",  # use of unconventional markdown
+    # use of unconventional markdown
+    # use of unconventional markdown
     "Seq2SeqTrainingArguments",
-    "Speech2Text2Config",
     "Speech2Text2Tokenizer",
     "Speech2TextTokenizer",
     "SpeechEncoderDecoderModel",
-    "SpeechT5Config",
     "SpeechT5Model",
-    "SplinterConfig",
     "SplinterTokenizerFast",
     "SqueezeBertTokenizerFast",
-    "SummarizationPipeline",
     "Swin2SRImageProcessor",
     "Swinv2Model",
-    "SwitchTransformersConfig",
-    "T5Config",
     "T5Tokenizer",
     "T5TokenizerFast",
     "TableQuestionAnsweringPipeline",
-    "TableTransformerConfig",
-    "TapasConfig",
     "TapasModel",
     "TapasTokenizer",
-    "Text2TextGenerationPipeline",
     "TextClassificationPipeline",
     "TextGenerationPipeline",
-    "TimeSeriesTransformerConfig",
     "TokenClassificationPipeline",
-    "TrOCRConfig",
     "Phi4MultimodalProcessor",
     "TrainerState",
     "TrainingArguments",
-    "TrajectoryTransformerConfig",
-    "TranslationPipeline",
     "TvltImageProcessor",
-    "UMT5Config",
-    "UperNetConfig",
     "UperNetForSemanticSegmentation",
     "ViTHybridImageProcessor",
     "ViTHybridModel",
     "ViTMSNModel",
     "ViTModel",
     "VideoClassificationPipeline",
-    "ViltConfig",
     "ViltForImagesAndTextClassification",
     "ViltModel",
     "VisionEncoderDecoderModel",
     "VisionTextDualEncoderModel",
-    "VisualBertConfig",
     "VisualBertModel",
-    "VisualQuestionAnsweringPipeline",
     "VitMatteForImageMatting",
     "VitsTokenizer",
     "VivitModel",
     "Wav2Vec2BertForCTC",
     "Wav2Vec2CTCTokenizer",
-    "Wav2Vec2Config",
-    "Wav2Vec2ConformerConfig",
     "Wav2Vec2ConformerForCTC",
     "Wav2Vec2FeatureExtractor",
     "Wav2Vec2PhonemeCTCTokenizer",
-    "WavLMConfig",
     "WavLMForCTC",
-    "WhisperConfig",
     "WhisperFeatureExtractor",
     "WhisperForAudioClassification",
-    "XCLIPTextConfig",
-    "XCLIPVisionConfig",
-    "XGLMConfig",
     "XGLMModel",
     "XGLMTokenizerFast",
-    "XLMConfig",
-    "XLMProphetNetConfig",
-    "XLMRobertaConfig",
     "XLMRobertaModel",
     "XLMRobertaTokenizerFast",
-    "XLMRobertaXLConfig",
     "XLMRobertaXLModel",
-    "XLNetConfig",
     "XLNetTokenizerFast",
-    "XmodConfig",
     "XmodModel",
     "YolosImageProcessor",
     "YolosModel",
-    "YosoConfig",
     "ZeroShotAudioClassificationPipeline",
     "ZeroShotClassificationPipeline",
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
-    "Llama4TextConfig",
-    "BltConfig",
-    "BltPatcherConfig",
+    "VoxtralRealtimeFeatureExtractor",
 }
 # In addition to the objects above, we also ignore objects with certain prefixes. If you add an item to the list
 # below, make sure to add a comment explaining why.
@@ -533,6 +399,47 @@ MATH_OPERATORS = {
     ast.BitXor: op.xor,
     ast.USub: op.neg,
 }
+
+
+def _get_auto_docstring_names(file_path: str, cache: dict[str, set[str]] | None = None) -> set[str]:
+    """
+    Parse a source file once and return the set of class/function names decorated with @auto_docstring.
+    Walks top-level definitions and one level into class bodies (methods).
+    Results can be cached per file path.
+    """
+    if cache is not None and file_path in cache:
+        return cache[file_path]
+
+    names = set()
+    try:
+        with open(file_path) as f:
+            source = f.read()
+        tree = ast.parse(source, filename=file_path)
+        for node in tree.body:
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                if any(_is_auto_docstring_decorator(dec) for dec in node.decorator_list):
+                    names.add(node.name)
+                # Also check methods inside classes
+                if isinstance(node, ast.ClassDef):
+                    for class_item in node.body:
+                        if isinstance(class_item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            if any(_is_auto_docstring_decorator(dec) for dec in class_item.decorator_list):
+                                names.add(class_item.name)
+    except (OSError, SyntaxError):
+        pass
+
+    if cache is not None:
+        cache[file_path] = names
+    return names
+
+
+def has_auto_docstring_decorator(obj, cache: dict[str, set[str]] | None = None) -> bool:
+    try:
+        source_file = inspect.getfile(obj)
+    except (TypeError, OSError):
+        return False
+    decorated_names = _get_auto_docstring_names(source_file, cache=cache)
+    return obj.__name__ in decorated_names
 
 
 def find_indent(line: str) -> int:
@@ -924,6 +831,25 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         f.write("\n".join(lines))
 
 
+def _is_redundant_with_source(arg_doc: dict, source_arg_doc: dict) -> bool:
+    """Return True when *arg_doc* is a redundant copy of *source_arg_doc*.
+
+    An entry is redundant when its description is identical to the source (after
+    normalising whitespace) and it carries no custom shape that differs from the
+    source.  If the description matches, the auto-docstring machinery will supply
+    the full canonical entry (including additional_info / shape), so the manual
+    copy adds no value and should be deleted so that ``auto`` takes priority.
+    """
+    if source_arg_doc["description"].strip("\n ") != arg_doc.get("description", "").strip("\n "):
+        return False
+    # Keep the entry when it carries a custom shape not present (or different) in source.
+    arg_shape = (arg_doc.get("shape") or "").strip()
+    source_shape = (source_arg_doc.get("shape") or "").strip()
+    if arg_shape and arg_shape != source_shape:
+        return False
+    return True
+
+
 def _find_docstring_end_line(lines, docstring_start_line):
     """Find the line number where a docstring ends. Only handles triple double quotes."""
     if docstring_start_line is None or docstring_start_line < 0 or docstring_start_line >= len(lines):
@@ -982,6 +908,10 @@ def find_matching_model_files(check_all: bool = False):
     potential_files = glob.glob(modeling_glob_pattern)
     image_processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/image_processing_*_fast.py")
     potential_files += glob.glob(image_processing_glob_pattern)
+    processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/processing_*.py")
+    potential_files += glob.glob(processing_glob_pattern)
+    configuration_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/configuration_*.py")
+    potential_files += glob.glob(configuration_glob_pattern)
     matching_files = []
     for file_path in potential_files:
         if os.path.isfile(file_path):
@@ -989,8 +919,6 @@ def find_matching_model_files(check_all: bool = False):
     if not check_all:
         # intersect with module_diff_files
         matching_files = sorted([file for file in matching_files if file in module_diff_files])
-
-    print("    Checking auto_docstrings in the following files:" + "\n    - " + "\n    - ".join(matching_files))
 
     return matching_files
 
@@ -1021,6 +949,238 @@ def get_args_in_dataclass(lines, dataclass_content):
     return args_in_dataclass
 
 
+def _normalize_docstring_code_fences(raw_doc: str) -> str:
+    """
+    Normalise raw docstring text (including the r\"\"\"...\"\"\" delimiters).
+
+    One fix is applied: a closing ``` is inserted before the final \"\"\" when
+    a code block is still open (unclosed fence).  Detection of bare code blocks
+    (without an 'Example:' heading) is handled by the updated _re_example_or_return
+    pattern in auto_docstring.py, which now also splits at ``` lines.
+    """
+    lines = raw_doc.split("\n")
+    result: list[str] = []
+    in_code_block = False
+
+    for line in lines:
+        stripped = line.strip()
+        indent = line[: len(line) - len(line.lstrip())]
+
+        if not in_code_block and stripped.startswith("```"):
+            in_code_block = True
+
+        elif in_code_block and stripped == "```":
+            in_code_block = False
+
+        elif in_code_block and stripped.endswith('"""'):
+            if not stripped.startswith("```"):
+                # Unclosed fence – insert closing ``` before the triple-quote line
+                result.append(f"{indent}```")
+            in_code_block = False
+
+        result.append(line)
+
+    return "\n".join(result)
+
+
+def _find_corresponding_modular_file(generated_file: str) -> str | None:
+    """Return the modular_*.py path for any generated model file, or None.
+
+    Handles modeling_*, configuration_*, processing_*, image_processing_* (including
+    the image_processing_pil_* variant).
+    """
+    path = Path(generated_file)
+    stem = path.stem
+    for prefix in ("modeling_", "configuration_", "processing_", "image_processing_pil_", "image_processing_"):
+        if stem.startswith(prefix):
+            model_name = stem[len(prefix) :]
+            modular_path = path.parent / f"modular_{model_name}.py"
+            return str(modular_path) if modular_path.exists() else None
+    return None
+
+
+def _node_has_docstring(node) -> bool:
+    """Return True when the AST node's body starts with a string-literal docstring."""
+    return (
+        node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
+    )
+
+
+def _propagate_fixes_to_modular(
+    generated_file: str,
+    decorated_items: list,
+    overwrite: bool = False,
+) -> bool:
+    """After fixing docstrings in a generated file, propagate the same fixes to the
+    corresponding modular_*.py source file.
+
+    For each @auto_docstring item processed in *generated_file*, we look for the
+    same class/method (by name) in the modular source.  If the modular item has an
+    *explicit* docstring we sync it using the *generated* file as the ground truth:
+
+    - Arg descriptions come from the generated docstring (which was just fixed/reordered).
+      Descriptions present in the modular docstring take priority over the generated ones
+      (modular is the source), but args that exist in the generated docstring and were
+      missing from the modular (e.g. stripped by a previous bug) are restored.
+    - The Example/Returns section is taken from the modular docstring (modular-specific).
+    - Arg order follows gen_item.args (the generated file's annotation order).
+
+    If the modular item has *no* docstring it was inherited and we leave it untouched.
+
+    Returns True when the modular file was (or would be) changed.
+    """
+    modular_file = _find_corresponding_modular_file(generated_file)
+    if not modular_file:
+        return False
+
+    try:
+        with open(modular_file, encoding="utf-8") as f:
+            modular_content = f.read()
+        modular_tree = ast.parse(modular_content)
+        with open(generated_file, encoding="utf-8") as f:
+            generated_content = f.read()
+    except (OSError, SyntaxError):
+        return False
+
+    modular_lines = modular_content.split("\n")
+    gen_lines = generated_content.split("\n")
+
+    # Build a lookup: (class_name_or_None, item_name) -> (method_node, class_node_or_None)
+    lookup: dict[tuple, tuple] = {}
+    for node in modular_tree.body:
+        if isinstance(node, ast.ClassDef):
+            lookup[(None, node.name)] = (node, None)
+            for child in node.body:
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    lookup[(node.name, child.name)] = (child, node)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            lookup[(None, node.name)] = (node, None)
+
+    # Collect (docstring_start_0based, docstring_end_0based, new_lines) for each fix
+    fixes: list[tuple[int, int, list[str]]] = []
+
+    for gen_item in decorated_items:
+        key = (gen_item.class_name, gen_item.name)
+        entry = lookup.get(key)
+        if entry is None:
+            continue
+
+        mod_node, _mod_class_node = entry
+
+        # Find the "active" node containing the docstring
+        # For class items with __init__: the docstring lives in __init__
+        # For config classes (no __init__):  the docstring lives at class-body level
+        # For function items: the node itself carries the docstring
+        if gen_item.kind == "class" and gen_item.has_init:
+            active_node = next(
+                (m for m in mod_node.body if isinstance(m, ast.FunctionDef) and m.name == "__init__"),
+                None,
+            )
+            if active_node is None:
+                continue
+        elif gen_item.kind == "class":
+            active_node = mod_node
+        else:
+            active_node = mod_node
+
+        # Skip if the modular item has no explicit docstring – it was inherited
+        if not _node_has_docstring(active_node):
+            continue
+
+        # Locate the docstring in modular_lines (0-based)
+        body_start_1based = active_node.body[0].lineno
+        sig_end_0based = body_start_1based - 1  # 0-based index of the docstring line
+        if sig_end_0based >= len(modular_lines):
+            continue
+        if '"""' not in modular_lines[sig_end_0based]:
+            continue
+        doc_end_0based = _find_docstring_end_line(modular_lines, sig_end_0based)
+        if doc_end_0based is None:
+            continue
+
+        # Parse the modular docstring to get its current arg descriptions and remaining section
+        mod_doc_raw = _normalize_docstring_code_fences("\n".join(modular_lines[sig_end_0based : doc_end_0based + 1]))
+        mod_args_dict, mod_remaining = parse_docstring(mod_doc_raw)
+
+        # Parse the generated docstring to get the authoritative (fixed) arg descriptions.
+        # gen_item.body_start_line is 1-based and points to the first line of the body
+        # (which is always the docstring for @auto_docstring items).
+        gen_doc_start_0 = gen_item.body_start_line - 1
+        gen_doc_end_0 = _find_docstring_end_line(gen_lines, gen_doc_start_0)
+        if gen_doc_end_0 is not None and '"""' in gen_lines[gen_doc_start_0]:
+            gen_doc_raw = _normalize_docstring_code_fences("\n".join(gen_lines[gen_doc_start_0 : gen_doc_end_0 + 1]))
+            gen_args_dict, gen_remaining = parse_docstring(gen_doc_raw)
+        else:
+            gen_args_dict, gen_remaining = {}, ""
+
+        # Merge: generated docstring is the base (has all args, already fixed/reordered),
+        # modular descriptions take priority where both have the same arg.
+        merged = dict(gen_args_dict)
+        merged.update(mod_args_dict)
+
+        # Order merged args by gen_item.args (generated annotation order).
+        # Extra args that are only in modular (not yet in generated) are appended at the end.
+        ordered: dict = {}
+        for arg in gen_item.args:
+            if arg in merged:
+                ordered[arg] = merged[arg]
+        for arg, info in mod_args_dict.items():
+            if arg not in ordered:
+                ordered[arg] = info
+
+        # Prefer the modular's remaining section (its Example/Returns are modular-specific).
+        # Fall back to the generated remaining only when the modular has none.
+        remaining = mod_remaining or gen_remaining
+
+        # Build the new docstring string (mirrors generate_new_docstring_for_signature logic)
+        if not ordered and not remaining:
+            continue
+        new_doc = 'r"""\n'
+        for arg, info in ordered.items():
+            additional_info = info.get("additional_info") or ""
+            description = info.get("description", "")
+            if description.endswith('"""'):
+                description = "\n".join(description.split("\n")[:-1])
+            new_doc += f"{arg} ({info['type']}{additional_info}):{description}\n"
+        close_doc = True
+        if remaining:
+            if remaining.endswith('"""'):
+                # remaining already contains the closing """; don't add it separately
+                close_doc = False
+            end_remaining = "\n" if close_doc else ""
+            new_doc += f"{set_min_indent(remaining, 0)}{end_remaining}"
+        if close_doc:
+            new_doc += '"""'
+
+        # Indent to match the modular docstring's own indentation
+        raw_doc_line = modular_lines[sig_end_0based]
+        output_indent = len(raw_doc_line) - len(raw_doc_line.lstrip())
+        new_docstring = set_min_indent(new_doc, output_indent)
+
+        old_lines = modular_lines[sig_end_0based : doc_end_0based + 1]
+        new_lines = new_docstring.split("\n")
+        if old_lines == new_lines:
+            continue
+
+        fixes.append((sig_end_0based, doc_end_0based, new_lines))
+
+    if not fixes:
+        return False
+
+    # Apply fixes in reverse line order so earlier line numbers stay valid
+    fixes.sort(key=lambda x: x[0], reverse=True)
+    for start, end, new_lines in fixes:
+        modular_lines[start : end + 1] = new_lines
+
+    if overwrite:
+        with open(modular_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(modular_lines))
+    return True
+
+
 def generate_new_docstring_for_signature(
     lines,
     args_in_signature,
@@ -1030,6 +1190,7 @@ def generate_new_docstring_for_signature(
     output_docstring_indent=8,
     custom_args_dict={},
     source_args_doc=[ModelArgs, ImageProcessorArgs],
+    is_model_output=False,
 ):
     """
     Generalized docstring generator for a function or class signature.
@@ -1039,6 +1200,7 @@ def generate_new_docstring_for_signature(
         sig_end_line: Line index where the signature ends.
         docstring_line: Line index where the docstring starts (or None if not present).
         arg_indent: Indentation for missing argument doc entries.
+        is_model_output: Whether this is a ModelOutput dataclass (inherited args should be kept)
     Returns:
         new_docstring, sig_end_line, docstring_end (last docstring line index)
     """
@@ -1053,7 +1215,8 @@ def generate_new_docstring_for_signature(
     if docstring_start_line is not None:
         docstring_end_line = _find_docstring_end_line(lines, docstring_start_line)
         docstring_content = lines[docstring_start_line : docstring_end_line + 1]
-        parsed_docstring, remaining_docstring = parse_docstring("\n".join(docstring_content))
+        raw_doc = _normalize_docstring_code_fences("\n".join(docstring_content))
+        parsed_docstring, remaining_docstring = parse_docstring(raw_doc)
         args_docstring_dict.update(parsed_docstring)
     else:
         docstring_end_line = None
@@ -1061,29 +1224,36 @@ def generate_new_docstring_for_signature(
     # Remove pre-existing entries for *args and untyped **kwargs from the docstring
     # (No longer needed since *args are excluded from args_in_signature)
 
-    # Remove args that are the same as the ones in the source args doc
+    # Remove args that are the same as the ones in the source args doc OR have placeholders
     for arg in args_docstring_dict:
         if arg in get_args_doc_from_source(source_args_doc) and arg not in ALWAYS_OVERRIDE:
             source_arg_doc = get_args_doc_from_source(source_args_doc)[arg]
-            if source_arg_doc["description"].strip("\n ") == args_docstring_dict[arg]["description"].strip("\n "):
-                if source_arg_doc.get("shape") is not None and args_docstring_dict[arg].get("shape") is not None:
-                    if source_arg_doc.get("shape").strip("\n ") == args_docstring_dict[arg].get("shape").strip("\n "):
-                        docstring_args_ro_remove.append(arg)
-                elif (
-                    source_arg_doc.get("additional_info") is not None
-                    and args_docstring_dict[arg].get("additional_info") is not None
-                ):
-                    if source_arg_doc.get("additional_info").strip("\n ") == args_docstring_dict[arg].get(
-                        "additional_info"
-                    ).strip("\n "):
-                        docstring_args_ro_remove.append(arg)
-                else:
-                    docstring_args_ro_remove.append(arg)
+            arg_doc = args_docstring_dict[arg]
+
+            # Check if this arg has placeholders
+            has_placeholder = "<fill_type>" in arg_doc.get("type", "") or "<fill_docstring>" in arg_doc.get(
+                "description", ""
+            )
+
+            # Remove if has placeholder or description is identical to source
+            if has_placeholder or _is_redundant_with_source(arg_doc, source_arg_doc):
+                docstring_args_ro_remove.append(arg)
+
+    # For regular methods/functions (not ModelOutput), also remove args not in signature
+    if not is_model_output:
+        for arg in list(args_docstring_dict.keys()):
+            if (
+                arg not in args_in_signature
+                and arg not in get_args_doc_from_source(source_args_doc)
+                and arg not in custom_args_dict
+            ):
+                docstring_args_ro_remove.append(arg)
+
     args_docstring_dict = {
         arg: args_docstring_dict[arg] for arg in args_docstring_dict if arg not in docstring_args_ro_remove
     }
 
-    # Fill missing args
+    # Fill missing args (only when the item carries an explicit @auto_docstring decorator)
     for arg in args_in_signature:
         if (
             arg not in args_docstring_dict
@@ -1100,7 +1270,8 @@ def generate_new_docstring_for_signature(
                 "additional_info": None,
             }
 
-    # Handle docstring of inherited args (for dataclasses)
+    # Handle docstring of inherited args (for dataclasses like ModelOutput)
+    # For regular methods, this will be empty since we removed args not in signature above
     ordered_args_docstring_dict = OrderedDict(
         (arg, args_docstring_dict[arg]) for arg in args_docstring_dict if arg not in args_in_signature
     )
@@ -1153,6 +1324,13 @@ def generate_new_docstring_for_function(
     sig_end_line = item.body_start_line - 1  # Convert to 0-based
     args_in_signature = item.args
     docstring_start_line = sig_end_line if '"""' in lines[sig_end_line] else None
+
+    # Use ProcessorArgs for processor methods
+    if item.is_processor:
+        source_args_doc = [ModelArgs, ImageProcessorArgs, ProcessorArgs]
+    else:
+        source_args_doc = [ModelArgs, ImageProcessorArgs]
+
     return generate_new_docstring_for_signature(
         lines,
         args_in_signature,
@@ -1160,6 +1338,8 @@ def generate_new_docstring_for_function(
         docstring_start_line,
         arg_indent="    ",
         custom_args_dict=custom_args_dict,
+        source_args_doc=source_args_doc,
+        is_model_output=False,  # Functions are never ModelOutput
     )
 
 
@@ -1179,7 +1359,11 @@ def generate_new_docstring_for_class(
         sig_end_line = item.body_start_line - 1  # Convert from body start to sig end (0-based)
         args_in_signature = item.args
         output_docstring_indent = 8
-        source_args_doc = [ModelArgs, ImageProcessorArgs]
+        # Add ProcessorArgs for Processor classes
+        if item.is_processor:
+            source_args_doc = [ModelArgs, ImageProcessorArgs, ProcessorArgs]
+        else:
+            source_args_doc = [ModelArgs, ImageProcessorArgs]
     elif item.is_model_output:
         # ModelOutput class - extract args from dataclass attributes
         current_line_end = item.def_line - 1  # Convert to 0-based
@@ -1195,8 +1379,16 @@ def generate_new_docstring_for_class(
         args_in_signature = get_args_in_dataclass(lines, dataclass_content)
         output_docstring_indent = 4
         source_args_doc = [ModelOutputArgs]
+    elif item.is_config:
+        # Config class (PreTrainedConfig subclass) - args are class-level type annotations,
+        # docstring is at class body level (no __init__ in source; @strict generates one at runtime).
+        current_line_end = item.def_line - 1  # Convert to 0-based
+        sig_end_line = current_line_end + 1
+        args_in_signature = item.args
+        output_docstring_indent = 4
+        source_args_doc = [ConfigArgs]
     else:
-        # Class has no __init__ and is not a ModelOutput - nothing to document
+        # Class has no __init__ and is not a ModelOutput or Config - nothing to document
         return "", None, None, [], [], []
 
     docstring_start_line = sig_end_line if '"""' in lines[sig_end_line] else None
@@ -1210,16 +1402,18 @@ def generate_new_docstring_for_class(
         custom_args_dict=custom_args_dict,
         output_docstring_indent=output_docstring_indent,
         source_args_doc=source_args_doc,
+        is_model_output=item.is_model_output,
     )
 
 
-def _build_ast_indexes(source: str) -> list[DecoratedItem]:
+def _build_ast_indexes(source: str, tree: ast.Module | None = None) -> list[DecoratedItem]:
     """Parse source once and return list of all @auto_docstring decorated items.
 
     Returns:
         List of DecoratedItem objects, one for each @auto_docstring decorated function or class.
     """
-    tree = ast.parse(source)
+    if tree is None:
+        tree = ast.parse(source)
     # First pass: collect top-level string variables (for resolving custom_args variable references)
     var_to_string: dict[str, str] = {}
     for node in tree.body:
@@ -1234,10 +1428,21 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
             if isinstance(node.value.value, str) and isinstance(node.target, ast.Name):
                 var_to_string[node.target.id] = node.value.value
     # Second pass: find all @auto_docstring decorated functions/classes
+    # First, identify processor classes to track method context (only top-level classes)
+    processor_classes: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                if isinstance(base, ast.Name) and ("ProcessorMixin" in base.id or "Processor" in base.id):
+                    processor_classes.add(node.name)
+                    break
+
     decorated_items: list[DecoratedItem] = []
-    for node in ast.walk(tree):
+
+    # Helper function to process decorated items
+    def process_node(node, parent_class_name=None):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            continue
+            return
         # Find @auto_docstring decorator and extract custom_args if present
         decorator_line = None
         custom_args_text = None
@@ -1255,7 +1460,7 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
                             custom_args_text = var_to_string.get(kw.value.id, "").strip()
             break
         if decorator_line is None:  # No @auto_docstring decorator found
-            continue
+            return
         # Extract info for this decorated item
         kind = "class" if isinstance(node, ast.ClassDef) else "function"
         body_start_line = node.body[0].lineno if node.body else node.lineno + 1
@@ -1264,16 +1469,26 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
         has_init = False
         init_def_line = None
         is_model_output = False
+        is_processor = False
+        is_config = False
+
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            # For functions, extract args directly
+            # For functions/methods, extract args directly
             arg_names = _extract_function_args(node)
+            # Check if this method is inside a processor class
+            if parent_class_name and parent_class_name in processor_classes:
+                is_processor = True
         elif isinstance(node, ast.ClassDef):
-            # For classes, look for __init__ method and check if it's a ModelOutput
-            # Check if class inherits from ModelOutput
+            # For classes, look for __init__ method and check if it's a ModelOutput or Processor
+            # Check if class inherits from ModelOutput, ProcessorMixin, or PreTrainedConfig
             for base in node.bases:
-                if isinstance(base, ast.Name) and "ModelOutput" in base.id:
-                    is_model_output = True
-                    break
+                if isinstance(base, ast.Name):
+                    if "ModelOutput" in base.id:
+                        is_model_output = True
+                    elif "ProcessorMixin" in base.id or "Processor" in base.id:
+                        is_processor = True
+                    elif base.id == "PreTrainedConfig":
+                        is_config = True
             # Look for __init__ method in the class body
             for class_item in node.body:
                 if isinstance(class_item, ast.FunctionDef) and class_item.name == "__init__":
@@ -1283,6 +1498,24 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
                     # Update body_start_line to be the __init__ body start
                     body_start_line = class_item.body[0].lineno if class_item.body else class_item.lineno + 1
                     break
+            # For config classes (PreTrainedConfig subclasses), extract class-level type annotations as args.
+            # These use @strict from huggingface_hub which generates __init__ from annotations, so there is
+            # no explicit __init__ in the source. The docstring and parameters live at the class body level.
+            if is_config and not has_init:
+                for class_item in node.body:
+                    if isinstance(class_item, ast.AnnAssign) and isinstance(class_item.target, ast.Name):
+                        attr_name = class_item.target.id
+                        if attr_name.startswith("_"):
+                            continue
+                        # Skip ClassVar annotations (class-level metadata, not config parameters)
+                        ann = class_item.annotation
+                        if (
+                            isinstance(ann, ast.Subscript)
+                            and isinstance(ann.value, ast.Name)
+                            and ann.value.id == "ClassVar"
+                        ):
+                            continue
+                        arg_names.append(attr_name)
 
         decorated_items.append(
             DecoratedItem(
@@ -1295,10 +1528,351 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
                 has_init=has_init,
                 init_def_line=init_def_line,
                 is_model_output=is_model_output,
+                is_processor=is_processor,
+                is_config=is_config,
+                name=node.name,
+                class_name=parent_class_name,
             )
         )
 
+    # Traverse tree with parent context
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            # Check class itself
+            process_node(node)
+            # Check methods within the class
+            for class_item in node.body:
+                process_node(class_item, parent_class_name=node.name)
+        else:
+            # Top-level functions
+            process_node(node)
+
     return sorted(decorated_items, key=lambda x: x.decorator_line)
+
+
+def _extract_type_name(annotation) -> str | None:
+    """
+    Extract the type name from an AST annotation node.
+    Handles: TypeName, Optional[TypeName], Union[TypeName, ...], list[TypeName], etc.
+    Returns the base type name if found, or None.
+    """
+    if isinstance(annotation, ast.Name):
+        # Simple type: TypeName
+        return annotation.id
+    elif isinstance(annotation, ast.Subscript):
+        # Generic type: Optional[TypeName], list[TypeName], etc.
+        # Try to extract from the subscript value
+        if isinstance(annotation.value, ast.Name):
+            # If it's Optional, Union, list, etc., look at the slice
+            if isinstance(annotation.slice, ast.Name):
+                return annotation.slice.id
+            elif isinstance(annotation.slice, ast.Tuple):
+                # Union[TypeName, None] - take first element
+                if annotation.slice.elts and isinstance(annotation.slice.elts[0], ast.Name):
+                    return annotation.slice.elts[0].id
+    return None
+
+
+def _find_typed_dict_classes(source: str, tree: ast.Module | None = None) -> list[dict]:
+    """
+    Find all custom TypedDict kwargs classes in the source.
+
+    Returns:
+        List of dicts with TypedDict info: name, line, fields, all_fields, field_types, docstring info
+        - fields: fields that need custom documentation (not in standard args, not nested TypedDicts)
+        - all_fields: all fields including those in standard args (for redundancy checking)
+    """
+    if tree is None:
+        tree = ast.parse(source)
+
+    # Get standard args that are already documented in source classes
+    standard_args = set()
+    try:
+        standard_args.update(get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs]).keys())
+    except Exception as e:
+        logger.debug(f"Could not get standard args from source: {e}")
+
+    # Collect TypedDict class names and nodes (TypedDicts are always top-level)
+    typed_dict_names = set()
+    typed_dict_nodes = []
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                if isinstance(base, ast.Name) and ("TypedDict" in base.id or "Kwargs" in base.id):
+                    typed_dict_names.add(node.name)
+                    typed_dict_nodes.append(node)
+                    break
+
+    typed_dicts = []
+
+    # Check each TypedDict class
+    for node in typed_dict_nodes:
+        # Skip standard kwargs classes
+        if node.name in ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs", "ProcessingKwargs"]:
+            continue
+
+        # Extract fields and their types (in declaration order)
+        fields = []  # Fields that need custom documentation
+        all_fields = []  # All fields including those in standard args
+        field_types = {}
+        for class_item in node.body:
+            if isinstance(class_item, ast.AnnAssign) and isinstance(class_item.target, ast.Name):
+                field_name = class_item.target.id
+                if not field_name.startswith("_"):
+                    # Extract type and check if it's a nested TypedDict
+                    if class_item.annotation:
+                        type_name = _extract_type_name(class_item.annotation)
+                        if type_name:
+                            field_types[field_name] = type_name
+                            # Skip nested TypedDicts
+                            if type_name in typed_dict_names or type_name.endswith("Kwargs"):
+                                continue
+                    # Track all fields for redundancy checking
+                    all_fields.append(field_name)
+                    # Only add to fields if not in standard args (needs custom documentation)
+                    if field_name not in standard_args:
+                        fields.append(field_name)
+
+        # Skip if no fields at all (including standard args)
+        if not all_fields:
+            continue
+
+        # Extract docstring info
+        docstring = None
+        docstring_start_line = None
+        docstring_end_line = None
+        if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ):
+            docstring = node.body[0].value.value
+            docstring_start_line = node.body[0].lineno
+            docstring_end_line = node.body[0].end_lineno
+
+        typed_dicts.append(
+            {
+                "name": node.name,
+                "line": node.lineno,
+                "fields": fields,
+                "all_fields": all_fields,
+                "field_types": field_types,
+                "docstring": docstring,
+                "docstring_start_line": docstring_start_line,
+                "docstring_end_line": docstring_end_line,
+            }
+        )
+
+    return typed_dicts
+
+
+def _process_typed_dict_docstrings(
+    candidate_file: str,
+    overwrite: bool = False,
+    tree: ast.Module | None = None,
+) -> tuple[list[str], list[str], list[str]]:
+    """
+    Check and optionally fix TypedDict docstrings.
+    Runs as a separate pass after @auto_docstring processing.
+
+    Args:
+        candidate_file: Path to the file to process
+        overwrite: Whether to fix issues by writing to the file
+        tree: Pre-parsed AST tree to avoid re-parsing the file
+
+    Returns:
+        Tuple of (missing_warnings, fill_warnings, redundant_warnings)
+    """
+    with open(candidate_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    typed_dicts = _find_typed_dict_classes(content, tree=tree)
+    if not typed_dicts:
+        return [], [], []
+
+    # Get source args for comparison
+    source_args_doc = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs])
+
+    missing_warnings = []
+    fill_warnings = []
+    redundant_warnings = []
+
+    # Process each TypedDict
+    for td in typed_dicts:
+        # Parse existing docstring
+        documented_fields = {}
+        remaining_docstring = ""
+        if td["docstring"]:
+            try:
+                documented_fields, remaining_docstring = parse_docstring(td["docstring"])
+            except Exception as e:
+                logger.debug(f"Could not parse docstring for {td.get('name', 'unknown')}: {e}")
+
+        # Find missing, fill, and redundant fields
+        missing_fields = []
+        fill_fields = []
+        redundant_fields = []
+
+        # Check fields that need custom documentation (not in source args)
+        for field in td["fields"]:
+            if field not in documented_fields:
+                missing_fields.append(field)
+            else:
+                field_doc = documented_fields[field]
+                desc = field_doc.get("description", "")
+                type_str = field_doc.get("type", "")
+                has_placeholder = "<fill_type>" in type_str or "<fill_docstring>" in desc
+                if has_placeholder:
+                    fill_fields.append(field)
+
+        # Check ALL documented fields (including those in source args) for redundancy
+        for field in documented_fields:
+            if field in source_args_doc:
+                field_doc = documented_fields[field]
+                desc = field_doc.get("description", "")
+                type_str = field_doc.get("type", "")
+                has_placeholder = "<fill_type>" in type_str or "<fill_docstring>" in desc
+
+                source_doc = source_args_doc[field]
+                source_desc = source_doc.get("description", "").strip("\n ")
+                field_desc = desc.strip("\n ")
+
+                # Mark as redundant if has placeholder OR description matches source
+                if has_placeholder or source_desc == field_desc:
+                    redundant_fields.append(field)
+
+        if missing_fields:
+            field_list = ", ".join(sorted(missing_fields))
+            missing_warnings.append(f"    - {td['name']} (line {td['line']}): undocumented fields: {field_list}")
+
+        if fill_fields:
+            field_list = ", ".join(sorted(fill_fields))
+            fill_warnings.append(f"    - {td['name']} (line {td['line']}): fields with placeholders: {field_list}")
+
+        if redundant_fields:
+            field_list = ", ".join(sorted(redundant_fields))
+            redundant_warnings.append(
+                f"    - {td['name']} (line {td['line']}): redundant fields (in source): {field_list}"
+            )
+
+    # If overwrite mode, fix missing fields and remove redundant ones
+    if overwrite and (missing_warnings or redundant_warnings):
+        lines = content.split("\n")
+
+        # Process TypedDicts in reverse order to avoid line number shifts
+        for td in sorted(typed_dicts, key=lambda x: x["line"], reverse=True):
+            # Parse existing docstring
+            documented_fields = {}
+            remaining_docstring = ""
+            if td["docstring"]:
+                try:
+                    documented_fields, remaining_docstring = parse_docstring(td["docstring"])
+                except Exception as e:
+                    logger.debug(f"Could not parse docstring for {td.get('name', 'unknown')}: {e}")
+
+            # Determine which fields to remove (redundant with source)
+            fields_to_remove = set()
+            for field in documented_fields:
+                if field in source_args_doc:
+                    field_doc = documented_fields[field]
+                    desc = field_doc.get("description", "")
+                    type_str = field_doc.get("type", "")
+                    has_placeholder = "<fill_type>" in type_str or "<fill_docstring>" in desc
+
+                    source_doc = source_args_doc[field]
+                    source_desc = source_doc.get("description", "").strip("\n ")
+                    field_desc = desc.strip("\n ")
+
+                    # Remove if has placeholder OR description matches source
+                    if has_placeholder or source_desc == field_desc:
+                        fields_to_remove.add(field)
+
+            # Check if any fields are missing or need removal
+            has_missing = any(f not in documented_fields for f in td["fields"])
+            has_changes = has_missing or len(fields_to_remove) > 0
+
+            if not has_changes:
+                continue
+
+            # Build new docstring dict (preserving existing, removing redundant, adding missing)
+            # We iterate over documented_fields first to preserve order, then add missing fields
+            new_doc_dict = OrderedDict()
+
+            # First, add documented fields that should be kept (not redundant)
+            for field in documented_fields:
+                if field not in fields_to_remove:
+                    # Only keep fields that are either:
+                    # 1. In td["fields"] (needs custom documentation)
+                    # 2. Not in source_args_doc (might be inherited or custom)
+                    if field in td["fields"] or field not in source_args_doc:
+                        new_doc_dict[field] = documented_fields[field]
+
+            # Then, add missing fields from td["fields"]
+            for field in td["fields"]:
+                if field not in documented_fields and field not in new_doc_dict:
+                    # Add placeholder for missing field
+                    new_doc_dict[field] = {
+                        "type": "`<fill_type>`",
+                        "optional": False,
+                        "shape": None,
+                        "description": "\n    <fill_docstring>",
+                        "default": None,
+                        "additional_info": None,
+                    }
+
+            # Build new docstring text
+            class_line_idx = td["line"] - 1
+            class_line = lines[class_line_idx]
+            indent = len(class_line) - len(class_line.lstrip())
+
+            # If all fields were removed, remove the docstring entirely
+            if not new_doc_dict and not remaining_docstring:
+                if td["docstring"] is not None:
+                    doc_start_idx = td["docstring_start_line"] - 1
+                    doc_end_idx = td["docstring_end_line"]
+                    lines = lines[:doc_start_idx] + lines[doc_end_idx:]
+                continue
+
+            # Build docstring content (without indentation first)
+            docstring_content = '"""\n'
+            for field_name, field_doc in new_doc_dict.items():
+                additional_info = field_doc.get("additional_info", "") or ""
+                description = field_doc["description"]
+                if description.endswith('"""'):
+                    description = "\n".join(description.split("\n")[:-1])
+                docstring_content += f"{field_name} ({field_doc['type']}{additional_info}):{description}\n"
+
+            # Add remaining docstring content if any
+            close_docstring = True
+            if remaining_docstring:
+                if remaining_docstring.endswith('"""'):
+                    close_docstring = False
+                end_str = "\n" if close_docstring else ""
+                docstring_content += f"{set_min_indent(remaining_docstring, 0)}{end_str}"
+            if close_docstring:
+                docstring_content += '"""'
+
+            # Apply proper indentation
+            docstring_content = set_min_indent(docstring_content, indent + 4)
+            docstring_lines = docstring_content.split("\n")
+
+            # Replace in lines
+            if td["docstring"] is None:
+                # Insert new docstring after class definition
+                insert_idx = class_line_idx + 1
+                lines = lines[:insert_idx] + docstring_lines + lines[insert_idx:]
+            else:
+                # Replace existing docstring
+                doc_start_idx = td["docstring_start_line"] - 1
+                doc_end_idx = td["docstring_end_line"]  # end_lineno is 1-based, we want to include this line
+                lines = lines[:doc_start_idx] + docstring_lines + lines[doc_end_idx:]
+
+        # Write updated content
+        with open(candidate_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+    return missing_warnings, fill_warnings, redundant_warnings
 
 
 def update_file_with_new_docstrings(
@@ -1391,11 +1965,20 @@ def update_file_with_new_docstrings(
     )
 
 
-def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
+def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cache: dict[str, set[str]] | None = None):
     """
     Check docstrings of all public objects that are decorated with `@auto_docstrings`.
     This function orchestrates the process by finding relevant files, scanning for decorators,
     generating new docstrings, and updating files as needed.
+
+    Args:
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether to fix inconsistencies or not.
+        check_all (`bool`, *optional*, defaults to `False`):
+            Whether to check all files.
+        cache (Dictionary `str` to `Set[str]`, *optional*):
+            To speed up auto-docstring detection if it was previously called on a file, the cache of all previously
+            computed results.
     """
     # 1. Find all model files to check
     matching_files = find_matching_model_files(check_all)
@@ -1403,55 +1986,109 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         return
     # 2. Find files that contain the @auto_docstring decorator
     auto_docstrings_files = find_files_with_auto_docstring(matching_files)
+
+    # Collect all errors before raising
+    has_errors = False
+
     # 3. For each file, update docstrings for all candidates
     for candidate_file in auto_docstrings_files:
         with open(candidate_file, "r", encoding="utf-8") as f:
             content = f.read()
         lines = content.split("\n")
 
-        # Parse file once to find all @auto_docstring decorated items
-        decorated_items = _build_ast_indexes(content)
+        # Parse file once and share the AST tree across all analysis passes
+        tree = ast.parse(content)
+        decorated_items = _build_ast_indexes(content, tree=tree)
 
-        if not decorated_items:
-            continue
+        # Warm the cache so check_docstrings() won't re-parse this file
+        _get_auto_docstring_names(candidate_file, cache=cache)
 
-        # Update docstrings for all decorated items
-        missing_docstring_args_warnings, fill_docstring_args_warnings, docstring_args_ro_remove_warnings = (
-            update_file_with_new_docstrings(
-                candidate_file,
-                lines,
-                decorated_items,
-                content,
-                overwrite=overwrite,
+        missing_docstring_args_warnings = []
+        fill_docstring_args_warnings = []
+        docstring_args_ro_remove_warnings = []
+
+        # Process @auto_docstring decorated items
+        if decorated_items:
+            missing_docstring_args_warnings, fill_docstring_args_warnings, docstring_args_ro_remove_warnings = (
+                update_file_with_new_docstrings(
+                    candidate_file,
+                    lines,
+                    decorated_items,
+                    content,
+                    overwrite=overwrite,
+                )
             )
+
+        # Propagate docstring fixes to the corresponding modular_*.py source so that
+        # the fixes survive the next modular-converter regeneration run.  We only
+        # touch a modular item when it carries an *explicit* docstring – items without
+        # one inherit their docs from a parent class and must be left alone.
+        _propagate_fixes_to_modular(candidate_file, decorated_items, overwrite=overwrite)
+
+        # Process TypedDict kwargs (separate pass to avoid line number conflicts)
+        # This runs AFTER @auto_docstring processing is complete
+        typed_dict_missing_warnings, typed_dict_fill_warnings, typed_dict_redundant_warnings = (
+            _process_typed_dict_docstrings(candidate_file, overwrite=overwrite, tree=tree)
         )
-        if missing_docstring_args_warnings:
+
+        # Report TypedDict errors
+        if typed_dict_missing_warnings:
+            has_errors = True
             if not overwrite:
                 print(
-                    "Some docstrings are missing. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to generate the docstring templates where needed."
+                    "Some TypedDict fields are undocumented. Run `make fix-copies` or "
+                    "`python utils/check_docstrings.py --fix_and_overwrite` to generate placeholders."
+                )
+            print(f"[ERROR] Undocumented fields in custom TypedDict kwargs in {candidate_file}:")
+            for warning in typed_dict_missing_warnings:
+                print(warning)
+        if typed_dict_redundant_warnings:
+            has_errors = True
+            if not overwrite:
+                print(
+                    "Some TypedDict fields are redundant (same as source or have placeholders). "
+                    "Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove them."
+                )
+            print(f"[ERROR] Redundant TypedDict docstrings in {candidate_file}:")
+            for warning in typed_dict_redundant_warnings:
+                print(warning)
+        if typed_dict_fill_warnings:
+            has_errors = True
+            print(f"[ERROR] TypedDict docstrings need to be filled in {candidate_file}:")
+            for warning in typed_dict_fill_warnings:
+                print(warning)
+        if missing_docstring_args_warnings:
+            has_errors = True
+            if not overwrite:
+                print(
+                    "Some docstrings are missing. Run `make fix-repo` or `python utils/check_docstrings.py --fix_and_overwrite` to generate the docstring templates where needed."
                 )
             print(f"[ERROR] Missing docstring for the following arguments in {candidate_file}:")
             for warning in missing_docstring_args_warnings:
                 print(warning)
         if docstring_args_ro_remove_warnings:
+            has_errors = True
             if not overwrite:
                 print(
-                    "Some docstrings are redundant with the ones in `auto_docstring.py` and will be removed. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
+                    "Some docstrings are redundant with the ones in `auto_docstring.py` and will be removed. Run `make fix-repo` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
                 )
             print(f"[ERROR] Redundant docstring for the following arguments in {candidate_file}:")
             for warning in docstring_args_ro_remove_warnings:
                 print(warning)
         if fill_docstring_args_warnings:
+            has_errors = True
             print(f"[ERROR] Docstring needs to be filled for the following arguments in {candidate_file}:")
             for warning in fill_docstring_args_warnings:
                 print(warning)
-        if missing_docstring_args_warnings or docstring_args_ro_remove_warnings or fill_docstring_args_warnings:
-            raise ValueError(
-                "There was at least one problem when checking docstrings of objects decorated with @auto_docstring."
-            )
+
+    # Raise error after processing all files
+    if has_errors:
+        raise ValueError(
+            "There was at least one problem when checking docstrings of objects decorated with @auto_docstring."
+        )
 
 
-def check_docstrings(overwrite: bool = False, check_all: bool = False):
+def check_docstrings(overwrite: bool = False, check_all: bool = False, cache: dict[str, set[str]] | None = None):
     """
     Check docstrings of all public objects that are callables and are documented. By default, only checks the diff.
 
@@ -1460,6 +2097,9 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             Whether to fix inconsistencies or not.
         check_all (`bool`, *optional*, defaults to `False`):
             Whether to check all files.
+        cache (Dictionary `str` to `Set[str]`, *optional*):
+            To speed up auto-docstring detection if it was previously called on a file, the cache of all previously
+            computed results.
     """
     module_diff_files = None
     if not check_all:
@@ -1476,7 +2116,6 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         # quick escape route: if there are no module files in the diff, skip this check
         if len(module_diff_files) == 0:
             return
-        print("    Checking docstrings in the following files:" + "\n    - " + "\n    - ".join(module_diff_files))
 
     failures = []
     hard_failures = []
@@ -1500,6 +2139,10 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             object_file_relative_path = "src/" + str(object_file).split("/src/")[1]
             if object_file_relative_path not in module_diff_files:
                 continue
+
+        # Skip objects decorated with @auto_docstring - they have auto-generated documentation
+        if has_auto_docstring_decorator(obj, cache=cache):
+            continue
 
         # Check docstring
         try:
@@ -1530,7 +2173,7 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         error_message += "\n" + "\n".join([f"- {name}" for name in hard_failures])
     if len(failures) > 0:
         error_message += (
-            "The following objects docstrings do not match their signature. Run `make fix-copies` to fix this. "
+            "The following objects docstrings do not match their signature. Run `make fix-repo` to fix this. "
             "In some cases, this error may be raised incorrectly by the docstring checker. If you think this is the "
             "case, you can manually check the docstrings and then add the object name to `OBJECTS_TO_IGNORE` in "
             "`utils/check_docstrings.py`."
@@ -1555,5 +2198,6 @@ if __name__ == "__main__":
         "--check_all", action="store_true", help="Whether to check all files. By default, only checks the diff"
     )
     args = parser.parse_args()
-    check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
-    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
+    auto_docstring_cache: dict[str, set[str]] = {}
+    check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all, cache=auto_docstring_cache)
+    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all, cache=auto_docstring_cache)

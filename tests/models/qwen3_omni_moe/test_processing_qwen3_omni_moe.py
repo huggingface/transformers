@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -167,8 +166,8 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for k in out_dict:
             self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
 
-    @unittest.skip("Skipping but this one is important, should be fixed ASAP")
     @parameterized.expand([(1, "pt"), (2, "pt")])
+    @unittest.skip("Skipping but this one is important, should be fixed ASAP")
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         pass
 
@@ -264,8 +263,8 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages[0][0]["content"][-1] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
             ],
         }
         out_dict_with_video = processor.apply_chat_template(

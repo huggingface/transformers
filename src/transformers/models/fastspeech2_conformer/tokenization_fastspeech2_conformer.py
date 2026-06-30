@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import json
 import os
-from typing import Optional
 
 import regex
 
@@ -144,7 +142,7 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         )
         return tokens
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         """
         Save the vocabulary and special tokens file to a directory.
 

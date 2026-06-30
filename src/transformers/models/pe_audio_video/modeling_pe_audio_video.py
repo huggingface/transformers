@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pe_audio_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,15 +27,16 @@ import torch.nn as nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...integrations import use_kernel_forward_from_hub
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_pe_audio_video import PeAudioVideoConfig, PeAudioVideoEncoderConfig
 
@@ -166,8 +166,8 @@ class PeAudioVideoEncoderEmbedder(nn.Module):
         self,
         video_hidden_state: torch.Tensor,
         audio_hidden_state: torch.Tensor,
-        padding_mask_videos: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
+        padding_mask_videos: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Align video_hidden_state to audio_hidden_state by nearest neighbor interpolation.
@@ -196,7 +196,9 @@ class PeAudioVideoEncoderEmbedder(nn.Module):
             # note: when one of the above is true, we can expect the other to be true as there is no reason
             # to have masked audio without masked video and vice versa
 
-            return nn.functional.interpolate(video_hidden_state, size=audio_hidden_state.shape[1], mode="nearest")
+            return nn.functional.interpolate(
+                video_hidden_state.transpose(1, 2), size=audio_hidden_state.shape[1], mode="nearest"
+            ).transpose(1, 2)
 
         aligned_shape = (*audio_hidden_state.shape[:2], video_hidden_state.shape[-1])
         aligned_hidden_state = audio_hidden_state.new_zeros(aligned_shape)
@@ -217,8 +219,8 @@ class PeAudioVideoEncoderEmbedder(nn.Module):
         self,
         input_values: torch.Tensor,
         pixel_values_videos: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
-        padding_mask_videos: Optional[torch.Tensor] = None,
+        padding_mask: torch.Tensor | None = None,
+        padding_mask_videos: torch.Tensor | None = None,
     ):
         audio_output = self.audio_encoder(input_values, padding_mask=padding_mask)
         video_output = self.video_encoder(pixel_values_videos, padding_mask_videos=padding_mask_videos)
@@ -259,7 +261,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -269,8 +271,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -296,7 +297,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return (q_ * freqs_cis).sum(5).flatten(3), (k_ * freqs_cis).sum(5).flatten(3)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class PeAudioVideoEncoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -333,8 +333,8 @@ class PeAudioVideoEncoderAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -347,9 +347,9 @@ class PeAudioVideoEncoderAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -397,12 +397,11 @@ class PeAudioVideoEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -414,7 +413,6 @@ class PeAudioVideoEncoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -470,9 +468,9 @@ class PeAudioVideoEncoderRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[PeAudioVideoEncoderConfig] = None,
+        config: PeAudioVideoEncoderConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
+        seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -519,7 +517,7 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
     config: PeAudioVideoConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PeAudioVideoEncoderLayer"]
+    _no_split_modules = ["PeAudioVideoEncoderLayer", "TimmWrapperForImageClassification"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -546,15 +544,24 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
             init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioVideoEncoder`].
     """
 )
+@dataclass
 class PeAudioVideoEncoderOutput(BaseModelOutputWithPooling):
-    audio_model_output: Optional[BaseModelOutputWithPooling] = None
-    video_model_output: Optional[BaseModelOutputWithPooling] = None
+    r"""
+    audio_model_output (`BaseModelOutputWithPooling`, *optional*):
+        Output of the audio encoder, containing the last hidden state, pooled output, and optional hidden states
+        and attentions. See [`~modeling_outputs.BaseModelOutputWithPooling`] for details.
+    video_model_output (`BaseModelOutputWithPooling`, *optional*):
+        Output of the video encoder, containing the last hidden state, pooled output, and optional hidden states
+        and attentions. See [`~modeling_outputs.BaseModelOutputWithPooling`] for details.
+    """
+
+    audio_model_output: BaseModelOutputWithPooling | None = None
+    video_model_output: BaseModelOutputWithPooling | None = None
 
 
 @auto_docstring(
@@ -582,15 +589,16 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_values: torch.Tensor | None = None,
         pixel_values_videos: torch.Tensor | None = None,
-        padding_mask: Optional[torch.Tensor] = None,
-        padding_mask_videos: Optional[torch.Tensor] = None,
+        padding_mask: torch.Tensor | None = None,
+        padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
-    ) -> PeAudioVideoEncoderOutput:
+    ) -> tuple | PeAudioVideoEncoderOutput:
         inputs_embeds, padding_mask, audio_output, video_output = self.embedder(
             input_values,
             pixel_values_videos,
@@ -600,7 +608,11 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         inputs_embeds, attention_mask = self.patch_embedder(inputs_embeds, padding_mask=padding_mask)
 
         if attention_mask is not None:
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
 
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
@@ -625,45 +637,98 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioVideoModel`] when using text, audio, and/or video.
     """
 )
+@dataclass
 class PeAudioVideoOutput(ModelOutput):
+    r"""
+    audio_embeds (`torch.FloatTensor`, *optional*):
+        Audio modality embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    video_embeds (`torch.FloatTensor`, *optional*):
+        Video modality embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    audio_video_embeds (`torch.FloatTensor`, *optional*):
+        Joint audio-video embeddings produced by a fusion module. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_audio_embeds (`torch.FloatTensor`, *optional*):
+        Joint text-audio embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_video_embeds (`torch.FloatTensor`, *optional*):
+        Joint text-video embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_audio_video_embeds (`torch.FloatTensor`, *optional*):
+        Joint text-audio-video embeddings combining all three modalities. Shape `(batch_size, sequence_length, hidden_size)`.
+    audio_plus_text_embeds (`torch.FloatTensor`, *optional*):
+        Combined audio and text embeddings (e.g., concatenation or additive fusion). Shape `(batch_size, sequence_length, hidden_size)`.
+    video_plus_text_embeds (`torch.FloatTensor`, *optional*):
+        Combined video and text embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_outputs (`MaskedLMOutput`, *optional*):
+        Model outputs for the text encoder. Includes hidden states, attentions, and optionally loss.
+    audio_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Model outputs for the audio encoder, including last hidden state and pooled output.
+    video_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Model outputs for the video encoder, including last hidden state and pooled output.
+    audio_video_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Model outputs for the joint audio-video encoder.
+    logits_audio_text (`torch.FloatTensor`, *optional*):
+        Similarity logits between audio and text embeddings. Shape `(batch_size, batch_size)`.
+    logits_video_text (`torch.FloatTensor`, *optional*):
+        Similarity logits between video and text embeddings. Shape `(batch_size, batch_size)`.
+    logits_audio_video (`torch.FloatTensor`, *optional*):
+        Similarity logits between audio and video embeddings. Shape `(batch_size, batch_size)`.
+    logits_audio_video_text (`torch.FloatTensor`, *optional*):
+        Similarity logits across audio, video, and text modalities.
+    logits_audio_plus_text_video (`torch.FloatTensor`, *optional*):
+        Similarity logits between fused (audio + text) embeddings and video embeddings.
+    logits_video_plus_text_audio (`torch.FloatTensor`, *optional*):
+        Similarity logits between fused (video + text) embeddings and audio embeddings.
+    audio_text_loss (`torch.FloatTensor`, *optional*):
+        Contrastive loss computed between audio and text representations.
+    video_text_loss (`torch.FloatTensor`, *optional*):
+        Contrastive loss computed between video and text representations.
+    audio_video_loss (`torch.FloatTensor`, *optional*):
+        Contrastive loss computed between audio and video representations.
+    audio_video_text_loss (`torch.FloatTensor`, *optional*):
+        Joint loss over audio, video, and text modalities.
+    audio_plus_text_video_loss (`torch.FloatTensor`, *optional*):
+        Loss between fused (audio + text) representations and video.
+    video_plus_text_audio_loss (`torch.FloatTensor`, *optional*):
+        Loss between fused (video + text) representations and audio.
+    loss (`torch.FloatTensor`, *optional*):
+        Combined loss for all modality-wise losses.
+    """
+
     # embeddings
-    audio_embeds: Optional[torch.FloatTensor] = None
-    video_embeds: Optional[torch.FloatTensor] = None
-    audio_video_embeds: Optional[torch.FloatTensor] = None
-    text_audio_embeds: Optional[torch.FloatTensor] = None
-    text_video_embeds: Optional[torch.FloatTensor] = None
-    text_audio_video_embeds: Optional[torch.FloatTensor] = None
-    audio_plus_text_embeds: Optional[torch.FloatTensor] = None
-    video_plus_text_embeds: Optional[torch.FloatTensor] = None
+    audio_embeds: torch.FloatTensor | None = None
+    video_embeds: torch.FloatTensor | None = None
+    audio_video_embeds: torch.FloatTensor | None = None
+    text_audio_embeds: torch.FloatTensor | None = None
+    text_video_embeds: torch.FloatTensor | None = None
+    text_audio_video_embeds: torch.FloatTensor | None = None
+    audio_plus_text_embeds: torch.FloatTensor | None = None
+    video_plus_text_embeds: torch.FloatTensor | None = None
 
     # model outputs
     # TODO: update types to the correct ones
-    text_outputs: Optional[MaskedLMOutput] = None
-    audio_outputs: Optional[BaseModelOutputWithPooling] = None
-    video_outputs: Optional[BaseModelOutputWithPooling] = None
-    audio_video_outputs: Optional[BaseModelOutputWithPooling] = None
+    text_outputs: MaskedLMOutput | None = None
+    audio_outputs: BaseModelOutputWithPooling | None = None
+    video_outputs: BaseModelOutputWithPooling | None = None
+    audio_video_outputs: BaseModelOutputWithPooling | None = None
 
     # logits
-    logits_audio_text: Optional[torch.FloatTensor] = None
-    logits_video_text: Optional[torch.FloatTensor] = None
-    logits_audio_video: Optional[torch.FloatTensor] = None
-    logits_audio_video_text: Optional[torch.FloatTensor] = None
-    logits_audio_plus_text_video: Optional[torch.FloatTensor] = None
-    logits_video_plus_text_audio: Optional[torch.FloatTensor] = None
+    logits_audio_text: torch.FloatTensor | None = None
+    logits_video_text: torch.FloatTensor | None = None
+    logits_audio_video: torch.FloatTensor | None = None
+    logits_audio_video_text: torch.FloatTensor | None = None
+    logits_audio_plus_text_video: torch.FloatTensor | None = None
+    logits_video_plus_text_audio: torch.FloatTensor | None = None
 
-    audio_text_loss: Optional[torch.FloatTensor] = None
-    video_text_loss: Optional[torch.FloatTensor] = None
-    audio_video_loss: Optional[torch.FloatTensor] = None
-    audio_video_text_loss: Optional[torch.FloatTensor] = None
-    audio_plus_text_video_loss: Optional[torch.FloatTensor] = None
-    video_plus_text_audio_loss: Optional[torch.FloatTensor] = None
-    loss: Optional[torch.FloatTensor] = None
+    audio_text_loss: torch.FloatTensor | None = None
+    video_text_loss: torch.FloatTensor | None = None
+    audio_video_loss: torch.FloatTensor | None = None
+    audio_video_text_loss: torch.FloatTensor | None = None
+    audio_plus_text_video_loss: torch.FloatTensor | None = None
+    video_plus_text_audio_loss: torch.FloatTensor | None = None
+    loss: torch.FloatTensor | None = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(self[k] if not k.endswith("model_output") else getattr(self, k).to_tuple() for k in self.keys())
@@ -671,9 +736,9 @@ class PeAudioVideoOutput(ModelOutput):
 
 @dataclass
 class AudioVideoEmbeddings(ModelOutput):
-    audio_embeds: Optional[torch.FloatTensor] = None
-    video_embeds: Optional[torch.FloatTensor] = None
-    audio_video_embeds: Optional[torch.FloatTensor] = None
+    audio_embeds: torch.FloatTensor | None = None
+    video_embeds: torch.FloatTensor | None = None
+    audio_video_embeds: torch.FloatTensor | None = None
 
 
 class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
@@ -730,6 +795,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -745,8 +811,8 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         self,
         input_values: torch.Tensor,
         pixel_values_videos: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
-        padding_mask_videos: Optional[torch.Tensor] = None,
+        padding_mask: torch.Tensor | None = None,
+        padding_mask_videos: torch.Tensor | None = None,
         return_audio_embeds: bool = False,
         return_video_embeds: bool = False,
         **kwargs,
@@ -774,8 +840,8 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         self,
         input_ids: torch.Tensor,
         input_values: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         audio_embeds = self.audio_model.audio_encoder(
             input_values=input_values,
@@ -785,6 +851,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -796,8 +863,8 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         self,
         input_ids: torch.Tensor,
         pixel_values_videos: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        padding_mask_videos: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        padding_mask_videos: torch.Tensor | None = None,
     ) -> torch.Tensor:
         video_embeds = self.video_model.video_encoder(
             pixel_values_videos=pixel_values_videos,
@@ -807,6 +874,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -817,17 +885,20 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.Tensor] = None,
-        input_values: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        padding_mask_videos: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        input_values: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        padding_mask_videos: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
         return_loss=False,
         **kwargs,
     ) -> PeAudioVideoOutput:
         if sum([input_ids is not None, pixel_values_videos is not None, input_values is not None]) < 2:
-            raise ValueError("At least two of input_ids, pixel_values_videos, or input_values must be provided")
+            raise ValueError(
+                "At least two of input_ids, pixel_values_videos, or input_values must be provided. "
+                "For encoding individual modalities, get_*_embeds methods are available."
+            )
 
         if pixel_values_videos is None:
             outputs = self.audio_model(

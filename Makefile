@@ -1,123 +1,93 @@
-.PHONY: deps_table_update modified_only_fixup extra_style_checks quality style fixup fix-copies test test-examples benchmark
-
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-check_dirs := examples tests src utils scripts benchmark benchmark_v2
-
-exclude_folders :=  ""
-
-modified_only_fixup:
-	@current_branch=$$(git branch --show-current); \
-	if [ "$$current_branch" = "main" ]; then \
-		echo "On main branch, running 'style' target instead..."; \
-		$(MAKE) style; \
-	else \
-		modified_py_files=$$(python utils/get_modified_files.py $(check_dirs)); \
-		if [ -n "$$modified_py_files" ]; then \
-			echo "Checking/fixing files: $${modified_py_files}"; \
-			ruff check $${modified_py_files} --fix --exclude $(exclude_folders); \
-			ruff format $${modified_py_files} --exclude $(exclude_folders); \
-		else \
-			echo "No library .py files were modified"; \
-		fi; \
-	fi
-
-# Update src/transformers/dependency_versions_table.py
-
-deps_table_update:
-	@python setup.py deps_table_update
-
-deps_table_check_updated:
-	@md5sum src/transformers/dependency_versions_table.py > md5sum.saved
-	@python setup.py deps_table_update
-	@md5sum -c --quiet md5sum.saved || (printf "\nError: the version dependency table is outdated.\nPlease run 'make fixup' or 'make style' and commit the changes.\n\n" && exit 1)
-	@rm md5sum.saved
-
-# autogenerating code
-
-autogenerate_code: deps_table_update
-
-# Check that the repo is in a good state
-
-repo-consistency:
-	python utils/check_copies.py
-	python utils/check_modular_conversion.py
-	python utils/check_dummies.py
-	python utils/check_repo.py
-	python utils/check_modeling_structure.py
-	python utils/check_inits.py
-	python utils/check_pipeline_typing.py
-	python utils/check_config_docstrings.py
-	python utils/check_config_attributes.py
-	python utils/check_doctest_list.py
-	python utils/update_metadata.py --check-only
-	python utils/check_docstrings.py
-	python utils/add_dates.py --check-only
-
-# this target runs checks on all files
-
-quality:
-	@python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
-	ruff check $(check_dirs) setup.py conftest.py
-	ruff format --check $(check_dirs) setup.py conftest.py
-	python utils/sort_auto_mappings.py --check_only
-	python utils/check_doc_toc.py
-	python utils/check_docstrings.py --check_all
+.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test test-examples benchmark codex claude clean-ai
 
 
-# Format source code automatically and check is there are any problems left that need manual fixing
+# Checker lists. The two CI jobs (CircleCI runs `make check-code-quality` and
+# `make check-repository-consistency` in parallel) own the canonical sets below.
+# Local convenience targets `check-repo` and `fix-repo` are *derived* from them,
+# so they can never drift out of sync (e.g. silently dropping `auto_mappings`
+# from CI, as happened in #45018 → fixed in #45774).
 
-extra_style_checks:
-	python utils/sort_auto_mappings.py
-	python utils/check_doc_toc.py --fix_and_overwrite
+STYLE_CHECKERS := ruff_check, ruff_format, init_isort, sort_auto_mappings
+TYPING_CHECKERS := types, modeling_structure
+CODE_QUALITY_CHECKERS := $(TYPING_CHECKERS), $(STYLE_CHECKERS)
 
-# this target runs checks on all files and potentially modifies some of them
+REPO_CONSISTENCY_CHECKERS := \
+	auto_mappings, \
+	imports, \
+	import_complexity, \
+	copies, \
+	modular_conversion, \
+	doc_toc, \
+	modeling_rules_doc, \
+	docstrings, \
+	dummies, \
+	repo, \
+	inits, \
+	pipeline_typing, \
+	config_docstrings, \
+	config_attributes, \
+	doctest_list, \
+	update_metadata, \
+	add_dates, \
+	deps_table
 
+ALL_CHECKERS := $(CODE_QUALITY_CHECKERS), $(REPO_CONSISTENCY_CHECKERS)
+
+
+# Runs all linting/formatting scripts, most notably ruff
 style:
-	ruff check $(check_dirs) setup.py conftest.py --fix --exclude $(exclude_folders)
-	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
-	${MAKE} autogenerate_code
-	${MAKE} extra_style_checks
+	@python utils/checkers.py $(STYLE_CHECKERS) --fix
 
-# Super fast fix and check target that only works on relevant modified files since the branch was made
+# Runs ty type checker and model structure rules
+typing:
+	@python utils/checkers.py $(TYPING_CHECKERS)
 
-fixup: modified_only_fixup extra_style_checks autogenerate_code repo-consistency
+# Runs typing, ruff linting/formatting, import-order checks and auto-mappings
+check-code-quality:
+	@python utils/checkers.py $(CODE_QUALITY_CHECKERS)
 
-# Make marked copies of snippets of codes conform to the original
+# Runs a full repository consistency check.
+check-repository-consistency:
+	@python utils/checkers.py $(REPO_CONSISTENCY_CHECKERS)
 
-fix-copies:
-	python utils/check_copies.py --fix_and_overwrite
-	python utils/check_modular_conversion.py --fix_and_overwrite
-	python utils/check_dummies.py --fix_and_overwrite
-	python utils/check_pipeline_typing.py --fix_and_overwrite
-	python utils/check_doctest_list.py --fix_and_overwrite
-	python utils/check_docstrings.py --fix_and_overwrite
-	python utils/add_dates.py
+# Runs typing and formatting checks + repository consistency check (ignores errors)
+check-repo:
+	@python utils/checkers.py $(ALL_CHECKERS) --keep-going
 
-# Run tests for the library
+# Run all repo checks for which there is an automatic fix, most notably modular conversions
+fix-repo:
+	@python utils/checkers.py $(ALL_CHECKERS) --fix --keep-going
 
+# Run tests for the library, requires pytest-random-order
 test:
-	python -m pytest -n auto --dist=loadfile -s -v ./tests/
+	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./tests/
 
-# Run tests for examples
-
+# Run tests for examples, requires pytest-random-order
 test-examples:
-	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
+	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./examples/pytorch/
 
 # Run benchmark
-
 benchmark:
 	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
 
-# Run tests for SageMaker DLC release
+codex:
+	mkdir -p .agents
+	rm -rf .agents/skills
+	ln -snf ../.ai/skills .agents/skills
 
-test-sagemaker: # install sagemaker dependencies in advance with pip install .[sagemaker]
-	TEST_SAGEMAKER=True python -m pytest -n auto  -s -v ./tests/sagemaker
+claude:
+	mkdir -p .claude
+	rm -rf .claude/skills
+	ln -snf ../.ai/skills .claude/skills
+
+clean-ai:
+	rm -rf .agents/skills .claude/skills
 
 
 # Release stuff
-
 pre-release:
 	python utils/release.py
 

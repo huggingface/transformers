@@ -1,4 +1,4 @@
-<!--Copyright 2025 The GLM & ZhipuAI team and The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The ZhipuAI Inc. and The HuggingFace Inc. team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -13,9 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-06-18 and added to Hugging Face Transformers on 2025-04-09.*
+*This model was published in HF papers on 2024-06-18 and contributed to Hugging Face Transformers on 2025-04-09.*
 
-# Glm4
+# GLM-4-0414
 
 ## Overview
 

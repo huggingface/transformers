@@ -14,87 +14,98 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# ONNX
+# Exporting to production
 
-[ONNX](http://onnx.ai) is an open standard that defines a common set of operators and a file format to represent deep learning models in different frameworks, including PyTorch and TensorFlow. When a model is exported to ONNX, the operators construct a computational graph (or *intermediate representation*) which represents the flow of data through the model. Standardized operators and data types makes it easy to switch between frameworks.
+Export Transformers' models to different formats for optimized runtimes and devices. Deploy the same model to cloud providers or run it on mobile and edge devices. You don't need to rewrite the model from scratch for each deployment environment. Freely deploy across any inference ecosystem.
 
-The [Optimum](https://huggingface.co/docs/optimum/index) library exports a model to ONNX with configuration objects which are supported for [many architectures](https://huggingface.co/docs/optimum/exporters/onnx/overview) and can be easily extended. If a model isn't supported, feel free to make a [contribution](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/contribute) to Optimum.
+## ExecuTorch
 
-The benefits of exporting to ONNX include the following.
+[ExecuTorch](https://pytorch.org/executorch/stable/index.html) runs PyTorch models on mobile and edge devices. It exports a model into a graph of standardized operators, compiles the graph into an ExecuTorch program, and executes it on the target device. The runtime is lightweight and calculates the execution plan ahead of time.
 
-- [Graph optimization](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/optimization) and [quantization](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/quantization) for improving inference.
-- Use the [`~optimum.onnxruntime.ORTModel`] API to run a model with [ONNX Runtime](https://onnxruntime.ai/).
-- Use [optimized inference pipelines](https://huggingface.co/docs/optimum/main/en/onnxruntime/usage_guides/pipelines) for ONNX models.
-
-Export a Transformers model to ONNX with the Optimum CLI or the `optimum.onnxruntime` module.
-
-## Optimum CLI
-
-Run the command below to install Optimum and the [exporters](https://huggingface.co/docs/optimum/exporters/overview) module.
+Install [Optimum ExecuTorch](https://huggingface.co/docs/optimum-executorch/en/index) from source.
 
 ```bash
-pip install optimum-onnx
+git clone https://github.com/huggingface/optimum-executorch.git
+cd optimum-executorch
+pip install '.[dev]'
 ```
 
-> [!TIP]
-> Refer to the [Export a model to ONNX with optimum.exporters.onnx](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model#exporting-a-model-to-onnx-using-the-cli) guide for all available arguments or with the command below.
->
-> ```bash
-> optimum-cli export onnx --help
-> ```
-
-Set the `--model` argument to export a PyTorch model from the Hub.
+Export a Transformers model to ExecuTorch with the CLI tool.
 
 ```bash
-optimum-cli export onnx --model distilbert/distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/
+optimum-cli export executorch \
+    --model "Qwen/Qwen3-8B" \
+    --task "text-generation" \
+    --recipe "xnnpack" \
+    --use_custom_sdpa \
+    --use_custom_kv_cache \
+    --qlinear 8da4w \
+    --qembedding 8w \
+    --output_dir="hf_smollm2"
 ```
 
-You should see logs indicating the progress and showing where the resulting `model.onnx` is saved.
-
-```text
-Validating ONNX model distilbert_base_uncased_squad_onnx/model.onnx...
-	-[✓] ONNX model output names match reference model (start_logits, end_logits)
-	- Validating ONNX Model output "start_logits":
-		-[✓] (2, 16) matches (2, 16)
-		-[✓] all values close (atol: 0.0001)
-	- Validating ONNX Model output "end_logits":
-		-[✓] (2, 16) matches (2, 16)
-		-[✓] all values close (atol: 0.0001)
-The ONNX export succeeded and the exported model was saved at: distilbert_base_uncased_squad_onnx
-```
-
-For local models, make sure the model weights and tokenizer files are saved in the same directory, for example `local_path`. Pass the directory to the `--model` argument and use `--task` to indicate the [task](https://huggingface.co/docs/optimum/exporters/task_manager) a model can perform. If `--task` isn't provided, the model architecture without a task-specific head is used.
+Run the following command to view all export options.
 
 ```bash
-optimum-cli export onnx --model local_path --task question-answering distilbert_base_uncased_squad_onnx/
+optimum-cli export executorch --help
 ```
 
-The `model.onnx` file can be deployed with any [accelerator](https://onnx.ai/supported-tools.html#deployModel) that supports ONNX. The example below demonstrates loading and running a model with ONNX Runtime.
+## ONNX
 
-```python
->>> from transformers import AutoTokenizer
->>> from optimum.onnxruntime import ORTModelForQuestionAnswering
+[ONNX](http://onnx.ai) is a shared language for describing models from different frameworks. It represents models as a graph of standardized operators with well-defined types, shapes, and metadata. Models serialize into compact protobuf files that you can deploy across optimized runtimes and engines.
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert_base_uncased_squad_onnx")
->>> model = ORTModelForQuestionAnswering.from_pretrained("distilbert_base_uncased_squad_onnx")
->>> inputs = tokenizer("What am I using?", "Using DistilBERT with ONNX Runtime!", return_tensors="pt")
->>> outputs = model(**inputs)
+[Optimum ONNX](https://huggingface.co/docs/optimum-onnx/index) exports models to ONNX with configuration objects. It supports many [architectures](https://huggingface.co/docs/optimum-onnx/onnx/overview) and is easily extendable. Export models through the CLI tool or programmatically.
+
+Install [Optimum ONNX](https://huggingface.co/docs/optimum-onnx/index).
+
+```bash
+uv pip install optimum-onnx
 ```
 
-## optimum.onnxruntime
+### optimum-cli
 
-The `optimum.onnxruntime` module supports programmatically exporting a Transformers model. Instantiate a [`~optimum.onnxruntime.ORTModel`] for a task and set `export=True`. Use [`~OptimizedModel.save_pretrained`] to save the ONNX model.
+Specify a model to export and the output directory with the `--model` argument.
 
-```python
->>> from optimum.onnxruntime import ORTModelForSequenceClassification
->>> from transformers import AutoTokenizer
+```bash
+optimum-cli export onnx --model Qwen/Qwen3-8B Qwen/Qwen3-8b-onnx/
+```
 
->>> model_checkpoint = "distilbert/distilbert-base-uncased-distilled-squad"
->>> save_directory = "onnx/"
+Run the following command to view all available arguments or refer to the [Export a model to ONNX with optimum.exporters.onnx](https://huggingface.co/docs/optimum-onnx/onnx/usage_guides/export_a_model) guide for more details.
 
->>> ort_model = ORTModelForSequenceClassification.from_pretrained(model_checkpoint, export=True)
->>> tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
+```bash
+optimum cli export onnx --help
+```
 
->>> ort_model.save_pretrained(save_directory)
->>> tokenizer.save_pretrained(save_directory)
+To export a local model, save the weights and tokenizer files in the same directory. Pass the directory path to the `--model` argument and use the `--task` argument to specify the [task](https://huggingface.co/docs/optimum/exporters/task_manager#transformers). If you don't provide `--task`, the system auto-infers it from the model or uses an architecture without a task-specific head.
+
+```bash
+optimum-cli export onnx --model path/to/local/model --task text-generation Qwen/Qwen3-8b-onnx/
+```
+
+Deploy the model with any [runtime](https://onnx.ai/supported-tools.html#deployModel) that supports ONNX, including ONNX Runtime.
+
+```py
+from transformers import AutoTokenizer
+from optimum.onnxruntime import ORTModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-8b-onnx")
+model = ORTModelForCausalLM.from_pretrained("Qwen/Qwen3-8b-onnx")
+inputs = tokenizer("Plants generate energy through a process known as ", return_tensors="pt")
+outputs = model.generate(**inputs)
+print(tokenizer.batch_decode(outputs))
+```
+
+### optimum.onnxruntime
+
+Export Transformers' models programmatically with Optimum ONNX. Instantiate a [`~optimum.onnxruntime.ORTModel`] with a model and set `export=True`. Save the ONNX model with [`~optimum.onnxruntime.ORTModel.save_pretrained`].
+
+```py
+from optimum.onnxruntime import ORTModelForCausalLM
+from transformers import AutoTokenizer
+
+ort_model = ORTModelForCausalLM.from_pretrained("Qwen/Qwen3-8b", export=True)
+tokenizer = AutoTokenizer.from_pretrained("onnx/")
+
+ort_model.save_pretrained("onnx/")
+tokenizer.save_pretrained("onnx/")
 ```

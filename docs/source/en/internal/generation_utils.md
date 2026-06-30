@@ -204,6 +204,8 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 [[autodoc]] AsyncTextIteratorStreamer
 
+[[autodoc]] TextDiffusionStreamer
+
 ## Caches
 
 [[autodoc]] CacheLayerMixin
@@ -257,20 +259,6 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 [[autodoc]] QuantizedCache
 
 [[autodoc]] EncoderDecoderCache
-
-[[autodoc]] QuantoQuantizedCache
-
-[[autodoc]] HQQQuantizedCache
-
-[[autodoc]] OffloadedCache
-
-[[autodoc]] OffloadedStaticCache
-
-[[autodoc]] HybridCache
-
-[[autodoc]] HybridChunkedCache
-
-[[autodoc]] SlidingWindowCache
 
 ## Watermark Utils
 

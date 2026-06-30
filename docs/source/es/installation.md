@@ -22,11 +22,9 @@ rendered properly in your Markdown viewer.
 
 En esta guía puedes encontrar información para instalar 🤗 Transformers para cualquier biblioteca de Machine Learning con la que estés trabajando. Además, encontrarás información sobre cómo establecer el caché y cómo configurar 🤗 Transformers para correrlo de manera offline (opcional).
 
-🤗 Transformers ha sido probada en Python 3.6+, PyTorch 1.1.0+, TensorFlow 2.0+, y Flax. Para instalar la biblioteca de deep learning con la que desees trabajar, sigue las instrucciones correspondientes listadas a continuación:
+🤗 Transformers ha sido probada en Python 3.10+ y PyTorch 2.4+. Para instalar la biblioteca de deep learning con la que desees trabajar, sigue las instrucciones correspondientes listadas a continuación:
 
 * [PyTorch](https://pytorch.org/get-started/locally/)
-* [TensorFlow 2.0](https://www.tensorflow.org/install/pip)
-* [Flax](https://flax.readthedocs.io/en/latest/)
 
 ## Instalación con pip
 
@@ -57,18 +55,6 @@ Por ejemplo, instala 🤗 Transformers y Pytorch:
 
 ```bash
 pip install transformers[torch]
-```
-
-🤗 Transformers y TensorFlow 2.0:
-
-```bash
-pip install transformers[tf-cpu]
-```
-
-🤗 Transformers y Flax:
-
-```bash
-pip install transformers[flax]
 ```
 
 Por último, revisa si 🤗 Transformers ha sido instalada exitosamente con el siguiente comando que descarga un modelo pre-entrenado:
@@ -112,7 +98,7 @@ cd transformers
 pip install -e .
 ```
 
-Éstos comandos van a ligar el directorio desde donde clonamos el repositorio al path de las bibliotecas de Python. Python ahora buscará dentro de la carpeta que clonaste además de los paths normales de la biblioteca. Por ejemplo, si los paquetes de Python se encuentran instalados en `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python también buscará en el directorio desde donde clonamos el repositorio `~/transformers/`.
+Éstos comandos van a ligar el directorio desde donde clonamos el repositorio al path de las bibliotecas de Python. Python ahora buscará dentro de la carpeta que clonaste además de los paths normales de la biblioteca. Por ejemplo, si los paquetes de Python se encuentran instalados en `~/anaconda3/envs/main/lib/python3.10/site-packages/`, Python también buscará en el directorio desde donde clonamos el repositorio `~/transformers/`.
 
 <Tip warning={true}>
 

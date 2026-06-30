@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Trax Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -21,7 +20,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import reduce
 from operator import mul
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -41,6 +40,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
     logging,
+    torch_compilable_check,
 )
 from .configuration_reformer import ReformerConfig
 
@@ -67,7 +67,7 @@ class ReformerDynamicCache:
     A dynamic cache that stores past buckets instead of key/values.
     """
 
-    def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
+    def __init__(self, _distributed_cache_data: Iterable | None = None) -> None:
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.buckets_cache: list[torch.Tensor] = []
         self.states_cache: list[torch.Tensor] = []
@@ -89,7 +89,7 @@ class ReformerDynamicCache:
         buckets: torch.Tensor,
         states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[dict[str, Any]] = None,
+        cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
@@ -129,7 +129,7 @@ class ReformerDynamicCache:
 
         return self.buckets_cache[layer_idx], self.states_cache[layer_idx]
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int | None = 0) -> int:
         return None
 
     def get_start_idx(self) -> int:
@@ -263,9 +263,18 @@ class AxialPositionEmbeddings(nn.Module):
                     f"{self.least_common_mult_chunk_length})."
                 )
 
-            # compute how many columns are needed
+            # compute how many columns are needed; ceil-div as `(x + bs - 1) // bs` to keep
+            # the engine on positive-arithmetic, and the `torch_compilable_check` calls propagate
+            # the trivial bounds `0 <= max_position_id < axial_pos_shape[0] * axial_pos_shape[1]`
+            # (from the axial-encoding contract) so the result stays within `[1, axial_pos_shape[0]]`.
             max_position_id = position_ids.max().item()
-            required_pos_encodings_columns = -(-(max_position_id + 1) // self.axial_pos_shape[1])
+            axial_h, axial_w = self.axial_pos_shape
+            torch_compilable_check(max_position_id >= 0, "Axial position id underflow.")
+            torch_compilable_check(
+                max_position_id < axial_h * axial_w,
+                "Position id exceeds axial_pos_shape[0] * axial_pos_shape[1].",
+            )
+            required_pos_encodings_columns = (max_position_id + axial_w) // axial_w
 
             # cut to columns that are needed
             position_encodings = torch.cat(
@@ -444,7 +453,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         past_buckets_states=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
         **kwargs,
     ):
         sequence_length = hidden_states.shape[1]
@@ -1370,7 +1378,7 @@ class ReformerAttention(nn.Module):
         orig_sequence_length=None,
         output_attentions=False,
         buckets=None,
-        cache_position=None,
+        **kwargs,
     ):
         hidden_states = self.layer_norm(hidden_states)
 
@@ -1383,7 +1391,6 @@ class ReformerAttention(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
             buckets=buckets,
-            cache_position=cache_position,
         )
 
         # add buckets if necessary
@@ -1498,7 +1505,7 @@ class ReformerLayer(nn.Module):
 
         # randomize seeds
         # use cuda generator if available
-        if hasattr(torch.cuda, "default_generators") and len(torch.cuda.default_generators) > 0:
+        if len(torch.cuda.default_generators) > 0:
             # GPU
             device_idx = torch.cuda.current_device()
             self.attention_seed = torch.cuda.default_generators[device_idx].seed()
@@ -1515,7 +1522,7 @@ class ReformerLayer(nn.Module):
         """
         # randomize seeds
         # use cuda generator if available
-        if hasattr(torch.cuda, "default_generators") and len(torch.cuda.default_generators) > 0:
+        if len(torch.cuda.default_generators) > 0:
             # GPU
             device_idx = torch.cuda.current_device()
             self.feed_forward_seed = torch.cuda.default_generators[device_idx].seed()
@@ -1861,12 +1868,12 @@ class ReformerPreTrainedModel(PreTrainedModel):
             init.constant_(module.mask_value_float32, -1e9)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ReformerModel`].
     """
 )
+@dataclass
 class ReformerModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_predict, hidden_size)`):
@@ -1884,17 +1891,17 @@ class ReformerModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    past_buckets_states: Optional[list[tuple[torch.LongTensor, torch.FloatTensor]]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    past_buckets_states: list[tuple[torch.LongTensor, torch.FloatTensor]] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ReformerModelWithLMHead`].
     """
 )
+@dataclass
 class ReformerModelWithLMHeadOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
@@ -1913,11 +1920,11 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
         up sequential decoding.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_buckets_states: Optional[list[tuple[torch.LongTensor, torch.FloatTensor]]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_buckets_states: list[tuple[torch.LongTensor, torch.FloatTensor]] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
@@ -1944,18 +1951,18 @@ class ReformerModel(ReformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        num_hashes: Optional[int] = None,
-        past_buckets_states: Optional[ReformerDynamicCache] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        num_hashes: int | None = None,
+        past_buckets_states: ReformerDynamicCache | None = None,
+        use_cache: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, ReformerModelOutput]:
+    ) -> tuple | ReformerModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -1984,7 +1991,7 @@ class ReformerModel(ReformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -2169,20 +2176,20 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        num_hashes: Optional[int] = None,
-        past_buckets_states: Optional[list[tuple[torch.Tensor]]] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        num_hashes: int | None = None,
+        past_buckets_states: list[tuple[torch.Tensor]] | None = None,
+        use_cache: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+        labels: torch.Tensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutput]:
+    ) -> tuple | CausalLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2210,7 +2217,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for
             labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -2245,6 +2252,10 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             hidden_states=reformer_outputs.hidden_states,
             attentions=reformer_outputs.attentions,
         )
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        # Overwritten -- attention mask or input ids size doesn't match with actual input size
+        return None
 
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, is_first_iteration=False, **kwargs
@@ -2297,17 +2308,17 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        num_hashes: Optional[int] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        num_hashes: int | None = None,
+        labels: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, MaskedLMOutput]:
+    ) -> tuple | MaskedLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2372,7 +2383,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         >>> loss = round(outputs.loss.item(), 2)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -2429,17 +2440,17 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        num_hashes: Optional[int] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        num_hashes: int | None = None,
+        labels: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, SequenceClassifierOutput]:
+    ) -> tuple | SequenceClassifierOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2489,7 +2500,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         >>> loss = model(**inputs, labels=labels).loss
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.reformer(
             input_ids,
@@ -2578,18 +2589,18 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        num_hashes: Optional[int] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        num_hashes: int | None = None,
+        start_positions: torch.Tensor | None = None,
+        end_positions: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, QuestionAnsweringModelOutput]:
+    ) -> tuple | QuestionAnsweringModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2606,7 +2617,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
 
             For more information, see `num_hashes` in [`ReformerConfig`].
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         reformer_outputs = self.reformer(
             input_ids,

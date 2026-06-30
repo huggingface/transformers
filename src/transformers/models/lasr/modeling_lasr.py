@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_lasr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team and Google LLC. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,21 +20,24 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...generation import CompileConfig, GenerationMixin
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..auto import AutoModel
 from .configuration_lasr import LasrCTCConfig, LasrEncoderConfig
 
 
@@ -88,9 +90,9 @@ class LasrEncoderRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[LasrEncoderConfig] = None,
+        config: LasrEncoderConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
+        seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -140,7 +142,7 @@ def rotate_half(x):
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -148,8 +150,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -184,7 +184,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -194,8 +194,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -235,8 +234,8 @@ class LasrEncoderAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -249,9 +248,9 @@ class LasrEncoderAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -378,8 +377,8 @@ class LasrEncoderBlock(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -449,7 +448,7 @@ class LasrPreTrainedModel(PreTrainedModel):
 
         return input_lengths
 
-    def _get_output_attention_mask(self, attention_mask: torch.Tensor, target_length: Optional[int] = None):
+    def _get_output_attention_mask(self, attention_mask: torch.Tensor, target_length: int | None = None):
         """
         Convert the input attention mask to its subsampled form. `target_length` sets the desired output length, useful
         when the attention mask length differs from `sum(-1).max()` (i.e., when the longest sequence in the batch is padded)
@@ -459,6 +458,26 @@ class LasrPreTrainedModel(PreTrainedModel):
         max_length = target_length if target_length is not None else output_lengths.max()
         attention_mask = torch.arange(max_length, device=attention_mask.device) < output_lengths[:, None]
         return attention_mask
+
+
+@auto_docstring(
+    custom_intro="""
+    Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask since sequence length
+    is not preserved in the model's forward.
+    """
+)
+@dataclass
+class LasrEncoderModelOutput(BaseModelOutputWithPooling):
+    r"""
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
+        sequence length may differ from the input sequence length. Mask values selected in `[0, 1]`:
+
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    """
+
+    attention_mask: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -488,22 +507,27 @@ class LasrEncoder(LasrPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        output_attention_mask: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> LasrEncoderModelOutput:
         r"""
+        output_attention_mask (`bool`, *optional*):
+            Whether to return the output attention mask.
+
         Example:
 
         ```python
         >>> from transformers import AutoProcessor, LasrEncoder
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> encoder = ParakeetEncoder.from_pretrained(model_id)
 
@@ -526,12 +550,14 @@ class LasrEncoder(LasrPreTrainedModel):
         cos = nn.functional.dropout(cos, p=self.dropout_positions, training=self.training)
         sin = nn.functional.dropout(sin, p=self.dropout_positions, training=self.training)
 
+        output_mask = None
         if attention_mask is not None:
-            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            output_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            attention_mask = output_mask
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
@@ -553,13 +579,16 @@ class LasrEncoder(LasrPreTrainedModel):
 
         hidden_states = self.out_norm(hidden_states)
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return LasrEncoderModelOutput(
+            last_hidden_state=hidden_states,
+            attention_mask=output_mask.int() if output_attention_mask and output_mask is not None else None,
+        )
 
 
 @dataclass
-class LasrGenerateOutput(ModelOutput):
+class LasrCTCGenerateOutput(ModelOutput):
     """
-    Outputs of Lasr models.
+    Outputs of Lasr CTC model generation.
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -578,9 +607,9 @@ class LasrGenerateOutput(ModelOutput):
     """
 
     sequences: torch.LongTensor
-    logits: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    logits: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
 
 
 @auto_docstring(
@@ -588,12 +617,12 @@ class LasrGenerateOutput(ModelOutput):
     Lasr Encoder with a Connectionist Temporal Classification (CTC) head.
     """
 )
-class LasrForCTC(LasrPreTrainedModel):
+class LasrForCTC(LasrPreTrainedModel, GenerationMixin):
     config: LasrCTCConfig
 
     def __init__(self, config: LasrCTCConfig):
         super().__init__(config)
-        self.encoder = LasrEncoder(config.encoder_config)
+        self.encoder = AutoModel.from_config(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer
         self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
@@ -604,8 +633,8 @@ class LasrForCTC(LasrPreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutput:
         r"""
@@ -628,6 +657,8 @@ class LasrForCTC(LasrPreTrainedModel):
         >>> print(outputs.loss)
         ```"""
 
+        if labels is not None:
+            kwargs.setdefault("output_attention_mask", True)
         encoder_outputs = self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -639,14 +670,9 @@ class LasrForCTC(LasrPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # retrieve loss input_lengths from attention_mask
-            attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_features, dtype=torch.long)
-            )
-            input_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
+            encoder_lengths = encoder_outputs.attention_mask.sum(-1)
 
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
+            # assuming that padded tokens are filled with pad_token_id when not being attended to
             labels_mask = labels != self.config.pad_token_id
             target_lengths = labels_mask.sum(-1)
             flattened_targets = labels.masked_select(labels_mask)
@@ -658,7 +684,7 @@ class LasrForCTC(LasrPreTrainedModel):
                 loss = nn.functional.ctc_loss(
                     log_probs,
                     flattened_targets,
-                    input_lengths,
+                    encoder_lengths,
                     target_lengths,
                     blank=self.config.pad_token_id,
                     reduction=self.config.ctc_loss_reduction,
@@ -676,10 +702,11 @@ class LasrForCTC(LasrPreTrainedModel):
     def generate(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         return_dict_in_generate: bool = False,
+        compile_config: CompileConfig | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[LasrGenerateOutput, torch.LongTensor]:
+    ) -> LasrCTCGenerateOutput | torch.LongTensor:
         r"""
         Example:
 
@@ -687,7 +714,7 @@ class LasrForCTC(LasrPreTrainedModel):
         >>> from transformers import AutoProcessor, LasrForCTC
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = LasrForCTC.from_pretrained(model_id)
 
@@ -701,8 +728,10 @@ class LasrForCTC(LasrPreTrainedModel):
         >>> print(transcription)
         ```
         """
+        model_forward = self.get_compiled_call(compile_config) if compile_config is not None else self.__call__
+
         kwargs["return_dict"] = True
-        outputs: CausalLMOutput = self.forward(
+        outputs: CausalLMOutput = model_forward(
             input_features=input_features,
             attention_mask=attention_mask,
             **kwargs,
@@ -717,7 +746,7 @@ class LasrForCTC(LasrPreTrainedModel):
             sequences[~attention_mask] = self.config.pad_token_id
 
         if return_dict_in_generate:
-            return LasrGenerateOutput(
+            return LasrCTCGenerateOutput(
                 sequences=sequences,
                 logits=outputs.logits,
                 attentions=outputs.attentions,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_kosmos2_5 import *
     from .image_processing_kosmos2_5 import *
-    from .image_processing_kosmos2_5_fast import *
+    from .image_processing_pil_kosmos2_5 import *
     from .modeling_kosmos2_5 import *
     from .processing_kosmos2_5 import *
 else:

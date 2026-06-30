@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_ovis2 import *
     from .image_processing_ovis2 import *
-    from .image_processing_ovis2_fast import *
+    from .image_processing_pil_ovis2 import *
     from .modeling_ovis2 import *
     from .processing_ovis2 import *
 else:

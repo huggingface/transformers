@@ -18,13 +18,12 @@ import unittest
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    require_read_token,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -35,11 +34,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Mamba2ForCausalLM,
-        Mamba2Model,
-    )
-    from transformers.models.mamba2.modeling_mamba2 import Mamba2Cache, Mamba2Mixer
+    from transformers import DynamicCache, Mamba2ForCausalLM, Mamba2Model
+    from transformers.models.mamba2.modeling_mamba2 import Mamba2Mixer
 
 
 class Mamba2ConfigTester(ConfigTester):
@@ -194,7 +190,6 @@ class Mamba2ModelTester:
             input_ids[:, :-1],
             attention_mask=attention_mask[:, :-1],
             use_cache=True,
-            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
         )
         output_one = outputs.last_hidden_state
 
@@ -204,7 +199,6 @@ class Mamba2ModelTester:
             attention_mask=attention_mask[:, -1:],
             use_cache=True,
             cache_params=outputs.cache_params,
-            cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device),
         )
         output_two = outputs.last_hidden_state
 
@@ -212,17 +206,45 @@ class Mamba2ModelTester:
             torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-3, rtol=1e-3)
         )
 
-    def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args, gradient_checkpointing=False):
-        model = Mamba2Model(config)
+    def create_and_check_mamba2_chunked_prefill(self, config, input_ids, *args, device="cpu"):
+        """
+        Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
+        to check whether multi-token cached input is properly handled.
+
+        Can either be run on GPU (fast path) or CPU (slow path), see `test_mamba2_chunked_prefill_*`
+        """
+        model = Mamba2Model(config=config)
+        model.to(device)
         model.eval()
 
-        if not (is_mamba_2_ssm_available() and is_causal_conv1d_available()):
-            self.parent.skipTest(
-                "This test needs the Mamba2 fast path. Skipping as the necessary packages have not been found."
-            )
-        if torch_device != "cuda":
-            self.parent.skipTest("This test needs the Mamba2 fast path. Skipping as we need a cuda capable device.")
+        input_ids = input_ids[:1].to(device)
+        prefill_len = input_ids.shape[1] // 2 + 1
+        prompt = input_ids[:, :prefill_len]
+        next_token = input_ids[:, prefill_len : prefill_len + 1]
+        distractors = input_ids[:, prefill_len + 1 :]
+        multi_input = torch.cat([next_token, distractors], dim=1)
 
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, cache_params=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache_params=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, cache_params=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache_params=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        self.parent.assertTrue(
+            torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
+            msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
+        )
+
+    def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args, gradient_checkpointing=False):
+        """Slow vs fast path check guarded by require kernels to enable fast path"""
+        model = Mamba2Model(config)
+        model.eval()
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -250,25 +272,34 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Mamba2Cache)
-
+    def _get_conv_state_shape(self, batch_size: int, config):
         intermediate_size = config.expand * config.hidden_size
         conv_shape = (
-            config.num_hidden_layers,
             batch_size,
             intermediate_size + 2 * config.n_groups * config.state_size,
             config.conv_kernel,
         )
-        ssm_shape = (config.num_hidden_layers, batch_size, config.num_heads, config.head_dim, config.state_size)
+        return conv_shape
 
-        self.assertEqual(past_key_values.conv_states.shape, conv_shape)
-        self.assertEqual(past_key_values.ssm_states.shape, ssm_shape)
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.num_heads, config.head_dim, config.state_size)
 
     def test_mamba2_caching(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
 
+    def test_mamba2_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba2_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs, device=torch_device)
+
+    @require_torch_accelerator
+    @require_kernels
     def test_mamba2_slow_vs_fast_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
@@ -276,6 +307,8 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     # This test adjusts n_groups to half the original setting and effectively
     # creates a grouped SSD configuration in the mamba2 layers
     # See https://github.com/huggingface/transformers/pull/37533/
+    @require_torch_accelerator
+    @require_kernels
     def test_mamba2_slow_vs_fast_forward_grouped(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config_and_inputs[0].n_groups //= 2
@@ -294,9 +327,12 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, Mamba2Cache):  # MODIFIED PART START
-                        recursive_check(tuple_object.conv_states, dict_object.conv_states)
-                        recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
+                    if isinstance(tuple_object, DynamicCache):  # MODIFIED PART START
+                        for idx in range(len(tuple_object)):
+                            recursive_check(tuple_object.layers[idx].conv_states, dict_object.layers[idx].conv_states)
+                            recursive_check(
+                                tuple_object.layers[idx].recurrent_states, dict_object.layers[idx].recurrent_states
+                            )
                     elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
@@ -341,17 +377,35 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
+    def test_tied_weight_embeddings(self):
+        """Regression test for https://github.com/huggingface/transformers/issues/43206."""
+        config = self.model_tester.get_config()
+
+        config.tie_word_embeddings = True
+        model = Mamba2ForCausalLM(config)
+
+        self.assertEqual(
+            model.lm_head.weight.data_ptr(),
+            model.backbone.embeddings.weight.data_ptr(),
+        )
+
+        config.tie_word_embeddings = False
+        model = Mamba2ForCausalLM(config)
+
+        self.assertNotEqual(
+            model.lm_head.weight.data_ptr(),
+            model.backbone.embeddings.weight.data_ptr(),
+        )
+
 
 @require_torch
 @slow
-@require_read_token
 class Mamba2IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_id = "mistralai/Mamba-Codestral-7B-v0.1"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
         self.prompt = ("[INST]Write a hello world program in C++.",)
 
-    @require_read_token
     @slow
     @require_torch
     def test_simple_generate(self):
@@ -381,7 +435,6 @@ class Mamba2IntegrationTest(unittest.TestCase):
         ground_truth_sentence = ground_truth_sentences.get_expectation()
         self.assertEqual(output_sentence, ground_truth_sentence)
 
-    @require_read_token
     @slow
     @require_torch_accelerator
     def test_batched_equivalence_with_cache(self):
@@ -412,7 +465,6 @@ class Mamba2IntegrationTest(unittest.TestCase):
             individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
 
-    @require_read_token
     @slow
     @require_torch_accelerator
     def test_batched_equivalence_without_cache(self):

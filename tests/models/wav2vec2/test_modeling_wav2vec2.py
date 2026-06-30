@@ -60,7 +60,6 @@ if is_torch_available():
         Wav2Vec2FeatureExtractor,
         Wav2Vec2ForAudioFrameClassification,
         Wav2Vec2ForCTC,
-        Wav2Vec2ForMaskedLM,
         Wav2Vec2ForPreTraining,
         Wav2Vec2ForSequenceClassification,
         Wav2Vec2ForXVector,
@@ -478,7 +477,7 @@ class Wav2Vec2ModelTester:
 @require_torch
 class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
+        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
         if is_torch_available()
         else ()
     )
@@ -487,7 +486,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             "audio-classification": Wav2Vec2ForSequenceClassification,
             "automatic-speech-recognition": Wav2Vec2ForCTC,
             "feature-extraction": Wav2Vec2Model,
-            "fill-mask": Wav2Vec2ForMaskedLM,
         }
         if is_torch_available()
         else {}
@@ -495,7 +493,7 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -676,7 +674,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         (
             Wav2Vec2ForCTC,
             Wav2Vec2Model,
-            Wav2Vec2ForMaskedLM,
             Wav2Vec2ForSequenceClassification,
             Wav2Vec2ForPreTraining,
             Wav2Vec2ForAudioFrameClassification,
@@ -690,7 +687,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = Wav2Vec2ModelTester(
             self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
         )
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -745,7 +742,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -757,7 +754,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Descript and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -29,8 +27,8 @@ from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class DacOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`):
@@ -45,15 +43,15 @@ class DacOutput(ModelOutput):
         Projected latents (continuous representation of input before quantization).
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    audio_values: Optional[torch.FloatTensor] = None
-    quantized_representation: Optional[torch.FloatTensor] = None
-    audio_codes: Optional[torch.LongTensor] = None
-    projected_latents: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    audio_values: torch.FloatTensor | None = None
+    quantized_representation: torch.FloatTensor | None = None
+    audio_codes: torch.LongTensor | None = None
+    projected_latents: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class DacEncoderOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`):
@@ -66,14 +64,14 @@ class DacEncoderOutput(ModelOutput):
         Projected latents (continuous representation of input before quantization).
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    quantized_representation: Optional[torch.FloatTensor] = None
-    audio_codes: Optional[torch.FloatTensor] = None
-    projected_latents: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    quantized_representation: torch.FloatTensor | None = None
+    audio_codes: torch.FloatTensor | None = None
+    projected_latents: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 # Copied from transformers.models.encodec.modeling_encodec.EncodecDecoderOutput with Encodec->Dac, segment_length->input_length
 class DacDecoderOutput(ModelOutput):
     r"""
@@ -81,7 +79,7 @@ class DacDecoderOutput(ModelOutput):
         Decoded audio values, obtained using the decoder part of Dac.
     """
 
-    audio_values: Optional[torch.FloatTensor] = None
+    audio_values: torch.FloatTensor | None = None
 
 
 class Snake1d(nn.Module):
@@ -280,7 +278,7 @@ class DacResidualVectorQuantizer(nn.Module):
         self.quantizers = nn.ModuleList([DacVectorQuantize(config) for i in range(config.n_codebooks)])
         self.quantizer_dropout = quantizer_dropout
 
-    def forward(self, hidden_state, n_quantizers: Optional[int] = None):
+    def forward(self, hidden_state, n_quantizers: int | None = None):
         """
         Quantizes the input tensor using a fixed set of codebooks and returns corresponding codebook vectors.
         Args:
@@ -328,7 +326,7 @@ class DacResidualVectorQuantizer(nn.Module):
             )
 
             # Create mask to apply quantizer dropout
-            mask = torch.full((hidden_state.shape[0],), fill_value=i, device=hidden_state.device) < n_quantizers
+            mask = torch.full((hidden_state.shape[0],), i, device=hidden_state.device, dtype=torch.long) < n_quantizers
             quantized_representation = quantized_representation + quantized_representation_i * mask[:, None, None]
             residual = residual - quantized_representation_i
 
@@ -392,11 +390,13 @@ class DacResidualVectorQuantizer(nn.Module):
         n_codebooks = np.where(dims <= latents.shape[1])[0].max(axis=0, keepdims=True)[0]
         for i in range(n_codebooks):
             hidden_dim_j, hidden_dim_k = dims[i], dims[i + 1]
-            quantized_latents_i, codes_i = self.quantizers[i].decode_latents(latents[:, hidden_dim_j:hidden_dim_k, :])
+            latent_chunk = latents[:, hidden_dim_j:hidden_dim_k, :]
+            quantized_latents_i, codes_i = self.quantizers[i].decode_latents(latent_chunk)
             quantized_latents.append(quantized_latents_i)
             codes.append(codes_i)
 
-            quantized_representation_i = self.quantizers[i].out_proj(quantized_latents_i)
+            quantized_with_ste = latent_chunk + (quantized_latents_i - latent_chunk)
+            quantized_representation_i = self.quantizers[i].out_proj(quantized_with_ste)
             quantized_representation = quantized_representation + quantized_representation_i
 
         return quantized_representation, torch.cat(quantized_latents, dim=1)
@@ -445,18 +445,17 @@ class DacEncoder(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
-        strides = config.downsampling_ratios
         # Create first convolution
         self.conv1 = nn.Conv1d(1, config.encoder_hidden_size, kernel_size=7, padding=3)
 
         self.block = []
         # Create EncoderBlocks that double channels as they downsample by `stride`
-        for stride_index, stride in enumerate(strides):
+        for stride_index, stride in enumerate(config.downsampling_ratios):
             stride_index = stride_index + 1
             self.block += [DacEncoderBlock(config, stride=stride, stride_index=stride_index)]
 
         self.block = nn.ModuleList(self.block)
-        d_model = config.encoder_hidden_size * 2**stride_index
+        d_model = config.encoder_hidden_size * 2 ** len(config.downsampling_ratios)
         self.snake1 = Snake1d(d_model)
         self.conv2 = nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1)
 
@@ -581,9 +580,9 @@ class DacModel(DacPreTrainedModel):
     def encode(
         self,
         input_values: torch.Tensor,
-        n_quantizers: Optional[int] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, DacEncoderOutput]:
+        n_quantizers: int | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | DacEncoderOutput:
         r"""
         input_values (`torch.Tensor of shape `(batch_size, 1, time_steps)`):
             Input audio data to encode,
@@ -607,10 +606,10 @@ class DacModel(DacPreTrainedModel):
     @auto_docstring
     def decode(
         self,
-        quantized_representation: Optional[torch.Tensor] = None,
-        audio_codes: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, DacDecoderOutput]:
+        quantized_representation: torch.Tensor | None = None,
+        audio_codes: torch.Tensor | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | DacDecoderOutput:
         r"""
         quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
             Quantized continuous representation of input.
@@ -641,9 +640,9 @@ class DacModel(DacPreTrainedModel):
     def forward(
         self,
         input_values: torch.Tensor,
-        n_quantizers: Optional[int] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, DacOutput]:
+        n_quantizers: int | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | DacOutput:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, time_steps)`):
             Audio data to encode.

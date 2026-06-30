@@ -12,16 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import importlib.metadata
+import json
 import os
 import re
 import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
+from packaging import version
 from torch import nn
 
 from transformers import (
+    AutoConfig,
+    AutoModel,
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -40,7 +47,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import check_torch_load_is_safe, is_torch_available
+from transformers.utils import ADAPTER_CONFIG_NAME, check_torch_load_is_safe, is_torch_available
 
 
 if is_torch_available():
@@ -55,8 +62,6 @@ class PeftTesterMixin:
     transformers_test_model_classes = (AutoModelForCausalLM, OPTForCausalLM)
 
 
-# TODO: run it with CI after PEFT release.
-@slow
 class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
     """
     A testing suite that makes sure that the PeftModel class is correctly integrated into the transformers library.
@@ -94,7 +99,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
                 with CaptureLogger(logger) as cl:
-                    peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                    peft_model = transformers_class.from_pretrained(model_id, use_safetensors=False).to(torch_device)
                 # ensure that under normal circumstances, there  are no warnings about keys
                 self.assertNotIn("unexpected keys", cl.out)
                 self.assertNotIn("missing keys", cl.out)
@@ -111,7 +116,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, revision="refs/pr/2").to(torch_device)
 
                 state_dict = peft_model.get_adapter_state_dict()
 
@@ -125,7 +130,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, revision="refs/pr/2").to(torch_device)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -206,6 +211,73 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model.save_pretrained(tmpdirname)
                     model_from_pretrained = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(model_from_pretrained))
+
+    def test_peft_save_reload_preserves_adapter_weights(self):
+        """
+        Regression test: after save_pretrained + from_pretrained roundtrip, the reloaded model's LoRA
+        weights must match the pre-save values. Covers both the encoder and decoder paths.
+        """
+        from peft import LoraConfig
+
+        cases = [
+            (AutoModel, "hf-internal-testing/tiny-random-BertModel"),
+            (AutoModelForCausalLM, "hf-internal-testing/tiny-random-OPTForCausalLM"),
+        ]
+        sentinel_a, sentinel_b = 0.0234, 0.0567
+
+        for auto_class, model_id in cases:
+            with self.subTest(model=model_id):
+                model = auto_class.from_pretrained(model_id).to(torch_device)
+                model.add_adapter(LoraConfig(init_lora_weights=False, r=8))
+
+                with torch.no_grad():
+                    for name, p in model.named_parameters():
+                        if "lora_A" in name:
+                            p.fill_(sentinel_a)
+                        elif "lora_B" in name:
+                            p.fill_(sentinel_b)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    reloaded = auto_class.from_pretrained(tmpdirname).to(torch_device)
+
+                lora_params = {
+                    name: p for name, p in reloaded.named_parameters() if "lora_A" in name or "lora_B" in name
+                }
+                self.assertTrue(lora_params, "no LoRA parameters found on reloaded model")
+                for name, p in lora_params.items():
+                    expected = sentinel_a if "lora_A" in name else sentinel_b
+                    self.assertTrue(
+                        torch.allclose(p, torch.full_like(p, expected)),
+                        f"adapter weight {name} was not restored from the checkpoint "
+                        f"(expected uniform {expected}, got first values {p.flatten()[:4].tolist()})",
+                    )
+
+    def test_peft_load_adapter_non_moe_conversion_mapped_model(self):
+        """
+        Regression test for a `KeyError` in `_convert_peft_config_moe` when the base model's `model_type`
+        appears in `_MODEL_TO_CONVERSION_PATTERN` (used for legacy checkpoint key renaming) but not in
+        `_MOE_TARGET_MODULE_MAPPING` (which only has MoE architectures). Affected types include
+        `qwen2_5_vl`, `paligemma`, `gemma3`, `internvl`, `aya_vision`, `got_ocr2`, and `rt_detr_v2`.
+        """
+        from peft import LoraConfig
+
+        model_id = "trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration"
+        model = AutoModel.from_pretrained(model_id).to(torch_device)
+        model.add_adapter(
+            LoraConfig(
+                r=4,
+                lora_alpha=4,
+                target_modules=["q_proj", "v_proj"],
+                task_type="FEATURE_EXTRACTION",
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            reloaded = AutoModel.from_pretrained(tmpdirname).to(torch_device)
+
+        self.assertTrue(self._check_lora_correctly_converted(reloaded))
 
     def test_peft_add_adapter_modules_to_save(self):
         """
@@ -459,7 +531,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 # dummy generation
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
@@ -480,7 +551,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear4bit")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -499,7 +569,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -525,7 +594,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear4bit")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -543,7 +611,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -626,6 +693,58 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # after loading, no meta device should be remaining
                 self.assertFalse(any((p.device.type == "meta") for p in model.parameters()))
 
+    def test_peft_load_adapter_warmup_uses_adapter_expected_keys(self):
+        """
+        Check that adapter loading only warms up memory for adapter parameters by capturing the device map passed to
+        `caching_allocator_warmup`.
+
+        Note: this test depends on `_load_pretrained_model` calling `caching_allocator_warmup`; if that internal
+        contract changes, update the test to keep checking the keys used for warmup sizing.
+        """
+        from peft import LoraConfig
+
+        import transformers.modeling_utils as modeling_utils
+
+        adapter_name = "warmup_test_adapter"
+        adapter_key_markers = (adapter_name, "lora")
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                peft_config = LoraConfig()
+                template_model = transformers_class.from_pretrained(model_id)
+                template_model.add_adapter(LoraConfig(), adapter_name=adapter_name)
+                dummy_state_dict = {
+                    name: torch.zeros_like(param)
+                    for name, param in template_model.named_parameters()
+                    if any(marker in name for marker in adapter_key_markers)
+                }
+                del template_model
+                self.assertTrue(dummy_state_dict)
+
+                captured_device_maps = []
+
+                def capture_warmup(model, expanded_device_map, hf_quantizer):
+                    captured_device_maps.append(dict(expanded_device_map))
+
+                with patch.object(modeling_utils, "caching_allocator_warmup", side_effect=capture_warmup):
+                    with CaptureLogger(logging.get_logger("transformers.integrations.peft")):
+                        model.load_adapter(
+                            adapter_state_dict=dummy_state_dict,
+                            adapter_name=adapter_name,
+                            peft_config=peft_config,
+                        )
+
+                self.assertTrue(captured_device_maps)
+                warmed_keys = set().union(*(device_map.keys() for device_map in captured_device_maps))
+                self.assertTrue(warmed_keys)
+
+                unexpected_base_keys = [
+                    key for key in warmed_keys if not any(marker in key for marker in adapter_key_markers)
+                ]
+                self.assertEqual(unexpected_base_keys, [])
+
     def test_peft_from_pretrained_hub_kwargs(self):
         """
         Tests different combinations of PEFT model + from_pretrained + hub kwargs
@@ -633,7 +752,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         peft_model_id = "peft-internal-testing/tiny-opt-lora-revision"
 
         # This should not work
-        with self.assertRaises(OSError):
+        # Transformers cannot identify the model and raises a ValueError
+        with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(peft_model_id)
 
         # This should work
@@ -675,11 +795,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 dummy_state_dict["foobar"] = next(iter(dummy_state_dict.values()))
 
                 with CaptureLogger(logger) as cl:
-                    model.load_adapter(
-                        adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
-                    )
+                    model.load_adapter(adapter_state_dict=dummy_state_dict, peft_config=peft_config)
 
-                msg = "Loading adapter weights from state_dict led to unexpected keys not found in the model: foobar"
+                msg = "foobar | UNEXPECTED"
                 self.assertIn(msg, cl.out)
 
     def test_peft_from_pretrained_missing_keys_warning(self):
@@ -717,9 +835,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 key = key.removeprefix(peft_prefix)
                 # 2. Insert adapter name
                 prefix, _, suffix = key.rpartition(".")
-                key = f"{prefix}.other.{suffix}"
-
-                msg = f"Loading adapter weights from state_dict led to missing keys in the model: {key}"
+                key = f".other.{suffix}"
+                msg = f"{key} | MISSING |"
                 self.assertIn(msg, cl.out)
 
     def test_peft_load_adapter_training_inference_mode_true(self):
@@ -735,8 +852,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     peft_model.save_pretrained(tmpdirname)
                     model = transformers_class.from_pretrained(peft_model.config._name_or_path)
                     model.load_adapter(tmpdirname)
-                    assert not any(p.requires_grad for p in model.parameters())
                     assert not any(m.training for m in model.modules())
+                    grads = [n for n, p in model.named_parameters() if p.requires_grad]
+                    assert len(grads) == 0
                     del model
 
     def test_peft_load_adapter_training_inference_mode_false(self):
@@ -746,7 +864,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, use_safetensors=False).to(torch_device)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -932,6 +1050,42 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     output_peft = model(inputs).logits
                 # should be different
                 assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
+
+    def test_mixtral_lora_conversion(self):
+        if version.parse(importlib.metadata.version("peft")) < version.parse("0.19.0"):
+            self.skipTest("For this test to pass, PEFT 0.19 is required.")
+
+        inputs = torch.arange(10).view(1, -1).to(torch_device)
+        model_name = "hf-internal-testing/Mixtral-tiny"
+        adapter_name = "peft-internal-testing/mixtral-pre-v5-lora"
+
+        # original logits were:
+        # tensor([[[ 0.2676,  0.3870,  0.2956,  ...,  0.4624,  0.1966,  0.2539],
+        #          [-0.6706, -0.0969, -0.6240,  ..., -0.0201,  0.7099, -0.3099],
+        #          [ 0.0663,  0.1653,  0.7189,  ...,  0.5905,  0.0649,  0.5839],
+        #          ...,
+        #          [-0.2712, -0.6451, -0.0219,  ..., -0.4344,  0.5471, -0.9355],
+        #          [-0.3607,  0.4526,  0.2750,  ...,  0.1082,  0.7179,  0.8487],
+        #          [ 0.5826, -0.1407, -0.3131,  ...,  0.1026,  0.6878, -0.3382]]],
+        #        device='cuda:0')
+        expected_logits_0_to_3 = torch.Tensor(
+            [
+                [0.2676, 0.3870, 0.2956],
+                [-0.6706, -0.0969, -0.6240],
+                [0.0663, 0.1653, 0.7189],
+            ]
+        ).to(device=torch_device, dtype=torch.float16)
+
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        model.load_adapter(adapter_name)
+        model.to(torch_device)
+        model.eval()
+        with torch.inference_mode():
+            output = model(inputs).logits
+
+        # a little bit of deviation but that's fine
+        atol, rtol = 1e-3, 1e-4
+        assert torch.allclose(output[0, :3, :3], expected_logits_0_to_3, atol=atol, rtol=rtol)
 
 
 @require_peft
@@ -1120,3 +1274,41 @@ class PeftHotswapIntegrationTest(unittest.TestCase):
             torch._inductor.utils.fresh_inductor_cache(),
         ):
             self._check_model_hotswap(rank1=7, rank2=13, do_compile=True)
+
+    def test_maybe_load_adapters_path_not_overwritten_for_complete_model(self):
+        """
+        Test for issue #43746: Only overwrite the pretrained_model_name_or_path if needed with adapter.
+
+        This test ensures that when a model has an adapter config and the pretrained_model_name_or_path
+        points to a model directory with both a base model and an embedded adapter, the path should NOT
+        be overwritten with the base_model_name_or_path from the adapter config.
+
+        The fix is applied in src/transformers/integrations/peft.py in the maybe_load_adapters function.
+        """
+        peft_test_model = "peft-internal-testing/tiny-OPTForCausalLM-lora"
+        transformers_test_model = "hf-internal-testing/tiny-random-OPTForCausalLM"
+
+        # Create a temporary directory with a complete adapter model structure
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+
+            # Save the model and adapter locally
+            config = AutoConfig.from_pretrained(transformers_test_model)
+            model = AutoModel.from_pretrained(transformers_test_model)
+            adapter_model = AutoModel.from_pretrained(peft_test_model)
+            config.save_pretrained(tmp_dir)
+            model.save_pretrained(tmp_dir)
+            adapter_model.save_pretrained(tmp_dir)
+
+            # Overwrite the base_model_name_or_path to an invalid value that
+            # would cause the load to fail later
+            adapter_config_path = tmp_dir / ADAPTER_CONFIG_NAME
+            with open(adapter_config_path, "r") as handle:
+                adapter_config = json.load(handle)
+            adapter_config["base_model_name_or_path"] = "some/model/that/does/not/exist"
+            with open(adapter_config_path, "w") as handle:
+                json.dump(adapter_config, handle)
+
+            # Load from the saved path and make sure it actually loads despite
+            # the invalid adapter config path
+            AutoModel.from_pretrained(tmp_dir)

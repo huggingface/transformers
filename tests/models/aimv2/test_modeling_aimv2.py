@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -185,7 +184,7 @@ class Aimv2VisionModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Aimv2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Aimv2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Aimv2VisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -312,7 +311,7 @@ class Aimv2TextModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Aimv2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Aimv2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Aimv2TextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,14 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
-import numpy as np
-
-from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, make_flat_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import BatchFeature, MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
 
 
 class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
@@ -36,16 +30,28 @@ class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class AyaVisionProcessor(ProcessorMixin):
-    r"""
-    Constructs a AyaVision processor which wraps a [`AutoImageProcessor`] and
-    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
-    tokenizer functionalities. See the [`~AyaVisionProcessor.__call__`] and [`~AyaVisionProcessor.decode`] for more information.
-    Args:
-        image_processor ([`AutoImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
-            The tokenizer is a required input.
+    valid_processor_kwargs = AyaVisionProcessorKwargs
+
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        patch_size: int = 28,
+        img_size: int = 364,
+        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
+        downsample_factor: int = 1,
+        start_of_img_token="<|START_OF_IMG|>",
+        end_of_img_token="<|END_OF_IMG|>",
+        img_patch_token="<|IMG_PATCH|>",
+        img_line_break_token="<|IMG_LINE_BREAK|>",
+        tile_token="TILE",
+        tile_global_token="TILE_GLOBAL",
+        chat_template=None,
+        **kwargs,
+    ):
+        r"""
         patch_size (`int`, *optional*, defaults to 28):
             The size of image patches for tokenization.
         img_size (`int`, *optional*, defaults to 364):
@@ -66,27 +72,7 @@ class AyaVisionProcessor(ProcessorMixin):
             The token to be used to represent an image patch in the text.
         tile_global_token (`str`, *optional*, defaults to `"TILE_GLOBAL"`):
             The token to be used to represent the cover image in the text.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        patch_size: int = 28,
-        img_size: int = 364,
-        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
-        downsample_factor: int = 1,
-        start_of_img_token="<|START_OF_IMG|>",
-        end_of_img_token="<|END_OF_IMG|>",
-        img_patch_token="<|IMG_PATCH|>",
-        img_line_break_token="<|IMG_LINE_BREAK|>",
-        tile_token="TILE",
-        tile_global_token="TILE_GLOBAL",
-        chat_template=None,
-        **kwargs,
-    ):
+        """
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.image_token = image_token
@@ -100,21 +86,21 @@ class AyaVisionProcessor(ProcessorMixin):
         self.tile_token = tile_token
         self.tile_global_token = tile_global_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.img_patch_token)
-        self.image_ids = tokenizer.convert_tokens_to_ids(
-            [img_patch_token, tile_token, tile_global_token, start_of_img_token, end_of_img_token]
+
+    @property
+    def image_token_ids(self) -> list[int]:
+        return self.tokenizer.convert_tokens_to_ids(
+            [
+                self.img_patch_token,
+                self.tile_token,
+                self.tile_global_token,
+                self.start_of_img_token,
+                self.end_of_img_token,
+            ]
         )
 
-    def _prompt_split_image(self, num_patches):
-        """
-        Create a structured string representation of image tokens
-
-        Args:
-           num_patches: Number of patches in the image
-
-        Returns:
-            String with appropriate image tokens
-        """
-
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        num_patches = image_inputs["num_patches"][image_idx]
         img_patches_per_tile = (self.img_size // self.patch_size) ** 2
         img_string = f"{self.start_of_img_token}"
         if num_patches > 1:
@@ -125,86 +111,23 @@ class AyaVisionProcessor(ProcessorMixin):
         img_string += f"{self.end_of_img_token}"
         return img_string
 
-    def __call__(
-        self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        **kwargs: Unpack[AyaVisionProcessorKwargs],
-    ) -> BatchFeature:
+    def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
         """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text.
-        To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
-        GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+        Checks that number of special tokens in text and processed text is same. The count can be different
+        if tokenized text was truncated, leading to issues in model code.
         """
-        if text is None:
-            raise ValueError("You have to specify text.")
+        # Aya vision uses `img_patch_token` instead of `image_token`
+        token_str = self.img_patch_token
+        token_id = self.image_token_id
+        if token_str is not None and token_id is not None:
+            ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
+            text_count = [sample.count(token_str) for sample in text]
 
-        output_kwargs = self._merge_kwargs(
-            AyaVisionProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if not isinstance(text, (list, tuple)):
-            text = [text]
-
-        # Process images
-        image_inputs = {}
-        if images is not None:
-            images = self.image_processor.fetch_images(images)
-            images = make_flat_list_of_images(images)
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            num_patches = image_inputs.pop("num_patches")
-            image_index = 0
-            processed_text = []
-            for prompt in text:
-                new_prompt = prompt
-                while "<image>" in new_prompt:
-                    # Replace the image placeholder with structured image tokens
-                    image_tokens = self._prompt_split_image(num_patches[image_index])
-                    new_prompt = new_prompt.replace("<image>", image_tokens, 1)
-                    image_index += 1
-                processed_text.append(new_prompt)
-
-            if image_index != len(images):
-                raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
-
-            text = processed_text
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-
-        if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+            if ids_count != text_count:
+                raise ValueError(
+                    f"Mismatch in `image` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
+                    "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
+                )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
@@ -237,6 +160,10 @@ class AyaVisionProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["num_patches"]
 
 
 __all__ = ["AyaVisionProcessor"]

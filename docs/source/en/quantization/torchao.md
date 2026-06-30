@@ -72,7 +72,7 @@ pip install torchao --index-url https://download.pytorch.org/whl/cu126 # options
 </hfoption>
 </hfoptions>
 
-If your torchao version is below 0.10.0, you need to upgrade it, please refer to the [deprecation notice](#deprecation-notice) for more details.
+torchao >= 0.15.0 is required. The string-based API (e.g., `TorchAoConfig("int4_weight_only")`) has been removed — use `AOBaseConfig` objects instead (see examples below).
 
 ## Quantization examples
 
@@ -85,6 +85,9 @@ You can manually choose the quantization types and settings or automatically sel
 Create a [`TorchAoConfig`] and specify the quantization type and `group_size` of the weights to quantize (for int8 weight only and int4 weight only). Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method.
 
 We'll show examples for recommended quantization methods based on hardwares, e.g. A100 GPU, H100 GPU, CPU.
+
+> [!WARNING]
+> torchao automatically compiles the model during the first inference if we set `cache_implementation="static"`. The model is recompiled every time batch size or `max_new_tokens` is modified. Pass `disable_compile=True` in [`~GenerationMixin.generate`] to quantize without compilation.
 
 ### H100 GPU
 
@@ -111,7 +114,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -140,7 +143,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -207,7 +210,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -243,7 +246,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -275,7 +278,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -310,7 +313,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -325,11 +328,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 from torchao.quantization import Int4WeightOnlyConfig
-from torchao.dtypes import Int4XPULayout
-from torchao.quantization.quant_primitives import ZeroPointDomain
 
 
-quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4XPULayout(), zero_point_domain=ZeroPointDomain.INT, int4_packing_format="plain_int32")
+quant_config = Int4WeightOnlyConfig(group_size=128, int4_packing_format="plain_int32")
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
 # Load and quantize the model
@@ -342,7 +343,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device).to(quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -376,7 +377,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt")
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -387,16 +388,14 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="int4-weight-only">
 
 > [!TIP]
-> Run the quantized model on a CPU by changing `device_map` to `"cpu"` and `layout` to `Int4CPULayout()`.
+> CPU int4 weight-only quantization requires torchao version 0.15.0 or later.
 
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Int4WeightOnlyConfig
-from torchao.dtypes import Int4CPULayout
+from torchao.prototype.quantization.int4 import PrototypeInt4WeightOnlyConfig
 
-quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4CPULayout(), int4_packing_format="opaque")
-quantization_config = TorchAoConfig(quant_type=quant_config)
+quantization_config = TorchAoConfig(PrototypeInt4WeightOnlyConfig(group_size=128, int4_choose_qparams_algorithm="tinygemm"))
 
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -408,7 +407,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt")
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device).to(quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -443,7 +442,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # Manual Testing
 prompt = "Hey, are you conscious? Can you talk to me?"
-inputs = tokenizer(prompt, return_tensors="pt").to(quantized_model.device.type)
+inputs = tokenizer(prompt, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 generated_ids = quantized_model.generate(**inputs, max_new_tokens=128)
 output_text = tokenizer.batch_decode(
     generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
@@ -482,7 +481,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # Manual Testing
 prompt = "Hey, are you conscious? Can you talk to me?"
-inputs = tokenizer(prompt, return_tensors="pt").to("cpu")
+inputs = tokenizer(prompt, return_tensors="pt").to("cpu", quantized_model.dtype)
 generated_ids = quantized_model.generate(**inputs, max_new_tokens=128, cache_implementation="static")
 output_text = tokenizer.batch_decode(
     generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
@@ -577,7 +576,7 @@ print("Prompt:", prompt)
 inputs = tokenizer(
     prompt,
     return_tensors="pt",
-).to("cuda")
+).to(quantized_model.device, quantized_model.dtype)
 # setting temperature to 0 to make sure result deterministic
 generated_ids = quantized_model.generate(**inputs, max_new_tokens=128, temperature=0)
 
@@ -602,39 +601,6 @@ output_text = tokenizer.batch_decode(
 print("Response:", output_text[0][len(prompt) :])
 
 assert(correct_output_text == output_text)
-```
-
-### Autoquant
-
-If you want to automatically choose a quantization type for quantizable layers (`nn.Linear`) you can use the [autoquant](https://pytorch.org/ao/stable/generated/torchao.quantization.autoquant.html#torchao.quantization.autoquant) API.
-
-The `autoquant` API automatically chooses a quantization type by micro-benchmarking on input type and shape and compiling a single linear layer.
-
-Note: autoquant is for GPU only right now.
-
-Create a [`TorchAoConfig`] and set to `"autoquant"`. Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method. Finally, call `finalize_autoquant` on the quantized model to finalize the quantization and log the input shapes.
-
-```py
-import torch
-from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-
-quantization_config = TorchAoConfig("autoquant", min_sqnr=None)
-quantized_model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.1-8B-Instruct",
-    dtype="auto",
-    device_map="auto",
-    quantization_config=quantization_config
-)
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
-input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device.type)
-
-# auto-compile the quantized model with `cache_implementation="static"` to get speed up
-output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
-# explicitly call `finalize_autoquant` (may be refactored and removed in the future)
-quantized_model.finalize_autoquant()
-print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 ## Serialization
@@ -738,42 +704,12 @@ reloaded_model = AutoModelForCausalLM.from_pretrained(
 )
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt")
+input_ids = tokenizer(input_text, return_tensors="pt").to(reloaded_model.device.type)
 
 output = reloaded_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```
-
-## ⚠️ Deprecation Notice
-
-> Starting with version 0.10.0, the string-based API for quantization configuration (e.g., `TorchAoConfig("int4_weight_only", group_size=128)`) is **deprecated** and will be removed in a future release.
->
-> Please use the new `AOBaseConfig`-based approach instead:
->
-> ```python
-> # Old way (deprecated)
-> quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
->
-> # New way (recommended)
-> from torchao.quantization import Int4WeightOnlyConfig
-> quant_config = Int4WeightOnlyConfig(group_size=128)
-> quantization_config = TorchAoConfig(quant_type=quant_config)
-> ```
->
-> The new API offers greater flexibility, better type safety, and access to the full range of features available in torchao.
->
-> [Migration Guide](#migration-guide)
->
-> Here's how to migrate from common string identifiers to their `AOBaseConfig` equivalents:
->
-> | Old String API | New `AOBaseConfig` API |
-> |----------------|------------------------|
-> | `"int4_weight_only"` | `Int4WeightOnlyConfig()` |
-> | `"int8_weight_only"` | `Int8WeightOnlyConfig()` |
-> | `"int8_dynamic_activation_int8_weight"` | `Int8DynamicActivationInt8WeightConfig()` |
->
-> All configuration objects accept parameters for customization (e.g., `group_size`, `scheme`, `layout`).
 
 ## Resources
 

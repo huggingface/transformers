@@ -327,9 +327,9 @@ class ReformerModelTester:
 
     def create_and_check_reformer_feed_backward_chunking(self, config, input_ids, input_mask, choice_labels):
         # disable dropout
-        config.hidden_dropout_prob = 0
-        config.local_attention_probs_dropout_prob = 0
-        config.lsh_attention_probs_dropout_prob = 0
+        config.hidden_dropout_prob = 0.0
+        config.local_attention_probs_dropout_prob = 0.0
+        config.lsh_attention_probs_dropout_prob = 0.0
         config.lsh_num_chunks_after = 1
         config.is_decoder = False
 
@@ -604,10 +604,11 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     )
 
     test_sequence_classification_problem_types = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = ReformerModelTester(self, text_seq_length=16)
-        self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=32)
 
     @slow
     def test_model_from_pretrained(self):
@@ -711,6 +712,12 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     def test_left_padding_compatibility(self):
         pass
 
+    @unittest.skip(
+        reason="The model doesn't support arbitrary position ids"
+    )  # and it's not used enough to be worth fixing :)
+    def test_generate_with_and_without_position_ids(self):
+        pass
+
     def prepare_config_and_inputs_for_generate(self, *args, **kwargs):
         # override because otherwise we hit max possible seq length for model (4*8=32)
         # decreasing the seq_length in tester causes errors for "training_tests", those need exactly max seq length
@@ -735,7 +742,6 @@ class ReformerLSHAttnModelTest(
         {
             "feature-extraction": ReformerModel,
             "fill-mask": ReformerForMaskedLM,
-            "question-answering": ReformerForQuestionAnswering,
             "text-classification": ReformerForSequenceClassification,
             "text-generation": ReformerModelWithLMHead,
             "zero-shot": ReformerForSequenceClassification,
@@ -745,6 +751,8 @@ class ReformerLSHAttnModelTest(
     )
 
     # TODO: Fix the failed tests
+    test_torch_exportable = False
+
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
@@ -807,7 +815,7 @@ class ReformerLSHAttnModelTest(
             hash_seed=0,
             num_labels=2,
         )
-        self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=32)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
@@ -910,6 +918,12 @@ class ReformerLSHAttnModelTest(
 
     @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
+        pass
+
+    @unittest.skip(
+        reason="The model doesn't support arbitrary position ids"
+    )  # and it's not used enough to be worth fixing :)
+    def test_generate_with_and_without_position_ids(self):
         pass
 
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team and Google DeepMind.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,12 @@
 import inspect
 import math
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
 
-from ..pytorch_utils import isin_mps_friendly
+from .._typing import WhisperGenerationConfigLike
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
 
@@ -49,6 +48,10 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 
 class LogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
+
+    # Whether the logit processor is supported by continuous batching.
+    # True if it is, False if it is not, None if it is not yet known.
+    supports_continuous_batching: bool | None = None
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -134,6 +137,8 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching: bool = False
+
     def __init__(self, min_length: int, eos_token_id: int | list[int] | torch.Tensor, device: str = "cpu"):
         if not isinstance(min_length, int) or min_length < 0:
             raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
@@ -149,7 +154,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
+        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
         scores_processed = scores.clone()
         if input_ids.shape[-1] < self.min_length:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
@@ -193,6 +198,8 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching = False
+
     def __init__(
         self,
         prompt_length_to_skip: int,
@@ -221,7 +228,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         scores_processed = scores.clone()
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
+        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
         if new_tokens_length < self.min_new_tokens:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
 
@@ -275,6 +282,8 @@ class TemperatureLogitsWarper(LogitsProcessor):
     'Hugging Face Company is a company that has been around for over 20 years']
     ```
     """
+
+    supports_continuous_batching = True
 
     def __init__(self, temperature: float):
         if not isinstance(temperature, float) or not (temperature > 0):
@@ -344,6 +353,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching = False
+
     def __init__(self, penalty: float, prompt_ignore_length: int | None = None):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
@@ -357,10 +368,6 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         self.prompt_ignore_length = prompt_ignore_length
         self.logits_indices = None
         self.cu_seq_lens_q = None
-
-    def set_continuous_batching_context(self, logits_indices: torch.Tensor, cu_seq_lens_q: torch.Tensor):
-        self.logits_indices = logits_indices
-        self.cu_seq_lens_q = cu_seq_lens_q
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -443,6 +450,8 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching: bool = False
+
     def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
@@ -500,6 +509,8 @@ class TopPLogitsWarper(LogitsProcessor):
     A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
     ```
     """
+
+    supports_continuous_batching = True
 
     def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         top_p = float(top_p)
@@ -565,12 +576,15 @@ class TopKLogitsWarper(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching = True
+
     def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         if not isinstance(top_k, int) or top_k <= 0:
             raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
 
         self.top_k = max(top_k, min_tokens_to_keep)
         self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep  # used for CB processor initialization
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -1265,7 +1279,8 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, sequence_bias: list[list[list[int] | float]]):
-        self.sequence_bias = sequence_bias
+        # After _convert_list_arguments_into_dict(), becomes dict[tuple[int, ...], float]
+        self.sequence_bias: Any = sequence_bias
         self._validate_arguments()
         self._convert_list_arguments_into_dict()
 
@@ -1540,133 +1555,6 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
                 mask[batch_id * self._num_beams + beam_id, prefix_allowed_tokens] = 0
 
         scores_processed = scores + mask
-        return scores_processed
-
-
-class HammingDiversityLogitsProcessor(LogitsProcessor):
-    r"""
-    [`LogitsProcessor`] that enforces diverse beam search.
-    Note that this logits processor is only effective for [`PreTrainedModel.group_beam_search`]. See [Diverse Beam
-    Search: Decoding Diverse Solutions from Neural Sequence Models](https://huggingface.co/papers/1610.02424) for more
-    details.
-    Traditional beam search often generates very similar sequences across different beams.
-    `HammingDiversityLogitsProcessor` addresses this by penalizing beams that generate tokens already chosen by other
-    beams in the same time step.
-    Args:
-        diversity_penalty (`float`):
-            This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
-            particular time. A higher `diversity_penalty` will enforce greater diversity among the beams. Adjusting
-            this value can help strike a balance between diversity and natural likelihood.
-        num_beams (`int`):
-            Number of beams for beam search. 1 means no beam search.
-        num_beam_groups (`int`):
-            Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
-            [this paper](https://huggingface.co/papers/1610.02424) for more details.
-    Examples:
-    ```python
-    >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-    >>> import torch
-    >>> # Initialize the model and tokenizer
-    >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
-    >>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
-    >>> # A long text about the solar system
-    >>> text = (
-    ...     "The Solar System is a gravitationally bound system comprising the Sun and the objects that orbit it, "
-    ...     "either directly or indirectly. Of the objects that orbit the Sun directly, the largest are the eight "
-    ...     "planets, with the remainder being smaller objects, such as the five dwarf planets and small Solar System "
-    ...     "bodies. The Solar System formed 4.6 billion years ago from the gravitational collapse of a giant "
-    ...     "interstellar molecular cloud."
-    ... )
-    >>> inputs = tokenizer("summarize: " + text, return_tensors="pt")
-    >>> # Generate diverse summary
-    >>> outputs_diverse = model.generate(
-    ...     **inputs,
-    ...     num_beam_groups=2,
-    ...     diversity_penalty=10.0,
-    ...     max_length=100,
-    ...     num_beams=4,
-    ...     num_return_sequences=2,
-    ... )
-    >>> summaries_diverse = tokenizer.batch_decode(outputs_diverse, skip_special_tokens=True)
-    >>> # Generate non-diverse summary
-    >>> outputs_non_diverse = model.generate(
-    ...     **inputs,
-    ...     max_length=100,
-    ...     num_beams=4,
-    ...     num_return_sequences=2,
-    ... )
-    >>> summary_non_diverse = tokenizer.batch_decode(outputs_non_diverse, skip_special_tokens=True)
-    >>> # With `diversity_penalty`, the resulting beams are much more diverse
-    >>> print(summary_non_diverse)
-    ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
-    'the Solar System formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.']
-    >>> print(summaries_diverse)
-    ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
-    'the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets. the rest of the objects are smaller objects, such as the five dwarf planets and small solar system bodies.']
-    ```
-    """
-
-    def __init__(self, diversity_penalty: float, num_beams: int, num_beam_groups: int):
-        logger.warning_once(
-            "`HammingDiversityLogitsProcessor` is deprecated and will be removed in v4.62.0, as constrained beam search has been moved to the Hub: https://hf.co/transformers-community/constrained-beam-search."
-        )
-        if not isinstance(diversity_penalty, float) or (not diversity_penalty > 0.0):
-            raise ValueError("`diversity_penalty` should be a float strictly larger than 0.")
-        self._diversity_penalty = diversity_penalty
-        if not isinstance(num_beams, int) or num_beams < 2:
-            raise ValueError("`num_beams` should be an integer strictly larger than 1.")
-        self._num_beams = num_beams
-        if not isinstance(num_beam_groups, int) or num_beam_groups < 2:
-            raise ValueError("`num_beam_groups` should be an integer strictly larger than 1.")
-        if num_beam_groups > num_beams:
-            raise ValueError("`beam_groups` has to be smaller or equal to `num_beams`.")
-        self._num_sub_beams = num_beams // num_beam_groups
-
-    def __call__(
-        self,
-        input_ids: torch.LongTensor,
-        scores: torch.FloatTensor,
-        current_tokens: torch.LongTensor,
-        beam_group_idx: int,
-    ) -> torch.FloatTensor:
-        r"""
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-            scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
-                Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
-                beam search or log softmax for each vocabulary token when using beam search
-            current_tokens (`torch.LongTensor` of shape `(batch_size)`):
-                Indices of input sequence tokens in the vocabulary, corresponding to the tokens selected by the other
-                beam groups in the current generation step.
-            beam_group_idx (`int`):
-                The index of the beam group currently being processed.
-        Return:
-            `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`:
-                The processed prediction scores.
-        """
-        # hamming diversity: penalise using same token in current group which was used in previous groups at
-        # the same time step
-        batch_size = current_tokens.shape[0] // self._num_beams
-        group_start_idx = beam_group_idx * self._num_sub_beams
-        group_end_idx = min(group_start_idx + self._num_sub_beams, self._num_beams)
-        group_size = group_end_idx - group_start_idx
-        vocab_size = scores.shape[-1]
-
-        if group_start_idx == 0:
-            return scores
-
-        scores_processed = scores.clone()
-        for batch_idx in range(batch_size):
-            # predicted tokens of last time step of previous groups
-            previous_group_tokens = current_tokens[
-                batch_idx * self._num_beams : batch_idx * self._num_beams + group_start_idx
-            ]
-            token_frequency = torch.bincount(previous_group_tokens, minlength=vocab_size).to(scores.device)
-            scores_processed[batch_idx * group_size : (batch_idx + 1) * group_size] -= (
-                self._diversity_penalty * token_frequency
-            )
-
         return scores_processed
 
 
@@ -1975,7 +1863,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.begin_suppress_tokens)
+        suppress_token_mask = torch.isin(vocab_tensor, self.begin_suppress_tokens.to(scores.device))
         scores_processed = scores
         if input_ids.shape[-1] == self.begin_index:
             scores_processed = torch.where(suppress_token_mask, -float("inf"), scores)
@@ -2018,7 +1906,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens.to(scores.device))
+        suppress_token_mask = torch.isin(vocab_tensor, self.suppress_tokens.to(scores.device))
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
         return scores
 
@@ -2087,8 +1975,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         begin_index: int,
         _detect_timestamp_from_logprob: bool | None = None,
     ):  # support for the kwargs
-        self.no_timestamps_token_id = generate_config.no_timestamps_token_id
-        self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+        whisper_generate_config = cast(WhisperGenerationConfigLike, generate_config)
+        self.no_timestamps_token_id = whisper_generate_config.no_timestamps_token_id
+        self.timestamp_begin = whisper_generate_config.no_timestamps_token_id + 1
         self.eos_token_id = generate_config.eos_token_id or generate_config.bos_token_id
 
         # this variable is mostly just used for testing
@@ -2180,17 +2069,14 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self._no_speech_prob = [0.0]
         self.is_scores_logprobs = scores_is_logprobs
 
-        # overwritten dynamically
-        self.model = None
-        self.inputs = None
+        # overwritten dynamically via set_model()
+        self.model: Any = None
+        self.inputs: dict[str, Any] | None = None
 
     def set_model(self, model):
         self.model = model
 
     def set_inputs(self, inputs):
-        # build `cache_position` on the fly
-        seq_length = inputs["input_ids"].shape[1]
-        inputs = self.model._get_initial_cache_position(seq_length, self.model.device, inputs)
         # prepare other inputs
         self.inputs = {**self.model.prepare_inputs_for_generation(**inputs), **inputs}
         self.inputs["input_features"] = self.inputs.pop("inputs")
@@ -2824,8 +2710,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         if self.debug_mode:
             scores = torch.ones_like(scores)
 
-        # Currently indices is just a arange to compute watermarking on the dense logits.
-        all_indices = torch.stack([torch.arange(vocab_size, device=self.device) for _ in range(batch_size)])
+        # Build continuation indices once and broadcast across batch instead of creating one arange per row.
+        all_indices = torch.arange(vocab_size, device=self.device).unsqueeze(0).expand(batch_size, -1)
 
         if self.state is None:
             # Initialize watermarking state if it does not exist.

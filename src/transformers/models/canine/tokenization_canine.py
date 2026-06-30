@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright Google AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -66,6 +65,8 @@ class CanineTokenizer(PreTrainedTokenizer):
         model_max_length (`int`, *optional*, defaults to 2048):
                 The maximum sentence length the model accepts.
     """
+
+    model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
 
     def __init__(
         self,

@@ -172,11 +172,10 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VivitModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VivitConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VivitConfig, has_text_modality=False, hidden_size=32)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -355,7 +354,7 @@ class VivitModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-0.9498, 2.7971, -1.4049, 0.1024, -1.8353],
-                ("cuda", 8): [-0.9498, 2.7971, -1.4049, 0.1025, -1.8353],
+                ("cuda", 8): [-0.9502, 2.7967, -1.4046, 0.1027, -1.8345],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

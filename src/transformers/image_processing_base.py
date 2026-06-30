@@ -15,10 +15,10 @@
 import copy
 import json
 import os
-from typing import Any, Optional, TypeVar, Union
+from typing import Any, TypeVar
 
 import numpy as np
-from huggingface_hub import create_repo, is_offline_mode
+from huggingface_hub import is_offline_mode
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
@@ -31,7 +31,7 @@ from .utils import (
     logging,
     safe_load_json_file,
 )
-from .utils.hub import cached_file
+from .utils.hub import cached_file, hf_api
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
@@ -84,11 +84,11 @@ class ImageProcessingMixin(PushToHubMixin):
     @classmethod
     def from_pretrained(
         cls: type[ImageProcessorType],
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ) -> ImageProcessorType:
@@ -104,7 +104,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 - a path to a *directory* containing a image processor file saved using the
                   [`~image_processing_utils.ImageProcessingMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved image processor JSON *file*, e.g.,
+                - a path to a saved image processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model image processor should be cached if the
@@ -180,7 +180,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
         return cls.from_dict(image_processor_dict, **kwargs)
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
         Save an image processor object to the directory `save_directory`, so that it can be re-loaded using the
         [`~image_processing_utils.ImageProcessingMixin.from_pretrained`] class method.
@@ -203,7 +203,7 @@ class ImageProcessingMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -230,7 +230,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
     @classmethod
     def get_image_processor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
@@ -369,10 +369,18 @@ class ImageProcessingMixin(PushToHubMixin):
         image_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
         image_processor = cls(**image_processor_dict)
 
-        # Remove kwargs that are used to initialize the image processor attributes
-        for key in list(kwargs):
-            if hasattr(image_processor, key):
-                kwargs.pop(key)
+        # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
+        extra_keys = []
+        for key in reversed(list(kwargs.keys())):
+            if hasattr(image_processor, key) and key not in cls.valid_kwargs.__annotations__:
+                setattr(image_processor, key, kwargs.pop(key, None))
+                extra_keys.append(key)
+        if extra_keys:
+            logger.warning_once(
+                f"Image processor {cls.__name__}: kwargs {extra_keys} were applied for backward compatibility. "
+                f"To avoid this warning, add them to valid_kwargs: create a custom TypedDict extending "
+                f"ImagesKwargs with these keys and set it as the `valid_kwargs` class attribute."
+            )
 
         logger.info(f"Image processor {image_processor}")
         if return_unused_kwargs:
@@ -393,7 +401,7 @@ class ImageProcessingMixin(PushToHubMixin):
         return output
 
     @classmethod
-    def from_json_file(cls, json_file: Union[str, os.PathLike]):
+    def from_json_file(cls, json_file: str | os.PathLike):
         """
         Instantiates a image processor of type [`~image_processing_utils.ImageProcessingMixin`] from the path to a JSON
         file of parameters.
@@ -426,7 +434,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 
@@ -462,14 +470,14 @@ class ImageProcessingMixin(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    def fetch_images(self, image_url_or_urls: Union[str, list[str], list[list[str]]]):
+    def fetch_images(self, image_url_or_urls: str | list[str] | list[list[str]]):
         """
         Convert a single or a list of urls into the corresponding `PIL.Image` objects.
 
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        if isinstance(image_url_or_urls, list):
+        if isinstance(image_url_or_urls, (list, tuple)):
             return [self.fetch_images(x) for x in image_url_or_urls]
         elif isinstance(image_url_or_urls, str):
             return load_image(image_url_or_urls)
