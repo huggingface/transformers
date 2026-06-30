@@ -18,63 +18,93 @@ limitations under the License.
 -->
 
 
-# Kimi2_6
+*This model was contributed to Hugging Face Transformers on 2026-06-30.*
+
+# Kimi_K25
 
 ## Overview
 
-The Kimi2_6 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+Kimi K2.5 is an open-source, native multimodal agentic model that advances practical capabilities in long-horizon coding, coding-driven design, proactive autonomous execution, and swarm-based task orchestration. The model was proposed in [Kimi K2.5: Advancing Open-Source Coding
+](https://www.kimi.com/en/blog/kimi-k2-6) and improved in [Improved Baselines with Visual Instruction Tuning](https://huggingface.co/papers/2310.03744).
 
-The abstract from the paper is the following:
+Kimi K2.5 achieves significant improvements on complex, end-to-end coding tasks, generalizing robustly across programming languages (Rust, Go, Python) and domains spanning front-end, DevOps, and performance optimization. The model is capable of transforming simple prompts and visual inputs into production-ready interfaces and lightweight full-stack workflows, generating structured layouts, interactive elements, and rich animations with deliberate aesthetic precision.
 
-<INSERT PAPER ABSTRACT HERE>
+## Usage Tips
 
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
+The offical checkpoints can be found [here](https://huggingface.co/moonshotai/Kimi-K2.6).
 
 ## Usage examples
 
-<INSERT SOME NICE EXAMPLES HERE>
+```python
+import os
+import torch
+from transformers import AutoProcessor, AutoTokenizer, AutoModelForImageTextToText
+from transformers.distributed.configuration_utils import DistributedConfig
 
-## Kimi26Config
+distributed_config = DistributedConfig(enable_expert_parallel=True)
+local_rank = int(os.environ["LOCAL_RANK"])
+device = torch.device(f"cuda:{local_rank}")
+torch.cuda.set_device(device)
+torch.distributed.init_process_group("nccl", device_id=device)
 
-[[autodoc]] Kimi26Config
+processor = AutoProcessor.from_pretrained('moonshotai/Kimi-K2.6', trust_remote_code=False)
+model = AutoModelForImageTextToText.from_pretrained(
+    'moonshotai/Kimi-K2.6',
+    trust_remote_code=False,
+    distributed_config=distributed_config,
+)
 
-## Kimi26TextConfig
 
-[[autodoc]] Kimi26TextConfig
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+            {"type": "text", "text": "What is shown in this image?"},
+        ],
+    }
+]
 
-## Kimi26VisionConfig
+inputs = processor.apply_chat_template(
+    messages,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_tensors="pt",
+    return_dict=True,
+).to(device=model.device, dtype=torch.bfloat16)
 
-[[autodoc]] Kimi26VisionConfig
+generated_ids = model.generate(**inputs, max_new_tokens=64)
+generated_text = processor.batch_decode(generated_ids[:, inputs["input_ids"].shape[-1]:], skip_special_tokens=True)[0]
+print(generated_text)
 
-## Kimi26ForConditionalGeneration
+```
+## Kimi_K25Config
 
-[[autodoc]] Kimi26ForConditionalGeneration
+[[autodoc]] Kimi_K25Config
 
-## Kimi26Model
+## Kimi_K25VisionConfig
 
-[[autodoc]] Kimi26Model
+[[autodoc]] Kimi_K25VisionConfig
+
+## Kimi_K25ForConditionalGeneration
+
+[[autodoc]] Kimi_K25ForConditionalGeneration
+
+## Kimi_K25Model
+
+[[autodoc]] Kimi_K25Model
     - forward
 
-## Kimi26PreTrainedModel
+## Kimi_K25PreTrainedModel
 
-[[autodoc]] Kimi26PreTrainedModel
+[[autodoc]] Kimi_K25PreTrainedModel
     - forward
 
-## Kimi26TextModel
+## Kimi_K25ImageProcessor
 
-[[autodoc]] Kimi26TextModel
-    - forward
+[[autodoc]] Kimi_K25ImageProcessor
 
-## Kimi26ImageProcessor
+## Kimi_K25Processor
 
-[[autodoc]] Kimi26ImageProcessor
-
-## Kimi26Processor
-
-[[autodoc]] Kimi26Processor
+[[autodoc]] Kimi_K25Processor

@@ -103,15 +103,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         return True
 
     def get_weight_conversions(self):
-        # FIXME: can't always just add conversions blindly! Should check that loaded scheme's `target`
-        # matches param names/classes (i.e. `is_moe_proj_in_config_scheme`) and that model already has simple
-        # MoE conversion in the mapping (i.e. `has_moe_conversion(self)`). Then we remove simple MoE and replace it
-        # with `DecompressExperts` below
-
         # Only models that have already been quantized can be loaded atm, so we can
         # assume that if `hasattr(self, hf_quantizer)` and `has_moe_conversion(self)` and `is_moe_proj_in_config_scheme`
         # then it needs special dequantization for MoE projections
-        # NOTE: MoE conversion should happen AFTER decompression! Already hardcoded in convesion
+        # NOTE: MoE conversion should happen AFTER decompression! Already hardcoded in conversion
 
         dequant_conversions = [
             WeightConverter(

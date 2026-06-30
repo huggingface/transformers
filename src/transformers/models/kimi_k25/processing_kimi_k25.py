@@ -167,8 +167,14 @@ class Kimi_K25Processor(ProcessorMixin):
         )
 
     @property
-    def model_input_names(self):
-        return super().model_input_names()
+    def model_input_names(self) -> list[str]:
+        model_input_names = []
+        for attribute_name in self.get_attributes():
+            attribute = getattr(self, attribute_name, None)
+            if attribute is not None:
+                attr_input_names = getattr(attribute, "model_input_names")
+                model_input_names.extend(attr_input_names)
+        return [name for name in model_input_names if name not in self.unused_input_names]
 
     @property
     def unused_input_names(self):
