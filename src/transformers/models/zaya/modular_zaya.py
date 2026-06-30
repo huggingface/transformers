@@ -26,7 +26,7 @@ from torch.nn import init
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -585,26 +585,22 @@ class ZayaModel(LagunaModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        if attention_mask is not None and attention_mask.ndim != 2:
-            raise ValueError(
-                "ZAYA CCA projection requires a 2D `attention_mask` to mask padding tokens before convolution."
-            )
-
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        mask_creation_functions = {
-            "hybrid": lambda: create_causal_mask(**mask_kwargs),
-            "hybrid_sliding": lambda: create_sliding_window_causal_mask(**mask_kwargs),
-        }
-        causal_mask_mapping = {
-            layer_type: mask_creation_functions[layer_type]() for layer_type in set(self.config.layer_types)
-        }
-        cca_mask = self._update_cca_mask(attention_mask, past_key_values)
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            mask_creation_functions = {
+                "hybrid": lambda: create_causal_mask(**mask_kwargs),
+                "hybrid_sliding": lambda: create_sliding_window_causal_mask(**mask_kwargs),
+            }
+            causal_mask_mapping = {
+                layer_type: mask_creation_functions[layer_type]() for layer_type in set(self.config.layer_types)
+            }
+            causal_mask_mapping["conv"] = create_recurrent_attention_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
 
@@ -627,7 +623,10 @@ class ZayaModel(LagunaModel):
             hidden_states, prev_router_hidden_states = decoder_layer(
                 hidden_states,
                 prev_router_hidden_states,
-                attention_mask={"causal": causal_mask_mapping[layer_type], "conv": cca_mask},
+                attention_mask={
+                    "causal": causal_mask_mapping[layer_type],
+                    "conv": causal_mask_mapping.get("conv"),
+                },
                 past_key_values=past_key_values,
                 position_embeddings=position_embeddings[layer_type],
                 **kwargs,
@@ -639,17 +638,6 @@ class ZayaModel(LagunaModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
-
-    def _update_cca_mask(self, attention_mask, past_key_values):
-        """
-        No need to zero padding states when cached convolution states are already available or all inputs are valid.
-        """
-        cca_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state()) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
-            cca_mask = None
-        return cca_mask
 
 
 @auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
@@ -663,6 +651,28 @@ class ZayaForCausalLM(AfmoeForCausalLM, ZayaPreTrainedModel):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        # ZAYA decoder layers are hybrid: attention consumes the causal/sliding mask, while CCA uses a 2D padding
+        # mask to zero tokens before the convolutional projection.
+        text_config = config.get_text_config()
+        mask_kwargs = {
+            "config": text_config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        mask_creation_functions = {
+            "hybrid": lambda: create_causal_mask(**mask_kwargs),
+            "hybrid_sliding": lambda: create_sliding_window_causal_mask(**mask_kwargs),
+        }
+        mask_mapping = {
+            layer_type: mask_creation_functions[layer_type]() for layer_type in set(text_config.layer_types)
+        }
+        mask_mapping["conv"] = create_recurrent_attention_mask(**mask_kwargs)
+        return mask_mapping
 
 
 __all__ = [
