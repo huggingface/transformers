@@ -42,113 +42,147 @@ from transformers.testing_utils import (
 
 
 # ──────────────────────────── skip lists ────────────────────────────
+#
+# A single mapping ``EXPORT_SKIPS[scope][model_class_name] = reason`` drives every skip.
+# ``scope`` is a dotted path that narrows from broad (``"all"`` — every backend, every variant)
+# to specific (``"onnx.generate"``, ``"onnx.dynamic"``, ``"openvino"``, …). At test time
+# ``_should_skip`` walks the scopes that match the current ``(backend, generate, dynamic)``
+# triple and returns ``True`` as soon as the model is found in any of them. Reasons live next
+# to the model name so the "why" travels with the entry.
+#
+# Adding a new skip: pick the most specific scope that applies and add a ``"Name": "reason"``
+# entry. Add a new scope key if the existing ones don't fit.
 
-# Model classes skipped for all export backends.
-EXPORT_SKIP_MODEL_CLASSES = {
-    # VideoMAE computes loss even when return_loss=False, hitting a data-dependent guard in mse_loss.
-    # TODO: fix VideoMAE to skip loss computation when labels are not provided.
-    "VideoMAEForPreTraining",
-    # OpenAIPrivacyFilter overrides `get_correct_experts_implementation` to default to `eager` because
-    # the model is sensitive to accumulation order. The eager experts forward has a Python loop over
-    # `expert_hit.nonzero()` which torch.export can't trace (data-dependent shape). To export, the
-    # user has to opt in to `set_experts_implementation("batched_mm")` and accept the accuracy
-    # trade-off; we don't force that switch from the exporter side.
-    "OpenAIPrivacyFilterModel",
-    "OpenAIPrivacyFilterForTokenClassification",
+
+EXPORT_SKIPS: dict[str, dict[str, str]] = {
+    # Every backend, every variant.
+    "all": {
+        "VideoMAEForPreTraining": (
+            "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
+            "`mse_loss`. TODO: skip loss when labels aren't provided."
+        ),
+        "OpenAIPrivacyFilterModel": (
+            "`get_correct_experts_implementation` defaults to `eager` because the model is "
+            "sensitive to accumulation order. Eager experts forward iterates over "
+            "`expert_hit.nonzero()` (data-dependent shape). Users can opt into "
+            "`set_experts_implementation('batched_mm')` to export."
+        ),
+        "OpenAIPrivacyFilterForTokenClassification": (
+            "Same root cause as `OpenAIPrivacyFilterModel` — eager experts implementation."
+        ),
+    },
+    # Every backend, generate path only.
+    "generate": {
+        "Blip2ForConditionalGeneration": (
+            "`generate()` delegates to the inner language model without calling top-level "
+            "`forward()`, so `decompose_prefill_decode` can't capture inputs. "
+            "TODO: route generate through top-level `forward()`."
+        ),
+        "InstructBlipForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
+        "InstructBlipVideoForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
+        "Kosmos2ForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
+        "RecurrentGemmaForCausalLM": (
+            "Stores recurrent/conv state as module attributes (not a `Cache` object); "
+            "`torch.export` can't carry that state between calls. "
+            "TODO: refactor to a cache-based SSM pattern (like Mamba/Mamba2)."
+        ),
+        "MoshiForConditionalGeneration": (
+            "`generate()` creates `blank_user_audio_codes` outside the traced forward and "
+            "passes it as a kwarg; the resulting ONNX input has mismatched rank (scalar vs 3D). "
+            "TODO: make `blank_user_audio_codes` part of the model state."
+        ),
+        "UdopForConditionalGeneration": (
+            "Exported decoder output is missing `attention_mask` vs eager — encoder-decoder "
+            "cross-attention mask doesn't flow through the generate decomposition correctly."
+        ),
+        "VoxtralRealtimeForConditionalGeneration": (
+            "Exported prefill drops `past_key_values.*.{keys,values,_sliding_window_tensor}` "
+            "tensors that eager returns. Plain forward exports work. "
+            "TODO: align generate-decomposition path with the realtime KV-cache shape."
+        ),
+        "Gemma3nForConditionalGeneration": (
+            "KV-shared layers (`num_kv_shared_layers`) reuse cache entries from earlier layers; "
+            "exported prefill returns only `logits` while eager surfaces the populated KV cache. "
+            "Same shape as Voxtral. TODO: align the generate-decomposition path."
+        ),
+    },
+    # ONNX, every variant.
+    "onnx": {
+        "CHMv2ForDepthEstimation": (
+            "`run_decompositions` retraces through aot_autograd which emits a `detach_(alias(...))` "
+            "pair the functional-graph assertion rejects (independent of any source `.detach()` — "
+            "verified). Torch export works. TODO: file upstream `torch.export` issue."
+        ),
+    },
+    # ONNX, generate path only.
+    "onnx.generate": {
+        "ReformerModelWithLMHead": (
+            "Chunked local attention exports a Constant idx that exceeds the cached-keys axis "
+            "length under static decode (prefill+1 token, seq=17 vs chunked axis of 16). The same "
+            "computation stays symbolic under dynamic so ORT can't pre-validate it. The other "
+            "three Reformer-local-attn ONNX variants pass."
+        ),
+    },
+    # ONNX, dynamic-shape only.
+    "onnx.dynamic": {
+        "GroundingDinoModel": (
+            "Same `detach_(alias(...))` retrace bug as CHMv2, but only triggered under dynamic "
+            "shapes — `aot_autograd`'s decomposition pipeline emits the detach itself (verified "
+            "by guarding all three modeling-side detaches with `if self.training`). Static works."
+        ),
+        "GroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
+        "MMGroundingDinoModel": "Same as `GroundingDinoModel`.",
+        "MMGroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
+        "Sam2VisionModel": (
+            "`torch.export` of the Hiera vision backbone under dynamic shapes takes ~7.5 min "
+            "even after simplifying `window_partition`/`window_unpartition` (12 attention blocks "
+            "× 3 Q-pool stage transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
+        ),
+        "Sam2Model": "Same Hiera-backbone dynamic-shape budget overrun as `Sam2VisionModel`.",
+    },
+    # OpenVINO, every variant (currently empty — populated as we sweep).
+    "openvino": {},
+    # OpenVINO, dynamic-shape only.
+    "openvino.dynamic": {},
 }
 
 
-# Model classes skipped for ONNX export (both static and dynamic). Other backends work.
-ONNX_SKIP_MODEL_CLASSES = {
-    # `run_decompositions` retraces through aot_autograd, which produces a `detach_(alias(...))`
-    # pair that the functional-graph assertion rejects (verified independent of any source
-    # `.detach()` in the model). Torch export works in both static and dynamic.
-    # TODO: file an upstream torch.export issue.
-    "CHMv2ForDepthEstimation",
-}
+# ──────────────────────────── ONNX optimization toggles ────────────────────────────
+# Not "skips" — these select whether `onnxscript` optimisation runs for a given model.
+# Same scope-keyed shape as ``EXPORT_SKIPS`` for symmetry.
 
 
-# Model classes skipped for ONNX dynamic-shape export only (static export works).
-ONNX_DYNAMIC_SKIP_MODEL_CLASSES = {
-    # Under dynamic shapes, run_decompositions retraces through aot_autograd which emits a
-    # `detach_(alias(...))` pair from its own decomposition pipeline (independent of any
-    # source `.detach()` calls in the model — verified by guarding all three modeling-side
-    # detaches with `if self.training` and observing the same failure). Same shape as the
-    # CHMv2 failure above. Static export works. TODO: file an upstream torch.export issue.
-    "GroundingDinoModel",
-    "GroundingDinoForObjectDetection",
-    "MMGroundingDinoModel",
-    "MMGroundingDinoForObjectDetection",
-}
-
-
-# Model classes where ONNX optimization must be disabled due to upstream onnxscript bugs.
-ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES = {
-    # LayoutLMv2 uses detectron2's FPN backbone — the ONNX optimizer drops initializers
-    # that are still referenced by nodes, producing an invalid graph for ORT.
-    "LayoutLMv2Model",
-    "LayoutLMv2ForSequenceClassification",
-    "LayoutLMv2ForTokenClassification",
-    "LayoutLMv2ForQuestionAnswering",
-    # Onnxscript optimizer pass exceeds 1000s on the YOLOS detection graph (many small Concat /
-    # Slice nodes — verified: `optimize=False` exports in 2s, `optimize=True` runs past 6 minutes
-    # before being killed). TODO: revisit when onnxscript's optimizer gets faster on dense
-    # small-node graphs.
-    "YolosModel",
-    "YolosForObjectDetection",
-    # Pixio (ViT-based) and SegGpt — same shape as YOLOS: `optimize=True` takes ~100–290s for a
-    # graph that `optimize=False` exports in ~2s. Verified with a static/dynamic × opt-on/off
-    # bench; ORT load times are unaffected. TODO: revisit when onnxscript's optimizer improves.
-    "PixioModel",
-    "SegGptModel",
-    "SegGptForImageSegmentation",
-}
-
-
-# Model classes where ONNX optimization must be disabled only for dynamic-shape export.
-# Static export benefits from optimization; dynamic still trips onnxscript's `SplitToSequence`
-# constant folding ('NoneType' object has no attribute 'ndim'). The modeling rewrites in this
-# PR (vectorized prophetnet `ngram_attention_bias`, etc.) cleared the static path.
-ONNX_DYNAMIC_DISABLE_OPTIMIZE_MODEL_CLASSES = {
-    "ProphetNetModel",
-    "ProphetNetForConditionalGeneration",
-    "ProphetNetDecoder",
-    "ProphetNetForCausalLM",
-    "ZoeDepthForDepthEstimation",
-}
-
-
-# Model classes skipped for generate export tests only.
-EXPORT_GENERATE_SKIP_MODEL_CLASSES = {
-    # These multi-modal models override generate() and delegate to an inner language model without ever calling
-    # the top-level forward(), so decompose_prefill_decode can't capture prefill/decode inputs.
-    # TODO: refactor these models to call the top-level forward() instead of using internal submodules
-    "Blip2ForConditionalGeneration",
-    "InstructBlipForConditionalGeneration",
-    "InstructBlipVideoForConditionalGeneration",
-    "Kosmos2ForConditionalGeneration",
-    # RecurrentGemma stores recurrent/conv state as module attributes instead of using a Cache object,
-    # which is incompatible with torch.export (state captured at trace time can't flow between calls).
-    # TODO: refactor RecurrentGemma to use a cache-based SSM pattern (like Mamba/Mamba2).
-    "RecurrentGemmaForCausalLM",
-    # Moshi creates blank_user_audio_codes inside generate() and passes it as a forward kwarg.
-    # The resulting ONNX input has mismatched rank (scalar vs 3D) because the tensor is created
-    # outside the traced forward graph. TODO: refactor to make blank_user_audio_codes part of the model state.
-    "MoshiForConditionalGeneration",
-    # UdopForConditionalGeneration's exported decoder output is missing 'attention_mask' vs eager,
-    # due to a mismatch in how the encoder cross-attention mask flows through the generate decomposition.
-    # TODO: investigate UDOP's encoder-decoder output structure in the context of decomposed export.
-    "UdopForConditionalGeneration",
-    # VoxtralRealtime's exported prefill drops the past_key_values tensors that eager returns
-    # (`Missing keys: past_key_values.layers.*.{keys,values,_sliding_window_tensor}`), so the
-    # output-shape check in test_torch_export_generate fails. Plain forward exports work.
-    # TODO: align the generate-decomposition path with the realtime KV-cache shape.
-    "VoxtralRealtimeForConditionalGeneration",
-    # Gemma3n's KV-shared layers (`num_kv_shared_layers`) reuse cache entries from earlier layers;
-    # the exported prefill returns only `logits` while eager surfaces the populated KV cache
-    # (`past_key_values.layers.*.{keys,values,_sliding_window_tensor}`). Same shape as Voxtral.
-    # TODO: align the generate-decomposition path with the KV-shared layer cache layout.
-    "Gemma3nForConditionalGeneration",
+ONNX_DISABLE_OPTIMIZE: dict[str, dict[str, str]] = {
+    # Disable for every variant.
+    "all": {
+        "LayoutLMv2Model": (
+            "Detectron2 FPN backbone — onnxscript optimizer drops initializers still referenced "
+            "by nodes, producing an invalid graph for ORT."
+        ),
+        "LayoutLMv2ForSequenceClassification": "Same as `LayoutLMv2Model`.",
+        "LayoutLMv2ForTokenClassification": "Same as `LayoutLMv2Model`.",
+        "LayoutLMv2ForQuestionAnswering": "Same as `LayoutLMv2Model`.",
+        "YolosModel": (
+            "Optimizer takes >6 min on the YOLOS detection graph (many small Concat/Slice nodes). "
+            "`optimize=False` exports in 2s. TODO: revisit when onnxscript's optimizer improves."
+        ),
+        "YolosForObjectDetection": "Same as `YolosModel`.",
+        "PixioModel": "Same dense-small-node optimizer slowdown as YOLOS (~100–290s).",
+        "SegGptModel": "Same dense-small-node optimizer slowdown as YOLOS.",
+        "SegGptForImageSegmentation": "Same dense-small-node optimizer slowdown as YOLOS.",
+    },
+    # Disable for dynamic-shape only — static benefits from optimisation.
+    "dynamic": {
+        "ProphetNetModel": (
+            "Onnxscript's `SplitToSequence` constant-folding trips `'NoneType' object has no "
+            "attribute 'ndim'` under dynamic shapes. Static works after the vectorized "
+            "`ngram_attention_bias` rewrite."
+        ),
+        "ProphetNetForConditionalGeneration": "Same `SplitToSequence` issue as `ProphetNetModel`.",
+        "ProphetNetDecoder": "Same `SplitToSequence` issue as `ProphetNetModel`.",
+        "ProphetNetForCausalLM": "Same `SplitToSequence` issue as `ProphetNetModel`.",
+        "ZoeDepthForDepthEstimation": "Same `SplitToSequence` issue as `ProphetNetModel`.",
+    },
 }
 
 
@@ -187,10 +221,22 @@ def _clean_inputs_for_export(inputs_dict, config):
 
 def _run_onnx_program(onnx_program, inputs) -> dict:
     """Run an ONNX program and return outputs as a `{name: tensor}` dict."""
+    set_seed(1234)
     onnx_inputs = get_leaf_tensors(inputs)
     onnx_outputs = onnx_program(**onnx_inputs)
     onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
     return dict(zip(onnx_names, onnx_outputs))
+
+
+def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
+    """Return whether onnxscript optimisation should run for this model under this shape mode.
+
+    Mirrors ``_should_skip``'s scope walk on ``ONNX_DISABLE_OPTIMIZE`` — ``"all"`` always
+    applies; ``"dynamic"`` adds the dynamic-only entries.
+    """
+    name = model_class.__name__
+    scopes = ["all"] + (["dynamic"] if dynamic else [])
+    return not any(name in ONNX_DISABLE_OPTIMIZE.get(scope, {}) for scope in scopes)
 
 
 # ──────────────────────────── mixins ────────────────────────────
@@ -226,17 +272,24 @@ class ExportTesterMixin:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
     def _should_skip(self, model_class, generate=False, dynamic=False, backend=None):
-        """Return True if this model class should be skipped for export tests."""
+        """Return True if this model class should be skipped for export tests.
+
+        Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
+        ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
+        for generate tests, ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` for
+        the more-specific intersections.
+        """
         name = model_class.__name__
-        if name in EXPORT_SKIP_MODEL_CLASSES:
-            return True
-        if generate and name in EXPORT_GENERATE_SKIP_MODEL_CLASSES:
-            return True
-        if backend == "onnx" and name in ONNX_SKIP_MODEL_CLASSES:
-            return True
-        if backend == "onnx" and dynamic and name in ONNX_DYNAMIC_SKIP_MODEL_CLASSES:
-            return True
-        return False
+        scopes = ["all"]
+        if generate:
+            scopes.append("generate")
+        if backend:
+            scopes.append(backend)
+            if generate:
+                scopes.append(f"{backend}.generate")
+            if dynamic:
+                scopes.append(f"{backend}.dynamic")
+        return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
     def _prepare_export_model_and_inputs(self, model_class):
         """Create model and forward inputs ready for export.
@@ -335,9 +388,7 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="onnx"):
                 continue
 
-            optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES and not (
-                dynamic and model_class.__name__ in ONNX_DYNAMIC_DISABLE_OPTIMIZE_MODEL_CLASSES
-            )
+            optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
@@ -347,7 +398,6 @@ class ExportTesterMixin:
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     onnx_program = exporter.export(model, inputs, config=config)
-                    set_seed(1234)
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
@@ -458,9 +508,7 @@ class ExportGenerateTesterMixin:
             if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="onnx"):
                 continue
 
-            optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES and not (
-                dynamic and model_class.__name__ in ONNX_DYNAMIC_DISABLE_OPTIMIZE_MODEL_CLASSES
-            )
+            optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 

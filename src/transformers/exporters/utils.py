@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 # Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,6 +41,7 @@ import copy
 import enum
 import functools
 import inspect
+import sys
 from collections.abc import MutableMapping
 from typing import Any
 
@@ -312,7 +313,7 @@ def cast_leaf_tensors(obj: Any, dtype: torch.dtype, device: torch.device) -> Any
     return _map_leaf_tensors(obj, _cast)
 
 
-def module_device(model: torch.nn.Module) -> torch.device | None:
+def module_device(model: PreTrainedModel | torch.nn.Module) -> torch.device | None:
     """`.device` for any `nn.Module`. `PreTrainedModel` exposes it directly via `ModuleUtilsMixin`;
     for plain submodules (e.g. a `Linear` or `MultiModalProjector` from a decomposed multimodal model)
     we fall back to the first parameter. Returns `None` if the module has no parameters at all."""
@@ -324,7 +325,7 @@ def module_device(model: torch.nn.Module) -> torch.device | None:
         return None
 
 
-def module_dtype(model: torch.nn.Module) -> torch.dtype | None:
+def module_dtype(model: PreTrainedModel | torch.nn.Module) -> torch.dtype | None:
     """`.dtype` for any `nn.Module`. Same fallback story as `module_device`."""
     if hasattr(model, "dtype"):
         return model.dtype
@@ -480,42 +481,33 @@ def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any])
 @register_export_input_preparer("input_features", "feature_lens")
 def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """Replace `input_features`/`feature_lens` with precomputed `padded_feature`, `chunk_lengths`,
-    `cu_seqlens`, `valid_indices` (+ `pool_indices` on Qwen2.5-Omni) so the encoder's
-    `.split(.tolist(), dim=0)` and related data-dependent ops happen outside the traced graph.
+    `cu_seqlens`, `valid_indices` (+ `pool_indices` on Qwen2.5-Omni-style encoders) so the
+    encoder's `.split(.tolist(), dim=0)` and related data-dependent ops happen outside the
+    traced graph.
 
-    Qwen3-Omni-MoE threads `n_window_infer` into `get_audio_cu_seqlens`; Qwen2.5-Omni doesn't,
-    and additionally emits `pool_indices`.
+    The helpers (`chunk_and_pad_features`, `get_audio_cu_seqlens`, …) all live in the model's
+    own ``modeling_*.py`` module, so we resolve them via ``type(model).__module__`` rather than
+    hard-coding one Omni variant. ``n_window_infer`` selects the Qwen3-Omni-style four-arg
+    ``get_audio_cu_seqlens`` over the Qwen2.5-Omni-style single-arg form.
     """
     feature_lens = inputs["feature_lens"]
     input_features = inputs["input_features"]
+    module = sys.modules[type(model).__module__]
 
-    if hasattr(model, "n_window_infer") and hasattr(model, "n_window"):
-        from ..models.qwen3_omni_moe.modeling_qwen3_omni_moe import (
-            chunk_and_pad_features,
-            get_audio_cu_seqlens,
-            get_valid_indices,
-        )
+    chunk_and_pad_features = getattr(module, "chunk_and_pad_features")
+    get_audio_cu_seqlens = getattr(module, "get_audio_cu_seqlens")
+    get_valid_indices = getattr(module, "get_valid_indices")
 
-        padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
-        inputs["padded_feature"] = padded_feature
-        inputs["chunk_lengths"] = chunk_lengths
+    padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
+    inputs["padded_feature"] = padded_feature
+    inputs["chunk_lengths"] = chunk_lengths
+    if hasattr(model, "n_window_infer"):
         inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, model.n_window_infer, model.n_window)
         inputs["valid_indices"] = get_valid_indices(chunk_lengths, model.n_window)
-
-    elif hasattr(model, "n_window"):
-        from ..models.qwen2_5_omni.modeling_qwen2_5_omni import (
-            chunk_and_pad_features,
-            get_audio_cu_seqlens,
-            get_pool_indices,
-            get_valid_indices,
-        )
-
-        padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
-        inputs["padded_feature"] = padded_feature
-        inputs["chunk_lengths"] = chunk_lengths
+    else:
         inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
         inputs["valid_indices"] = get_valid_indices(chunk_lengths)
-        inputs["pool_indices"] = get_pool_indices(feature_lens)
+        inputs["pool_indices"] = getattr(module, "get_pool_indices")(feature_lens)
 
 
 @register_export_input_preparer("input_features", "input_features_mask")

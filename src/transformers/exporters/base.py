@@ -63,8 +63,11 @@ class HfExporter(ABC):
                 missing.append(pkg)
                 continue
             tested = self.tested_versions.get(pkg)
-            if tested is not None and installed != "N/A" and installed.split("+", 1)[0] != tested.split("+", 1)[0]:
-                drift.append((pkg, installed, tested))
+            if tested is not None and installed != "N/A":
+                installed_base = installed.split("+", 1)[0]
+                tested_base = tested.split("+", 1)[0]
+                if installed_base != tested_base:
+                    drift.append((pkg, installed_base, tested_base))
 
         if missing:
             specs = ", ".join(
