@@ -62,8 +62,6 @@ class PeftTesterMixin:
     transformers_test_model_classes = (AutoModelForCausalLM, OPTForCausalLM)
 
 
-# TODO: run it with CI after PEFT release.
-@slow
 class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
     """
     A testing suite that makes sure that the PeftModel class is correctly integrated into the transformers library.
@@ -754,7 +752,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         peft_model_id = "peft-internal-testing/tiny-opt-lora-revision"
 
         # This should not work
-        with self.assertRaises(OSError):
+        # Transformers cannot identify the model and raises a ValueError
+        with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(peft_model_id)
 
         # This should work
@@ -1056,7 +1055,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         if version.parse(importlib.metadata.version("peft")) < version.parse("0.19.0"):
             self.skipTest("For this test to pass, PEFT 0.19 is required.")
 
-        inputs = torch.arange(10).view(1, -1).to(0)
+        inputs = torch.arange(10).view(1, -1).to(torch_device)
         model_name = "hf-internal-testing/Mixtral-tiny"
         adapter_name = "peft-internal-testing/mixtral-pre-v5-lora"
 
