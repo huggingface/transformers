@@ -182,7 +182,7 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
                 position_embeddings = position_embeddings + self.time_position_embeddings[0:t]
 
             pos_embs.append(position_embeddings.flatten(0, 1))
-        hidden_states = hidden_states + torch.cat(pos_embs, dim=0)
+        hidden_states = hidden_states + torch.cat(pos_embs, dim=0).to(hidden_states.dtype)
         return hidden_states
 
 
