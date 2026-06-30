@@ -28,7 +28,8 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...loss.loss_utils import ForCausalLMLoss
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -66,6 +67,7 @@ class Gemma2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
+@use_kernel_forward_from_hub("GeGLUMLP")
 class Gemma2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -473,6 +475,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         )
 
 
+@use_kernelized_func(ForCausalLMLoss)
 @auto_docstring
 class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
@@ -533,15 +536,29 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-        if self.config.final_logit_softcapping is not None:
+        hidden_states = hidden_states[:, slice_indices, :]
+
+        # We only compute logits during inference (no labels given) or when we do not use any kernel (materialization of logits needed)
+        logits = self.lm_head(hidden_states) if labels is None or not self.use_kernels else None
+
+        if logits is not None and self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
             logits = torch.tanh(logits)
             logits = logits * self.config.final_logit_softcapping
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+            loss = self.loss_function(
+                hidden_states=hidden_states,
+                lm_head_weight=self.lm_head.weight,
+                lm_head_bias=self.lm_head.bias,
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                hidden_size=hidden_states.shape[-1],
+                final_logit_softcapping=self.config.final_logit_softcapping,
+                **kwargs,
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
