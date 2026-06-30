@@ -19,8 +19,8 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...integrations.accelerate import force_accelerate_hooks
 from ...utils import auto_docstring, logging
-from ...utils.generic import force_accelerate_hooks
 from ...utils.import_utils import is_mambapy_available, is_torch_greater_or_equal, is_torchdynamo_compiling, is_tracing
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (

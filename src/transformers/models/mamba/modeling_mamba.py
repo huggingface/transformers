@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import lazy_load_kernel
+from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -32,7 +33,6 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import force_accelerate_hooks
 from ...utils.import_utils import (
     is_mambapy_available,
     is_torch_greater_or_equal,
