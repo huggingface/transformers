@@ -184,11 +184,16 @@ def main():
     print(f"Saved model to {args.output_dir}")
 
     tokenizer = AutoTokenizer.from_pretrained(src_dir)
+    chat_template = getattr(tokenizer, "chat_template", None)
+    chat_template_path = os.path.join(src_dir, "chat_template.json")
+    if chat_template is None and os.path.isfile(chat_template_path):
+        with open(chat_template_path, encoding="utf-8") as f:
+            chat_template = json.load(f)["chat_template"]
     image_processor = LocateAnythingImageProcessor()
     processor = LocateAnythingProcessor(
         image_processor=image_processor,
         tokenizer=tokenizer,
-        chat_template=getattr(tokenizer, "chat_template", None),
+        chat_template=chat_template,
     )
     processor.save_pretrained(args.output_dir)
     print(f"Saved processor/tokenizer to {args.output_dir}")

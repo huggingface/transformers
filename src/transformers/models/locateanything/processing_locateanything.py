@@ -113,10 +113,12 @@ class LocateAnythingProcessor(ProcessorMixin):
                 index = [0]
 
                 def _replace(match):
-                    idx = int(match.group(1)) - 1 if match.group(1) else index[0]
+                    number = match.group(1)
+                    idx = int(number) - 1 if number else index[0]
                     index[0] += 1
                     placeholder = self.image_token * num_tokens[idx]
-                    return f"{self.image_start_token}{placeholder}{self.image_end_token}"
+                    visible_id = number if number else str(idx + 1)
+                    return f"<image {visible_id}>{self.image_start_token}{placeholder}{self.image_end_token}"
 
                 new_text.append(pattern.sub(_replace, sample))
             text = new_text
