@@ -44,7 +44,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accelerate_hook_compatible_wrapper, merge_with_config_defaults
 from ...utils.import_utils import resolve_internal_import
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_jamba import JambaConfig
@@ -470,8 +470,12 @@ class JambaMambaMixer(nn.Module):
             self.config.use_mamba_kernels = False
 
         if self.config.use_mamba_kernels:
-            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
-        return self.slow_forward(hidden_states, cache_params, attention_mask)
+            return accelerate_hook_compatible_wrapper(self.cuda_kernels_forward)(
+                hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
+            )
+        return accelerate_hook_compatible_wrapper(self.slow_forward)(
+            hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
+        )
 
 
 class JambaMLP(nn.Module):

@@ -33,6 +33,7 @@ from ...integrations import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.generic import accelerate_hook_compatible_wrapper
 from ...utils.import_utils import (
     is_mambapy_available,
     is_torch_greater_or_equal,
@@ -450,8 +451,12 @@ class FalconMambaMixer(nn.Module):
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
         )
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
-        return self.slow_forward(hidden_states, cache_params, attention_mask)
+            return accelerate_hook_compatible_wrapper(self.cuda_kernels_forward)(
+                hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
+            )
+        return accelerate_hook_compatible_wrapper(self.slow_forward)(
+            hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
+        )
 
 
 class FalconMambaRMSNorm(nn.Module):

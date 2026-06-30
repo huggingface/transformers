@@ -28,7 +28,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutpu
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accelerate_hook_compatible_wrapper, merge_with_config_defaults
 from ...utils.import_utils import resolve_internal_import
 from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
@@ -667,9 +667,13 @@ class Zamba2MambaMixer(nn.Module):
         **kwargs,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
+            return accelerate_hook_compatible_wrapper(self.cuda_kernels_forward)(
+                hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
+            )
 
-        return self.torch_forward(hidden_states, cache_params, attention_mask)
+        return accelerate_hook_compatible_wrapper(self.torch_forward)(
+            hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
+        )
 
 
 class Zamba2MLP(nn.Module):

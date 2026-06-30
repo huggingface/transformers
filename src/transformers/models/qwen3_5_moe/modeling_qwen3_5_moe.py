@@ -415,9 +415,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
 
         self.out_proj = nn.Linear(self.value_dim, self.hidden_size, bias=False)
 
-        self.causal_conv1d_fn = (
-            accelerate_hook_compatible_wrapper(causal_conv1d_fn) if causal_conv1d_fn is not None else None
-        )
+        self.causal_conv1d_fn = accelerate_hook_compatible_wrapper(causal_conv1d_fn)
         self.causal_conv1d_update = accelerate_hook_compatible_wrapper(
             causal_conv1d_update or torch_causal_conv1d_update
         )

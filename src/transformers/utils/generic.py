@@ -1157,13 +1157,16 @@ def retry(
     return decorator
 
 
-def accelerate_hook_compatible_wrapper(original_func: Callable, squeeze_weight: bool = True) -> Callable:
+def accelerate_hook_compatible_wrapper(original_func: Callable | None, squeeze_weight: bool = True) -> Callable | None:
     """
     Wrapper around a function that uses some weights of a module, without calling that module's `forward` method, to forcefully
     trigger the accelerate hooks. Indeed, the hooks are only fired through the `forward` method, so if the weights are used directly,
-    as is the case inside `causal_conv1d_fn` and `causal_conv1d_update` for example, they will not be fired. This will cause device
-    issues, that this wrapper will correct.
+    as is the case inside `causal_conv1d_fn` and `causal_conv1d_update` for example, they will not be fired. This may cause device
+    issues, especially in the case of offloading, that this wrapper will correct.
     """
+    # If no Callable is passed, return None as well
+    if original_func is None:
+        return None
 
     def wrapped(*args, **kwargs):
         hook = None
