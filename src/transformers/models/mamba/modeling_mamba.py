@@ -32,7 +32,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import accelerate_hook_compatible_wrapper
+from ...utils.generic import force_accelerate_hooks
 from ...utils.import_utils import (
     is_mambapy_available,
     is_torch_greater_or_equal,
@@ -364,6 +364,7 @@ class MambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
@@ -375,12 +376,8 @@ class MambaMixer(nn.Module):
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_tracing(hidden_states):
-            return accelerate_hook_compatible_wrapper(self.cuda_kernels_forward)(
-                hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
-            )
-        return accelerate_hook_compatible_wrapper(self.slow_forward)(
-            hidden_states, cache_params, attention_mask, hooked_module=self.conv1d
-        )
+            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
+        return self.slow_forward(hidden_states, cache_params, attention_mask)
 
 
 class MambaRMSNorm(nn.Module):

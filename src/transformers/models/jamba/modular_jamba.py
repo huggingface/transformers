@@ -365,11 +365,7 @@ class JambaMambaMixer(nn.Module):
 
         if self.config.use_mamba_kernels:
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
-        return self.slow_forward(
-            hidden_states,
-            cache_params,
-            attention_mask,
-        )
+        return self.slow_forward(hidden_states, cache_params, attention_mask)
 
 
 class JambaMLP(MistralMLP):
