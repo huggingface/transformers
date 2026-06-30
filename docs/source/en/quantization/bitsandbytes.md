@@ -253,6 +253,29 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+### Energy efficiency considerations
+
+When deploying quantized models, it's important to understand the energy efficiency implications of different quantization configurations.
+
+**INT8 mixed-precision trade-offs**
+
+The default `llm_int8_threshold=6.0` configuration provides excellent accuracy preservation but may increase energy consumption by 17-33% compared to FP16 due to mixed-precision decomposition overhead. This is a justified trade-off for maintaining model quality in production deployments.
+
+**Threshold configuration**
+
+While setting `llm_int8_threshold=0.0` can speed up inference, it's not recommended for quality-sensitive workloads. Benchmarking shows that `threshold=0.0` saves only ~3% energy but can cause significant accuracy degradation (up to 25% perplexity increase in some models). The default `threshold=6.0` strikes the best balance between accuracy and performance for most use cases.
+
+**Model size considerations**
+
+- **NF4 quantization**: Most energy-efficient for models with >5B parameters, where memory bandwidth savings outweigh dequantization overhead
+- **Small models** (<5B parameters): May not benefit from NF4 quantization due to dequantization costs exceeding memory bandwidth savings
+
+**Batch size impact**
+
+Energy efficiency improves significantly with larger batch sizes. Increasing from `batch_size=1` to `batch_size=8-64` can reduce energy consumption by 84-96%, making batching a critical optimization for production deployments.
+
+For detailed benchmarking data and methodology, see the [EcoCompute AI benchmark repository](https://github.com/hongping-zh/ecocompute-ai).
+
 ### Skip module conversion
 
 For some models, like [Jukebox](model_doc/jukebox), you don't need to quantize every module to 8-bit because it can actually cause instability. With Jukebox, there are several `lm_head` modules that should be skipped using the `llm_int8_skip_modules` parameter in [`BitsAndBytesConfig`].
