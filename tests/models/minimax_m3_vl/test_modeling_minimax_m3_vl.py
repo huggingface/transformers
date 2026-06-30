@@ -15,6 +15,7 @@
 
 import copy
 import unittest
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -31,6 +32,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -466,6 +468,143 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                     pixel_values_videos=pixel_values_videos,
                     video_grid_thw=video_grid_thw,
                 )
+
+
+@require_torch
+@require_torch_accelerator
+class MiniMaxM3VLSparseAttentionDeviceTest(unittest.TestCase):
+    """Regression test for the CPU/CUDA device-mismatch in ``_sparse_attention`` (PR #46848).
+
+    The bug: when ``bsz == 1`` and ``cache_position`` lives on the CPU (the typical case in
+    the generation loop), ``valid_k`` was cast to ``torch.int32`` without an explicit ``device``
+    argument and therefore stayed on CPU. Concatenating that CPU tensor with the GPU-resident
+    zero tensor raised::
+
+        RuntimeError: Expected all tensors to be on the same device, but found
+        at least two devices, cuda:0 and cpu!
+
+    The fix adds ``device=q.device`` to the ``.to()`` call so ``valid_k`` always follows the
+    query tensor's device.
+
+    This test uses a real ``MiniMaxM3VLAttention`` sparse-layer module built from a tiny dummy
+    config, exercising the actual ``indexer`` and ``config`` attributes rather than mocks. Only
+    ``_msa_sparse_atten_op`` is patched to avoid the SM100/Blackwell kernel hardware requirement
+    that makes a fully end-to-end test impractical on general CI hardware.
+    """
+
+    # Minimal text config values that satisfy the MSA kernel's constraints:
+    # head_dim == 128 (MSA_SUPPORTED_HEAD_DIM) and index_block_size == 128 (MSA_SUPPORTED_BLOCK_SIZE).
+    _TEXT_CONFIG = {
+        "hidden_size": 256,
+        "intermediate_size": 64,
+        "dense_intermediate_size": 128,
+        "shared_intermediate_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "head_dim": 128,  # must equal MSA_SUPPORTED_HEAD_DIM
+        "rotary_dim": 64,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "rms_norm_eps": 1e-6,
+        "vocab_size": 99,
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": 2,
+        "num_local_experts": 2,
+        "num_experts_per_tok": 1,
+        "n_shared_experts": 1,
+        "moe_layer_freq": [0, 1],
+        "layer_types": ["full_attention", "minimax_m3_sparse"],
+        "use_routing_bias": True,
+        "routed_scaling_factor": 2.0,
+        "swiglu_alpha": 1.702,
+        "swiglu_limit": 7.0,
+        "tie_word_embeddings": False,
+        "rope_parameters": {
+            "rope_type": "default",
+            "rope_theta": 5000000.0,
+            "partial_rotary_factor": 0.5,
+        },
+        "index_n_heads": 2,
+        "index_head_dim": 128,
+        "index_block_size": 128,  # must equal MSA_SUPPORTED_BLOCK_SIZE
+        "index_topk_blocks": 4,
+        "index_local_blocks": 1,
+    }
+
+    def test_sparse_attention_cache_position_on_cpu(self):
+        """Regression: ``cache_position`` on CPU must not cause a device mismatch.
+
+        Builds a real ``MiniMaxM3VLAttention`` sparse layer (with the MSA-required
+        ``head_dim=128`` and ``index_block_size=128``) and calls ``_sparse_attention``
+        directly with QKV on CUDA and ``cache_position`` on CPU — the exact conditions
+        that triggered the original ``RuntimeError``. Only ``_msa_sparse_atten_op`` is
+        patched to avoid the Blackwell/SM100 hardware requirement; all module attributes
+        (config, indexer, block_size, topk_blocks) come from the real model class.
+        """
+        from transformers.integrations.msa_attention import _sparse_attention
+        from transformers.models.minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLTextConfig
+        from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention
+
+        text_config = MiniMaxM3VLTextConfig(**self._TEXT_CONFIG)
+        # Layer index 1 is the ``minimax_m3_sparse`` layer → has a real indexer.
+        sparse_layer_idx = 1
+        attn_module = MiniMaxM3VLAttention(text_config, layer_idx=sparse_layer_idx).to(torch_device).eval()
+
+        # Confirm the module has the real indexer (not None) — defensive guard.
+        self.assertIsNotNone(attn_module.indexer, "Layer 1 should be a sparse layer with a real indexer")
+
+        bsz, num_q_heads, q_len = 1, text_config.num_attention_heads, 1
+        num_kv_heads = text_config.num_key_value_heads
+        head_dim = text_config.head_dim
+        k_len = 16  # simulated static-cache allocation length
+
+        query = torch.randn(bsz, num_q_heads, q_len, head_dim, device=torch_device)
+        key = torch.randn(bsz, num_kv_heads, k_len, head_dim, device=torch_device)
+        value = torch.randn(bsz, num_kv_heads, k_len, head_dim, device=torch_device)
+        block_indices = torch.zeros(
+            bsz, num_kv_heads, q_len, text_config.index_topk_blocks, dtype=torch.long, device=torch_device
+        )
+        # cache_position intentionally on CPU — the exact source of the original bug.
+        cache_position = torch.tensor([7], device="cpu")
+
+        captured = {}
+
+        def _stub_op(q, k, v, q2k, cu_seqlens_q, cu_seqlens_k, *args, **kwargs):
+            captured["cu_seqlens_k"] = cu_seqlens_k
+            return torch.zeros_like(q)
+
+        # Only ``_msa_sparse_atten_op`` is patched — the SM100 hardware guard in
+        # ``_validate_msa_init`` is never reached because we call ``_sparse_attention``
+        # directly (bypassing ``msa_attention_forward``).
+        with patch("transformers.integrations.msa_attention._msa_sparse_atten_op", side_effect=_stub_op):
+            _sparse_attention(
+                attn_module,
+                query,
+                key,
+                value,
+                scaling=head_dim**-0.5,
+                block_indices=block_indices,
+                block_size=text_config.index_block_size,
+                cache_position=cache_position,
+            )
+
+        self.assertIn("cu_seqlens_k", captured, "_stub_op was never called — _sparse_attention did not reach the op")
+        cu_seqlens_k = captured["cu_seqlens_k"]
+        # Before the fix, cu_seqlens_k stayed on CPU and this assertion would fail.
+        self.assertEqual(
+            cu_seqlens_k.device.type,
+            torch.device(torch_device).type,
+            f"cu_seqlens_k must be on {torch_device} (same as QKV tensors), got {cu_seqlens_k.device}. "
+            "This reproduces the device-mismatch bug from PR #46848.",
+        )
+        # Verify the boundary values are also numerically correct: [0, cache_position[-1]+1] = [0, 8].
+        expected = torch.tensor([0, 8], dtype=torch.int32, device=torch_device)
+        self.assertTrue(
+            torch.equal(cu_seqlens_k, expected),
+            f"Expected cu_seqlens_k == {expected.tolist()}, got {cu_seqlens_k.tolist()}",
+        )
 
 
 @slow
