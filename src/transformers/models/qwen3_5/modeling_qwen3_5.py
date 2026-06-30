@@ -32,6 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...generation.mtp import MtpLayerStack, fold_mtp_loss
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -813,7 +814,7 @@ class Qwen3_5PreTrainedModel(PreTrainedModel):
     config: Qwen3_5Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
+    _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock", "MtpLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1617,6 +1618,9 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
+        if getattr(config, "num_mtp_layers", 0) > 0:
+            self.mtp = MtpLayerStack(self, config.num_mtp_layers)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1633,7 +1637,7 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> "Qwen3_5CausalLMOutputWithPast":
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1666,17 +1670,31 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        hidden_states = outputs.last_hidden_state
+        hidden_states = outputs[0]
+
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
+        mtp_loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        loss, mtp_loss = fold_mtp_loss(
+            getattr(self, "mtp", None),
+            main_loss=loss,
+            labels=labels,
+            input_ids=input_ids,
+            main_hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            mtp_loss_weight=float(getattr(self.config, "mtp_loss_weight", 0.0)),
+        )
+
+        return Qwen3_5CausalLMOutputWithPast(
             loss=loss,
+            mtp_loss=mtp_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -1692,11 +1710,14 @@ class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTra
 @dataclass
 class Qwen3_5CausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
+    mtp_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when MTP is enabled and `labels` are provided):
+        Multi-Token Prediction auxiliary loss. Weighting is left to the trainer.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
         The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
+    mtp_loss: torch.FloatTensor | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
@@ -1709,6 +1730,9 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = Qwen3_5Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        if getattr(config, "num_mtp_layers", 0) > 0:
+            self.mtp = MtpLayerStack(self, config.num_mtp_layers)
 
         self.post_init()
 
@@ -1743,6 +1767,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1827,11 +1852,24 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
+        mtp_loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
+        loss, mtp_loss = fold_mtp_loss(
+            getattr(self, "mtp", None),
+            main_loss=loss,
+            labels=labels,
+            input_ids=input_ids,
+            main_hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            mtp_loss_weight=float(getattr(self.config, "mtp_loss_weight", 0.0)),
+        )
+
         return Qwen3_5CausalLMOutputWithPast(
             loss=loss,
+            mtp_loss=mtp_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -2108,4 +2146,5 @@ __all__ = [
     "Qwen3_5ForTokenClassification",
     "Qwen3_5ForConditionalGeneration",
     "Qwen3_5PreTrainedModel",
+    "Qwen3_5CausalLMOutputWithPast",
 ]

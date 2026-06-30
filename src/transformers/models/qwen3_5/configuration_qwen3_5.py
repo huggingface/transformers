@@ -38,6 +38,12 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
+    num_mtp_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled. Matches the field name
+        used by the generic MTP infrastructure in #46229.
+    mtp_loss_weight (`float`, *optional*, defaults to 0.0):
+        Weight of the MTP auxiliary loss added on top of the main LM loss when `labels` are provided.
+        Set to 0.0 to compute and return `mtp_loss` separately without folding it into the main loss.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -101,6 +107,8 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
+    num_mtp_layers: int = 0
+    mtp_loss_weight: float = 0.0
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
@@ -145,6 +153,12 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
 @strict
 class Qwen3_5Config(PreTrainedConfig):
     r"""
+    num_mtp_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) layers. When set to 0, MTP is disabled.
+    mtp_loss_weight (`float`, *optional*, defaults to 0.0):
+        Weight of the MTP auxiliary loss added on top of the main LM loss when `labels` are provided.
+        Set to 0.0 to compute and return `mtp_loss` separately without folding it into the main loss.
+
     Example:
 
     ```python
@@ -172,6 +186,8 @@ class Qwen3_5Config(PreTrainedConfig):
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
     tie_word_embeddings: bool = False
+    num_mtp_layers: int = 0
+    mtp_loss_weight: float = 0.0
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
