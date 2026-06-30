@@ -278,6 +278,10 @@ def _reshaped_vision_attention_forward(
         hidden_states = hidden_states.squeeze(0)
 
     seq_length = hidden_states.shape[0]
+    torch_compilable_check(
+        seq_length != 0,
+        "Chunked vision attention received an empty input.",
+    )
     num_segments = cu_seqlens.shape[0] - 1
     torch_compilable_check(
         seq_length % num_segments == 0,
