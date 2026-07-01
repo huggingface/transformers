@@ -34,6 +34,8 @@ import torch
 
 from ..utils import logging
 from ..utils.import_utils import (
+    KERNELS_MAX_VERSION,
+    KERNELS_MIN_VERSION,
     get_cuda_runtime_version,
     is_kernels_available,
     is_torchdynamo_compiling,
@@ -81,7 +83,9 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(
-                "DeepGEMM kernel requires the `kernels` package. Install it with `pip install -U kernels`."
+                "DeepGEMM kernel requires the `kernels` package. "
+                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
             )
         if not torch.cuda.is_available():
             raise ImportError("DeepGEMM kernel requires CUDA, but CUDA is not available.")
@@ -140,7 +144,9 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     ]
     if missing:
         raise ImportError(
-            f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. Update with `pip install -U kernels`."
+            f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. "
+            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
     return DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
@@ -178,6 +184,28 @@ def _is_sm100(device: torch.device) -> bool:
     process lifetime and this gets hit on every linear/expert forward.
     """
     return torch.cuda.get_device_capability(device)[0] >= 10
+
+
+def _assert_sm100_scales_are_ue8m0(scale: torch.Tensor) -> None:
+    """On B200 (SM100) DeepGEMM only supports UE8M0 (power-of-two) scales; the float32 scales
+    that work on H100 (SM90) have no SM100 path. UE8M0 scales load as ``float8_e8m0fnu`` (the
+    loader normalizes even float32-container checkpoints like dsv4-flash-base), so a plain
+    ``float32`` scale here means a genuine non-UE8M0 checkpoint — fail loud rather than let
+    ``_coerce_sf_for_kernel`` silently round it and corrupt the output.
+    """
+    if not _is_sm100(scale.device):
+        return  # SM90 consumes float32 SFs directly (no UE8M0 round).
+    if scale.dtype != torch.float32:
+        return  # already UE8M0 (`float8_e8m0fnu`) — kernel-ready as-is.
+    raise ValueError(
+        "DeepGEMM's Blackwell (SM100) experts kernel requires power-of-two (UE8M0) scale "
+        "factors, but this checkpoint's expert scales are plain float32 "
+        "(quantization_config.scale_fmt='float'). Rounding them to UE8M0 would scale the "
+        "dequantized expert weights incorrectly and silently corrupt the output. Use a "
+        "checkpoint quantized with scale_fmt='ue8m0', or an experts implementation that "
+        "consumes float32 block scales directly, e.g. "
+        "`model.set_experts_implementation('grouped_mm')`."
+    )
 
 
 _DEEPGEMM_VISITED_DEVICES: set[int] = set()
@@ -550,6 +578,7 @@ def deepgemm_fp8_fp4_experts_forward(
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
     _assert_single_device(hidden_states.device, context="experts")
+    _assert_sm100_scales_are_ue8m0(self.down_proj_scale_inv)
 
     if self.activation_scheme == "static":
         raise NotImplementedError("DeepGEMM experts dispatch does not support static activation quantization.")
@@ -709,6 +738,8 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
       `transform_weights_for_mega_moe((gate_up, gate_up_sf), (down, down_sf))`.
       - `config.swiglu_limit` (optional): SwiGLU clamp; absent → unclamped.
     """
+    _assert_sm100_scales_are_ue8m0(self.down_proj_scale_inv)
+
     if self.gate_up_proj.dtype != torch.int8:
         raise RuntimeError(
             f"DeepGEMM Mega MoE requires FP4-packed expert weights (dtype=`int8`), got "

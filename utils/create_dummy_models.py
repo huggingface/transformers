@@ -1323,7 +1323,7 @@ def get_config_overrides(config_class, processors):
         #     vocab_size=tokenizer.tgt_vocab_size, bos_token_id=config_overrides["eos_token_id"]
         # )
 
-    # Marian failed to convert the tokenzier, and has `'vocab_size': 58101` and `'pad_token_id': 58100`.
+    # Marian failed to convert the tokenizer, and has `'vocab_size': 58101` and `'pad_token_id': 58100`.
     # which gives `Padding_idx must be within num_embeddings`
     if config_class.__name__ == "MarianConfig":
         config_overrides["decoder_vocab_size"] = config_overrides["vocab_size"]
@@ -1561,7 +1561,7 @@ def build_tiny_model_summary(results, organization=None, token=None):
             results[config_name]["processor"] = {x: x for x in processors}
         except Exception:
             # This happens for `VisionEncoderDecoderConfig` and `SpeechEncoderDecoderConfig`.
-            # Not a prority however.
+            # Not a priority however.
             print(config_name)
             print(results[config_name])
             print("******************************")
