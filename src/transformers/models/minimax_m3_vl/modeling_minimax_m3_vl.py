@@ -1039,7 +1039,7 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
         grid_thw: torch.Tensor,
         device: torch.device,
         dtype: torch.dtype,
-        **kwargs: Unpack[TransformersKwargs],
+        kwargs: dict | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         coords = get_vision_position_ids(grid_thw, self.spatial_merge_size, include_temporal=True, kwargs=kwargs)
         coords = coords.to(device=device, dtype=torch.float32)
