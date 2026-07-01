@@ -1570,6 +1570,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         use_cache=None,
         decoder_delay_pattern_mask=None,
         guidance_scale=None,
+        next_sequence_length: int | None = None,
         **kwargs,
     ):
         # Overwritten -- MusicGen has custom processing
@@ -1593,12 +1594,15 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             past_length = past_key_values.get_seq_length()
 
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
+            if next_sequence_length is not None:
+                remove_prefix_length = decoder_input_ids.shape[1] - next_sequence_length
             else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
+                # Some generation methods already pass only the last input ID
+                if decoder_input_ids.shape[1] > past_length:
+                    remove_prefix_length = past_length
+                else:
+                    # Default to old behavior: keep only final ID
+                    remove_prefix_length = decoder_input_ids.shape[1] - 1
 
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
