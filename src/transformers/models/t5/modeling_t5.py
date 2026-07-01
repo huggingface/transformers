@@ -24,6 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...integrations.sdpa_attention import sdpa_attention_forward
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -35,7 +36,7 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring, logging, torch_compilable_check
 from .configuration_t5 import T5Config
 
@@ -137,6 +138,33 @@ class T5LayerFF(nn.Module):
         return hidden_states
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    # T5 uses float32 softmax for numerical stability
+    attn_weights = nn.functional.softmax(attn_weights.float(), dim=-1).type_as(query)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class T5Attention(nn.Module):
     def __init__(
         self,
@@ -154,6 +182,7 @@ class T5Attention(nn.Module):
         self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
+        self.config = config
         self.layer_idx = layer_idx
         if layer_idx is None and self.is_decoder:
             logger.warning_once(
@@ -291,42 +320,78 @@ class T5Attention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
-        scores = torch.matmul(query_states, key_states.transpose(3, 2))
-
+        # Compute the position bias (relative position bias + mask) to add to the attention scores
         if position_bias is None:
             key_length = key_states.shape[-2]
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, query_states.shape[1], input_shape[1], key_length), device=scores.device, dtype=scores.dtype
+                    (1, self.n_heads, input_shape[1], key_length), device=query_states.device, dtype=query_states.dtype
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(
-                    input_shape[1], key_length, device=scores.device, past_seen_tokens=past_seen_tokens
+                    input_shape[1], key_length, device=query_states.device, past_seen_tokens=past_seen_tokens
                 )
 
             if mask is not None:
                 causal_mask = mask[:, :, :, : key_states.shape[-2]]
                 position_bias = position_bias + causal_mask
 
-        position_bias_masked = position_bias
-        scores += position_bias_masked
+        # Dispatch to the selected attention implementation.
+        # T5 does NOT scale the query-key dot product (unlike most models that use 1/sqrt(d_kv)).
+        # Pass scaling=1.0 to avoid the default 1/sqrt(d_kv) scaling in SDPA/flash kernels.
+        attn_implementation = self.config._attn_implementation
 
-        # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        # output_attentions=True forces the eager path: SDPA and Flash Attention do not
+        # return attention probabilities, so we must fall back to eager to honour the request.
+        if output_attentions:
+            attention_interface = eager_attention_forward
+        else:
+            attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_implementation, eager_attention_forward)
 
-        attn_output = torch.matmul(attn_weights, value_states)
+        # T5 uses a learned additive position bias (shape: batch, heads, q_len, k_len).
+        # SDPA's `scaled_dot_product_attention` natively supports additive `attn_mask`,
+        # so the position_bias can be passed through directly. Flash Attention 2 on the
+        # other hand only accepts a 2D padding mask for unpadding; it does not support
+        # arbitrary additive bias. When FA2 is selected and a position_bias is present,
+        # we fall back to SDPA which supports additive attn_mask natively.
+        is_fa2 = attn_implementation is not None and attn_implementation.startswith("flash_attention")
 
-        attn_output = attn_output.transpose(1, 2).contiguous()
+        if is_fa2 and position_bias is not None:
+            # FA2 cannot handle additive position bias → use SDPA which supports it natively
+            attn_output, _ = sdpa_attention_forward(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=position_bias,
+                scaling=1.0,
+                dropout=0.0 if not self.training else self.dropout,
+                is_causal=False,
+                **kwargs,
+            )
+            attn_weights = None
+        else:
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=position_bias,
+                scaling=1.0,
+                dropout=0.0 if not self.training else self.dropout,
+                **kwargs,
+            )
+
+        # Flash attention returns (output, None); others return (output, weights)
+        attn_weights = attn_weights if output_attentions and attn_weights is not None else None
+
         attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = self.o(attn_output)
 
         outputs = (attn_output, position_bias)
-
-        if output_attentions:
+        if attn_weights is not None:
             outputs = outputs + (attn_weights,)
         return outputs
 
@@ -512,6 +577,8 @@ class T5PreTrainedModel(PreTrainedModel):
 
     _no_split_modules = ["T5Block"]
     _keep_in_fp32_modules = ["wo"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
 
     @property
     def dummy_inputs(self):
