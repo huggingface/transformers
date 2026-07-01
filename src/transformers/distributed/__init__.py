@@ -21,12 +21,12 @@ _import_structure = {
     "configuration_utils": ["DistributedConfig"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module", "verify_fsdp_plan"],
     "utils": [
-        "init_device_mesh",
         "distribute_model",
         "gather_full_state_dict",
+        "init_device_mesh",
+        "load_optimizer_distributed",
         "save_model_checkpoint_distributed",
         "save_optimizer_distributed",
-        "load_optimizer_distributed",
     ],
 }
 

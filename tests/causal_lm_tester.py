@@ -30,6 +30,7 @@ from transformers.testing_utils import (
 )
 
 from .test_configuration_common import ConfigTester
+from .test_fsdp_mixin import FSDPTesterMixin
 from .test_modeling_common import (
     GenerationTesterMixin,
     ModelTesterMixin,
@@ -39,7 +40,6 @@ from .test_modeling_common import (
     torch_device,
 )
 from .test_pipeline_mixin import PipelineTesterMixin
-from .test_fsdp_mixin import FSDPTesterMixin
 from .test_tensor_parallel_mixin import TensorParallelTesterMixin
 from .test_training_mixin import TrainingTesterMixin
 
