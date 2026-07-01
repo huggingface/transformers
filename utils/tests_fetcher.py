@@ -62,6 +62,7 @@ from git import Repo
 
 # List here the models not to be filtered by `filter_tests`.
 
+a = 1
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 PATH_TO_EXAMPLES = PATH_TO_REPO / "examples"
