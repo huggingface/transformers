@@ -820,7 +820,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
         super().__init__(config)
         self.visual = GlmOcrVisionModel._from_config(config.vision_config)
         self.language_model = GlmOcrTextModel._from_config(config.text_config)
-        self.rope_deltas = None  # cache rope_deltas here
+        self.rope_deltas = None
 
         # Initialize weights and apply final processing
         self.post_init()

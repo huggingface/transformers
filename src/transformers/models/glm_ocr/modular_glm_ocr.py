@@ -51,6 +51,9 @@ class GlmOcrVisionMlp(Glm4VisionMlp):
     def __init__(self, config, bias: bool = True):
         super().__init__(config)
         self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
