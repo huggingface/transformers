@@ -29,7 +29,8 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, DynamicLayer, DynamicSlidingWindowLayer, StaticSlidingWindowLayer
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
@@ -48,6 +49,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_torchdynamo_compiling,
     logging,
     torch_compilable_check,
     torch_int,
@@ -1266,6 +1268,330 @@ class UnlimitedOcrTextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, UnlimitedOcrTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+
+
+class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
+    """Reference sliding-window attention (R-SWA) cache layer that keeps all prefill tokens before
+    the first decode step and applies a sliding window to all decoded tokens.
+
+    Once ``sliding_window`` decode tokens have accumulated, the oldest decode tokens are evicted and
+    replaced by the most recent ones. The prefill tokens always remain in the cache.
+    """
+
+    layer_type = "reference_sliding_attention"
+
+    def __init__(self, config: PreTrainedConfig | None = None, sliding_window: int | None = None):
+        super().__init__(config=config, sliding_window=sliding_window)
+        self.prefill_length: int | None = None
+
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Lazy initialization
+        if not self.is_initialized:
+            self.lazy_initialization(key_states, value_states)
+
+        kv_length = key_states.shape[-2]
+        self.cumulative_length += kv_length
+
+        # Compute the full states
+        full_key_states = torch.cat([self.keys, key_states], dim=-2)
+        full_value_states = torch.cat([self.values, value_states], dim=-2)
+
+        # Prefill
+        if self.prefill_length is None and kv_length > 1:
+            self.keys = full_key_states
+            self.values = full_value_states
+            return self.keys, self.values
+
+        # First decode step (or an empty prompt that skipped prefill above): mark prefill as complete
+        if self.prefill_length is None:
+            self.prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
+
+        generated_length = full_key_states.shape[-2] - self.prefill_length
+        if generated_length < self.sliding_window:
+            # Window still growing: keep every prefill and decode token.
+            self.keys = full_key_states
+            self.values = full_value_states
+        else:
+            # TODO: copy when already full
+            # Window full: keep all prefill tokens plus the most recent `sliding_window - 1` decode tokens.
+            # The `- 1` mirrors `DynamicSlidingWindowLayer`: the incoming query token supplies the last slot,
+            # so the current query still attends over a full `sliding_window` of decode tokens.
+            self.keys = torch.cat(
+                [
+                    full_key_states[:, :, : self.prefill_length, :],
+                    full_key_states[:, :, -self.sliding_window + 1 :, :],
+                ],
+                dim=-2,
+            )
+            self.values = torch.cat(
+                [
+                    full_value_states[:, :, : self.prefill_length, :],
+                    full_value_states[:, :, -self.sliding_window + 1 :, :],
+                ],
+                dim=-2,
+            )
+
+        # Return full states to avoid losing context in case we added more than sliding_window tokens at once
+        return full_key_states, full_value_states
+
+    def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the attention mask"""
+        is_full = (
+            self.prefill_length is not None and self.cumulative_length >= self.prefill_length + self.sliding_window
+        )
+
+        kv_offset = 0
+        if is_full:
+            kv_offset = max(self.cumulative_length - self.prefill_length - self.sliding_window + 1, 0)
+            kv_length = self.prefill_length + self.sliding_window - 1 + query_length
+        else:
+            kv_length = self.cumulative_length + query_length
+
+        # Returned kv_offset is with respect to sliding window keys.
+        # Remove kv_offset from kv_idx to retrieve the prefill indices.
+        return kv_length, kv_offset
+
+    def get_max_length(self) -> int:
+        """Return the maximum cache shape of the cache"""
+        if self.prefill_length is None:
+            return -1
+        return self.prefill_length + self.sliding_window
+
+    def crop(self, max_length: int) -> None:
+        """
+        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
+        negative to remove `max_length` tokens.
+        """
+        if self.prefill_length is not None and self.get_seq_length() >= self.prefill_length + self.sliding_window:
+            raise ValueError(
+                "Cannot `crop` a `UnlimitedOcrDynamicReferenceSlidingWindowLayer` after it has seen more tokens than its"
+                "prefill + sliding window (otherwise some states are lost)"
+            )
+        DynamicLayer.crop(self, max_length)
+        self.cumulative_length = self.keys.shape[-2]
+
+
+class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
+    """
+    A static cache layer that stores the key and value states as static tensors of shape
+    `[batch_size, num_heads, min(max_cache_len, prefill_size + sliding_window), head_dim]`.
+    It lazily allocates its full backing tensors, and then mutates them in-place.
+    Built for `torch.compile` support.
+
+    The backing buffer is split in two regions: slots ``[0, prefill_length)`` hold the prefill (reference) slots
+    that are never eviced from the cache. Slots ``[prefill_length, prefill_length + sliding_window)`` hold the
+    sliding window decode slots where the oldest entries are always replaced by the newest ones.
+
+    Args:
+        max_cache_len (`int`):
+            Maximum number of tokens that can be stored, used for tensor preallocation.
+        sliding_window (`int`):
+            The size of the sliding window.
+    """
+
+    layer_type = "reference_sliding_attention"
+
+    def __init__(self, max_cache_len: int, sliding_window: int):
+        super().__init__(max_cache_len=max_cache_len, sliding_window=sliding_window)
+        # Keep `max_cache_len` as max value for lenght bookkeeping.
+        # The phyiscal buffer doens't exceed `prefill_length + sliding_window`.
+        self.max_cache_len = max_cache_len
+        self.sliding_window = sliding_window
+        self.prefill_length: int | None = None
+
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Update the key and value caches in-place, and return the necessary keys and value states.
+
+        Args:
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+
+        Returns:
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
+        """
+        # Lazy initialization
+        if not self.is_initialized:
+            self.lazy_initialization(key_states, value_states)
+
+        kv_length = key_states.shape[-2]
+
+        # Prefill
+        if self.prefill_length is None and kv_length > 1:
+            # Chunked prefill: the buffer was sized for the first chunk only, so grow it to hold all prefill seen so far plus this chunk plus the reserved window.
+            required_length = min(self.max_cache_len, self.cumulative_length_int + kv_length + self.sliding_window)
+            if self.keys.shape[-2] < required_length:
+                self._allocate_key_value_buffers(required_length, copy_existing=True)
+            # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
+            # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten
+            cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
+            try:
+                self.keys.index_copy_(2, cache_position, key_states)
+                self.values.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                # Fallback for devices like MPS where index_copy_ might not be supported.
+                self.keys[:, :, cache_position] = key_states
+                self.values[:, :, cache_position] = value_states
+
+            # Keep both the int (control flow) and the tensor (cudagraph-safe indexing) versions in sync.
+            self.cumulative_length_int += kv_length
+            self.cumulative_length.add_(kv_length)
+
+            # Very important to return the `self` tensors here, as they have the static dynamo address
+            return self.keys, self.values
+
+        # First decode step (or an empty prompt that skipped prefill above): mark prefill as complete
+        if self.prefill_length is None:
+            self.prefill_length = self.cumulative_length_int
+
+        # Everything below mirrors `StaticSlidingWindowLayer.update` with the difference that the sliding window
+        # is in the `sliding_window` slots right after the prefill instead of spanning the whole buffer.
+        window_start = self.prefill_length
+        current_length = self.cumulative_length_int - self.prefill_length
+        is_full = current_length >= self.sliding_window
+        # Update it now that we saved the value above
+        self.cumulative_length_int += kv_length
+
+        if is_full:
+            # In general, we should use a much simpler `cat` here as well, independently of the states size. However,
+            # dynamo is currently bugged when doing it - see https://github.com/pytorch/pytorch/issues/159855 for more details
+            if key_states.shape[-2] == 1:
+                # Roll the window region to the left by 1 position (the pinned prefill in front stays put)
+                new_keys = self.keys[:, :, window_start : window_start + self.sliding_window, :].roll(-1, dims=-2)
+                new_values = self.values[:, :, window_start : window_start + self.sliding_window, :].roll(-1, dims=-2)
+                # Overwrite the last position with new states
+                # (note: very important to use a tensor to index here, see https://github.com/pytorch/pytorch/issues/159855)
+                index = torch.tensor([-1], dtype=int, device=self.device)
+                new_keys[:, :, index] = key_states
+                new_values[:, :, index] = value_states
+
+                # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
+                self.keys[:, :, window_start : window_start + self.sliding_window, :].copy_(new_keys)
+                self.values[:, :, window_start : window_start + self.sliding_window, :].copy_(new_values)
+
+                # Very important to return the `self` tensors here, as they have the static dynamo address
+                return self.keys, self.values
+            # Already full but using more than 1 new token (e.g. chat continuation, etc...)
+            else:
+                full_key_states = torch.cat(
+                    (self.keys[:, :, window_start + 1 : window_start + self.sliding_window, :], key_states), dim=-2
+                )
+                full_value_states = torch.cat(
+                    (self.values[:, :, window_start + 1 : window_start + self.sliding_window, :], value_states), dim=-2
+                )
+        # Not yet full, but becoming full on this update
+        elif current_length + kv_length > self.sliding_window:
+            # Fast path, no need to cat() in this case, as the window is currently empty
+            if current_length == 0:
+                full_key_states = key_states
+                full_value_states = value_states
+            else:
+                window = slice(window_start, window_start + current_length)
+                full_key_states = torch.cat((self.keys[:, :, window, :], key_states), dim=-2)
+                full_value_states = torch.cat((self.values[:, :, window, :], value_states), dim=-2)
+        else:
+            # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
+            # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten.
+            cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
+            try:
+                self.keys.index_copy_(2, cache_position, key_states)
+                self.values.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                # Fallback for devices like MPS where index_copy_ might not be supported.
+                self.keys[:, :, cache_position] = key_states
+                self.values[:, :, cache_position] = value_states
+
+            # Update the tensor version of the length in-place (we don't need to update it if we are already outside
+            # of this branch, as we don't need the tensor anymore)
+            self.cumulative_length.add_(kv_length)
+
+            # Very important to return the `self` tensors here, as they have the static dynamo address
+            return self.keys, self.values
+
+        # We only cache the last `sliding_window` tokens
+        self.keys[:, :, window_start : window_start + self.sliding_window, :].copy_(
+            full_key_states[:, :, -self.sliding_window :, :]
+        )
+        self.values[:, :, window_start : window_start + self.sliding_window, :].copy_(
+            full_value_states[:, :, -self.sliding_window :, :]
+        )
+        return full_key_states, full_value_states
+
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        self.dtype, self.device = key_states.dtype, key_states.device
+        self.batch_size, self.num_heads = key_states.shape[:2]
+        self.v_head_dim = value_states.shape[-1]
+        self.k_head_dim = key_states.shape[-1]
+
+        self.cumulative_length = self.cumulative_length.to(self.device)
+        # Note: `mark_static_address` is used to tag the tensors as a fixed data pointer, preventing compiled graph
+        # breaks or cudagraph skips due to inplace mutations when updating the cache. However, it is not supported when
+        # tracing the graph, so we skip it in this case. As prefill should never be compiled, this is not an issue and it
+        # will still be run (except when users compile prefill explicitly, but this should be avoided!)
+        # Without this, we cannot use cudagraphs!!
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cumulative_length)
+
+        prefill_seen = key_states.shape[-2] if key_states.shape[-2] > 1 else 0
+        self._allocate_key_value_buffers(min(self.max_cache_len, prefill_seen + self.sliding_window))
+
+        self.is_initialized = True
+
+    def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the attention mask"""
+        is_full = (
+            self.prefill_length is not None and self.cumulative_length_int >= self.prefill_length + self.sliding_window
+        )
+
+        kv_offset = 0
+        # Prefill
+        if self.prefill_length is None and query_length > 1:
+            kv_length = min(self.max_cache_len, self.cumulative_length_int + query_length + self.sliding_window)
+        # Decode: cache is already full
+        elif is_full:
+            kv_offset = max(self.cumulative_length_int - self.prefill_length - self.sliding_window + 1, 0)
+            kv_length = self.prefill_length + self.sliding_window - 1 + query_length
+        # Decode: cache not yet full, but becoming full on this update
+        elif (
+            self.prefill_length is not None
+            and self.cumulative_length_int + query_length > self.prefill_length + self.sliding_window
+        ):
+            kv_length = self.cumulative_length_int + query_length
+        # Decode: cache not yet full but we return the local size as it's static
+        else:
+            kv_length = self.keys.shape[-2]
+
+        return kv_length, kv_offset
+
+    def reset(self) -> None:
+        super().reset()
+        self.prefill_length = None
+
+    def _allocate_key_value_buffers(self, physical_length: int, copy_existing: bool = False) -> None:
+        """(Re)allocate the static key/value buffers to `physical_length` slots and (re)tag the static address.
+
+        Only ever called from the eager prefill pass (initial allocation or chunked-prefill growth), never from a
+        compiled decode step, so reallocating here is safe for cudagraphs.
+        """
+        new_keys = torch.zeros(
+            (self.batch_size, self.num_heads, physical_length, self.k_head_dim), dtype=self.dtype, device=self.device
+        )
+        new_values = torch.zeros(
+            (self.batch_size, self.num_heads, physical_length, self.v_head_dim), dtype=self.dtype, device=self.device
+        )
+        if copy_existing:
+            old_length = self.keys.shape[-2]
+            new_keys[:, :, :old_length, :].copy_(self.keys)
+            new_values[:, :, :old_length, :].copy_(self.values)
+        self.keys = new_keys
+        self.values = new_values
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.keys)
+            torch._dynamo.mark_static_address(self.values)
 
 
 class UnlimitedOcrTextRotaryEmbedding(nn.Module):
