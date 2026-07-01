@@ -167,6 +167,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("internvl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("jina_embeddings_v3", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
+        ("kimi_k25", "TokenizersBackend" if is_tokenizers_available() else None),
         ("kosmos-2", "TokenizersBackend" if is_tokenizers_available() else None),
         ("lasr_ctc", "LasrTokenizer" if is_tokenizers_available() else None),
         ("lasr_encoder", "LasrTokenizer" if is_tokenizers_available() else None),
@@ -854,6 +855,7 @@ class AutoTokenizer:
                 ).__module__.startswith("transformers.")
             )
         )
+
         # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
         if (
             has_remote_code
@@ -863,7 +865,7 @@ class AutoTokenizer:
             has_remote_code = False
             tokenizer_auto_map = None
 
-        if has_remote_code:
+        if has_remote_code and not has_local_code:
             # V5: Always prefer fast tokenizer (index 1), fallback to slow (index 0)
             if tokenizer_auto_map[1] is not None:
                 class_ref = tokenizer_auto_map[1]

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+from ..core_model_loading import ConversionOps, WeightConverter
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
@@ -101,3 +101,144 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_serializable(self) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
         return True
+
+    def get_weight_conversions(self):
+        # Only models that have already been quantized can be loaded atm, so we can
+        # assume that if `hasattr(self, hf_quantizer)` and `has_moe_conversion(self)` and `is_moe_proj_in_config_scheme`
+        # then it needs special dequantization for MoE projections
+        # NOTE: MoE conversion should happen AFTER decompression! Already hardcoded in conversion
+
+        dequant_conversions = [
+            WeightConverter(
+                source_patterns=[
+                    r".weight_packed$",
+                    r".weight_scale$",
+                    r".weight_shape$",
+                ],
+                target_patterns=r"weight",
+                operations=[DecompressExperts(self)],
+            ),
+        ]
+        return dequant_conversions
+
+    def update_weight_conversions(self, weight_conversions):
+        updated: list = []
+        for conv in weight_conversions:
+            # Only WeightConverter for experts have ``.operations`` to extend with the dequant op
+            if not isinstance(conv, WeightConverter) or any("experts" not in p for p in conv.source_patterns):
+                updated.append(conv)
+                continue
+            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
+            if weight_sources:
+                packed_weight = [p + "_packed$" for p in weight_sources]
+                scale_sources = [p + "_scale$" for p in weight_sources]
+                shape_sources = [p + "_shape$" for p in weight_sources]
+                other = [p for p in conv.source_patterns if not p.endswith(".weight")]
+                new_sources = packed_weight + scale_sources + shape_sources + other
+                new_ops = [DecompressExperts(self)] + list(conv.operations)
+                conv = WeightConverter(
+                    source_patterns=new_sources,
+                    target_patterns=conv._original_target_patterns,
+                    operations=new_ops,
+                )
+            updated.append(conv)
+        updated.extend(self.get_weight_conversions())
+        return updated
+
+
+class DecompressExperts(ConversionOps):
+    """
+    Dequantize MoE layers when they are in new layout, because they aren't `nn.Module` anymore!
+
+    Takes packed weights and scales from the loaded state dict, creates a dummy Module
+    to take advantage of higher-lvl API `decompress_module` and dequantizes all weights.
+
+    Requires MoE conversion to be defined on conversion mapping, so that decompressed weights
+    are stacked/merged for all experts.
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        from compressed_tensors.compressors import BaseCompressor
+        from compressed_tensors.compressors.format import infer_module_format
+        from torch import nn
+
+        ct_quantization_config = self.hf_quantizer.compressor.quantization_config
+
+        quantization_scheme = list(ct_quantization_config.config_groups.values())[0]
+        format = quantization_scheme.format or infer_module_format(nn.Linear, quantization_scheme)
+        compressor = BaseCompressor.get_value_from_registry(format)
+
+        class DummyModule(nn.Module):
+            def __init__(self, weight, scale, shape):
+                super().__init__()
+                self.weight_packed = nn.Parameter(weight, requires_grad=False)
+                self.weight_scale = nn.Parameter(scale, requires_grad=False)
+                self.weight_shape = nn.Parameter(shape, requires_grad=False)
+
+        # `pack_factor` low-bit weights are packed per int32 along the packed dim.
+        pack_factor = 32 // quantization_scheme.weights.num_bits
+
+        # Per-expert compressed projections of size (input-dim; output-dim)
+        processed_out = {}
+        for key, value in input_dict.items():
+            if "weight_packed" not in key:
+                continue
+            quantized = value
+            scales = input_dict[key.replace("weight_packed", "weight_scale")]
+
+            # Pre-allocate the stacked output buffer to reduce cuda mem fragmentation
+            #
+            # Without pre-allocation the loop accumulates N tensors per expert so that
+            # `MergeModulelist` stacks the full list for MoE kernels compatinility.
+            # The N alloc/free cycles for scratch buffers inside decompress_module
+            # scatter memory in a fragmented pattern, so that by the time Concatenate tries
+            # to allocate the final cat output, the allocator has enough total free bytes but
+            # they are spread across many small non-contiguous holes.
+            output = None
+            for i, (quant, scale) in enumerate(zip(quantized, scales)):
+                # The checkpoint's `weight_shape` holds the *full* [out, in] of the unsharded weight.
+                # Under tensor/expert parallelism the loader shards every source sibling mapped to this
+                # target (`weight_packed`/`weight_scale`/`weight_shape`) with the same op, which leaves
+                # the 2-element `weight_shape` empty on most ranks (and stale on rank 0). The packed
+                # tensor is the source of truth for the *shard's* geometry: it is `[rows, cols]` with
+                # `pack_factor` values packed per int32 along the last dim, so the decompressed shard is
+                # `[rows, cols * pack_factor]`. Rebuild the shape from it so decompression is correct for
+                # every shard; in the non-distributed path this equals the stored `weight_shape`, so that
+                # path is unchanged.
+                shape = torch.tensor([quant.shape[0], quant.shape[1] * pack_factor])
+                module = DummyModule(quant, scale, shape)
+                module.quantization_scheme = quantization_scheme
+                compressor.decompress_module(module)
+
+                if output is None:
+                    # Use the first expert's decompressed shape/dtype to allocate full buffer.
+                    output = torch.empty(
+                        (len(quantized), *module.weight.shape),
+                        dtype=module.weight.dtype,
+                        device=module.weight.device,
+                    )
+                output[i].copy_(module.weight)
+                # explicitly free intermediate tensors so it does not accumulate across iterations
+                del module
+
+            del quantized, scales
+            if output is not None:
+                # Return a single pre-stacked tensor instead of a list. `MergeModulelist`
+                # passes it through without an extra `torch.stack` copy -> no x2 memory overhead
+                processed_out[key] = output
+
+        return processed_out
+
+    @property
+    def reverse_op(self) -> "ConversionOps":
+        return None  # FIXME
