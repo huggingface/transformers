@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -432,12 +431,12 @@ class Qwen3TTSConfig(PreTrainedConfig):
         if talker_config is None:
             talker_config = {}
             logger.info("talker_config is None. Initializing talker model with default values")
-        if speaker_encoder_config is None:
-            speaker_encoder_config = {}
-            logger.info("speaker_encoder_config is None. Initializing speaker encoder with default values")
 
         self.talker_config = Qwen3TTSTalkerConfig(**talker_config)
-        self.speaker_encoder_config = Qwen3TTSSpeakerEncoderConfig(**speaker_encoder_config)
+        # A speaker encoder is only present for voice-cloning ("base") checkpoints; leave it None otherwise.
+        self.speaker_encoder_config = (
+            Qwen3TTSSpeakerEncoderConfig(**speaker_encoder_config) if speaker_encoder_config is not None else None
+        )
 
         self.tokenizer_type = tokenizer_type
         self.tts_model_size = tts_model_size
