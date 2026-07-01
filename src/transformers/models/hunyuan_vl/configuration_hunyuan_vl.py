@@ -119,6 +119,12 @@ class HunYuanVLTextConfig(PreTrainedConfig):
     eod_token_id (`int`, *optional*, defaults to 3):
         Token id representing the end-of-document marker. Inherited from [`HunYuanDenseV1Config`] and re-documented
         here so the auto-generated docstring stays in sync.
+    rope_parameters (`dict`, *optional*):
+        RoPE configuration inherited from [`HunYuanDenseV1Config`]. When `xdrope_section` is present, it partitions
+        half of each attention head across HunYuanVL's XdRoPE axes. The expected order is `(width, height,
+        image_index)` for 3-axis XdRoPE and `(position, width, height, image_index)` for 4-axis XdRoPE. The
+        `image_index` axis is the ordinal of the image/frame in the input sequence; all visual tokens from one image
+        share the same value on that axis.
     sep_token_id (`int`, *optional*, defaults to 4):
         Token id used as a separator marker by HunYuan tokenizers.
     use_qk_norm (`bool`, *optional*, defaults to `False`):

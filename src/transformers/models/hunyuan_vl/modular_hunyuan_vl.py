@@ -161,6 +161,12 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
     eod_token_id (`int`, *optional*, defaults to 3):
         Token id representing the end-of-document marker. Inherited from [`HunYuanDenseV1Config`] and re-documented
         here so the auto-generated docstring stays in sync.
+    rope_parameters (`dict`, *optional*):
+        RoPE configuration inherited from [`HunYuanDenseV1Config`]. When `xdrope_section` is present, it partitions
+        half of each attention head across HunYuanVL's XdRoPE axes. The expected order is `(width, height,
+        image_index)` for 3-axis XdRoPE and `(position, width, height, image_index)` for 4-axis XdRoPE. The
+        `image_index` axis is the ordinal of the image/frame in the input sequence; all visual tokens from one image
+        share the same value on that axis.
     sep_token_id (`int`, *optional*, defaults to 4):
         Token id used as a separator marker by HunYuan tokenizers.
     use_qk_norm (`bool`, *optional*, defaults to `False`):
@@ -387,7 +393,13 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
 
 
 def apply_rotary_pos_emb_xdrope(q, k, cos, sin, xdrope_section):
-    """Apply HunYuan's xdrope rotary embedding to ``q`` and ``k``."""
+    """
+    Apply HunYuan's XdRoPE rotary embedding to ``q`` and ``k``.
+
+    `xdrope_section` partitions half of the attention head dimension across the XdRoPE axes produced by
+    `HunYuanVLModel.get_rope_index`. The section order matches the position-id channel order: `(width, height,
+    image_index)` for 3-axis XdRoPE and `(position, width, height, image_index)` for 4-axis XdRoPE.
+    """
     x_dim = len(xdrope_section)
     xdrope_section = [int(section) * 2 for section in xdrope_section]
     if sum(xdrope_section) != cos.shape[-1]:
@@ -799,24 +811,10 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel, HunYuanDenseV1Model):
         if position_ids is None:
             position_ids = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-            if num_xdrope_axes:
-                position_ids = position_ids.view(1, 1, -1).expand(num_xdrope_axes, inputs_embeds.shape[0], -1)
-            else:
-                position_ids = position_ids.unsqueeze(0)
-        elif num_xdrope_axes and position_ids.dim() == 2:
+            ).unsqueeze(0)
+
+        if num_xdrope_axes and position_ids.dim() == 2:
             position_ids = position_ids[None, ...].expand(num_xdrope_axes, -1, -1)
-        elif num_xdrope_axes and position_ids.dim() == 3:
-            is_legacy_batch_first = (
-                position_ids.shape[0] == inputs_embeds.shape[0]
-                and position_ids.shape[1] in {num_xdrope_axes, num_xdrope_axes + 1}
-            )
-            is_channel_first = (
-                position_ids.shape[1] == inputs_embeds.shape[0]
-                and position_ids.shape[0] in {num_xdrope_axes, num_xdrope_axes + 1}
-            )
-            if is_legacy_batch_first and not is_channel_first:
-                position_ids = position_ids.permute(1, 0, 2)
 
         text_position_ids = None
         rotary_position_ids = position_ids
@@ -876,21 +874,25 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         self.rope_deltas = None
         self.post_init()
 
-    def get_image_position_ids(self, grid_thw: torch.LongTensor, device: str | torch.device | None = None):
+    def get_vision_position_ids(
+        self,
+        grid_hw: list[int, int] | torch.Tensor,
+        spatial_merge_size: int = 1,
+        device: str | torch.device | None = None,
+    ):
         """
         Compute HunYuanVL xdrope spatial indices for the pooled image-token grid of a single image.
 
         The vision merger appends one newline-style token per image row, so the width channel spans
         `patch_w + 1` positions while the height channel repeats each row id over that extra column.
         """
-        spatial_merge_size = self.config.vision_config.spatial_merge_size
-        _, grid_h, grid_w = (int(value) for value in grid_thw)
-        patch_h = grid_h // spatial_merge_size
-        patch_w = grid_w // spatial_merge_size
+        grid_h, grid_w = (int(value) for value in grid_hw)
+        llm_grid_h = grid_h // spatial_merge_size
+        llm_grid_w = grid_w // spatial_merge_size
 
-        position_width = torch.arange(patch_w + 1, dtype=torch.long, device=device).repeat(patch_h)
-        position_height = torch.arange(patch_h, dtype=torch.long, device=device).repeat_interleave(patch_w + 1)
-        return position_width, position_height
+        position_width = torch.arange(llm_grid_w + 1, dtype=torch.long, device=device).repeat(llm_grid_h)
+        position_height = torch.arange(llm_grid_h, dtype=torch.long, device=device).repeat_interleave(llm_grid_w + 1)
+        return torch.stack([position_width, position_height], dim=0)
 
     def get_image_placeholder_spans(self, input_ids: torch.LongTensor) -> list[tuple[int, int]]:
         """
@@ -942,8 +944,19 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         """
         Build HunYuanVL XdRoPE position ids.
 
-        Returns the XdRoPE axes consumed by the text rotary embedding: `(width, height, image_index)` for 3-axis
-        configs and `(position, width, height, image_index)` for 4-axis configs.
+        `rope_parameters["xdrope_section"]` controls both the number and order of XdRoPE axes. Each section value is
+        the number of half-rotary dimensions assigned to the corresponding axis, and the sections must sum to
+        `head_dim // 2`.
+
+        This method returns only the XdRoPE rotary axes consumed by the text backbone:
+
+        - 3-axis configs use `(width, height, image_index)`.
+        - 4-axis configs use `(position, width, height, image_index)`.
+
+        `width` and `height` index the pooled visual grid inside one image. `image_index` is the ordinal of the
+        image/frame in the input sequence, so all visual tokens from the first image get `0`, the second image get
+        `1`, and so on. The optional leading text-only channel that may be concatenated by generation helpers is not
+        part of `xdrope_section`.
         """
         rope_parameters = self.config.text_config.rope_parameters or {}
         num_xdrope_axes = len(rope_parameters.get("xdrope_section", []))
@@ -980,8 +993,12 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
                             "Found more image placeholder spans than entries in `image_grid_thw`."
                         ) from error
 
-                    position_width, position_height = self.get_image_position_ids(grid_thw, device=input_ids.device)
-                    grid_tokens = position_width.shape[0]
+                    vision_position_ids = self.get_vision_position_ids(
+                        grid_thw[1:],
+                        spatial_merge_size=self.config.vision_config.spatial_merge_size,
+                        device=input_ids.device,
+                    )
+                    grid_tokens = vision_position_ids.shape[1]
                     span_length = span_end - span_start
                     if span_length == grid_tokens + 2:
                         grid_start = span_start + 1
@@ -995,8 +1012,9 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
 
                     grid_end = grid_start + grid_tokens
                     offset = 1 if num_xdrope_axes == 4 else 0
-                    current_position_ids[offset, grid_start:grid_end] = position_width.to(dtype=input_ids.dtype)
-                    current_position_ids[offset + 1, grid_start:grid_end] = position_height.to(dtype=input_ids.dtype)
+                    current_position_ids[offset : offset + 2, grid_start:grid_end] = vision_position_ids.to(
+                        dtype=input_ids.dtype
+                    )
                     current_position_ids[offset + 2, grid_start:grid_end] = image_index
                     image_index += 1
 

@@ -112,9 +112,10 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
 
     def prepare_config_and_inputs(self):
         config, inputs_dict = self.prepare_config_and_inputs_for_common()
-        # HunYuanVL uses 4 position-id channels in multimodal mode: text, width, height, and temporal.
+        config.text_config.rope_parameters["xdrope_section"] = [2, 2, 2, 2]
+        # HunYuanVL uses 4 XdRoPE axes in multimodal mode: position, width, height, and temporal.
         inputs_dict["position_ids"] = (
-            torch.arange(self.seq_length, device=torch_device).view(1, 1, -1).expand(self.batch_size, 4, -1)
+            torch.arange(self.seq_length, device=torch_device).view(1, 1, -1).expand(4, self.batch_size, -1)
         )
         return config, inputs_dict
 
@@ -195,24 +196,29 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = HunYuanVLForConditionalGeneration(config).to(self.model_tester.device)
 
-        position_ids = model.model.get_rope_index(
+        position_ids, rope_deltas = model.model.get_rope_index(
             inputs_dict["input_ids"],
             image_grid_thw=inputs_dict["image_grid_thw"],
             attention_mask=inputs_dict["attention_mask"],
         )
 
         grid_tokens = self.model_tester.grid_hw * (self.model_tester.grid_hw + 1)
-        self.assertEqual(position_ids.shape, (self.model_tester.batch_size, 4, self.model_tester.seq_length))
+        self.assertEqual(position_ids.shape, (4, self.model_tester.batch_size, self.model_tester.seq_length))
+        self.assertEqual(rope_deltas.shape, (self.model_tester.batch_size, 1))
         self.assertTrue(
             torch.equal(
-                position_ids[0, 1, 1 : 1 + grid_tokens],
-                torch.arange(self.model_tester.grid_hw + 1).repeat(self.model_tester.grid_hw),
+                position_ids[1, 0, 1 : 1 + grid_tokens],
+                torch.arange(self.model_tester.grid_hw + 1, device=position_ids.device).repeat(
+                    self.model_tester.grid_hw
+                ),
             )
         )
         self.assertTrue(
             torch.equal(
-                position_ids[0, 2, 1 : 1 + grid_tokens],
-                torch.arange(self.model_tester.grid_hw).repeat_interleave(self.model_tester.grid_hw + 1),
+                position_ids[2, 0, 1 : 1 + grid_tokens],
+                torch.arange(self.model_tester.grid_hw, device=position_ids.device).repeat_interleave(
+                    self.model_tester.grid_hw + 1
+                ),
             )
         )
 
@@ -300,6 +306,7 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         prefill_inputs = model.prepare_inputs_for_generation(
             inputs_dict["input_ids"],
             attention_mask=inputs_dict["attention_mask"],
+            position_ids=inputs_dict["position_ids"],
             pixel_values=inputs_dict["pixel_values"],
             image_grid_thw=inputs_dict["image_grid_thw"],
             use_cache=True,
@@ -312,6 +319,7 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         decode_inputs = model.prepare_inputs_for_generation(
             inputs_dict["input_ids"],
             attention_mask=inputs_dict["attention_mask"],
+            position_ids=inputs_dict["position_ids"],
             pixel_values=inputs_dict["pixel_values"],
             image_grid_thw=inputs_dict["image_grid_thw"],
             use_cache=True,
@@ -320,7 +328,7 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         )
         self.assertIsNone(decode_inputs["pixel_values"])
         self.assertIs(decode_inputs["image_grid_thw"], inputs_dict["image_grid_thw"])
-        self.assertEqual(decode_inputs["position_ids"].shape, (self.model_tester.batch_size, 4, 1))
+        self.assertEqual(decode_inputs["position_ids"].shape, (4, self.model_tester.batch_size, 1))
 
     def test_batching_equivalence(self, atol=2e-5, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
