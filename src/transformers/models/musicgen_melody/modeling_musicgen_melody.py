@@ -1592,11 +1592,16 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 decoder_attention_mask = decoder_attention_mask.repeat((2, 1))
 
         if past_key_values is not None:
-            decoder_input_ids = (
-                decoder_input_ids[:, -next_sequence_length:]
-                if next_sequence_length is not None
-                else decoder_input_ids
-            )
+            past_length = past_key_values.get_seq_length()
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
             # we only want to use conditional signal in the 1st generation step but keeping the attention mask
             encoder_hidden_states = None
