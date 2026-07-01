@@ -319,12 +319,23 @@ class AXK2Attention(nn.Module):
         self.qk_head_dim = config.qk_head_dim
 
         self.is_causal = True
+        self.use_output_gate = getattr(config, "attention_output_gate", False)
+        # When the output gate is fused into q_b_proj (vLLM-compatible), the input is doubled
+        # ([q_a post-norm | q_a pre-norm]) and each head outputs [q (qk_head_dim) | gate (v_head_dim)].
+        self.attn_gate_fused = self.use_output_gate and getattr(config, "attn_gate_fused", False)
         if self.q_lora_rank is None:
             self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         else:
             self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
             self.q_a_layernorm = AXK2RMSNorm(config.q_lora_rank)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            if self.attn_gate_fused:
+                self.q_b_proj = nn.Linear(
+                    2 * config.q_lora_rank,
+                    self.num_heads * (self.qk_head_dim + self.v_head_dim),
+                    bias=False,
+                )
+            else:
+                self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
         self.kv_a_proj_with_mqa = nn.Linear(
             config.hidden_size,
@@ -344,7 +355,9 @@ class AXK2Attention(nn.Module):
             bias=config.attention_bias,
         )
 
-        if getattr(config, "attention_output_gate", False):
+        # Separate output-gate projection for non-fused checkpoints; the fused variant
+        # (attn_gate_fused) carries the gate inside q_b_proj instead.
+        if self.use_output_gate and not self.attn_gate_fused:
             gate_in = self.q_lora_rank if self.q_lora_rank is not None else config.hidden_size
             self.linear_gate = nn.Linear(gate_in, self.num_heads * self.v_head_dim, bias=False)
         else:
@@ -376,12 +389,22 @@ class AXK2Attention(nn.Module):
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
+        gate = None
         if self.q_lora_rank is None:
             q_compressed = hidden_states
             q_states = self.q_proj(hidden_states)
         else:
             q_compressed = self.q_a_proj(hidden_states)
-            q_states = self.q_b_proj(self.q_a_layernorm(q_compressed))
+            q_post = self.q_a_layernorm(q_compressed)
+            if self.attn_gate_fused:
+                # Fused output gate: doubled input [q_post | q_pre] -> per-head [q | gate].
+                qg = self.q_b_proj(torch.cat([q_post, q_compressed], dim=-1))
+                qg = qg.view(batch_size, seq_length, self.num_heads, self.qk_head_dim + self.v_head_dim)
+                q_states, gate = torch.split(qg, [self.qk_head_dim, self.v_head_dim], dim=-1)
+                q_states = q_states.reshape(batch_size, seq_length, self.num_heads * self.qk_head_dim)
+                gate = gate.reshape(batch_size, seq_length, self.num_heads * self.v_head_dim)
+            else:
+                q_states = self.q_b_proj(q_post)
         q_states = q_states.view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
@@ -456,6 +479,7 @@ class AXK2Attention(nn.Module):
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         if self.linear_gate is not None:
             gate = self.linear_gate(q_compressed)
+        if gate is not None:
             attn_output = (attn_output * torch.sigmoid(gate.float())).to(attn_output.dtype)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
