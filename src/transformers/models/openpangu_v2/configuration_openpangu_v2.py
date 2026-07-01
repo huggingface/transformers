@@ -30,18 +30,16 @@ class OpenPanguV2Config(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `OpenPangu_v2`
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "rowwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -76,6 +74,7 @@ class OpenPanguV2Config(PreTrainedConfig):
         num_experts_per_tok: int | None = None,
         num_hidden_layers: int | None = 0,
         num_key_value_heads: int | None = None,
+        pad_token_id: int | None = 2,
         param_sink_number: int | None = 0,
         q_lora_rank: int | None = None,
         qk_nope_head_dim: int | None = None,
@@ -94,6 +93,7 @@ class OpenPanguV2Config(PreTrainedConfig):
         vocab_size: int | None = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

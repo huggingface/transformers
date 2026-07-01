@@ -31,9 +31,10 @@ from torch.nn import functional as F
 from transformers.cache_utils import Cache
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.modeling_outputs import BaseModelOutputWithPast
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
@@ -42,9 +43,9 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import PreTrainedModel
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_openpangu_v2 import OpenPanguV2Config
 
 
@@ -271,10 +272,10 @@ class mHCModule(nn.Module):
         x: (B, S, n * H)
         """
         dtype = x.dtype
-        # x = x.float()
+        target_dtype = self.phi.weight.dtype
         rsqrt = torch.rsqrt(x.square().mean(-1, keepdim=True) + self.norm_eps)
         if self.mhc_use_gamma:
-            weight = self.phi((x * rsqrt * self.norm_gamma.unsqueeze(0)).to(torch.bfloat16))
+            weight = self.phi((x * rsqrt * self.norm_gamma.unsqueeze(0)).to(target_dtype))
         else:
             weight = self.phi(x) * rsqrt
 
@@ -352,7 +353,12 @@ class WindowBuffer:
         if self.cache_len <= 0:
             return None
 
-        if self.cache is None:
+        cache_invalid = (
+            self.cache is None
+            or self.cache.shape[0] != hidden_states.shape[0]
+            or self.cache.device != hidden_states.device
+        )
+        if cache_invalid:
             B, S, H = hidden_states.shape
             if self.cache_len > S:
                 padding = torch.zeros(
@@ -382,9 +388,12 @@ class WindowBuffer:
         else:
             if S > 1:
                 self.reset()
+            cache_valid = (
+                self.cache is not None and self.cache.shape[0] == B and self.cache.device == hidden_states.device
+            )
             current_cache = (
                 self.cache
-                if self.cache is not None
+                if cache_valid
                 else torch.zeros((B, self.cache_len, H), device=hidden_states.device, dtype=hidden_states.dtype)
             )
 
@@ -661,13 +670,11 @@ class OpenPanguV2Attention(nn.Module):
             self.param_sink_k_pe = torch.nn.Parameter(
                 torch.empty(
                     (self.param_sink_number, self.qk_rope_head_dim),
-                    dtype=config.torch_dtype,
                 )
             )
             self.param_sink_compressed_kv = torch.nn.Parameter(
                 torch.empty(
                     (self.param_sink_number, self.kv_lora_rank),
-                    dtype=config.torch_dtype,
                 )
             )
 
@@ -1066,16 +1073,56 @@ class OpenPanguV2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["OpenPanguV2DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": OpenPanguV2DecoderLayer,
-        "attentions": OpenPanguV2Attention,
-    }
+    # MLA does not output attention weights
+    # Override parent's _can_record_outputs to remove "attentions"
+    _can_record_outputs = {"hidden_states": OpenPanguV2DecoderLayer}
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = 0.02
+
+        if isinstance(module, mHCModule):
+            # Initialize MHC bfloat16 parameters
+            if hasattr(module, "norm_gamma"):
+                init.normal_(module.norm_gamma, mean=0.0, std=std)
+            if hasattr(module, "branch_alpha"):
+                init.normal_(module.branch_alpha, mean=0.0, std=std)
+            if hasattr(module, "branch_beta"):
+                init.normal_(module.branch_beta, mean=0.0, std=std)
+            if hasattr(module, "branch_alpha_pre"):
+                init.normal_(module.branch_alpha_pre, mean=0.0, std=std)
+            if hasattr(module, "branch_beta_pre"):
+                init.normal_(module.branch_beta_pre, mean=0.0, std=std)
+
+        elif isinstance(module, DsaIndexer):
+            init.normal_(module.wq_b, mean=0.0, std=std)
+            init.normal_(module.wk, mean=0.0, std=std)
+            init.normal_(module.weights_proj.weight, mean=0.0, std=std)
+
+        elif isinstance(module, OpenPanguV2Attention):
+            # Initialize sink token parameters
+            if hasattr(module, "param_sink_k_pe"):
+                init.normal_(module.param_sink_k_pe, mean=0.0, std=std)
+            if hasattr(module, "param_sink_compressed_kv"):
+                init.normal_(module.param_sink_compressed_kv, mean=0.0, std=std)
+
+        elif isinstance(module, OpenPanguV2Experts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+
+        elif isinstance(module, OpenPanguV2TopkRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+
+        elif isinstance(module, OpenPanguV2SparseMoeBlock):
+            # Initialize MoE block's e_score_correction_bias buffer
+            init.zeros_(module.e_score_correction_bias)
 
 
 @auto_docstring
@@ -1104,7 +1151,8 @@ class OpenPanguV2Model(OpenPanguV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

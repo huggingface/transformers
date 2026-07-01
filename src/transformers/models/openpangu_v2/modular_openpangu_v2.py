@@ -24,7 +24,7 @@ from torch.nn import functional as F
 from transformers.cache_utils import Cache
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.modeling_outputs import BaseModelOutputWithPast
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
 from transformers.utils import logging
 from transformers.models.llama.modeling_llama import (
@@ -46,11 +46,13 @@ from transformers.models.mixtral.modeling_mixtral import MixtralExperts
 from transformers.models.phi.modeling_phi import PhiRotaryEmbedding
 
 from ...cache_utils import Cache, DynamicCache
+from ... import initialization as init
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.import_utils import get_torch_version
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_openpangu_v2 import OpenPanguV2Config
 
 
@@ -288,10 +290,10 @@ class mHCModule(nn.Module):
         x: (B, S, n * H)
         """
         dtype = x.dtype
-        # x = x.float()
+        target_dtype = self.phi.weight.dtype
         rsqrt = torch.rsqrt(x.square().mean(-1, keepdim=True) + self.norm_eps)
         if self.mhc_use_gamma:
-            weight = self.phi((x * rsqrt * self.norm_gamma.unsqueeze(0)).to(torch.bfloat16))
+            weight = self.phi((x * rsqrt * self.norm_gamma.unsqueeze(0)).to(target_dtype))
         else:
             weight = self.phi(x) * rsqrt
 
@@ -369,7 +371,12 @@ class WindowBuffer:
         if self.cache_len <= 0:
             return None
         
-        if self.cache is None:
+        cache_invalid = (
+            self.cache is None
+            or self.cache.shape[0] != hidden_states.shape[0]
+            or self.cache.device != hidden_states.device
+        )
+        if cache_invalid:
             B, S, H = hidden_states.shape
             if S < self.cache_len:
                 padding = torch.zeros((B, self.cache_len - S, H), 
@@ -401,10 +408,17 @@ class WindowBuffer:
         else:
             if S > 1:
                 self.reset()
-            current_cache = self.cache if self.cache is not None else \
-                            torch.zeros((B, self.cache_len, H), 
-                                        device=hidden_states.device, 
-                                        dtype=hidden_states.dtype)
+            cache_valid = (
+                self.cache is not None
+                and self.cache.shape[0] == B
+                and self.cache.device == hidden_states.device
+            )
+            current_cache = (
+                self.cache if cache_valid
+                else torch.zeros((B, self.cache_len, H),
+                                 device=hidden_states.device,
+                                 dtype=hidden_states.dtype)
+            )
             
             conv_input = torch.cat([current_cache, hidden_states], dim=1)
             self._update_cache(hidden_states)
@@ -518,13 +532,11 @@ class OpenPanguV2Attention(nn.Module):
             self.param_sink_k_pe = torch.nn.Parameter(
                 torch.empty(
                     (self.param_sink_number, self.qk_rope_head_dim),
-                    dtype=config.torch_dtype,
                 )
             )
             self.param_sink_compressed_kv = torch.nn.Parameter(
                 torch.empty(
                     (self.param_sink_number, self.kv_lora_rank),
-                    dtype=config.torch_dtype,
                 )
             )
 
@@ -865,7 +877,55 @@ class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
 
 
 class OpenPanguV2PreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
+    # MLA does not output attention weights
+    # Override parent's _can_record_outputs to remove "attentions"
+    _can_record_outputs = {
+        "hidden_states": OpenPanguV2DecoderLayer
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        std = 0.02
+        
+        if isinstance(module, mHCModule):
+            # Initialize MHC bfloat16 parameters
+            if hasattr(module, 'norm_gamma'):
+                init.normal_(module.norm_gamma, mean=0.0, std=std)
+            if hasattr(module, 'branch_alpha'):
+                init.normal_(module.branch_alpha, mean=0.0, std=std)
+            if hasattr(module, 'branch_beta'):
+                init.normal_(module.branch_beta, mean=0.0, std=std)
+            if hasattr(module, 'branch_alpha_pre'):
+                init.normal_(module.branch_alpha_pre, mean=0.0, std=std)
+            if hasattr(module, 'branch_beta_pre'):
+                init.normal_(module.branch_beta_pre, mean=0.0, std=std)
+        
+        elif isinstance(module, DsaIndexer):
+            init.normal_(module.wq_b, mean=0.0, std=std)
+            init.normal_(module.wk, mean=0.0, std=std)
+            init.normal_(module.weights_proj.weight, mean=0.0, std=std)
+        
+        elif isinstance(module, OpenPanguV2Attention):
+            # Initialize sink token parameters
+            if hasattr(module, 'param_sink_k_pe'):
+                init.normal_(module.param_sink_k_pe, mean=0.0, std=std)
+            if hasattr(module, 'param_sink_compressed_kv'):
+                init.normal_(module.param_sink_compressed_kv, mean=0.0, std=std)
+        
+        elif isinstance(module, OpenPanguV2Experts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+
+        elif isinstance(module, OpenPanguV2TopkRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+
+        elif isinstance(module, OpenPanguV2SparseMoeBlock):
+            # Initialize MoE block's e_score_correction_bias buffer
+            init.zeros_(module.e_score_correction_bias)
 
 
 class OpenPanguV2Model(LlamaModel):
@@ -880,7 +940,8 @@ class OpenPanguV2Model(LlamaModel):
                 merge_layer_only_pre=True,
             )
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
