@@ -212,7 +212,7 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
     - update
     - get_seq_length
     - get_mask_sizes
-    - get_max_cache_shape
+    - get_max_length
     - reset
     - reorder_cache
     - lazy_initialization
@@ -245,7 +245,7 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
     - early_initialization
     - get_seq_length
     - get_mask_sizes
-    - get_max_cache_shape
+    - get_max_length
     - reset
     - reorder_cache
     - crop
