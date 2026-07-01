@@ -30,18 +30,15 @@ def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, valu
     # 1.cuda or Ascend NPU
     #   - torch version >= 2.5
     #   - attention_mask is None (otherwise it will fall back to the math kernel)
-    #   - key/value head_dim <= 256 (otherwise also fallback to math kernel). The key and value head_dim
-    #     can differ (e.g. MLA models), so both are checked.
+    #   - key head_dim == value head_dim <= 256. If they differ (e.g. MLA models) or exceed 256, `enable_gqa`
+    #     is served only by the cuDNN kernel (Flash needs q/k/v to share the last dim <= 256; mem-efficient
+    #     lacks the GQA broadcast), so it silently drops to the math kernel where cuDNN is unavailable. We take
+    #     the repeat_kv (MHA) path instead, which the mem-efficient kernel supports.
     # 2.xpu
     #   - torch version >= 2.8
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
-    return (
-        _is_torch_greater_or_equal_than_2_5
-        and attention_mask is None
-        and key.shape[-1] <= 256
-        and value.shape[-1] <= 256
-    )
+    return _is_torch_greater_or_equal_than_2_5 and attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
 
 
 def sdpa_attention_forward(

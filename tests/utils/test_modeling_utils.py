@@ -2935,6 +2935,21 @@ class TestAttentionImplementation(unittest.TestCase):
         # An explicit mask always disables GQA-in-SDPA (it would otherwise fall back to the math kernel).
         self.assertFalse(use_gqa_in_sdpa(torch.empty(1, 1, 4, 4), small, small))
 
+    @require_torch_greater_or_equal("2.5")
+    def test_use_gqa_in_sdpa_skips_mismatched_head_dim(self):
+        # Mismatched key/value head_dim (e.g. MLA) must disable GQA-in-SDPA even when both are <= 256: `enable_gqa`
+        # would then be served only by cuDNN and silently fall back to the math kernel where cuDNN is unavailable.
+        from transformers.integrations.sdpa_attention import use_gqa_in_sdpa
+
+        if is_torch_xpu_available():
+            self.skipTest(reason="The head_dim guard only applies to the CUDA/NPU/CPU dispatch path, not XPU")
+
+        key = torch.empty(1, 2, 4, 192)
+        value = torch.empty(1, 2, 4, 128)  # both <= 256 but differ
+        self.assertFalse(use_gqa_in_sdpa(None, key, value))
+        self.assertFalse(use_gqa_in_sdpa(None, value, key))
+        self.assertTrue(use_gqa_in_sdpa(None, value, value))
+
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
         # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
