@@ -135,24 +135,25 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        # dsv4-flash-base stores its (power-of-two) ue8m0 scales in a float32 container under
-        # `.scale`; those renamed keys keep the on-disk float32 dtype, so cast them to the UE8M0
-        # dtype the kernels expect (exact, since the values are powers of two). Checkpoints that
-        # already ship the native float8 E8M0 dtype (e.g. dsv4-flash) are left untouched.
+        # Convert UE8M0 weight scales to native float8_e8m0fnu (what the kernels expect).
+        # On disk they come two ways: float32 holds the scale value; uint8 holds the raw e8m0
+        # bits. Already-native e8m0 scales fall through unchanged.
         if self.quantization_config.scale_fmt == "ue8m0":
             from ..integrations.finegrained_fp8 import _get_ue8m0_dtype
 
             ue8m0 = _get_ue8m0_dtype()
-            float32_scales = [
-                name
-                for name, param in model.named_parameters()
-                if name.endswith("_scale_inv") and param.dtype == torch.float32
-            ]
-            for name in float32_scales:
+            for name, param in list(model.named_parameters()):
+                if not name.endswith("_scale_inv"):
+                    continue
+                if param.dtype == torch.float32:
+                    converted = param.data.to(ue8m0)  # cast the value
+                elif param.dtype == torch.uint8:
+                    converted = param.data.view(ue8m0)  # reinterpret the byte
+                else:
+                    continue
                 module_name, _, attr = name.rpartition(".")
                 module = model.get_submodule(module_name)
-                scale = getattr(module, attr)
-                setattr(module, attr, torch.nn.Parameter(scale.data.to(ue8m0), requires_grad=False))
+                setattr(module, attr, torch.nn.Parameter(converted, requires_grad=False))
         return model
 
     def update_tp_plan(self, config):
