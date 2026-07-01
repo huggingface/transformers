@@ -75,14 +75,17 @@ def classify_component(path: str, class_name: str) -> str:
         return "embedding"
     if "attention" in class_lower or path_lower.endswith("attention") or path_lower.endswith("self_attn"):
         return "attention"
+    # A Linear/Conv *leaf* is a projection even when it lives under an MLP/FFN (its path carries an
+    # "mlp"/"ffn" token) — feed_forward is the *container*, not its projections. Checked before the
+    # feed_forward branch so q/k/v/o and gate/up/down are surfaced as projections with dims.
+    if class_lower in {"linear", "conv1d", "conv2d"} or class_lower.endswith("linear"):
+        return "projection"
     if _looks_like_feed_forward(path_lower, class_lower):
         return "feed_forward"
     if "layernorm" in class_lower or "rmsnorm" in class_lower or class_lower.endswith("norm"):
         return "normalization"
     if class_lower == "dropout":
         return "dropout"
-    if class_lower in {"linear", "conv1d", "conv2d"} or class_lower.endswith("linear"):
-        return "projection"
     if "activation" in class_lower or path_lower.endswith("act_fn"):
         return "activation"
     if "pooler" in class_lower or path_lower.endswith("pooler"):

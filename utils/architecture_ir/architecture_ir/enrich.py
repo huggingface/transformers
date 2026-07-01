@@ -55,6 +55,16 @@ def attention_spec(config: Any) -> dict[str, Any]:
     return {key: value for key, value in spec.items() if value is not None}
 
 
+def mlp_spec(config: Any) -> dict[str, Any]:
+    """Config-derived feed-forward facts (dims + activation) attached to MLP components."""
+    spec = {
+        "hidden_size": _cfg(config, "hidden_size", "d_model", "n_embd"),
+        "intermediate_size": _cfg(config, "intermediate_size", "d_ff", "ffn_dim", "moe_intermediate_size"),
+        "activation": _cfg(config, "hidden_act", "activation_function"),
+    }
+    return {key: value for key, value in spec.items() if value is not None}
+
+
 def positional_scheme(config: Any) -> str | None:
     """rope | relative | alibi | learned | sinusoidal | None."""
     if _cfg(config, "rope_parameters", "rope_theta", "rope_scaling") is not None:

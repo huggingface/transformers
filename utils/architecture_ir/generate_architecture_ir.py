@@ -18,6 +18,7 @@ from architecture_ir import (  # noqa: E402
     SCHEMA_VERSION,
     build_architecture_artifact,
     build_expanded_architecture_artifact,
+    build_modular_graph,
     resolve_architecture,
 )
 from architecture_ir.serializer import write_artifact, write_json  # noqa: E402
@@ -31,6 +32,7 @@ def generate_architecture_ir(
     output_dir: str | Path,
     *,
     debug_expanded: bool = False,
+    modular_graph: bool = False,
 ) -> dict[str, Any]:
     output_path = Path(output_dir)
     artifacts_path = output_path / "artifacts"
@@ -75,6 +77,11 @@ def generate_architecture_ir(
                 }
             )
 
+    if modular_graph:
+        # Library-wide inheritance forest, independent of the requested architectures.
+        write_json(output_path / "modular_graph.json", build_modular_graph())
+        manifest["modular_graph"] = "modular_graph.json"
+
     write_json(output_path / "manifest.json", manifest)
     return manifest
 
@@ -93,11 +100,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Also write the full expanded module dump under debug/expanded/.",
     )
+    parser.add_argument(
+        "--modular-graph",
+        action="store_true",
+        help="Also write modular_graph.json: the library-wide modular inheritance forest.",
+    )
     args = parser.parse_args(argv)
 
-    manifest = generate_architecture_ir(args.architectures, args.output_dir, debug_expanded=args.debug_expanded)
+    manifest = generate_architecture_ir(
+        args.architectures,
+        args.output_dir,
+        debug_expanded=args.debug_expanded,
+        modular_graph=args.modular_graph,
+    )
     manifest_path = Path(args.output_dir) / "manifest.json"
     print(f"Wrote {manifest_path}")
+    if "modular_graph" in manifest:
+        print(f"Wrote {Path(args.output_dir) / manifest['modular_graph']}")
 
     for entry in manifest["architectures"]:
         print(f"Wrote {Path(args.output_dir) / entry['artifact']}")

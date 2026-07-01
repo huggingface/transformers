@@ -120,8 +120,14 @@ per-model special-casing):
   `sliding_window`, `tie_word_embeddings`. Fields that don't apply are omitted; a value being absent means
   "not present / undeterminable".
 - Per-component **`attributes`**: attention components carry `{variant, n_heads, n_kv_heads, head_dim, rope,
-  sliding_window}`; normalization components carry `{norm_type}` (`rms`/`layer`/…); MoE components carry
-  `{num_experts, experts_per_token, …}`.
+  sliding_window}`; feed-forward components carry `{hidden_size, intermediate_size, activation}`; normalization
+  components carry `{norm_type}` (`rms`/`layer`/…); MoE components carry `{num_experts, experts_per_token, …}`.
+
+The IR also **descends into the projections** inside attention / MLP / MoE bodies — the `q/k/v/o_proj` and
+`gate/up/down_proj` (kind `projection`) appear as children of their host with `{in_features, out_features}`, each
+**symbolized to a config expression** where it matches a salient value (e.g. `config.hidden_size`,
+`config.intermediate_size`; dims like `num_kv_heads · head_dim` that match no single field stay integers). This stays
+compact — projections are serialized once in the template body, never per repeated layer.
 
 These facts also drive the reserved edge kinds: decoder-side self-attention emits `cache_read`/`cache_write` edges to a
 `state:kv_cache` pseudo-node, and a MoE block emits a `route` edge to its experts container.
@@ -193,10 +199,18 @@ or a token — `"B"` (batch), `"S"` (sequence), or a config expression such as `
 matches a salient config value. So `[1, 8, 4096]` is serialized as `["B", "S", "config.hidden_size"]`, and a
 `ResolvedGraph` consumer can evaluate it per checkpoint.
 
+The forward is also hooked **inside** the representative element of each repeated block, so the `dataflow` object
+carries a `blocks` map (repeat id → the body's direct children in observed call order, with shapes). This **re-grounds
+the intra-block `data` edges**: module registration order is not forward order (it would leave a pre-norm block's
+norms dangling at the end), so the block's data edges are rewritten to the observed order — e.g. for a Llama layer,
+`input_layernorm → self_attn → post_attention_layernorm → mlp`. Only `data` edges internal to the block are rewritten;
+`residual`/`mask`/`position`/`cache` edges are left intact.
+
 Observed consecutive-stage `data` edges that the structural pass missed are added to `edges` (tagged with a
 `"provenance": "observed_forward"` field); `position`/`mask` stages are excluded from that chain since they are not
 main-path carriers. The `dataflow` block is **best-effort and optional**: models whose forward can't run on meta
-(data-dependent control flow, unusual inputs) simply omit it and keep their structural edges.
+(data-dependent control flow, unusual inputs) simply omit it and keep their structural edges. Blocks whose body wraps a
+further nested `ModuleList` of heterogeneous sub-layers (e.g. T5) are not re-grounded and keep their structural edges.
 
 ---
 
@@ -297,6 +311,17 @@ The parent model of each class is read from the modular file's `from ..<model>.m
 Computation is best-effort: on any failure the artifact still carries a `modularity` summary marking the model
 non-modular with a `note`, keeping the artifact shape stable.
 
+### Library-wide modular graph
+
+The per-artifact `extends` records only a model's own parent. To answer *which architectures are linked, and which share
+a lineage*, the generator can also emit a standalone **`modular_graph.json`** (schema
+`schema/modular-graph-v0.schema.json`, `schema_version: modular-graph-v0`): a forest over the whole library with, per
+node, its `extends`/`parents`, `children`, the transitive `root` ancestor, `depth`, `is_modular`, and `diff_size`, plus a
+`roots` list of the spine base models. Models sharing a `root` are in the same lineage — the pairs whose semantic IDs
+align cleanly and are the natural defaults for comparison. Like the per-model diff it is built purely by `ast`-parsing
+`modular_*.py` files (no torch, no model build), so the full forest computes in a few seconds independently of which
+artifacts are generated (`generate_architecture_ir.py --modular-graph`).
+
 ### Not yet implemented
 
 `patches` are keyed to Python classes projected onto semantic kinds — not yet to individual semantic component **IDs**
@@ -313,9 +338,14 @@ The generator writes:
 ```
 <output-dir>/
   manifest.json                # schema_version: architecture-ir-manifest-v0
+  modular_graph.json           # schema_version: modular-graph-v0 (only with --modular-graph)
   artifacts/
     <model_type>.json          # ArchitectureTemplate
 ```
 
 The `manifest.json` is an index over generated templates (with per-architecture status and any failures). It is not
 part of the two-level IR contract and has its own `schema_version` (`architecture-ir-manifest-v0`).
+
+The `modular_graph.json` (written when `--modular-graph` is passed) is the library-wide modular inheritance forest
+described in §10; it is independent of the two-level IR contract and covers the whole library, not just the generated
+architectures.

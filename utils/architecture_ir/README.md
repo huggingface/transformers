@@ -42,7 +42,9 @@ contains:
 - coarse semantic edges (`data`, `residual`, `mask`, `position`, `cross_attention`, `route`, `cache_read`,
   `cache_write`)
 - an `architecture` block of normalized semantic facts (view, task family, attention variant, positional scheme, MoE
-  params) plus per-component `attributes`
+  params) plus per-component `attributes` (attention heads/dims, MLP dims + activation, norm type)
+- projection-level depth: `q/k/v/o_proj` and `gate/up/down_proj` as `projection` children of their host, with
+  config-parametric `in_features`/`out_features` (e.g. `config.hidden_size → config.intermediate_size`)
 - a `modularity` block + `extends`/`patches`: the modular-diff of the model's `modular_<name>.py` vs its parent,
   including a `diff_size` modularity metric
 - an observed `dataflow` block: top-level flow from a real meta forward, with config-parametric (symbolized) tensor
@@ -72,6 +74,21 @@ python utils/architecture_ir/generate_architecture_ir.py \
 ```
 
 Expanded debug artifacts are written under `debug/expanded/` and are not the canonical artifact.
+
+To also emit the library-wide modular inheritance forest (which architectures are linked via `modular_<name>.py`, and
+which share a lineage), pass `--modular-graph`:
+
+```bash
+python utils/architecture_ir/generate_architecture_ir.py \
+  --architectures llama \
+  --output-dir /tmp/architecture-ir \
+  --modular-graph
+```
+
+This writes `modular_graph.json` (schema `schema/modular-graph-v0.schema.json`) covering the whole library — not just
+the requested architectures — with each model's parent/children, transitive `root`, `depth`, and `diff_size`, plus the
+spine `roots`. Models sharing a `root` are in the same lineage and align cleanly for comparison. It is built purely from
+`ast` parsing (no torch, no model build), so it computes in a few seconds.
 
 ## Current Scope
 

@@ -126,8 +126,9 @@ def capture_dataflow(model: Any, config: Any) -> dict[str, Any] | None:
     in_name = next(iter(inputs))
     in_shape = list(next(iter(inputs.values())).shape)
 
-    order = {id(m): i for i, (_, m) in enumerate(model.named_children())}
     flow: list[dict] = []
+    # Per repeated stage, the forward call order of the representative block's direct children.
+    block_flow: dict[str, list[dict]] = {}
     hooks = []
 
     def make_hook(stage_name: str, is_stack: bool):
@@ -139,7 +140,19 @@ def capture_dataflow(model: Any, config: Any) -> dict[str, Any] | None:
                     "is_stack": is_stack,
                     "in_shape": _shape_of(args),
                     "out_shape": _shape_of(output),
-                    "_ord": order.get(id(module if not is_stack else module), 999),
+                }
+            )
+
+        return hook
+
+    def make_block_hook(list_path: str, child_name: str):
+        def hook(module, args, output):
+            block_flow.setdefault(list_path, []).append(
+                {
+                    "name": child_name,
+                    "class_name": type(module).__name__,
+                    "in_shape": _shape_of(args),
+                    "out_shape": _shape_of(output),
                 }
             )
 
@@ -153,6 +166,16 @@ def capture_dataflow(model: Any, config: Any) -> dict[str, Any] | None:
             hooks.append(target.register_forward_hook(make_hook(name, is_stack)))
         except Exception:
             continue
+
+    # Recover intra-block forward order for every repeated stack (wherever it is nested), by
+    # hooking the direct children of each ModuleList's representative (first) element.
+    for path, module in model.named_modules():
+        if isinstance(module, (nn.ModuleList, nn.Sequential)) and len(module) > 0:
+            for child_name, sub in module[0].named_children():
+                try:
+                    hooks.append(sub.register_forward_hook(make_block_hook(path, child_name)))
+                except Exception:
+                    continue
 
     output = None
     try:
@@ -175,11 +198,24 @@ def capture_dataflow(model: Any, config: Any) -> dict[str, Any] | None:
         seen.add(entry["name"])
         stages.append(entry)
 
+    blocks = {stage: _dedup_by_name(entries) for stage, entries in block_flow.items()}
+
     return {
         "input": {"name": in_name, "shape": in_shape},
         "output": {"shape": _shape_of(output)},
         "stages": stages,
+        "blocks": blocks,
     }
+
+
+def _dedup_by_name(entries: list[dict]) -> list[dict]:
+    seen, out = set(), []
+    for entry in entries:
+        if entry["name"] in seen:
+            continue
+        seen.add(entry["name"])
+        out.append(entry)
+    return out
 
 
 def _reverse_shape_map(config: Any) -> dict[int, str]:
@@ -189,6 +225,18 @@ def _reverse_shape_map(config: Any) -> dict[int, str]:
         if isinstance(value, int) and not isinstance(value, bool) and value > 1:
             mapping[value] = field
     return mapping
+
+
+def symbolize_dim(value: Any, config: Any) -> Any:
+    """Rewrite a single integer dimension to a config expression when it matches a salient value.
+
+    ``4096`` -> ``"config.hidden_size"``, ``11008`` -> ``"config.intermediate_size"``; values that
+    don't match a config field (e.g. ``num_kv_heads * head_dim``) are left as integers.
+    """
+    if not isinstance(value, int) or isinstance(value, bool):
+        return value
+    field = _reverse_shape_map(config).get(value)
+    return f"config.{field}" if field else value
 
 
 def symbolize_shape(shape: list[int] | None, config: Any) -> list | None:

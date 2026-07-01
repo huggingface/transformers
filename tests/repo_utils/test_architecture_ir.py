@@ -30,7 +30,7 @@ if str(ARCHITECTURE_IR_PATH) not in sys.path:
     sys.path.append(str(ARCHITECTURE_IR_PATH))
 
 import generate_architecture_ir  # noqa: E402
-from architecture_ir import resolve_template_to_graph  # noqa: E402
+from architecture_ir import build_modular_graph, resolve_template_to_graph  # noqa: E402
 
 
 try:
@@ -115,8 +115,11 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
                 for junk in ("id2label", "transformers_version", "return_dict", "output_attentions", "bos_token_id"):
                     self.assertNotIn(junk, config_text)
 
+                # Soft compactness ceiling. Richer per-template detail (projections with dims) grows
+                # this, but symbolic repeats + the no-concrete-path checks below are the real guards
+                # against full-layer expansion (which would be many thousands of lines).
                 artifact_text = json.dumps(artifacts[model_type], indent=2)
-                self.assertLessEqual(artifact_text.count("\n"), 700)
+                self.assertLessEqual(artifact_text.count("\n"), 1200)
 
             # referenced_fields must expose exactly the config knobs the repeats reference.
             self.assertEqual(artifacts["llama"]["config"]["referenced_fields"], {"num_hidden_layers": 32})
@@ -138,6 +141,24 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
             llama_attn = next(c for c in artifacts["llama"]["templates"] if c["kind"] == "attention")
             self.assertEqual(llama_attn["attributes"]["variant"], "MHA")
             self.assertTrue(llama_attn["attributes"]["rope"])
+
+            # The IR descends into attention/MLP projections (once per template, still symbolic),
+            # with config-parametric dims — so a viewer can render q/k/v/o and gate/up/down.
+            templates_by_id = {c["id"]: c for c in artifacts["llama"]["templates"]}
+            self.assertIn("decoder_layer.self_attn.q_proj", templates_by_id)
+            self.assertEqual(templates_by_id["decoder_layer.self_attn.q_proj"]["kind"], "projection")
+            gate = templates_by_id["decoder_layer.mlp.gate_proj"]
+            self.assertEqual(
+                gate["attributes"], {"in_features": "config.hidden_size", "out_features": "config.intermediate_size"}
+            )
+            down = templates_by_id["decoder_layer.mlp.down_proj"]
+            self.assertEqual(down["attributes"]["in_features"], "config.intermediate_size")
+            # The MLP container carries dims + activation for its caption.
+            mlp = templates_by_id["decoder_layer.mlp"]
+            self.assertEqual(mlp["attributes"]["activation"], "silu")
+            self.assertEqual(mlp["attributes"]["intermediate_size"], 11008)
+            # Projections are attached as children of their host so the tree is navigable.
+            self.assertIn("decoder_layer.mlp.gate_proj", mlp["children"])
 
             # Reserved edge kinds are now emitted: decoder self-attention has a KV cache;
             # an encoder (bert) has none.
@@ -312,6 +333,16 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
             }
             self.assertNotIn("rotary_emb", {node for edge in observed_data for node in edge})
 
+            # Intra-block order is re-grounded from the observed forward (pre-norm), not module
+            # registration order — the input norm precedes attention rather than dangling at the end.
+            block = dataflow["blocks"]["decoder_layers"]
+            order = [c["id"].split(".", 1)[-1] for c in block]
+            self.assertEqual(order, ["input_layernorm", "self_attn", "post_attention_layernorm", "mlp"])
+            data_edges = {(e["source"], e["target"]) for e in artifact["edges"] if e["kind"] == "data"}
+            self.assertIn(("decoder_layer.input_layernorm", "decoder_layer.self_attn"), data_edges)
+            # The old registration-order edge (attention straight to mlp) is gone.
+            self.assertNotIn(("decoder_layer.self_attn", "decoder_layer.mlp"), data_edges)
+
     def test_modular_diff_extends_and_patches(self):
         from transformers.models.auto import configuration_auto, modeling_auto
 
@@ -383,6 +414,43 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
         resolved_repeats = _repeats_by_id(resolved)
         self.assertFalse(resolved_repeats["decoder_layers"]["count_resolved"])
         self.assertTrue(resolved["warnings"])
+
+
+class ModularGraphTest(unittest.TestCase):
+    """The library-wide modular inheritance forest (pure ast, no torch/model build)."""
+
+    def test_lineage_chain_and_roots(self):
+        # Seed a known chain; ancestors are resolved transitively for correct roots.
+        graph = build_modular_graph(only=["qwen3", "gemma"])
+        nodes = graph["nodes"]
+
+        self.assertEqual(nodes["qwen3"]["extends"], "qwen2")
+        self.assertEqual(nodes["qwen2"]["extends"], "llama")
+        self.assertEqual(nodes["gemma"]["extends"], "llama")
+
+        # Transitive root + depth make lineage explicit: qwen3 -> qwen2 -> llama.
+        self.assertEqual(nodes["qwen3"]["root"], "llama")
+        self.assertEqual(nodes["qwen3"]["depth"], 2)
+        self.assertEqual(nodes["llama"]["root"], "llama")
+        self.assertEqual(nodes["llama"]["depth"], 0)
+
+        # Reverse links: children point back down the tree.
+        self.assertIn("qwen3", nodes["qwen2"]["children"])
+        self.assertIn("qwen2", nodes["llama"]["children"])
+        self.assertIn("gemma", nodes["llama"]["children"])
+
+        # A spine base with descendants is a root; a leaf is not.
+        self.assertIn("llama", graph["roots"])
+        self.assertNotIn("qwen3", graph["roots"])
+
+        if HAS_JSONSCHEMA:
+            jsonschema.validate(instance=graph, schema=_load_schema("modular-graph-v0.schema.json"))
+
+    def test_isolated_standalone_is_pruned(self):
+        # A standalone model with no descendants in the seed set is not a node.
+        graph = build_modular_graph(only=["bert"])
+        self.assertNotIn("bert", graph["nodes"])
+        self.assertEqual(graph["roots"], [])
 
 
 def _repeats_by_id(artifact):

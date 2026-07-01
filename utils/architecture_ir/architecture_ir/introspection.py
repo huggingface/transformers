@@ -9,8 +9,8 @@ from collections.abc import Mapping
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from .dataflow import capture_dataflow, symbolize_shape
-from .enrich import architecture_facts, attention_spec, moe_spec, norm_type
+from .dataflow import capture_dataflow, symbolize_dim, symbolize_shape
+from .enrich import architecture_facts, attention_spec, mlp_spec, moe_spec, norm_type
 from .modular import compute_modularity, modularity_payload
 from .recognizers import build_edges, classify_component, detect_repeats, summarize_semantic_components
 from .semantic_model import SCHEMA_VERSION, ArchitectureArtifact, Component, Edge, Repeat
@@ -36,14 +36,22 @@ def _enrich_artifact(artifact: dict[str, Any], model_type: str, config: Any) -> 
 
     attn = attention_spec(config)
     moe = moe_spec(config)
+    mlp = mlp_spec(config)
     for component in [*artifact["components"], *artifact["templates"]]:
         kind = component["kind"]
         if kind in {"attention", "cross_attention"} and attn:
             component["attributes"] = dict(attn)
+        elif kind == "feed_forward" and mlp:
+            component["attributes"] = dict(mlp)
         elif kind == "normalization":
             component["attributes"] = {"norm_type": norm_type(component["class_name"])}
         elif kind == "moe" and moe:
             component["attributes"] = dict(moe)
+        elif kind == "projection" and component.get("attributes"):
+            # Symbolize the raw in/out features into config expressions where they match.
+            component["attributes"] = {
+                key: symbolize_dim(value, config) for key, value in component["attributes"].items()
+            }
 
     _attach_cache_edges(artifact, view)
     _attach_route_edges(artifact)
@@ -110,6 +118,34 @@ def _attach_dataflow(artifact: dict[str, Any], resolved: Any) -> None:
             }
         )
 
+    # Re-ground intra-block edges: for each repeated block, recover its body's forward order from
+    # the representative block (keyed by the ModuleList's path) and rewrite the block's data edges
+    # (module registration order is wrong — norms would dangle at the end of a pre-norm block).
+    known_ids = set(_kind_by_id(artifact))
+    observed_blocks = observed.get("blocks", {})
+    blocks: dict[str, list[dict]] = {}
+    for repeat in artifact["repeats"]:
+        repeat_body = repeat["body"]
+        list_path = repeat["container_path_pattern"].removeprefix("model.")
+        observed_block = observed_blocks.get(list_path)
+        if not observed_block:
+            continue
+        ordered = []
+        for child in observed_block:
+            child_id = f"{repeat_body}.{child['name']}"
+            if child_id in known_ids:
+                ordered.append(
+                    {
+                        "id": child_id,
+                        "class_name": child["class_name"],
+                        "in_shape": symbolize_shape(child["in_shape"], config),
+                        "out_shape": symbolize_shape(child["out_shape"], config),
+                    }
+                )
+        if len(ordered) >= 2:
+            blocks[repeat["id"]] = ordered
+            _reground_block_edges(artifact, repeat_body, [item["id"] for item in ordered])
+
     artifact["dataflow"] = {
         "source": "observed_forward_meta",
         "input": {
@@ -118,6 +154,7 @@ def _attach_dataflow(artifact: dict[str, Any], resolved: Any) -> None:
         },
         "output": {"shape": symbolize_shape(observed["output"]["shape"], config)},
         "stages": stages,
+        "blocks": blocks,
     }
 
     # Add any observed consecutive-stage data edges missing from the structural set. Position
@@ -137,6 +174,28 @@ def _attach_dataflow(artifact: dict[str, Any], resolved: Any) -> None:
         artifact["edges"].append(
             {"source": source, "target": target, "kind": "data", "provenance": "observed_forward"}
         )
+
+
+def _reground_block_edges(artifact: dict[str, Any], body_id: str, ordered_ids: list[str]) -> None:
+    """Replace a repeat body's intra-block data edges with the observed forward order.
+
+    Only ``data`` edges whose both endpoints are inside the block body are touched; residual,
+    position, mask, and cache edges are left intact.
+    """
+    body_prefix = f"{body_id}."
+    body_ids = {edge_id for edge_id in _kind_by_id(artifact) if edge_id.startswith(body_prefix)}
+
+    def is_intra_block_data(edge: dict[str, Any]) -> bool:
+        return edge["kind"] == "data" and edge["source"] in body_ids and edge["target"] in body_ids
+
+    artifact["edges"] = [edge for edge in artifact["edges"] if not is_intra_block_data(edge)]
+    existing = {(edge["source"], edge["target"], edge["kind"]) for edge in artifact["edges"]}
+    for source, target in zip(ordered_ids, ordered_ids[1:]):
+        if source != target and (source, target, "data") not in existing:
+            existing.add((source, target, "data"))
+            artifact["edges"].append(
+                {"source": source, "target": target, "kind": "data", "provenance": "observed_forward"}
+            )
 
 
 def _stage_id_lookup(artifact: dict[str, Any]) -> dict[str, str]:
@@ -266,8 +325,9 @@ def _build_compact_artifact(
 ) -> dict[str, Any]:
     repeat_templates = _repeat_templates(repeats)
     component_id_map = _canonical_component_id_map(components, repeat_templates)
-    compact_components = _compact_components(components, repeat_templates, component_id_map)
-    compact_templates = _compact_templates(components, repeat_templates, component_id_map)
+    raw_kind_by_id = {component.id: component.kind for component in components}
+    compact_components = _compact_components(components, repeat_templates, component_id_map, raw_kind_by_id)
+    compact_templates = _compact_templates(components, repeat_templates, component_id_map, raw_kind_by_id)
     compact_repeats = _compact_repeats(repeats, repeat_templates)
     known_ids = {component["id"] for component in compact_components}
     known_ids.update(template["id"] for template in compact_templates)
@@ -339,6 +399,7 @@ def _compact_components(
     components: list[Component],
     repeat_templates: dict[str, dict[str, Any]],
     component_id_map: dict[str, str],
+    raw_kind_by_id: dict[str, str],
 ) -> list[dict[str, Any]]:
     by_path = {component.path: component for component in components}
     compact: list[dict[str, Any]] = []
@@ -348,7 +409,7 @@ def _compact_components(
             continue
         if _repeat_for_container_path(component.path, repeat_templates) is not None:
             continue
-        if not _include_canonical_component(component):
+        if not _include_canonical_component(component, raw_kind_by_id.get(component.parent)):
             continue
 
         compact.append(
@@ -367,6 +428,7 @@ def _compact_templates(
     components: list[Component],
     repeat_templates: dict[str, dict[str, Any]],
     component_id_map: dict[str, str],
+    raw_kind_by_id: dict[str, str],
 ) -> list[dict[str, Any]]:
     by_path = {component.path: component for component in components}
     compact: list[dict[str, Any]] = []
@@ -379,7 +441,7 @@ def _compact_templates(
             if component.path == item_path or component.path.startswith(f"{item_path}.")
         ]
         for component in body_components:
-            if not _include_canonical_component(component):
+            if not _include_canonical_component(component, raw_kind_by_id.get(component.parent)):
                 continue
             compact.append(
                 _component_payload(
@@ -484,7 +546,7 @@ def _component_payload(
     children: list[str],
     path_pattern: str,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "id": component_id,
         "kind": component.kind,
         "class_name": component.class_name,
@@ -492,6 +554,13 @@ def _component_payload(
         "path_pattern": path_pattern,
         "children": children,
     }
+    if component.kind == "projection":
+        dims = {
+            key: component.attributes[key] for key in ("in_features", "out_features") if key in component.attributes
+        }
+        if dims:
+            payload["attributes"] = dims
+    return payload
 
 
 def _symbolic_children(
@@ -513,7 +582,17 @@ def _symbolic_children(
     return children
 
 
-def _include_canonical_component(component: Component) -> bool:
+# Parents whose projection children we descend into (q/k/v/o, gate/up/down, experts' linears).
+_PROJECTION_HOST_KINDS = {"attention", "cross_attention", "feed_forward", "moe"}
+
+
+def _include_canonical_component(component: Component, parent_kind: str | None = None) -> bool:
+    # Descend into the projections that live directly inside attention / MLP / MoE bodies, so the
+    # IR carries q/k/v/o and gate/up/down (with dims) instead of stopping at the module leaf. This
+    # stays compact: they are serialized once in the template body, not per repeated layer.
+    if component.kind == "projection":
+        return parent_kind in _PROJECTION_HOST_KINDS
+
     class_name = component.class_name.lower()
     if class_name == "linear" or class_name == "dropout" or class_name.endswith("activation"):
         return False
