@@ -206,6 +206,14 @@ class ESMFold2Config(PreTrainedConfig):
         Number of trunk loops for iterative refinement.
     num_diffusion_samples (`int`, *optional*, defaults to 8):
         Number of parallel structure predictions to generate.
+    num_res_types (`int`, *optional*, defaults to 33):
+        Number of residue types for the one-hot residue/MSA features.
+    max_atomic_number (`int`, *optional*, defaults to 128):
+        Size of the element (atomic-number) one-hot in the atom featurization.
+    char_vocab_size (`int`, *optional*, defaults to 64):
+        Vocabulary size for the per-character atom-name encoding.
+    max_chars (`int`, *optional*, defaults to 4):
+        Maximum number of characters per atom name.
     esmc_config (`ESMCConfig`, *optional*):
         Configuration of the bundled ESMC language-model backbone. Defaults to the
         ESMC-6B configuration. The backbone weights are part of the ESMFold2
@@ -263,6 +271,10 @@ class ESMFold2Config(PreTrainedConfig):
     n_relative_chain_bins: int | None = 2
     num_loops: int | None = 10
     num_diffusion_samples: int | None = 8
+    num_res_types: int | None = 33
+    max_atomic_number: int | None = 128
+    char_vocab_size: int | None = 64
+    max_chars: int | None = 4
     esmc_config: dict | ESMCConfig | None = None
     msa_encoder_overwrite: bool | None = True
     inputs: dict | InputsEmbedderConfig | None = None
