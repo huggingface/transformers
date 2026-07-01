@@ -148,6 +148,8 @@ class Glm5NextConfig(PreTrainedConfig):
     pad_token_id: int | None = 154820
     mlp_layer_types: list[str] | None = None
     layer_types: list[str] | None = None
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

@@ -31,7 +31,7 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -137,104 +137,8 @@ class Glm5NextHyperHead(nn.Module):
 
 
 # =============================================================================
-# KDA Linear Attention
+# Cache
 # =============================================================================
-
-
-class Glm5NextShortConv(nn.Conv1d):
-    def __init__(self, channels: int, kernel_size: int):
-        super().__init__(
-            channels,
-            channels,
-            kernel_size,
-            groups=channels,
-            bias=False,
-            dtype=torch.float32,
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        seq_len: int,
-        dtype: torch.dtype,
-        has_left_context: bool,
-    ) -> torch.Tensor:
-        if not has_left_context:
-            hidden_states = F.pad(hidden_states, (self.kernel_size[0] - 1, 0))
-        out = super().forward(hidden_states.to(self.weight.dtype))
-        out = F.silu(out)
-        if has_left_context:
-            out = out[:, :, -seq_len:]
-        return out.transpose(1, 2).to(dtype)
-
-
-class Glm5NextForgetGate(nn.Module):
-    def __init__(self, hidden_size: int, config: Glm5NextConfig):
-        super().__init__()
-        linear_attn_config = config.linear_attn_config
-        self.head_dim = linear_attn_config["head_dim"]
-        self.num_heads = linear_attn_config["num_heads"]
-        self.safe_gate = linear_attn_config.get("safe_gate", False)
-        self.safe_gate_lower_bound = linear_attn_config.get("lower_bound", None)
-        qk_projection_size = self.head_dim * self.num_heads
-        self.f_a_proj = nn.Linear(hidden_size, self.head_dim, bias=False)
-        self.f_b_proj = nn.Linear(self.head_dim, qk_projection_size, bias=False)
-        self.dt_bias = nn.Parameter(torch.empty(qk_projection_size, dtype=torch.float32))
-        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        forget_gate = self.f_b_proj(self.f_a_proj(hidden_states))
-        batch_size, seq_len = forget_gate.shape[:2]
-        g = forget_gate.float() + self.dt_bias.view(1, 1, -1)
-        g = g.view(batch_size, seq_len, self.num_heads, self.head_dim)
-        A_log = self.A_log.float().view(1, 1, self.num_heads, 1)
-
-        if self.safe_gate and self.safe_gate_lower_bound is not None:
-            return self.safe_gate_lower_bound * torch.sigmoid(torch.exp(A_log) * g)
-
-        threshold = 20.0
-        g_linear = g > threshold
-        sp = torch.where(g_linear, g, torch.log(1.0 + torch.exp(g)))
-        return -torch.exp(A_log) * sp
-
-
-class Glm5NextKdaSequential(nn.Module):
-    def forward(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        v: torch.Tensor,
-        g: torch.Tensor,
-        beta: torch.Tensor,
-        initial_state: torch.Tensor | None = None,
-        output_final_state: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        B, S, H, D = q.shape
-        V = v.shape[-1]
-        dtype = q.dtype
-
-        if initial_state is None:
-            h = torch.zeros(B, H, D, V, device=q.device, dtype=torch.float32)
-        else:
-            h = initial_state.to(device=q.device, dtype=torch.float32)
-        o = torch.empty(B, S, H, V, device=q.device, dtype=dtype)
-        scale = D**-0.5
-
-        for t in range(S):
-            q_t = q[:, t].float()
-            k_t = k[:, t].float()
-            v_t = v[:, t].float()
-
-            q_t = q_t / torch.sqrt(torch.sum(q_t * q_t, dim=-1, keepdim=True) + 1e-6)
-            k_t = k_t / torch.sqrt(torch.sum(k_t * k_t, dim=-1, keepdim=True) + 1e-6)
-
-            h = h * torch.exp(g[:, t, :, :, None])
-            delta_v = v_t - torch.einsum("bhkv,bhk->bhv", h, k_t)
-            delta_v = delta_v * beta[:, t, :, None]
-            h = h + torch.einsum("bhk,bhv->bhkv", k_t, delta_v)
-            o[:, t] = torch.einsum("bhkv,bhk->bhv", h, q_t * scale).to(dtype)
-
-        return o, h if output_final_state else None
 
 
 class Glm5NextAttentionCacheLayer(DynamicLayer):
@@ -259,94 +163,198 @@ class Glm5NextAttentionCacheLayer(DynamicLayer):
                 setattr(self, attribute_name, state[:, :max_length])
 
 
-class Glm5NextLinearAttentionCacheLayer(LinearAttentionLayer):
-    def update_conv_state(
-        self, conv_states: torch.Tensor, conv_kernel_size: int | None = None, **kwargs
-    ) -> torch.Tensor:
-        if not self.has_previous_state and conv_kernel_size is not None:
-            if conv_states.shape[-1] >= conv_kernel_size:
-                conv_states = conv_states[..., -conv_kernel_size:]
-            else:
-                conv_states = F.pad(conv_states, (conv_kernel_size - conv_states.shape[-1], 0))
-        return super().update_conv_state(conv_states, **kwargs)
-
-
 class Glm5NextDynamicCache(DynamicCache):
     def __init__(self, *args, config: Glm5NextConfig | None = None, **kwargs):
         super().__init__(*args, config=config, **kwargs)
         if config is not None:
             for layer_idx, layer_type in enumerate(config.layer_types):
                 if layer_type == "linear_attention":
-                    self.layers[layer_idx] = Glm5NextLinearAttentionCacheLayer(config)
+                    self.layers[layer_idx] = LinearAttentionLayer(config)
                 else:
                     self.layers[layer_idx] = Glm5NextAttentionCacheLayer(config)
 
 
+class Glm5NextRMSNormGated(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6, **kwargs):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states, gate=None):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        # Norm before gate
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = self.weight * hidden_states.to(input_dtype)
+        # Key difference recast on mul (not after) and use sigmoid instead of silu
+        hidden_states = hidden_states.to(input_dtype) * torch.sigmoid(gate.float()).to(input_dtype)
+        return hidden_states
+
+
+class Glm5NextForgetGate(nn.Module):
+    def __init__(self, config: Glm5NextConfig):
+        super().__init__()
+        linear_attn_config = config.linear_attn_config
+        self.head_dim = linear_attn_config["head_dim"]
+        self.num_heads = linear_attn_config["num_heads"]
+        self.safe_gate = linear_attn_config.get("safe_gate", False)
+        self.safe_gate_lower_bound = linear_attn_config.get("lower_bound", None)
+        qk_projection_size = self.head_dim * self.num_heads
+        self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.f_b_proj = nn.Linear(self.head_dim, qk_projection_size, bias=False)
+        self.dt_bias = nn.Parameter(torch.empty(qk_projection_size, dtype=torch.float32))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        forget_gate = self.f_b_proj(self.f_a_proj(hidden_states))
+        batch_size, seq_len = forget_gate.shape[:2]
+        g = forget_gate.float() + self.dt_bias.view(1, 1, -1)
+        g = g.view(batch_size, seq_len, self.num_heads, self.head_dim)
+        A_log = self.A_log.float().view(1, 1, self.num_heads, 1)
+
+        if self.safe_gate and self.safe_gate_lower_bound is not None:
+            return self.safe_gate_lower_bound * torch.sigmoid(torch.exp(A_log) * g)
+
+        threshold = 20.0
+        g_linear = g > threshold
+        sp = torch.where(g_linear, g, torch.log(1.0 + torch.exp(g)))
+        return -torch.exp(A_log) * sp
+
+
+def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+    """This function is intended to align with the l2norm implementation in the FLA library."""
+    norm = torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)  # intentionally avoided rsqrt using instead "/"
+    return x / norm
+
+
+def torch_recurrent_kimi_delta_rule(
+    query, key, value, g, beta, initial_state, output_final_state, use_qk_l2norm_in_kernel=False
+):
+    initial_dtype = query.dtype
+
+    # TODO: check whether g and beta were intentionally not casted
+    query, key, value = [x.to(torch.float32) for x in (query, key, value)]
+
+    batch_size, sequence_length, num_heads, k_head_dim = key.shape
+    v_head_dim = value.shape[-1]
+    scale = 1 / (query.shape[-1] ** 0.5)
+
+    core_attn_out = torch.zeros(
+        batch_size, sequence_length, num_heads, v_head_dim, dtype=initial_dtype, device=value.device
+    )
+    last_recurrent_state = (
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim, dtype=value.dtype, device=value.device)
+        if initial_state is None
+        else initial_state.to(value)
+    )
+
+    for i in range(sequence_length):
+        q_i = query[:, i]
+        k_i = key[:, i]
+        v_i = value[:, i]
+        g_i = g[:, i][..., None].exp()
+        b_i = beta[:, i][..., None]
+
+        if use_qk_l2norm_in_kernel:
+            q_i = l2norm(q_i, dim=-1, eps=1e-6)
+            k_i = l2norm(k_i, dim=-1, eps=1e-6)
+
+        # TODO: small rounding errors between einsum and native torch
+        last_recurrent_state = last_recurrent_state * g_i
+        # kv_mem = (last_recurrent_state * k_i[..., None]).sum(dim=-2)
+        kv_mem = torch.einsum("bhkv,bhk->bhv", last_recurrent_state, k_i)
+        delta = (v_i - kv_mem) * b_i
+
+        last_recurrent_state = last_recurrent_state + k_i.unsqueeze(-1) * delta.unsqueeze(-2)
+        # last_recurrent_state = last_recurrent_state + torch.einsum("bhk,bhv->bhkv", k_i, delta)
+        # core_attn_out[:, i] = (last_recurrent_state * (q_i * scale).unsqueeze(-1)).sum(dim=-2).to(initial_dtype)
+        core_attn_out[:, i] = torch.einsum("bhkv,bhk->bhv", last_recurrent_state, q_i * scale).to(initial_dtype)
+
+    return core_attn_out, last_recurrent_state if output_final_state else None
+
+
+def torch_causal_conv1d_update(
+    hidden_states,
+    conv_state,
+    weight,
+    bias=None,
+    activation=None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = ACT2FN[activation](out[:, :, -seq_len:])
+    out = out.to(hidden_states.dtype)
+    return out
+
+
+def torch_causal_conv1d_fn(
+    hidden_states,
+    weight,
+    bias=None,
+    activation=None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+
+    return ACT2FN[activation](out).to(hidden_states.dtype)
+
+
 class Glm5NextLinearAttention(nn.Module):
-    """
-    Kimi-style KDA (Kimi Linear Attention) for GLM-5-Next.
-
-    Replaces standard MLA attention on layers listed in `linear_attn_config["kda_layers"]`.
-
-    Architecture (checkpoint naming):
-      - Q/K/V: x -> q_proj/k_proj/v_proj -> causal_conv1d via q_conv1d/k_conv1d/v_conv1d
-      - Forget gate: x -> f_a_proj -> f_b_proj -> g = -exp(A_log) * softplus(gate + dt_bias)
-        or safe lower-bound gate when `linear_attn_config["lower_bound"]` is set
-      - Input gate: x -> b_proj -> sigmoid -> beta [B, S, H]
-      - Recurrence: o = kda_sequential(q, k, v, g, beta)  [pure PyTorch]
-      - Output gate: x -> g_a_proj -> g_b_proj -> sigmoid -> gated RMSNorm via o_norm
-      - Output: o_proj
-    """
+    """Kimi-style KDA (Kimi Linear Attention) for GLM-5-Next."""
 
     def __init__(
         self,
-        hidden_size: int,
         config: Glm5NextConfig,
         layer_idx: int,
-        rms_norm_eps: float = 1e-5,
     ):
         super().__init__()
-        self.hidden_size = hidden_size
-        self.config = config
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.linear_attn_config["num_heads"]
+        self.head_dim = config.linear_attn_config["head_dim"]
+        self.qkv_dim = self.head_dim * self.num_heads
+
+        self.conv_kernel_size = config.linear_attn_config.get("short_conv_kernel_size", 4)
         self.layer_idx = layer_idx
+        self.activation = config.hidden_act
+        self.layer_norm_epsilon = config.rms_norm_eps
 
-        linear_attn_config = config.linear_attn_config
-        self.head_dim = linear_attn_config["head_dim"]
-        self.v_head_dim = self.head_dim
-        self.num_heads = linear_attn_config["num_heads"]
-        self.conv_kernel_size = linear_attn_config.get("short_conv_kernel_size", 4)
+        self.q_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.qkv_dim, bias=False)
 
-        qk_projection_size = self.head_dim * self.num_heads
-        v_projection_size = self.v_head_dim * self.num_heads
+        self.conv_dim = self.qkv_dim * 3
+        self.conv1d = nn.Conv1d(
+            in_channels=self.conv_dim,
+            out_channels=self.conv_dim,
+            bias=False,
+            kernel_size=self.conv_kernel_size,
+            groups=self.conv_dim,
+            padding=self.conv_kernel_size - 1,
+            dtype=torch.float32,  # TODO: check if this was intended
+        )
 
-        # Separate Q, K, V projections (checkpoint uses q_proj/k_proj/v_proj, not qkv_proj)
-        self.q_proj = nn.Linear(hidden_size, qk_projection_size, bias=False)
-        self.k_proj = nn.Linear(hidden_size, qk_projection_size, bias=False)
-        self.v_proj = nn.Linear(hidden_size, v_projection_size, bias=False)
+        self.forget_gate = Glm5NextForgetGate(config)
+        self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
 
-        self.q_conv1d = Glm5NextShortConv(qk_projection_size, self.conv_kernel_size)
-        self.k_conv1d = Glm5NextShortConv(qk_projection_size, self.conv_kernel_size)
-        self.v_conv1d = Glm5NextShortConv(v_projection_size, self.conv_kernel_size)
-        self.forget_gate = Glm5NextForgetGate(hidden_size, config)
-
-        # Beta (input gate): hidden -> num_heads
-        self.b_proj = nn.Linear(hidden_size, self.num_heads, bias=False)
-
-        # Output norm gate: hidden -> v_head_dim -> v_projection_size
-        self.g_a_proj = nn.Linear(hidden_size, self.v_head_dim, bias=False)
-        self.g_b_proj = nn.Linear(self.v_head_dim, v_projection_size, bias=False)
-
-        # FusedRMSNormGated equivalent; keep the module wrapper so checkpoint
-        # keys match `self_attn.o_norm.weight`.
-        self.o_norm = Glm5NextRMSNorm(self.v_head_dim, eps=rms_norm_eps)
-        self.kda_sequential = Glm5NextKdaSequential()
-
-        # Output projection
-        self.o_proj = nn.Linear(v_projection_size, hidden_size, bias=False)
-
-    def _gated_rms_norm(self, x: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
-        """FusedRMSNormGated(..., activation="sigmoid") reference path."""
-        return self.o_norm(x) * torch.sigmoid(gate.float()).to(x.dtype)
+        self.g_a_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
+        self.g_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
+        # Check whether we can use fla's fused one with sigmoid instead
+        self.o_norm = Glm5NextRMSNormGated(self.head_dim, eps=self.layer_norm_epsilon)
+        self.o_proj = nn.Linear(self.qkv_dim, self.hidden_size, bias=False)
 
     def forward(
         self,
@@ -358,68 +366,90 @@ class Glm5NextLinearAttention(nn.Module):
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, None, None]:
-        _ = use_cache
-        batch_size, seq_len = hidden_states.shape[:2]
-        qk_projection_size = self.head_dim * self.num_heads
-        v_projection_size = self.v_head_dim * self.num_heads
+        cache_params = past_key_values
 
-        has_cache_state = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
-        if has_cache_state:
-            conv_state = past_key_values.layers[self.layer_idx].conv_states.to(hidden_states.device)
-            recurrent_state = past_key_values.layers[self.layer_idx].recurrent_states
+        # Set up dimensions for reshapes later
+        batch_size, seq_len = hidden_states.shape[:2]
+        hidden_shape = (batch_size, seq_len, -1, self.head_dim)
 
         mixed_qkv = torch.cat(
-            [self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)], dim=-1
+            [
+                self.q_proj(hidden_states),
+                self.k_proj(hidden_states),
+                self.v_proj(hidden_states),
+            ],
+            dim=-1,
         ).transpose(1, 2)
 
-        q_input, k_input, v_input = torch.split(
-            mixed_qkv, [qk_projection_size, qk_projection_size, v_projection_size], dim=1
-        )
-        if has_cache_state:
-            q_state, k_state, v_state = torch.split(
-                conv_state, [qk_projection_size, qk_projection_size, v_projection_size], dim=1
+        # Acts for normal prefill but also for multi-token prefill continue
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
+
+        # Single token decode path
+        if use_precomputed_states and seq_len == 1:
+            mixed_qkv = torch_causal_conv1d_update(
+                mixed_qkv,
+                conv_state,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
             )
-            q_input = torch.cat([q_state, q_input], dim=-1)
-            k_input = torch.cat([k_state, k_input], dim=-1)
-            v_input = torch.cat([v_state, v_input], dim=-1)
+        # Multi token prefill or simple "full" prefill
+        else:
+            # Concatenated state for prefill
+            if use_precomputed_states:
+                mixed_qkv = torch.cat([conv_state.to(mixed_qkv.dtype), mixed_qkv], dim=-1)
 
-        if past_key_values is not None:
-            past_key_values.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
+            if cache_params is not None:
+                new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
+                cache_params.update_conv_state(new_conv_state, self.layer_idx)
 
-        # Q, K, V projections and causal conv1d
-        q = self.q_conv1d(q_input, seq_len, hidden_states.dtype, has_cache_state)
-        k = self.k_conv1d(k_input, seq_len, hidden_states.dtype, has_cache_state)
-        v = self.v_conv1d(v_input, seq_len, hidden_states.dtype, has_cache_state)
+            mixed_qkv = torch_causal_conv1d_fn(
+                mixed_qkv,
+                self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
+                activation=self.activation,
+            )
 
-        q = q.view(batch_size, seq_len, self.num_heads, self.head_dim)
-        k = k.view(batch_size, seq_len, self.num_heads, self.head_dim)
-        v = v.view(batch_size, seq_len, self.num_heads, self.v_head_dim)
+            # Cut out any tail
+            if use_precomputed_states:
+                mixed_qkv = mixed_qkv[:, :, -seq_len:]
+
+        query, key, value = torch.split(
+            mixed_qkv.transpose(1, 2),
+            [self.qkv_dim] * 3,
+            dim=-1,
+        )
+
+        query = query.view(hidden_shape)
+        key = key.view(hidden_shape)
+        value = value.view(hidden_shape)
 
         # Forget gate and input gate
         g = self.forget_gate(hidden_states)
         beta = torch.sigmoid(self.b_proj(hidden_states))
 
-        # KDA sequential recurrence
-        core_attn_out, last_recurrent_state = self.kda_sequential(
-            q,
-            k,
-            v,
+        # TODO: chunk and sequential paths
+        # KDA
+        core_attn_out, last_recurrent_state = torch_recurrent_kimi_delta_rule(
+            query,
+            key,
+            value,
             g,
             beta,
-            initial_state=recurrent_state if has_cache_state else None,
-            output_final_state=past_key_values is not None,
+            initial_state=recurrent_state if use_precomputed_states else None,
+            output_final_state=cache_params is not None,
+            use_qk_l2norm_in_kernel=True,
         )
-        if past_key_values is not None:
-            past_key_values.update_recurrent_state(last_recurrent_state, self.layer_idx)
+        if cache_params is not None:
+            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
-        # Output norm with gating
-        g_proj = self.g_b_proj(self.g_a_proj(hidden_states))
-        g_proj = g_proj.view(batch_size, seq_len, self.num_heads, self.v_head_dim)
-        core_attn_out = self._gated_rms_norm(core_attn_out, g_proj)
-
-        # Flatten and output projection
-        core_attn_out = core_attn_out.reshape(batch_size, seq_len, -1)
-        output = self.o_proj(core_attn_out)
+        # Final gated norm and proj
+        gate = self.g_b_proj(self.g_a_proj(hidden_states)).view(hidden_shape)
+        output = self.o_norm(core_attn_out, gate).reshape(batch_size, seq_len, -1)
+        output = self.o_proj(output)
 
         return output, None, None
 
@@ -1106,8 +1136,11 @@ class Glm5NextMoE(nn.Module):
 class Glm5NextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Glm5NextConfig, layer_idx: int):
         super().__init__()
+        attention_class = (
+            Glm5NextLinearAttention if config.layer_types[layer_idx] == "linear_attention" else Glm5NextAttention
+        )
         self.hidden_size = config.hidden_size
-        self.self_attn = Glm5NextAttention(config, layer_idx)
+        self.self_attn = attention_class(config, layer_idx)
 
         if config.mlp_layer_types[layer_idx] == "sparse":
             self.mlp = Glm5NextMoE(config)
@@ -1116,16 +1149,6 @@ class Glm5NextDecoderLayer(GradientCheckpointingLayer):
 
         self.input_layernorm = Glm5NextRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = Glm5NextRMSNorm(config.hidden_size, config.rms_norm_eps)
-        if config.layer_types[layer_idx] == "linear_attention":
-            # TODO: remove hidden size and rms norm and move to linear directly
-            self.self_attn = Glm5NextLinearAttention(
-                hidden_size=config.hidden_size,
-                config=config,
-                layer_idx=layer_idx,
-                rms_norm_eps=config.rms_norm_eps,
-            )
-        else:
-            self.self_attn = Glm5NextAttention(config, layer_idx)
 
         self.mhc = config.mhc
         self.hc_mult = config.hc_mult
@@ -1198,8 +1221,9 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": OutputRecorder(Glm5NextDecoderLayer, index=1),
         "attentions": Glm5NextAttention,
+        "hidden_states": OutputRecorder(Glm5NextDecoderLayer, index=1),
+        "router_logits": OutputRecorder(Glm5NextTopkRouter, index=1),  # noqa: F821
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.45\.", r"model\.layers\.\d+\.shared_head\."]
@@ -1319,7 +1343,7 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1352,7 +1376,6 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        # TODO: this currently not used at all as in glm moe dsa --> no prev indices passed along
         topk_indices = None
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states, _ = decoder_layer(
@@ -1369,10 +1392,92 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         hidden_states = self.hc_head(hidden_states)
         hidden_states = self.norm(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
+
+
+def load_balancing_loss_func(
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
+    top_k=2,
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
 
 
 @auto_docstring
@@ -1386,6 +1491,9 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
         self.model = Glm5NextModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.num_experts = config.num_local_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1401,17 +1509,23 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> MoeCausalLMOutputWithPast:
         r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
         Example:
 
         ```python
         >>> from transformers import AutoTokenizer, Glm5NextForCausalLM
 
-        >>> model = Glm5NextForCausalLM.from_pretrained("meta-glm5_next/Glm5Next-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-glm5_next/Glm5Next-2-7b-hf")
+        >>> model = Glm5NextForCausalLM.from_pretrained("zai-org/GLM-5-Next")
+        >>> tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-5-Next")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1419,15 +1533,21 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        outputs: BaseModelOutputWithPast = self.model(
+
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -1438,14 +1558,27 @@ class Glm5NextForCausalLM(Glm5NextPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+        return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 

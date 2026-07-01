@@ -496,6 +496,15 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
+            WeightConverter(
+                source_patterns=[
+                    "self_attn.q_conv1d.weight",
+                    "self_attn.k_conv1d.weight",
+                    "self_attn.v_conv1d.weight",
+                ],
+                target_patterns="self_attn.conv1d.weight",
+                operations=[Concatenate(dim=0)],
+            ),
         ],
         "LlavaModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
