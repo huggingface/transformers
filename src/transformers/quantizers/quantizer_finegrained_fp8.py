@@ -95,10 +95,13 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return super().param_element_size(model, param_name, param)
 
     def _normalize_modules_to_not_convert(self, model: "PreTrainedModel"):
-        """Rewrite the skip-list to the model's own module tree.
-        For models that were already released, if they have a list of modules to not quantize
-        we need to apply the weight renaming / weight conversion opérations to get the actual
-        layer name of the model in `transformers`.
+        """Rewrite a released checkpoint's skip-list to this model's actual module tree.
+
+        A checkpoint names skipped modules with its own keys, which differ from the transformers
+        tree two ways: (1) weight renaming / conversion ops, and (2) a name given relative to a
+        submodel (e.g. a bare ``"vision_tower"`` for a model that nests it under ``"model."``). We
+        apply the renamings, then resolve each entry to the real qualified module path(s) so the
+        prefix match in ``should_convert_module`` fires.
         """
         skip = self.quantization_config.modules_to_not_convert
         if not skip:
@@ -107,13 +110,17 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..conversion_mapping import get_model_conversion_mapping
 
         renamings = get_model_conversion_mapping(model)
+        module_names = {name for name, _ in model.named_modules() if name}
+
         remapped = []
-        for name in skip:
-            renamed = name
+        for entry in skip:
             for rename in renamings:
-                renamed, _ = rename.rename_source_key(renamed)
-            remapped.append(renamed)
-        self.quantization_config.modules_to_not_convert = remapped
+                entry, _ = rename.rename_source_key(entry)
+            # Match a full module path or a trailing component (a bare name given under a submodel);
+            # keep the renamed entry as-is if it names no module (a regex / leaf-param pattern).
+            matches = [m for m in module_names if m == entry or m.endswith(f".{entry}")]
+            remapped.extend(matches or [entry])
+        self.quantization_config.modules_to_not_convert = list(dict.fromkeys(remapped))
 
     def _process_model_before_weight_loading(
         self,
