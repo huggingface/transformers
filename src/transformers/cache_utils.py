@@ -83,7 +83,13 @@ class CacheLayerMixin(ABC):
     def get_seq_length(self) -> int: ...
 
     @abstractmethod
-    def get_max_length(self) -> int: ...
+    def get_max_length(self) -> int:
+        """
+        Returns the maximum sequence length the layer can hold. A value of `-1` means no maximum, or an undefined
+        maximum, for example a dynamic attention layer that grows indefinitely or a linear attention layer that has no
+        sequence length dimension.
+        """
+        ...
 
     def offload(self):
         """Offload this layer's data to CPU device."""
