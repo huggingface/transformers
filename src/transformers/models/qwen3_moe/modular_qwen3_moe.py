@@ -95,6 +95,8 @@ class Qwen3MoeModel(MixtralModel):
 
 
 class Qwen3MoeForCausalLM(MixtralForCausalLM):
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
     def __init__(self, config):
         super().__init__(config)
         self.model = Qwen3MoeModel(config)
