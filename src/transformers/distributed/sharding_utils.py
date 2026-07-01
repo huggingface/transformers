@@ -103,27 +103,16 @@ class DtensorShardOperation:
     def shard_tensor(
         self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
     ) -> torch.Tensor | None:
-        """Slice source down to this rank's shard.
+        """Return this rank's local shard of a checkpoint tensor.
 
-        The checkpoint can store the parameter in two layouts. Take a stack
-        of N MoE experts of shape [in, out] as a running example — the
-        param shape is [N, in, out]:
+        Two layouts (example param shape [N, in, out]):
 
-        - Single tensor (tensor_idx is None): the checkpoint holds one
-          [N, in, out] tensor, so source.shape == param.shape. Every
-          sharded dim is sliced here, including axis 0.
-
-        - One tensor per piece (tensor_idx given): the checkpoint holds N
-          separate [in, out] tensors, one per expert. shard_tensor is
-          called once per expert; on each call source is the [in, out]
-          tensor for expert number tensor_idx (so 0 <= tensor_idx < N).
-          Note: source has one fewer dim than the param: the axis-0
-          index lives in tensor_idx, not in source.shape.
-          If this rank does not own tensor_idx along axis 0, return None
-          and the piece is discarded. Otherwise slice only the inner
-          dims; the caller (MergeModulelist / Concatenate) collects the
-          kept pieces and stacks them back along axis 0 to rebuild the
-          full [N, in, out] param.
+        - tensor_idx is None: one stacked [N, in, out] tensor;
+          slice every sharded dim (including axis 0).
+        - tensor_idx given: one [in, out] tensor per expert;
+          return None if this rank does not own that expert, else slice
+          inner dims only. Surviving pieces are stacked by MergeModulelist
+          into this rank's local [n_local, in, out] shard.
         """
         source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
         dim_placements = [
