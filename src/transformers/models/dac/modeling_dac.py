@@ -162,7 +162,7 @@ class DacVectorQuantize(nn.Module):
 
         # Compute euclidean distance with codebook
         l2_norm = encodings.pow(2).sum(1, keepdim=True)
-        dist = -(l2_norm - 2 * encodings @ codebook.t()) + codebook.pow(2).sum(1, keepdim=True).t()
+        dist = -(l2_norm - 2 * encodings @ codebook.t() + codebook.pow(2).sum(1, keepdim=True).t())
 
         indices = dist.max(1)[1]
         indices = indices.reshape(hidden_states.size(0), -1)
