@@ -1413,8 +1413,8 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             if layer_pattern == "sliding_attention" and past_key_values.is_compileable:
                 layer_idx = past_key_values.is_sliding.index(True)
                 sliding_layer = past_key_values.layers[layer_idx]
-                if kv_length >= sliding_layer.max_cache_len + additional_kv_length:
-                    kv_length = sliding_layer.max_cache_len + additional_kv_length
+                if kv_length >= sliding_layer.get_max_length() + additional_kv_length:
+                    kv_length = sliding_layer.get_max_length() + additional_kv_length
 
             mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
             attention_mask = mask_interface(
@@ -1497,7 +1497,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.encoder
 
     def get_decoder(self):

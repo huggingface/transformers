@@ -54,7 +54,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     TransformersKwargs,
@@ -78,6 +78,9 @@ from .configuration_qwen3_omni_moe import (
 )
 
 
+logger = logging.get_logger(__name__)
+
+
 @auto_docstring
 @dataclass
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
@@ -97,14 +100,14 @@ class SinusoidsPositionEmbedding(nn.Module):
         self.max_timescale = max_timescale
         if channels % 2 != 0:
             raise ValueError("SinusoidsPositionEmbedding needs even channels input")
-        log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
-        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
-        scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        self.register_buffer(
-            "positional_embedding",
-            torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
-            persistent=False,
-        )
+        position_embedding = self.compute_default_singular_positional_embedding()
+        self.register_buffer("positional_embedding", position_embedding, persistent=False)
+
+    def compute_default_singular_positional_embedding(self):
+        log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
+        scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+        return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
 
     def forward(self, seqlen: int):
         return self.positional_embedding[:seqlen, :]
@@ -126,7 +129,7 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        std = self.config.initializer_range
+        std = getattr(self.config, "initializer_range", 0.02)
         if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
             init.normal_(module.experts.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.experts.down_proj, mean=0.0, std=std)
@@ -137,24 +140,21 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
                 torch.arange(module.config.num_quantizers).view(1, -1, 1) * module.config.codebook_size,
             )
         elif isinstance(module, SinusoidsPositionEmbedding):
-            log_timescale_increment = np.log(module.max_timescale) / (module.channels // 2 - 1)
-            inv_timescales = torch.exp(-log_timescale_increment * torch.arange(module.channels // 2).float())
-            scaled_time = torch.arange(module.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-            init.copy_(module.positional_embedding, torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1))
+            position_embeddings = module.compute_default_singular_positional_embedding()
+            init.copy_(module.positional_embedding, position_embeddings)
         elif isinstance(module, Qwen3OmniMoeVisionRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)
 
 
-def _get_feat_extract_output_lengths(input_lengths):
-    """Compute output lengths after the 3-layer CNN feature extractor with deepstack.
-
-    Three stride-2 convolutions within each 100-frame block, plus 13 output frames
-    per full block from the deepstack path.
+def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     """
-    input_lengths_leave = input_lengths % 100
+    Computes the output length of the convolutional layers and the output length of the audio encoder
+    """
+    chunk_len = n_window * 2
+    input_lengths_leave = input_lengths % chunk_len
     feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
+    return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
 
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedModel):
@@ -352,7 +352,9 @@ class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrained
                     st_idx += bos_len
                     # Audio Only
                     if min_ed == ed_audio_start:
-                        audio_len = _get_feat_extract_output_lengths(audio_seqlens[audio_idx])
+                        audio_len = _get_feat_extract_output_lengths(
+                            audio_seqlens[audio_idx], self.config.audio_config.n_window
+                        )
                         llm_pos_ids = torch.arange(audio_len).view(1, -1).expand(3, -1) + st_idx
                         llm_pos_ids_list.append(llm_pos_ids)
 
@@ -396,7 +398,9 @@ class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrained
 
                     # Audio in Video
                     elif min_ed == ed_vision_start and ed_vision_start + 1 == ed_audio_start:
-                        audio_len = _get_feat_extract_output_lengths(audio_seqlens[audio_idx])
+                        audio_len = _get_feat_extract_output_lengths(
+                            audio_seqlens[audio_idx], self.config.audio_config.n_window
+                        )
                         audio_llm_pos_ids = torch.arange(audio_len).view(1, -1).expand(3, -1) + st_idx
                         grid_t = video_grid_thw[video_idx][0]
                         grid_hs = video_grid_thw[:, 1]
@@ -675,11 +679,12 @@ def chunk_and_pad_features(
     return padded_feature, chunk_lengths
 
 
-def get_valid_indices(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+def get_valid_indices(chunk_lengths: torch.Tensor, n_window: int, kwargs: dict | None = None) -> torch.Tensor:
     """Compute flat indices of valid (non-padding) positions after CNN extraction, or pop `"valid_indices"` from `kwargs` if precomputed.
 
     Args:
         chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        n_window: half the chunk size (in raw frames).
         kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
 
     Returns:
@@ -687,7 +692,7 @@ def get_valid_indices(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -
     """
     if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
         return valid_indices
-    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
+    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths, n_window)
     max_len_after_cnn = feature_lens_after_cnn.max().item()
     mask = torch.arange(max_len_after_cnn, device=chunk_lengths.device) < feature_lens_after_cnn.unsqueeze(1)
     return mask.flatten().nonzero().squeeze(-1)
@@ -718,8 +723,8 @@ def get_audio_cu_seqlens(
     if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
         return cu_seqlens
 
-    aftercnn_lens = _get_feat_extract_output_lengths(feature_lens)
-    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
+    aftercnn_lens = _get_feat_extract_output_lengths(feature_lens, n_window)
+    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths, n_window)
     max_len_after_cnn = feature_lens_after_cnn.max().item()
 
     n_window_ratio = n_window_infer // (n_window * 2)
@@ -803,7 +808,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         padded_feature, chunk_lengths = chunk_and_pad_features(
             input_features, feature_lens, self.n_window, kwargs=kwargs
         )
-        valid_indices = get_valid_indices(chunk_lengths, kwargs=kwargs)
+        valid_indices = get_valid_indices(chunk_lengths, self.n_window, kwargs=kwargs)
         cu_seqlens = get_audio_cu_seqlens(
             chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
         )
@@ -842,58 +847,6 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         hidden_states = self.act(hidden_states)
         hidden_states = self.proj2(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
-
-    # Ignore copy
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
-        """
-        Computes the output length of the convolutional layers and the output length of the audio encoder
-        """
-        input_lengths = (input_lengths - 1) // 2 + 1
-        output_lengths = (input_lengths - 2) // 2 + 1
-        return input_lengths, output_lengths
-
-    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
-        """
-        Pads a sequence of tensors to their maximum length on indicated `padding_side`.
-        Then prepares a mask so that pad tokens are not attended to.
-        """
-        warnings.warn(
-            f"`{self.__class__.__name__}.padded_and_mask_function` is deprecated and will be removed in v5.11. Use `chunk_and_pad_features` and `get_audio_cu_seqlens` helpers instead.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        max_len = tensor_len.max()
-        dim = tensor_list[0].shape[0]
-        padded_tensor = torch.full(
-            size=(len(tensor_list), dim, max_len),
-            fill_value=padding_value,
-            dtype=self.dtype,
-            device=tensor_list[0].device,
-        )
-
-        batch_mask = torch.zeros(
-            (len(tensor_len), max_len),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(tensor_len):
-            batch_mask[i, :length] = 1
-            padded_tensor[i, :, :length] = tensor_list[i]
-
-        feature_lens_after_cnn = (tensor_len - 1) // 2 + 1
-        max_len_after_cnn = feature_lens_after_cnn.max()
-        batch_mask_after_cnn = torch.zeros(
-            (len(tensor_len), max_len_after_cnn),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(feature_lens_after_cnn):
-            batch_mask_after_cnn[i, :length] = 1
-        return (
-            padded_tensor,
-            batch_mask.unsqueeze(1),
-            batch_mask_after_cnn.bool(),
-        )
 
 
 def rotate_half(x):
@@ -1919,6 +1872,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
+
+    def get_decoder(self):
+        # `base_model_prefix = "thinker"` means `self.base_model` falls back to `self`, so
+        # the default `get_decoder` can't find the LLM. The text model lives on `self.model`.
+        return self.model
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -3630,7 +3588,7 @@ class Qwen3OmniMoeCode2WavTransformerModel(Qwen3OmniMoePreTrainedModel):
         )
 
 
-class SnakeBeta(nn.Module):
+class Qwen3OmniMoeSnakeBeta(nn.Module):
     """
     A modified Snake function which uses separate parameters for the magnitude of the periodic components
     Shape:
@@ -3671,13 +3629,22 @@ class SnakeBeta(nn.Module):
         return hidden_states
 
 
+# Alias for BC
+class SnakeBeta(Qwen3OmniMoeSnakeBeta):
+    """Deprecated alias for `Qwen3OmniMoeSnakeBeta`; will be removed in a future release."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning_once("`SnakeBeta` is deprecated; please use `Qwen3OmniMoeSnakeBeta` instead.")
+        super().__init__(*args, **kwargs)
+
+
 class Qwen3OmniMoeCode2WavDecoderResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
 
-        self.act1 = SnakeBeta(dim)
+        self.act1 = Qwen3OmniMoeSnakeBeta(dim)
         self.conv1 = Qwen3OmniMoeCausalConvNet(dim, dim, kernel_size=7, dilation=dilation)
-        self.act2 = SnakeBeta(dim)
+        self.act2 = Qwen3OmniMoeSnakeBeta(dim)
         self.conv2 = Qwen3OmniMoeCausalConvNet(dim, dim, kernel_size=1)
 
     def forward(self, hidden_state):
@@ -3698,7 +3665,7 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
         upsample_rate = config.upsample_rates[layer_idx]
 
         block = [
-            SnakeBeta(in_dim),
+            Qwen3OmniMoeSnakeBeta(in_dim),
             Qwen3OmniMoeCausalTransConvNet(in_dim, out_dim, 2 * upsample_rate, upsample_rate),
         ]
 
@@ -3744,7 +3711,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
             decoder.append(Qwen3OmniMoeCode2WavDecoderBlock(config, i))
         output_dim = config.decoder_dim // 2 ** len(config.upsample_rates)
         decoder += [
-            SnakeBeta(output_dim),
+            Qwen3OmniMoeSnakeBeta(output_dim),
             Qwen3OmniMoeCausalConvNet(output_dim, 1, 7),
         ]
         self.decoder = nn.ModuleList(decoder)

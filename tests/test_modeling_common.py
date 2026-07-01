@@ -827,6 +827,7 @@ class ModelTesterMixin:
             "Gemma3nVision2TextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
+            "Wav2Vec2BertModelTest": 4,
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 
@@ -4275,11 +4276,6 @@ class ModelTesterMixin:
                 # disable classifier cast for nllb-moe
                 if hasattr(module, "_cast_classifier"):
                     module._cast_classifier = lambda *args, **kwargs: None
-                # disable mamba mask update for ssms
-                if hasattr(module, "_update_mamba_mask"):
-                    module._update_mamba_mask = lambda attention_mask, *args, **kwargs: attention_mask
-                if hasattr(module, "_update_linear_attn_mask"):
-                    module._update_linear_attn_mask = lambda attention_mask, *args, **kwargs: attention_mask
 
             return model, inputs_dict
 
