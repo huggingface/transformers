@@ -74,6 +74,7 @@ class CohereAsrConfig(PreTrainedConfig):
     eos_token_id: int | None = 3
     bos_token_id: int | None = 4
     is_encoder_decoder: bool = True
+    use_cache: bool = True
     initializer_range: float = 0.02
     attention_dropout: float | int = 0.0
     attention_bias: bool = True
