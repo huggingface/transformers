@@ -3057,12 +3057,16 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertTrue(FSDPLlamaModel._can_set_attn_implementation())
 
     def test_can_set_attn_modern_vs_legacy(self):
-        # Modern interface model: True. Legacy model (T5 doesn't use ALL_ATTENTION_FUNCTIONS): False.
+        # Modern interface models: True. Legacy model (FSMT doesn't use ALL_ATTENTION_FUNCTIONS): False.
+        from transformers.models.fsmt.modeling_fsmt import FSMTModel
         from transformers.models.llama.modeling_llama import LlamaModel
         from transformers.models.t5.modeling_t5 import T5Model
 
         self.assertTrue(LlamaModel._can_set_attn_implementation())
-        self.assertFalse(T5Model._can_set_attn_implementation())
+        # T5 now uses ALL_ATTENTION_FUNCTIONS (SDPA + FA2 support added)
+        self.assertTrue(T5Model._can_set_attn_implementation())
+        # FSMT is a legacy model that doesn't use ALL_ATTENTION_FUNCTIONS
+        self.assertFalse(FSMTModel._can_set_attn_implementation())
 
     def test_can_set_attn_legacy_edge_cases(self):
         # FSMT: bare `class Attention(nn.Module):` -- tightened regex catches this case.
