@@ -89,14 +89,8 @@ class DtensorShardOperation:
         self.placements = tuple(param.placements)
         self.param_ndim = param.ndim
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
-        # Where this rank's slice starts along axis 0, and how many indices
-        # it covers. Example: param of shape [8, in, out] with Shard(0) on
-        # 2 ranks gives:
-        #   rank 0 → _axis0_offset=0, _axis0_local_size=4  (owns experts 0..3)
-        #   rank 1 → _axis0_offset=4, _axis0_local_size=4  (owns experts 4..7)
-        # When the checkpoint stores one tensor per expert, shard_tensor
-        # checks whether tensor_idx falls in this rank's range to decide
-        # whether to keep the piece or drop it.
+        # Axis-0 range owned by this rank (used to filter per-expert pieces)
+        # [_axis0_offset, _axis0_offset + _axis0_local_size)
         self._axis0_offset = offsets[0]
         self._axis0_local_size = local_shape[0]
 
