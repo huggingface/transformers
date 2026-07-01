@@ -585,10 +585,11 @@ def mask_to_box_coordinate(mask, dtype):
     x_coords = x_coords.to(dtype)
     y_coords = y_coords.to(dtype)
 
+    finfo_max = torch.tensor(torch.finfo(dtype).max, device=mask.device)
     x_coords_masked = x_coords * mask
     x_max = x_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
     x_min = (
-        torch.where(mask, x_coords_masked, torch.tensor(torch.finfo(dtype).max))
+        torch.where(mask, x_coords_masked, finfo_max)
         .flatten(start_dim=-2)
         .min(dim=-1)
         .values
@@ -597,7 +598,7 @@ def mask_to_box_coordinate(mask, dtype):
     y_coords_masked = y_coords * mask
     y_max = y_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
     y_min = (
-        torch.where(mask, y_coords_masked, torch.tensor(torch.finfo(dtype).max))
+        torch.where(mask, y_coords_masked, finfo_max)
         .flatten(start_dim=-2)
         .min(dim=-1)
         .values

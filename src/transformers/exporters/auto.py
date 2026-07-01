@@ -22,16 +22,19 @@ from .configs import ExportConfigMixin, ExportFormat
 from .exporter_dynamo import DynamoConfig, DynamoExporter
 from .exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from .exporter_onnx import OnnxConfig, OnnxExporter
+from .exporter_openvino import OpenVINOConfig, OpenVINOExporter
 
 
 AUTO_EXPORTER_MAPPING = {
     "executorch": ExecutorchExporter,
+    "openvino": OpenVINOExporter,
     "dynamo": DynamoExporter,
     "onnx": OnnxExporter,
 }
 
 AUTO_EXPORT_CONFIG_MAPPING = {
     "executorch": ExecutorchConfig,
+    "openvino": OpenVINOConfig,
     "dynamo": DynamoConfig,
     "onnx": OnnxConfig,
 }

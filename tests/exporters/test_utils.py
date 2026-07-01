@@ -24,6 +24,7 @@ from transformers import set_seed
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
+from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
 from transformers.exporters.utils import (
     decompose_for_generation,
     decompose_multimodal,
@@ -34,6 +35,7 @@ from transformers.testing_utils import (
     require_executorch,
     require_onnxruntime,
     require_onnxscript,
+    require_openvino,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -402,6 +404,37 @@ class ExportTesterMixin:
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
 
+    # ──────────────────── OpenVINO tests ─────────────────────────
+
+    @slow
+    @DYNAMIC_EXPORT_PARAMS
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    def test_openvino_export(self, dynamic):
+        """Export each model class to OpenVINO IR and verify the converted model has the
+        expected number of named inputs and outputs."""
+        self._skip_if_not_exportable()
+        exporter = OpenVINOExporter()
+        config = OpenVINOConfig(dynamic=dynamic)
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, dynamic=dynamic, backend="openvino"):
+                continue
+
+            components = self._prepare_export_model_and_inputs(model_class)
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    ov_model = exporter.export(model, inputs, config=config)
+                    # Inference is intentionally skipped — OV CPU plugin rejects dynamic-rank
+                    # Parameters that several models still produce (empty caches, packed-batch
+                    # output ranks). Validate the converted graph's shape and we're done.
+                    self.assertTrue(ov_model.inputs, f"OpenVINO model has no inputs for {name}.")
+                    self.assertTrue(ov_model.outputs, f"OpenVINO model has no outputs for {name}.")
+                    self.assertGreaterEqual(len(ov_model.outputs), len(eager_outputs[name]))
+
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @slow
@@ -522,6 +555,38 @@ class ExportGenerateTesterMixin:
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
+
+    # ──────────────────── OpenVINO tests ─────────────────────────
+
+    @slow
+    @DYNAMIC_EXPORT_PARAMS
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    def test_openvino_export_generate(self, dynamic):
+        """Export prefill and decode stages to OpenVINO IR and verify the converted model has
+        the expected number of named inputs and outputs."""
+        self._skip_if_not_exportable()
+        exporter = OpenVINOExporter()
+        config = OpenVINOConfig(dynamic=dynamic)
+
+        for model_class in self.all_generative_model_classes:
+            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="openvino"):
+                continue
+
+            components = self._prepare_export_generate_model_and_inputs(model_class)
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    ov_model = exporter.export(model, inputs, config=config)
+                    # The prefill stage passes an EMPTY ``DynamicCache`` — ``get_leaf_tensors``
+                    # finds no tensor leaves inside it, so OV creates a dynamic-rank
+                    # ``past_key_values`` Parameter that the CPU plugin can't compile. Structure
+                    # check only here until the prefill cache leaves are materialised upstream.
+                    self.assertTrue(ov_model.inputs, f"OpenVINO model has no inputs for {name}.")
+                    self.assertTrue(ov_model.outputs, f"OpenVINO model has no outputs for {name}.")
+                    self.assertGreaterEqual(len(ov_model.outputs), len(eager_outputs[name]))
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 

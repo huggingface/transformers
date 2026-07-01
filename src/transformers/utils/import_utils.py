@@ -904,6 +904,11 @@ def is_onnxscript_available() -> bool:
 
 
 @lru_cache
+def is_openvino_available() -> bool:
+    return _is_package_available("openvino")[0]
+
+
+@lru_cache
 def is_onnxruntime_available() -> bool:
     return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]
 

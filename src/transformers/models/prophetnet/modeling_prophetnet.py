@@ -734,11 +734,10 @@ class ProphetNetNgramSelfAttention(nn.Module):
         if main_relative_position_buckets is None:
             batch_size, sequence_length = hidden_states.shape[:2]
             relative_positions = (
-                torch.arange(1, attn_weights.shape[-1] + 1)
+                torch.arange(1, attn_weights.shape[-1] + 1, device=position_ids.device)
                 .unsqueeze(0)
                 .unsqueeze(0)
                 .repeat(batch_size, sequence_length, 1)
-                .to(position_ids.device)
             )
             # [batch_size, sequence_length, sequence_length+1]
             relative_positions = relative_positions - position_ids.unsqueeze(0).repeat(batch_size, sequence_length, 1)
@@ -784,11 +783,10 @@ class ProphetNetNgramSelfAttention(nn.Module):
                 "`position_ids` are incorrect. They should be of the format 1 2 3 4 5 ... (key_sequence_length - 1)",
             )
             relative_positions = (
-                torch.arange(0, key_sequence_length)
+                torch.arange(0, key_sequence_length, device=position_ids.device)
                 .unsqueeze(0)
                 .unsqueeze(0)
                 .repeat(batch_size, sequence_length, 1)
-                .to(position_ids.device)
             )
 
             relative_positions = relative_positions - position_ids.unsqueeze(0).repeat(batch_size, sequence_length, 1)
@@ -1273,7 +1271,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     def compute_buffered_relative_buckets(self, position_ids):
         batch_size, sequence_length = position_ids.shape
 
-        position_ids = torch.arange(1, self.max_target_positions).to(position_ids.device).repeat(1, 1)
+        position_ids = torch.arange(1, self.max_target_positions, device=position_ids.device).repeat(1, 1)
         main_relative_buckets, predict_relative_buckets = compute_all_stream_relative_buckets(
             self.num_buckets, self.relative_max_distance, position_ids
         )
