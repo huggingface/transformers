@@ -644,9 +644,25 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
+
+            from ...masking_utils import and_masks, causal_mask_function, create_sliding_window_causal_mask
+
+            def create_reference_sliding_window_causal_mask(**kwargs):
+                cache_layer = past_key_values.layers[0]
+                prefill_length = float("inf") if cache_layer.prefill_length is None else cache_layer.prefill_length
+                _, kv_offset = cache_layer.get_mask_sizes(query_length=inputs_embeds.shape[1])
+
+                def prefill_overlay(batch_idx, head_idx, q_idx, kv_idx):
+                    # Remove kv_offset to retrieve the kv_index with respect to prefill
+                    return kv_idx - kv_offset < prefill_length
+
+                return create_sliding_window_causal_mask(
+                    or_mask_function=and_masks(causal_mask_function, prefill_overlay), **kwargs
+                )
+
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "reference_sliding_attention": create_causal_mask(**mask_kwargs),
+                "reference_sliding_attention": create_reference_sliding_window_causal_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds

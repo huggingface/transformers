@@ -330,28 +330,68 @@ class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
             self.prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
 
         generated_length = full_key_states.shape[-2] - self.prefill_length
-        if generated_length <= self.sliding_window:
-            # Append while window grows
+        if generated_length < self.sliding_window:
+            # Window still growing: keep every prefill and decode token.
             self.keys = full_key_states
             self.values = full_value_states
         else:
-            # Overwrite
-            self.keys[:, :, -self.sliding_window :, :].copy_(full_key_states[:, :, -self.sliding_window :, :])
-            self.values[:, :, -self.sliding_window :, :].copy_(full_value_states[:, :, -self.sliding_window :, :])
+            # TODO: copy when already full
+            # Window full: keep all prefill tokens plus the most recent `sliding_window - 1` decode tokens.
+            # The `- 1` mirrors `DynamicSlidingWindowLayer`: the incoming query token supplies the last slot,
+            # so the current query still attends over a full `sliding_window` of decode tokens.
+            self.keys = torch.cat(
+                [
+                    full_key_states[:, :, : self.prefill_length, :],
+                    full_key_states[:, :, -self.sliding_window + 1 :, :],
+                ],
+                dim=-2,
+            )
+            self.values = torch.cat(
+                [
+                    full_value_states[:, :, : self.prefill_length, :],
+                    full_value_states[:, :, -self.sliding_window + 1 :, :],
+                ],
+                dim=-2,
+            )
 
-        # TODO: Add multi-token decode support. This requires a custom create_causal_mask implementation.
-        return self.keys, self.values
+        # Return full states to avoid losing context in case we added more than sliding_window tokens at once
+        return full_key_states, full_value_states
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
+        is_full = (
+            self.prefill_length is not None and self.cumulative_length >= self.prefill_length + self.sliding_window
+        )
+
         kv_offset = 0
-        if self.prefill_length is None:
-            # Before the first decode step the whole buffer is prefill
-            kv_length = self.cumulative_length + query_length
+        if is_full:
+            kv_offset = max(self.cumulative_length - self.prefill_length - self.sliding_window + 1, 0)
+            kv_length = self.prefill_length + self.sliding_window - 1 + query_length
         else:
-            generated_length = self.keys.shape[-2] - self.prefill_length
-            kv_length = self.prefill_length + min(generated_length + query_length, self.sliding_window)
+            kv_length = self.cumulative_length + query_length
+
+        # Returned kv_offset is with respect to sliding window keys.
+        # Remove kv_offset from kv_idx to retrieve the prefill indices.
         return kv_length, kv_offset
+
+    def get_max_length(self) -> int:
+        """Return the maximum cache shape of the cache"""
+        if self.prefill_length is None:
+            return -1
+        return self.prefill_length + self.sliding_window
+
+    def crop(self, max_length: int) -> None:
+        """
+        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
+        negative to remove `max_length` tokens.
+        """
+        if self.prefill_length is not None and self.get_seq_length() >= self.prefill_length + self.sliding_window:
+            raise ValueError(
+                "Cannot `crop` a `DynamicReferenceSlidingWindowLayer` after it has seen more tokens than its"
+                "prefill + sliding window (otherwise some states are lost)"
+            )
+        DynamicLayer.crop(self, max_length)
+        self.cumulative_length = self.keys.shape[-2]
 
 
 class DynamicIndexedLayer(DynamicLayer):
