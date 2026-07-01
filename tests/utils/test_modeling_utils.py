@@ -2439,6 +2439,46 @@ class ModelUtilsTest(TestCasePlus):
         with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
         torch.testing.assert_close(reference, with_config_only)
 
+    def test_linear_attention_models_can_use_accelerate_hooks(self):
+        """
+        Test that linear attention models (here only tested on lfm2 as it has small checkpoints) can use device_map and
+        offloading correctly (the conv module inside the Mixer are not used through `forward`, so accelerate hooks have to be
+        forced)
+        """
+        model_id = "LiquidAI/LFM2.5-230M"
+        input_text = "Hello, who are you?"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": input_text}],
+            tokenize=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16)
+        out = model.generate(**inputs.to(model.device), max_new_tokens=20, do_sample=False)
+        output_text1 = tokenizer.batch_decode(out[:, inputs["input_ids"].shape[1] :])[0]
+
+        # This will offload to disk
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, dtype=torch.float16, device_map="auto", max_memory={"cpu": "200MiB", "disk": "12GiB"}
+        )
+        # Make sure it was offloaded
+        self.assertTrue("cpu" in model.hf_device_map.values())
+        self.assertTrue("disk" in model.hf_device_map.values())
+
+        # Make sure we will not crash when reaching a disk offloaded mixer with linear attention
+        out = model.generate(**inputs.to(model.device), max_new_tokens=20, do_sample=False)
+        output_text2 = tokenizer.batch_decode(out[:, inputs["input_ids"].shape[1] :])[0]
+
+        EXPECTED_TEXT = (
+            "I’m an AI language model created to help answer questions, provide information, and assist with a wide"
+        )
+
+        # Make sure they are equal, and equal to the ref
+        self.assertEqual(output_text1, output_text2)
+        self.assertEqual(output_text1, EXPECTED_TEXT)
+
 
 @slow
 @require_torch

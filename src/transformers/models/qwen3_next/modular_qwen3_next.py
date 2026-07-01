@@ -23,6 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -432,6 +433,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         a = a.reshape(a.size(0), a.size(1), self.num_v_heads)
         return query, key, value, z, b, a
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -22,6 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...integrations.accelerate import force_accelerate_hooks
 from ...integrations.hub_kernels import lazy_load_kernel
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
@@ -661,6 +662,7 @@ class Zamba2MambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
