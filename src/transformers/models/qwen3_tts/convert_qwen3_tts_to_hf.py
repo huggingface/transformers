@@ -162,6 +162,10 @@ def create_config_from_checkpoint(checkpoint_path: Path) -> Qwen3TTSConfig:
         rope_theta = talker_dict.get("rope_theta")
         if rope_theta is not None:
             rope_params["rope_theta"] = rope_theta
+        # The talker feeds identical position ids to all mRoPE sections, so the interleaved and non-interleaved
+        # layouts are numerically equivalent. We use the standard (non-interleaved) implementation from Qwen2-VL,
+        # so force the flag off to keep the config consistent with the modeling code.
+        rope_params["interleaved"] = False
         talker_filtered["rope_parameters"] = rope_params
 
     code_predictor_rope = code_predictor_dict.get("rope_scaling")
@@ -175,7 +179,7 @@ def create_config_from_checkpoint(checkpoint_path: Path) -> Qwen3TTSConfig:
     # Pass code_predictor as a dict inside talker_dict, since configs unpack with **
     talker_filtered["code_predictor_config"] = code_predictor_filtered
 
-    speaker_encoder_dict = original_config.get("speaker_encoder_config", {})
+    speaker_encoder_dict = original_config.get("speaker_encoder_config")
 
     config = Qwen3TTSConfig(
         talker_config=talker_filtered,
@@ -205,8 +209,23 @@ def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_s
     original_state_dict = load_original_checkpoint(Path(checkpoint_path))
     logger.info(f"Number of parameters in original state dict: {len(original_state_dict)}")
 
-    # No key renaming needed — original and HF key names match
-    converted_state_dict = original_state_dict
+    # Three renames are needed to match the modular reuse of existing components:
+    #   * The talker text projection reuses Voxtral's `MultiModalProjector` (`linear_1` / `linear_2`),
+    #     while the checkpoint names them `linear_fc1` / `linear_fc2`.
+    #   * The talker model reuses `Qwen2_5OmniTalkerModel`, whose input embedding is named `embed_tokens`,
+    #     while the checkpoint names it `codec_embedding`. Only the talker's own embedding is renamed; the
+    #     code predictor keeps its `codec_embedding` (a `ModuleList`).
+    #   * The talker is merged into `Qwen3TTSForConditionalGeneration`, so its `talker.` prefix is dropped
+    #     (the `speaker_encoder.*` weights are already top-level and unaffected).
+    converted_state_dict = {}
+    for key, value in original_state_dict.items():
+        new_key = (
+            key.replace("text_projection.linear_fc1", "text_projection.linear_1")
+            .replace("text_projection.linear_fc2", "text_projection.linear_2")
+            .replace("talker.model.codec_embedding", "talker.model.embed_tokens")
+        )
+        new_key = new_key.removeprefix("talker.")
+        converted_state_dict[new_key] = value
 
     if bfloat16:
         dtype = torch.bfloat16

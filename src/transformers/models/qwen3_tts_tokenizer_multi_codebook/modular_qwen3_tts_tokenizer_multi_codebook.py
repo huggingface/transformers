@@ -18,9 +18,8 @@ from types import SimpleNamespace
 
 import numpy as np
 import torch
-from torch import nn
-
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ...cache_utils import DynamicCache
 from ...configuration_utils import PreTrainedConfig

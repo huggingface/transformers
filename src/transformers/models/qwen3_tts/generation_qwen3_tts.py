@@ -47,9 +47,7 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
     def generate_speaker_prompt(self, voice_clone_prompt: list[dict]):
         voice_clone_spk_embeds = []
         for index in range(len(voice_clone_prompt["ref_spk_embedding"])):
-            ref_spk_embedding = (
-                voice_clone_prompt["ref_spk_embedding"][index].to(self.device).to(self.dtype)
-            )
+            ref_spk_embedding = voice_clone_prompt["ref_spk_embedding"][index].to(self.device).to(self.dtype)
             voice_clone_spk_embeds.append(ref_spk_embedding)
         return voice_clone_spk_embeds
 
@@ -63,9 +61,7 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
         non_streaming_mode: bool,
     ):
         # text embed (ref id + text id + eos) 1 T1 D
-        text_embed = self.text_projection(
-            self.get_text_embeddings()(torch.cat([ref_id, text_id], dim=-1))
-        )
+        text_embed = self.text_projection(self.get_text_embeddings()(torch.cat([ref_id, text_id], dim=-1)))
         text_embed = torch.cat([text_embed, tts_eos_embed], dim=1)
         # codec embed (codec bos + codec) 1 T2 D
         codec_embed = []
@@ -168,9 +164,7 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
         if instruct_ids is not None:
             for index, instruct_id in enumerate(instruct_ids):
                 if instruct_id is not None:
-                    talker_input_embeds[index].append(
-                        self.text_projection(self.get_text_embeddings()(instruct_id))
-                    )
+                    talker_input_embeds[index].append(self.text_projection(self.get_text_embeddings()(instruct_id)))
 
         # tts text prompt generate
         trailing_text_hiddens = []
