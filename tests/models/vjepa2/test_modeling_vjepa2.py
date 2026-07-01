@@ -184,6 +184,170 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
+    def test_config_2_1_defaults(self):
+        """Verify 2.1 config fields have correct defaults (backward-compatible with 2.0)."""
+        config = VJEPA2Config()
+        self.assertFalse(config.use_rope_interleave)
+        self.assertFalse(config.use_modality_embeddings)
+        self.assertFalse(config.interpolate_rope)
+        self.assertFalse(config.use_context_projection)
+        self.assertFalse(config.use_image_patch_embedder)
+        self.assertIsNone(config.teacher_embed_dim)
+        self.assertEqual(config.num_distillation_outputs, 1)
+        self.assertIsNone(config.hierarchical_layers)
+
+    def test_model_2_1_forward(self):
+        """Fast test: tiny 2.1 config forward pass with hierarchical output."""
+        config = VJEPA2Config(
+            crop_size=16,
+            frames_per_clip=2,
+            hidden_size=32,
+            num_attention_heads=2,
+            num_hidden_layers=4,
+            mlp_ratio=1.0,
+            pred_hidden_size=16,
+            pred_num_attention_heads=2,
+            pred_num_hidden_layers=2,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            use_context_projection=True,
+            use_image_patch_embedder=True,
+            teacher_embed_dim=64,
+            num_distillation_outputs=1,
+            hierarchical_layers=[0, 1, 2, 3],
+        )
+        model = VJEPA2Model(config).to(torch_device).eval()
+
+        pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
+        with torch.no_grad():
+            outputs = model(pixel_values)
+        # last_hidden_state is the post-loop encoder sequence (dim hidden_size)
+        self.assertEqual(outputs.last_hidden_state.shape, (1, 1, 32))
+        # hierarchical_hidden_state holds the single distillation-normed output (dim hidden_size)
+        self.assertEqual(outputs.hierarchical_hidden_state.shape, (1, 1, 32))
+        # predictor target predictions; proj_output_dim = teacher_embed_dim = 64
+        # last_hidden_state holds targets only; context goes to context_predictions.
+        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 1, 64))
+        self.assertEqual(outputs.predictor_output.context_predictions.shape, (1, 1, 64))
+
+    def test_model_2_1_multi_distillation(self):
+        """Fast test: 2.1 config with num_distillation_outputs=4 (multi-layer predictor embed)."""
+        config = VJEPA2Config(
+            crop_size=16,
+            frames_per_clip=2,
+            hidden_size=32,
+            num_attention_heads=2,
+            num_hidden_layers=4,
+            mlp_ratio=1.0,
+            pred_hidden_size=16,
+            pred_num_attention_heads=2,
+            pred_num_hidden_layers=2,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            use_context_projection=True,
+            use_image_patch_embedder=True,
+            num_distillation_outputs=4,
+            hierarchical_layers=[0, 1, 2, 3],
+        )
+        model = VJEPA2Model(config).to(torch_device).eval()
+
+        pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
+        with torch.no_grad():
+            outputs = model(pixel_values)
+        # last_hidden_state is the post-loop encoder sequence (dim hidden_size)
+        self.assertEqual(outputs.last_hidden_state.shape, (1, 1, 32))
+        # hierarchical_hidden_state is the concatenated distillation-normed outputs
+        # (num_distillation_outputs(4) * hidden_size(32) = 128)
+        self.assertEqual(outputs.hierarchical_hidden_state.shape, (1, 1, 128))
+        # proj_output_dim = num_distillation_outputs(4) * hidden_size(32) = 128
+        # last_hidden_state holds targets only; context goes to context_predictions.
+        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 1, 128))
+        self.assertEqual(outputs.predictor_output.context_predictions.shape, (1, 1, 128))
+
+    def test_output_hidden_states_and_attentions_plumbing(self):
+        """Verify output_hidden_states / output_attentions still populate tuples on the new
+        VJEPA2EncoderOutput / VJEPA2PredictorOutput dataclasses for both V-JEPA 2 and 2.1
+        configs. Catches breakage in the OutputRecorder plumbing introduced by the new
+        output dataclasses."""
+        common_kwargs = {
+            "crop_size": 16,
+            "frames_per_clip": 2,
+            "hidden_size": 32,
+            "num_attention_heads": 2,
+            "num_hidden_layers": 3,
+            "mlp_ratio": 1.0,
+            "pred_hidden_size": 16,
+            "pred_num_attention_heads": 2,
+            "pred_num_hidden_layers": 2,
+            "pred_num_mask_tokens": 8,
+        }
+        for label, config in [
+            ("v2", VJEPA2Config(**common_kwargs)),
+            (
+                "v2.1",
+                VJEPA2Config(
+                    use_rope_interleave=True,
+                    use_modality_embeddings=True,
+                    interpolate_rope=True,
+                    use_context_projection=True,
+                    use_image_patch_embedder=True,
+                    teacher_embed_dim=64,
+                    num_distillation_outputs=1,
+                    hierarchical_layers=[0, 1, 2],
+                    **common_kwargs,
+                ),
+            ),
+        ]:
+            with self.subTest(label):
+                # Use eager attention so the OutputRecorder can capture attention weights;
+                # sdpa does not expose them by design.
+                config._attn_implementation = "eager"
+                model = VJEPA2Model(config).to(torch_device).eval()
+                pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
+                with torch.no_grad():
+                    outputs = model(pixel_values, output_hidden_states=True, output_attentions=True)
+                self.assertIsInstance(outputs.hidden_states, tuple)
+                self.assertIsInstance(outputs.attentions, tuple)
+                self.assertEqual(len(outputs.hidden_states), config.num_hidden_layers + 1)
+                self.assertEqual(len(outputs.attentions), config.num_hidden_layers)
+
+    def test_classification_head_with_hierarchical_distillation(self):
+        """Wiring-only smoke test: classification head must instantiate and forward without
+        error when num_distillation_outputs > 1. Does not validate feature quality — the
+        pooler consumes last_hidden_state (post-loop, unnormalized for 2.1), which is the
+        documented behavior per the review's "let users experiment" direction.
+        """
+        num_labels = 5
+        config = VJEPA2Config(
+            crop_size=16,
+            frames_per_clip=2,
+            hidden_size=32,
+            num_attention_heads=2,
+            num_hidden_layers=4,
+            mlp_ratio=1.0,
+            pred_hidden_size=16,
+            pred_num_attention_heads=2,
+            pred_num_hidden_layers=2,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            use_image_patch_embedder=True,
+            num_distillation_outputs=4,
+            hierarchical_layers=[0, 1, 2, 3],
+            num_labels=num_labels,
+        )
+        model = VJEPA2ForVideoClassification(config).to(torch_device).eval()
+
+        pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
+        with torch.no_grad():
+            outputs = model(pixel_values)
+        self.assertEqual(outputs.logits.shape, (1, num_labels))
+
     @slow
     def test_model_from_pretrained(self):
         model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL)
@@ -314,6 +478,100 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         # verify the last hidden states
         expected_shape = torch.Size((1, num_masks, 1024))
         self.assertEqual(outputs.predictor_output.last_hidden_state.shape, expected_shape)
+
+    def test_inference_vjepa2_1_base(self):
+        """Smoke test: instantiate a 2.1-like config and run forward pass."""
+        config = VJEPA2Config(
+            crop_size=16,
+            frames_per_clip=2,
+            hidden_size=32,
+            num_attention_heads=2,
+            num_hidden_layers=4,
+            mlp_ratio=1.0,
+            pred_hidden_size=16,
+            pred_num_attention_heads=2,
+            pred_num_hidden_layers=2,
+            pred_num_mask_tokens=8,
+            use_rope_interleave=True,
+            use_modality_embeddings=True,
+            interpolate_rope=True,
+            use_context_projection=True,
+            use_image_patch_embedder=True,
+            teacher_embed_dim=64,
+            num_distillation_outputs=1,
+            hierarchical_layers=[0, 1, 2, 3],
+        )
+        model = VJEPA2Model(config).to(torch_device).eval()
+
+        pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
+        with torch.no_grad():
+            outputs = model(pixel_values)
+        self.assertIsNotNone(outputs.last_hidden_state)
+        self.assertIsNotNone(outputs.predictor_output)
+
+    @slow
+    def test_inference_vjepa2_1_integration(self):
+        """Integration test: load vjepa2.1-vitb from Hub and compare encoder output against Meta's original implementation."""
+        model = VJEPA2Model.from_pretrained("davevanveen/vjepa2.1-vitb-fpc64-384").to(torch_device)
+        model.eval()
+
+        video_processor = AutoVideoProcessor.from_pretrained("davevanveen/vjepa2.1-vitb-fpc64-384")
+        image = prepare_img()
+        inputs = video_processor(torch.Tensor(np.array(image)), return_tensors="pt").to(torch_device)
+        pixel_values_videos = inputs.pixel_values_videos
+        pixel_values_videos = pixel_values_videos.repeat(1, model.config.frames_per_clip, 1, 1, 1)
+
+        # compute total number of encoder tokens: (crop_size // patch_size)^2 * (frames_per_clip // tubelet_size)
+        num_patches = (model.config.crop_size // model.config.patch_size) ** 2 * (
+            model.config.frames_per_clip // model.config.tubelet_size
+        )
+        # use full context mask so hierarchical_hidden_state is computed (matches converter validation)
+        batch_size = pixel_values_videos.shape[0]
+        context_mask = [
+            torch.arange(num_patches, device=pixel_values_videos.device).unsqueeze(0).repeat((batch_size, 1))
+        ]
+        predictor_mask = context_mask
+
+        # forward pass with full mask
+        with torch.no_grad():
+            outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
+
+        # for vjepa2.1 models, the encoder output to compare is hierarchical_hidden_state
+        # (mirrors the converter's validation: hf_encoder = outputs.hierarchical_hidden_state ?? outputs.last_hidden_state)
+        # reference values from Meta's original implementation — see workstream_001_build.md
+        # allclose passed at atol=1e-3 in workstream_001 converter validation
+        hf_encoder = (
+            outputs.hierarchical_hidden_state
+            if outputs.hierarchical_hidden_state is not None
+            else outputs.last_hidden_state
+        )
+        expected_encoder_slice = torch.tensor(
+            [
+                [0.24165302515029907, 0.5494657158851624, 0.00034073402639478445, -0.3474652171134949],
+                [-0.3851822316646576, 0.03926074877381325, 0.42013248801231384, 0.1775028109550476],
+                [0.5560275912284851, 0.8459381461143494, 0.037836603820323944, 0.7014947533607483],
+                [0.31093376874923706, 1.8635334968566895, -0.16667403280735016, 1.002286434173584],
+            ],
+            device=torch_device,
+        )
+        self.assertTrue(
+            torch.allclose(hf_encoder[:, :4, :4], expected_encoder_slice, atol=1e-3),
+            f"Encoder output slice mismatch. Got:\n{hf_encoder[:, :4, :4]}",
+        )
+
+        expected_predictor_slice = torch.tensor(
+            [
+                [0.001277238130569458, 0.2505880296230316, 0.06844618916511536, -0.1792779117822647],
+                [0.00841611623764038, 0.10896551609039307, -0.008314952254295349, -0.21254171431064606],
+                [0.22983714938163757, 0.617747962474823, -0.3871285319328308, -0.2716492712497711],
+                [0.1592579483985901, 0.4939582943916321, -0.32962897419929504, -0.24818222224712372],
+            ],
+            device=torch_device,
+        )
+        self.assertTrue(
+            torch.allclose(outputs.predictor_output.last_hidden_state[:, :4, :4], expected_predictor_slice, atol=1e-2),
+            f"Predictor output mismatch. Got: {outputs.predictor_output.last_hidden_state[:, :4, :4]}",
+        )
 
     @slow
     def test_video_classification(self):

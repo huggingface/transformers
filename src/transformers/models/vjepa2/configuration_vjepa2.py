@@ -43,6 +43,28 @@ class VJEPA2Config(PreTrainedConfig):
         Initialize the mask tokens in the predictor with 0.
     pred_mlp_ratio (`float`, *optional*, defaults to 4.0):
         Ratio of the hidden size of the MLPs used in Predictor relative to the `pred_hidden_size`.
+    use_rope_interleave (`bool`, *optional*, defaults to `False`):
+        Use corrected RoPE implementation with `repeat_interleave` (V-JEPA 2.1) instead of `repeat` (V-JEPA 2).
+    use_modality_embeddings (`bool`, *optional*, defaults to `False`):
+        Add learnable modality embeddings (`img_mod_embed`/`video_mod_embed`) to patch embeddings.
+    interpolate_rope (`bool`, *optional*, defaults to `False`):
+        Scale RoPE positions for flexible resolution handling.
+    use_context_projection (`bool`, *optional*, defaults to `False`):
+        When True, the predictor instantiates a separate context projection head and exposes
+        the projected context tokens as `VJEPA2PredictorOutput.context_predictions`. When
+        False, only target predictions are produced (`last_hidden_state`).
+    use_image_patch_embedder (`bool`, *optional*, defaults to `False`):
+        When True, a separate single-frame patch embedder (tubelet_size=1) is instantiated
+        and used when the input has a single frame (image inputs). When False, the standard
+        video patch embedder is always used.
+    teacher_embed_dim (`int`, *optional*, defaults to `None`):
+        Teacher embedding dimension for distilled models. Controls predictor output projection size.
+    num_distillation_outputs (`int`, *optional*, defaults to 1):
+        Number of distillation outputs taken from `hierarchical_layers` (the last
+        `num_distillation_outputs` indices). Predictor uses a 2-layer MLP embedder when
+        greater than 1.
+    hierarchical_layers (`list[int]`, *optional*, defaults to `None`):
+        Encoder layer indices for hierarchical feature extraction with per-layer norms.
 
     Example:
 
@@ -84,6 +106,14 @@ class VJEPA2Config(PreTrainedConfig):
     pred_num_mask_tokens: int = 10
     pred_zero_init_mask_tokens: bool = True
     pred_mlp_ratio: int | float = 4.0
+    use_rope_interleave: bool = False
+    use_modality_embeddings: bool = False
+    interpolate_rope: bool = False
+    use_context_projection: bool = False
+    use_image_patch_embedder: bool = False
+    teacher_embed_dim: int | None = None
+    num_distillation_outputs: int = 1
+    hierarchical_layers: list[int] | None = None
 
 
 __all__ = ["VJEPA2Config"]
