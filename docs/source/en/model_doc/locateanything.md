@@ -37,6 +37,11 @@ Multi-Token Prediction (MTP). Three decoding regimes are available:
 - `"slow"` — auto-regressive decoding only.
 - `"hybrid"` — MTP with an auto-regressive fallback on uncertain boxes (the default).
 
+> [!TIP]
+> This model was contributed by [IMvision12](https://huggingface.co/IMvision12).
+>
+> Click on the LocateAnything models in the right sidebar for more examples of how to apply LocateAnything to different visual grounding tasks.
+
 ## Usage example
 
 ```python
