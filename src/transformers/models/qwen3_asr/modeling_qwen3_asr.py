@@ -48,7 +48,7 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3ASREncoderLayer", "Qwen3DecoderLayer"]
+    _no_split_modules = ["Qwen3ASRAudioEncoderLayer", "Qwen3DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -324,7 +324,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
     config: Qwen3ASREncoderConfig
     main_input_name = "input_features"
     input_modalities = "audio"
-    _no_split_modules = ["Qwen3ASREncoderLayer"]
+    _no_split_modules = ["Qwen3ASRAudioEncoderLayer"]
     _supports_sdpa = True
     _can_record_outputs = {
         "hidden_states": Qwen3ASRAudioEncoderLayer,
