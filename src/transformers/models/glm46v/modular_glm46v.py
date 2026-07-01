@@ -99,6 +99,11 @@ class Glm46VModel(Glm4vModel):
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
 
+    def forward(self, input_ids=None, **kwargs):
+        if input_ids is not None:
+            input_ids = input_ids.long()
+        return super().forward(input_ids=input_ids, **kwargs)
+
 
 class Glm46VForConditionalGeneration(Glm4vForConditionalGeneration):
     pass
