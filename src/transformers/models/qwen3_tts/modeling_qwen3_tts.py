@@ -1233,9 +1233,7 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         super().__init__(config)
         self.model = Qwen3TTSTalkerCodePredictorModel(config, talker_config.hidden_size)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.ModuleList(
-            [nn.Linear(config.hidden_size, config.vocab_size, bias=False) for _ in range(config.num_code_groups - 1)]
-        )
+        self.lm_head = nn.Linear(config.hidden_size, (config.num_code_groups - 1) * config.vocab_size, bias=False)
 
         if config.hidden_size != talker_config.hidden_size:
             self.small_to_mtp_projection = nn.Linear(talker_config.hidden_size, config.hidden_size, bias=True)
@@ -1306,7 +1304,10 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         )
 
         hidden_states = outputs.last_hidden_state
-        logits = self.lm_head[generation_steps](hidden_states)
+        logits = self.lm_head(hidden_states).view(
+            *hidden_states.shape[:-1], self.config.num_code_groups - 1, self.config.vocab_size
+        )
+        logits = logits[..., generation_steps, :]
 
         loss = None
         if labels is not None:
@@ -1352,8 +1353,8 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         )
         self.rope_deltas = None
 
-        # Optional speaker encoder for voice cloning (only for "base" model type)
-        if config.tts_model_type == "base":
+        # Optional speaker encoder for voice cloning (present only when a speaker_encoder_config is set)
+        if config.speaker_encoder_config is not None:
             self.speaker_encoder = Qwen3TTSSpeakerEncoder(config.speaker_encoder_config)
         else:
             self.speaker_encoder = None
@@ -1375,7 +1376,7 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
                     self.supported_languages.append(language_id)
 
         self.speaker_encoder_sample_rate = (
-            config.speaker_encoder_config.sample_rate if hasattr(config, "speaker_encoder_config") else 24000
+            config.speaker_encoder_config.sample_rate if config.speaker_encoder_config is not None else 24000
         )
         self.tokenizer_type = getattr(config, "tokenizer_type", "qwen2")
         self.tts_model_size = getattr(config, "tts_model_size", "base")

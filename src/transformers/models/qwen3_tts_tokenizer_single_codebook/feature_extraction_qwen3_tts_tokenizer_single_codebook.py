@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -75,8 +74,10 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(WhisperFeatureExtractor):
         device: str | None = "cpu",
         **kwargs,
     ) -> BatchFeature:
-        is_batched = isinstance(raw_speech, (list, tuple)) and len(raw_speech) > 0 and isinstance(
-            raw_speech[0], (np.ndarray, list, tuple)
+        is_batched = (
+            isinstance(raw_speech, (list, tuple))
+            and len(raw_speech) > 0
+            and isinstance(raw_speech[0], (np.ndarray, list, tuple))
         )
         if is_batched:
             input_values = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
@@ -87,7 +88,9 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(WhisperFeatureExtractor):
         max_raw_length = max(speech.shape[0] for speech in input_values)
         padded_input_values = np.stack(
             [
-                np.pad(speech, (0, max_raw_length - speech.shape[0]), mode="constant", constant_values=self.padding_value)
+                np.pad(
+                    speech, (0, max_raw_length - speech.shape[0]), mode="constant", constant_values=self.padding_value
+                )
                 for speech in input_values
             ]
         )
