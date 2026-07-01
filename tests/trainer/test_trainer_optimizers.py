@@ -15,7 +15,7 @@
 """
 Trainer optimizer and LR scheduler tests: custom optimizers, LR scheduler kwargs, cosine-with-min-lr,
 reduce-on-plateau, Adafactor, bitsandbytes (RMSProp, AdEMAMix), LOMO, GrokAdamW, schedule-free,
-GaLore, Apollo, Stable AdamW, Liger kernel, optimizer choice resolution, factory pattern detection,
+GaLore, Apollo, Stable AdamW, Gefen, Liger kernel, optimizer choice resolution, factory pattern detection,
 and model parameter inspection.
 """
 
@@ -38,6 +38,7 @@ from transformers.testing_utils import (
     require_apollo_torch,
     require_bitsandbytes,
     require_galore_torch,
+    require_gefen,
     require_grokadamw,
     require_lomo,
     require_schedulefree,
@@ -249,6 +250,38 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_accelerator
     def test_grokadamw(self):
         self._train_with_llama("grokadamw", learning_rate=2e-5, max_steps=20)
+
+    # ---------------------------------------------------------------------------
+    # Gefen test
+    # ---------------------------------------------------------------------------
+
+    @require_gefen
+    def test_gefen_trainer_adamw_args(self):
+        from gefen import Gefen
+
+        tiny_llama, train_dataset = self._get_llama_and_dataset()
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            weight_decay=0.001,
+            adam_beta1=0.89,
+            adam_beta2=0.98,
+            adam_epsilon=1e-8,
+            optim="gefen",
+            optim_args="fused=False,verbose=True",
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=10)
+
+        self.assertIsInstance(trainer.optimizer, Gefen)
+        self.assertFalse(trainer.optimizer.fused)
+        self.assertTrue(trainer.optimizer.verbose)
+        self.assertEqual(trainer.optimizer.defaults["lr"], args.learning_rate)
+        self.assertEqual(trainer.optimizer.defaults["beta1"], args.adam_beta1)
+        self.assertEqual(trainer.optimizer.defaults["beta2"], args.adam_beta2)
+        self.assertEqual(trainer.optimizer.defaults["eps"], args.adam_epsilon)
+        self.assertIn(args.weight_decay, {group["weight_decay"] for group in trainer.optimizer.param_groups})
 
     # ---------------------------------------------------------------------------
     # Schedule-free tests

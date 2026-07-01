@@ -155,6 +155,7 @@ class OptimizerNames(ExplicitEnum):
     APOLLO_ADAMW = "apollo_adamw"
     APOLLO_ADAMW_LAYERWISE = "apollo_adamw_layerwise"
     STABLE_ADAMW = "stable_adamw"
+    GEFEN = "gefen"
 
 
 def _convert_str_dict(passed_value: dict):

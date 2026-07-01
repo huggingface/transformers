@@ -145,6 +145,7 @@ from .import_utils import (
     is_fsdp_available,
     is_g2p_en_available,
     is_galore_torch_available,
+    is_gefen_available,
     is_gguf_available,
     is_gptqmodel_available,
     is_grokadamw_available,
