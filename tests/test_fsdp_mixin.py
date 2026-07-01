@@ -462,7 +462,7 @@ def _test_fsdp2_plan_vs_ddp_impl(rank, config_class, config_dict, tie_word_embed
 
 class FSDPTesterMixin(ABC):
     fsdp_nproc_per_node: int = 2
-    #TODO(3outeille): do we put the CONSTANTS in the mixin class ?
+    # TODO(3outeille): do we put the CONSTANTS in the mixin class ?
 
     @property
     @abstractmethod
@@ -485,7 +485,10 @@ class FSDPTesterMixin(ABC):
 
         config = self.model_tester.get_config()
         # Only top-N models are tested, set FSDP_DISTRIBUTED_TEST_MODEL_TYPES = None to run all tests.
-        if FSDP_DISTRIBUTED_TEST_MODEL_TYPES is not None and config.model_type not in FSDP_DISTRIBUTED_TEST_MODEL_TYPES:
+        if (
+            FSDP_DISTRIBUTED_TEST_MODEL_TYPES is not None
+            and config.model_type not in FSDP_DISTRIBUTED_TEST_MODEL_TYPES
+        ):
             self.skipTest(
                 f"FSDP distributed tests are not enabled for model_type={config.model_type!r} "
                 f"(enabled: {sorted(FSDP_DISTRIBUTED_TEST_MODEL_TYPES)}). Set FSDP_DISTRIBUTED_TEST_MODEL_TYPES = None to run all tests."
@@ -493,7 +496,7 @@ class FSDPTesterMixin(ABC):
 
     def _create_model_on_meta(self, config):
         """Instantiate a model on the meta device (no memory allocated)."""
-        auto_classes = [AutoModelForCausalLM, AutoModelForSeq2SeqLM] #TODO(3outeille): why AutoModelForSeq2SeqLM ?
+        auto_classes = [AutoModelForCausalLM, AutoModelForSeq2SeqLM]  # TODO(3outeille): why AutoModelForSeq2SeqLM ?
         for auto_cls in auto_classes:
             try:
                 with torch.device("meta"):
@@ -535,7 +538,7 @@ class FSDPTesterMixin(ABC):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(("", 0))
             port = s.getsockname()[1]
-        
+
         try:
             mp.spawn(
                 _fsdp_global_wrapper,
