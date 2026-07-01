@@ -412,6 +412,73 @@ class PermuteForRope(ConversionOps):
         return output
 
 
+def _interleaved_rope_perm(head_dim: int, device: torch.device) -> torch.Tensor:
+    """Permutation mapping an interleaved/complex 2D-RoPE head layout to the rotate_half (split) layout."""
+    quarter = head_dim // 4
+    ar = torch.arange(quarter, device=device)
+    perm = torch.empty(head_dim, dtype=torch.long, device=device)
+    perm[ar] = 4 * ar + 2
+    perm[quarter + ar] = 4 * ar
+    perm[2 * quarter + ar] = 4 * ar + 3
+    perm[3 * quarter + ar] = 4 * ar + 1
+    return perm
+
+
+def _reorder_heads(weight: torch.Tensor, num_heads: int, perm: torch.Tensor) -> torch.Tensor:
+    shape = weight.shape
+    head_dim = shape[0] // num_heads
+    return weight.view(num_heads, head_dim, *shape[1:])[:, perm].reshape(shape)
+
+
+class SplitQkvDeinterleaveRope(ConversionOps):
+    """Split a fused vision `wqkv` projection into q/k/v and reorder the q/k head dimensions at load time.
+
+    LocateAnything's MoonViT applies an interleaved (complex) 2D rotary embedding; the standard
+    `apply_rotary_pos_emb_vision` uses the `rotate_half` (split) layout. The two are identical up to a
+    per-head permutation of the query/key dimensions, applied here so the checkpoint is never rewritten.
+    The value projection is left untouched.
+    """
+
+    @torch.no_grad
+    def convert(self, input_dict, source_patterns, target_patterns, config, **kwargs):
+        num_heads = getattr(config, "vision_config", config).num_attention_heads
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        query, key, value = tensor.chunk(3, dim=0)
+        perm = _interleaved_rope_perm(query.shape[0] // num_heads, query.device)
+        return dict(
+            zip(target_patterns, [_reorder_heads(query, num_heads, perm), _reorder_heads(key, num_heads, perm), value])
+        )
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return FuseQkvReinterleaveRope()
+
+
+class FuseQkvReinterleaveRope(ConversionOps):
+    """Reverse of [`SplitQkvDeinterleaveRope`]: re-interleave the q/k head dimensions and fuse q/k/v into `wqkv`."""
+
+    @torch.no_grad
+    def convert(self, input_dict, source_patterns, target_patterns, config, **kwargs):
+        num_heads = getattr(config, "vision_config", config).num_attention_heads
+        ordered = []
+        for source_pattern in source_patterns:
+            tensors = input_dict[source_pattern]
+            ordered.append(tensors[0] if isinstance(tensors, list) else tensors)
+        query, key, value = ordered
+        perm = _interleaved_rope_perm(query.shape[0] // num_heads, query.device)
+        inverse = torch.empty_like(perm)
+        inverse[perm] = torch.arange(perm.shape[0], device=perm.device)
+        fused = torch.cat(
+            [_reorder_heads(query, num_heads, inverse), _reorder_heads(key, num_heads, inverse), value], dim=0
+        )
+        return {target_patterns[0]: fused}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return SplitQkvDeinterleaveRope()
+
+
 class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
     r"""
     Special operation that splits a module list over all keys and fuses over the number of original modules.
