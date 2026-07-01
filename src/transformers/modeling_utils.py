@@ -3486,7 +3486,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self.is_remote_code() and save_on_this_rank::
+        if self.is_remote_code() and save_on_this_rank:
             custom_object_save(self, save_directory, config=self.config)
 
         # Don't persist distributed_config in saved config — it's runtime-only
