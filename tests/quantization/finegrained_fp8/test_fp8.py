@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import gc
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from parameterized import parameterized
@@ -36,6 +38,8 @@ from transformers.utils import is_torch_available
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
 
 
 @contextmanager
@@ -71,6 +75,254 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
+
+
+def _quantize_static_fp8(tensor: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    scale = torch.clamp(tensor.float().abs().max() / 448.0, min=1e-6).reshape(1).to(torch.float32)
+    quantized = torch.clamp(tensor.float() / scale, -448.0, 448.0).to(torch.float8_e4m3fn)
+    return quantized.contiguous(), scale
+
+
+def _dequantize_static_fp8(tensor: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
+    return tensor.float() * scale.float()
+
+
+class _ReferenceInputQuantKernel:
+    def channel_scale_quantize_fp8_static_bf16(self, input, channel_scale, scale):
+        scaled = input.float() * channel_scale.float().reshape(1, -1)
+        return torch.clamp(scaled / scale.float(), -448.0, 448.0).to(torch.float8_e4m3fn)
+
+
+class _ReferenceMLPKernel:
+    def fp8_swiglu_mlp_bf16(
+        self,
+        input,
+        gate_up_weight,
+        down_weight,
+        input_scale,
+        gate_up_weight_scale,
+        hidden_scale,
+        down_weight_scale,
+    ):
+        x = _dequantize_static_fp8(input, input_scale)
+        gate_up = F.linear(x, _dequantize_static_fp8(gate_up_weight, gate_up_weight_scale))
+        gate, up = gate_up.chunk(2, dim=-1)
+        hidden = F.silu(gate) * up
+        hidden_fp8 = torch.clamp(hidden / hidden_scale.float(), -448.0, 448.0).to(torch.float8_e4m3fn)
+        out = F.linear(
+            _dequantize_static_fp8(hidden_fp8, hidden_scale), _dequantize_static_fp8(down_weight, down_weight_scale)
+        )
+        return out.to(torch.bfloat16)
+
+    def fp8_geglu_mlp_bf16(
+        self,
+        input,
+        gate_up_weight,
+        down_weight,
+        input_scale,
+        gate_up_weight_scale,
+        hidden_scale,
+        down_weight_scale,
+    ):
+        x = _dequantize_static_fp8(input, input_scale)
+        gate_up = F.linear(x, _dequantize_static_fp8(gate_up_weight, gate_up_weight_scale))
+        gate, up = gate_up.chunk(2, dim=-1)
+        hidden = F.gelu(gate, approximate="tanh") * up
+        hidden_fp8 = torch.clamp(hidden / hidden_scale.float(), -448.0, 448.0).to(torch.float8_e4m3fn)
+        out = F.linear(
+            _dequantize_static_fp8(hidden_fp8, hidden_scale), _dequantize_static_fp8(down_weight, down_weight_scale)
+        )
+        return out.to(torch.bfloat16)
+
+    def fp8_gelu_mlp_bf16(
+        self,
+        input,
+        up_weight,
+        up_bias,
+        down_weight,
+        down_bias,
+        input_scale,
+        up_weight_scale,
+        hidden_scale,
+        down_weight_scale,
+    ):
+        x = _dequantize_static_fp8(input, input_scale)
+        up = F.linear(x, _dequantize_static_fp8(up_weight, up_weight_scale), up_bias.float())
+        hidden = F.gelu(up, approximate="tanh")
+        hidden_fp8 = torch.clamp(hidden / hidden_scale.float(), -448.0, 448.0).to(torch.float8_e4m3fn)
+        out = F.linear(
+            _dequantize_static_fp8(hidden_fp8, hidden_scale),
+            _dequantize_static_fp8(down_weight, down_weight_scale),
+            down_bias.float(),
+        )
+        return out.to(torch.bfloat16)
+
+
+def _static_fp8_linear(in_features: int, out_features: int, *, has_bias: bool = False) -> nn.Module:
+    from transformers.integrations.finegrained_fp8 import FP8Linear
+
+    linear = FP8Linear(
+        in_features,
+        out_features,
+        block_size=None,
+        activation_scheme="static",
+        has_bias=has_bias,
+    )
+    weight = torch.randn(out_features, in_features, dtype=torch.float32) * 0.1
+    weight_fp8, weight_scale = _quantize_static_fp8(weight)
+    linear.weight = nn.Parameter(weight_fp8, requires_grad=False)
+    linear.weight_scale_inv = nn.Parameter(weight_scale, requires_grad=False)
+    linear.activation_scale = nn.Parameter(torch.tensor([0.05], dtype=torch.float32), requires_grad=False)
+    if has_bias:
+        linear.bias = nn.Parameter(torch.randn(out_features, dtype=torch.bfloat16) * 0.01, requires_grad=False)
+    return linear
+
+
+class _TinyStaticFP8GatedMLP(nn.Module):
+    def __init__(self, *, activation="gelu_pytorch_tanh"):
+        super().__init__()
+        from transformers.activations import ACT2FN
+
+        self.gate_proj = _static_fp8_linear(8, 16)
+        self.up_proj = _static_fp8_linear(8, 16)
+        self.down_proj = _static_fp8_linear(16, 8)
+        self.up_proj.activation_scale = nn.Parameter(
+            self.gate_proj.activation_scale.detach().clone(), requires_grad=False
+        )
+        self.up_proj.weight_scale_inv = nn.Parameter(
+            self.gate_proj.weight_scale_inv.detach().clone(), requires_grad=False
+        )
+        self.act_fn = ACT2FN[activation]
+
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+
+class _TinyStaticFP8DenseGELUMLP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        from transformers.activations import ACT2FN
+
+        self.fc1 = _static_fp8_linear(8, 16, has_bias=True)
+        self.fc2 = _static_fp8_linear(16, 8, has_bias=True)
+        self.activation_fn = ACT2FN["gelu_pytorch_tanh"]
+
+    def forward(self, x):
+        return self.fc2(self.activation_fn(self.fc1(x)))
+
+
+class _TinyStaticFP8Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.gated = _TinyStaticFP8GatedMLP()
+        self.dense = _TinyStaticFP8DenseGELUMLP()
+        self.config = SimpleNamespace()
+
+    def forward(self, x):
+        return self.gated(x), self.dense(x)
+
+
+class StaticQuantizedMLPFusionTest(unittest.TestCase):
+    fusion_config = {
+        "input_quant": {"repo_id": "reference/input-quant"},
+        "gated_mlp": {"repo_id": "reference/gated"},
+        "dense_gelu_mlp": {"repo_id": "reference/dense"},
+    }
+
+    def _kernel_loader(self, repo_id, version=None, revision=None, trust_remote_code=False):
+        del version, revision, trust_remote_code
+        if repo_id == "reference/input-quant":
+            return _ReferenceInputQuantKernel()
+        if repo_id in {"reference/gated", "reference/dense"}:
+            return _ReferenceMLPKernel()
+        raise AssertionError(f"Unexpected repo id {repo_id}")
+
+    def test_fusion_config_parsing(self):
+        from transformers.integrations.static_quantized_mlp import get_static_quantized_mlp_fusion_spec
+
+        spec = get_static_quantized_mlp_fusion_spec(
+            {
+                "input_quant": {"repo_id": "reference/input-quant", "trust_remote_code": True},
+                "gated_mlp": {"repo_id": "reference/gated", "version": 2},
+            }
+        )
+        self.assertEqual(spec.input_quant.kernel.repo_id, "reference/input-quant")
+        self.assertTrue(spec.input_quant.kernel.trust_remote_code)
+        self.assertEqual(spec.gated_mlp.kernel.version, 2)
+        self.assertIsNone(spec.dense_gelu_mlp)
+
+    def test_fusion_config_rejects_unknown_pattern(self):
+        from transformers.fusion_mapping import register_fusion_patches
+
+        with self.assertRaisesRegex(ValueError, "Unknown static quantized MLP fusion option"):
+            register_fusion_patches(object, SimpleNamespace(), {"static_quantized_mlp": {"unknown_mlp": True}})
+
+    def test_static_quantized_mlp_requires_explicit_kernel_config(self):
+        from transformers.fusion_mapping import register_fusion_patches
+
+        with self.assertRaisesRegex(ValueError, "requires explicit Hub kernel configurations"):
+            register_fusion_patches(object, SimpleNamespace(), {"static_quantized_mlp": True})
+
+    def test_static_fp8_gated_and_dense_gelu_mlp_replacement(self):
+        from transformers.integrations.static_quantized_mlp import (
+            StaticFP8DenseGELUMLP,
+            StaticFP8GatedMLP,
+            replace_with_static_quantized_mlp,
+        )
+
+        torch.manual_seed(0)
+        model = _TinyStaticFP8Model()
+        reference = copy.deepcopy(model)
+        x = torch.randn(2, 3, 8, dtype=torch.bfloat16)
+
+        with patch("transformers.integrations.static_quantized_mlp._load_hub_kernel", side_effect=self._kernel_loader):
+            model = replace_with_static_quantized_mlp(model, self.fusion_config)
+            reference = replace_with_static_quantized_mlp(reference, self.fusion_config)
+
+        self.assertIsInstance(model.gated, StaticFP8GatedMLP)
+        self.assertIsInstance(model.dense, StaticFP8DenseGELUMLP)
+        torch.testing.assert_close(model.gated(x), reference.gated(x))
+        torch.testing.assert_close(model.dense(x), reference.dense(x))
+
+        state_dict = model.state_dict()
+        self.assertIn("gated.gate_proj.weight", state_dict)
+        self.assertIn("dense.fc1.weight", state_dict)
+        self.assertNotIn("gated.gate_up_weight", state_dict)
+        self.assertNotIn("dense.input_channel_scale", state_dict)
+
+    def test_static_fp8_dense_gelu_unsupported_activation_falls_back(self):
+        from transformers.activations import ACT2FN
+        from transformers.integrations.static_quantized_mlp import (
+            StaticFP8DenseGELUMLP,
+            replace_with_static_quantized_mlp,
+        )
+
+        model = _TinyStaticFP8Model()
+        model.dense.activation_fn = ACT2FN["relu"]
+
+        with patch("transformers.integrations.static_quantized_mlp._load_hub_kernel", side_effect=self._kernel_loader):
+            model = replace_with_static_quantized_mlp(
+                model,
+                {
+                    "input_quant": self.fusion_config["input_quant"],
+                    "dense_gelu_mlp": self.fusion_config["dense_gelu_mlp"],
+                },
+            )
+
+        self.assertNotIsInstance(model.dense, StaticFP8DenseGELUMLP)
+
+    def test_quantizer_after_load_applies_static_quantized_mlp_fusion(self):
+        from transformers.integrations.static_quantized_mlp import StaticFP8DenseGELUMLP, StaticFP8GatedMLP
+
+        model = _TinyStaticFP8Model()
+        model.config.fusion_config = {"static_quantized_mlp": self.fusion_config}
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config(activation_scheme="static", weight_block_size=None))
+
+        with patch("transformers.integrations.static_quantized_mlp._load_hub_kernel", side_effect=self._kernel_loader):
+            model = quantizer._process_model_after_weight_loading(model)
+
+        self.assertIsInstance(model.gated, StaticFP8GatedMLP)
+        self.assertIsInstance(model.dense, StaticFP8DenseGELUMLP)
 
 
 @slow
