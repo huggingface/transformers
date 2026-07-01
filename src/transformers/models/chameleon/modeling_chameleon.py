@@ -761,17 +761,20 @@ class ChameleonImageVocabularyMapping:
     def bpe2img_search_tensors(self):
         return torch.tensor(sorted(self.bpe2img.keys())), torch.tensor(sorted(self.bpe2img.values()))
 
-    @cached_property
-    def img2bpe_mapping_tensor(self):
-        mapping = torch.zeros(max(self.img2bpe.keys()) + 1, dtype=torch.int)
-        for k, v in self.img2bpe.items():
-            mapping[k] = v
-        return mapping
+    def _build_img2bpe_mapping_tensor(self, device: torch.device) -> torch.Tensor:
+        """Build a device-local ``(max_img_id + 1,)`` int lookup table mapping VQ image ids to
+        BPE token ids. Cached per-device so we don't rebuild on every call."""
+        if not hasattr(self, "_img2bpe_mapping_cache"):
+            self._img2bpe_mapping_cache: dict[torch.device, torch.Tensor] = {}
+        if device not in self._img2bpe_mapping_cache:
+            mapping = torch.zeros(max(self.img2bpe.keys()) + 1, dtype=torch.int, device=device)
+            for k, v in self.img2bpe.items():
+                mapping[k] = v
+            self._img2bpe_mapping_cache[device] = mapping
+        return self._img2bpe_mapping_cache[device]
 
     def convert_img2bpe(self, img_batch: torch.Tensor) -> torch.Tensor:
-        device = img_batch.device
-        img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
-        return img_tokens.to(device)
+        return self._build_img2bpe_mapping_tensor(img_batch.device)[img_batch]
 
 
 @auto_docstring
