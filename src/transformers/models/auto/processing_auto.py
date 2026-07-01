@@ -62,6 +62,7 @@ else:
             ("mistral3", "PixtralProcessor"),
             ("mm-grounding-dino", "GroundingDinoProcessor"),
             ("modernvbert", "Idefics3Processor"),
+            ("molmo2", "Molmo2Processor"),
             ("moonshine", "Wav2Vec2Processor"),
             ("parakeet_ctc", "ParakeetProcessor"),
             ("parakeet_rnnt", "ParakeetProcessor"),
