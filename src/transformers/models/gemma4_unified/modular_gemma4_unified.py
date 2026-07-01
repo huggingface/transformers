@@ -27,7 +27,8 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
-from ...modeling_outputs import ModelOutput
+from ...modeling_layers import GenericForSequenceClassification
+from ...modeling_outputs import ModelOutput, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -1278,6 +1279,47 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         return model_inputs
 
 
+class Gemma4UnifiedTextForSequenceClassification(GenericForSequenceClassification, Gemma4UnifiedPreTrainedModel):
+    config: Gemma4UnifiedTextConfig
+    input_modalities = ("text",)
+
+
+class Gemma4UnifiedForSequenceClassification(GenericForSequenceClassification, Gemma4UnifiedPreTrainedModel):
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        mm_token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        image_position_ids: torch.LongTensor | None = None,
+        video_position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutputWithPast:
+        return super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            input_features=input_features,
+            input_features_mask=input_features_mask,
+            mm_token_type_ids=mm_token_type_ids,
+            image_position_ids=image_position_ids,
+            video_position_ids=video_position_ids,
+            labels=labels,
+            **kwargs,
+        )
+
+
 __all__ = [
     "Gemma4UnifiedImageProcessor",
     "Gemma4UnifiedVideoProcessor",
@@ -1288,7 +1330,9 @@ __all__ = [
     "Gemma4UnifiedVisionConfig",
     "Gemma4UnifiedForCausalLM",
     "Gemma4UnifiedForConditionalGeneration",
+    "Gemma4UnifiedForSequenceClassification",
     "Gemma4UnifiedModel",
     "Gemma4UnifiedPreTrainedModel",
+    "Gemma4UnifiedTextForSequenceClassification",
     "Gemma4UnifiedTextModel",
 ]

@@ -52,8 +52,10 @@ if is_torch_available():
         AutoModelForCausalLM,
         Gemma4UnifiedForCausalLM,
         Gemma4UnifiedForConditionalGeneration,
+        Gemma4UnifiedForSequenceClassification,
         Gemma4UnifiedModel,
         Gemma4UnifiedProcessor,
+        Gemma4UnifiedTextForSequenceClassification,
         Gemma4UnifiedTextModel,
         PreTrainedModel,
         set_seed,
@@ -73,6 +75,7 @@ class Gemma4UnifiedTextModelTester(CausalLMModelTester):
         config_class = Gemma4UnifiedTextConfig
         base_model_class = Gemma4UnifiedTextModel
         causal_lm_class = Gemma4UnifiedForCausalLM
+        sequence_classification_class = Gemma4UnifiedTextForSequenceClassification
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -388,7 +391,11 @@ class Gemma4UnifiedVision2TextModelTester:
 
 @require_torch
 class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma4UnifiedModel, Gemma4UnifiedForConditionalGeneration) if is_torch_available() else ()
+    all_model_classes = (
+        (Gemma4UnifiedModel, Gemma4UnifiedForConditionalGeneration, Gemma4UnifiedForSequenceClassification)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (Gemma4UnifiedForConditionalGeneration,) if is_torch_available() else ()
     additional_model_inputs = ["mm_token_type_ids"]
     test_resize_embeddings = False

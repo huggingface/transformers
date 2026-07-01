@@ -260,3 +260,13 @@ print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
 
 [[autodoc]] Gemma4UnifiedForConditionalGeneration
     - forward
+
+## Gemma4UnifiedForSequenceClassification
+
+[[autodoc]] Gemma4UnifiedForSequenceClassification
+    - forward
+
+## Gemma4UnifiedTextForSequenceClassification
+
+[[autodoc]] Gemma4UnifiedTextForSequenceClassification
+    - forward
