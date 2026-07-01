@@ -34,11 +34,6 @@ from ..auto import AutoModel
 from .configuration_esmfold2 import ESMFold2Config
 
 
-# ===========================================================================
-# fp32-compute LayerNorm
-# ===========================================================================
-
-
 class ESMFold2LayerNorm(nn.LayerNorm):
     """LayerNorm that always computes in fp32, with its weight stored at the model dtype.
 
@@ -52,13 +47,8 @@ class ESMFold2LayerNorm(nn.LayerNorm):
         return F.layer_norm(x.float(), self.normalized_shape, weight, bias, self.eps).to(x.dtype)
 
 
-# ===========================================================================
-# ESMFold2TransitionLayer (used in ESMFold2DiffusionConditioning)
-# ===========================================================================
-
-
 class ESMFold2TransitionLayer(nn.Module):
-    """ESMFold2SwiGLU transition: norm -> a_proj, b_proj -> silu(a)*b -> out_proj."""
+    """ESMFold2SwiGLU transition: norm -> a_proj/b_proj -> silu(gate) * up -> out_proj."""
 
     def __init__(self, d_model: int, n: int, eps: float = 1e-5) -> None:
         super().__init__()
@@ -70,14 +60,9 @@ class ESMFold2TransitionLayer(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.norm(x)
-        a = self.a_proj(x)
-        b = self.b_proj(x)
-        return self.out_proj(F.silu(a) * b)
-
-
-# ===========================================================================
-# ESMFold2AdaptiveLayerNorm (used in ESMFold2DiffusionTransformer)
-# ===========================================================================
+        gate = self.a_proj(x)
+        up = self.b_proj(x)
+        return self.out_proj(F.silu(gate) * up)
 
 
 class ESMFold2AdaptiveLayerNorm(nn.Module):
@@ -102,11 +87,6 @@ class ESMFold2AdaptiveLayerNorm(nn.Module):
         return (gate * a_norm + shift).to(a.dtype)
 
 
-# ===========================================================================
-# ESMFold2FourierEmbedding
-# ===========================================================================
-
-
 class ESMFold2FourierEmbedding(nn.Module):
     """Fourier embedding: cos(2*pi*(t*w + b))."""
 
@@ -126,11 +106,6 @@ class ESMFold2FourierEmbedding(nn.Module):
         return torch.cos(2.0 * torch.pi * (t[:, None] * self.w[None, :] + self.b[None, :]))
 
 
-# ===========================================================================
-# ESMFold2SwiGLU / ESMFold2SwiGLUMLP
-# ===========================================================================
-
-
 class ESMFold2SwiGLU(nn.Module):
     """ESMFold2SwiGLU with packed w12 and output w3."""
 
@@ -148,9 +123,9 @@ class ESMFold2SwiGLU(nn.Module):
         self.hidden_features = hidden_features
 
     def forward(self, x: Tensor) -> Tensor:
-        x12 = self.w12(x)
-        x1, x2 = x12.split(self.hidden_features, dim=-1)
-        hidden = F.silu(x1) * x2
+        gate_up = self.w12(x)
+        gate, up = gate_up.split(self.hidden_features, dim=-1)
+        hidden = F.silu(gate) * up
         return self.w3(hidden)
 
 
@@ -162,24 +137,12 @@ class ESMFold2SwiGLUMLP(ESMFold2SwiGLU):
         super().__init__(in_features=d_model, hidden_features=hidden, out_features=d_model, bias=bias)
 
 
-# ===========================================================================
-# ESMFold2SwiGLUFFN (atom transformer blocks)
-# ===========================================================================
-
-
-class ESMFold2SwiGLUFFN(nn.Module):
+class ESMFold2SwiGLUFFN(ESMFold2SwiGLU):
     """ESMFold2SwiGLU FFN with rounded hidden size for hardware alignment."""
 
     def __init__(self, d_model: int, expansion_ratio: int = 2) -> None:
-        super().__init__()
         hidden_size = ((expansion_ratio * (d_model // 3) * 2) + 255) // 256 * 256
-        self.w_up = nn.Linear(d_model, 2 * hidden_size, bias=False)
-        self.w_down = nn.Linear(hidden_size, d_model, bias=False)
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = x.to(self.w_up.weight.dtype)
-        x1, x2 = self.w_up(x).chunk(2, dim=-1)
-        return self.w_down(F.silu(x1) * x2)
+        super().__init__(in_features=d_model, hidden_features=hidden_size, out_features=d_model, bias=False)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -229,26 +192,17 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# ===========================================================================
-# SWA Atom Attention components
-# ===========================================================================
-
-
 def apply_rotary_emb_3d(x: Tensor, cos: Tensor, sin: Tensor) -> Tensor:
-    """Apply RoPE with batch-dependent cos/sin.
+    """Apply 3D RoPE with batch-dependent cos/sin.
 
     Args:
         x: [B, L, H, D]
-        cos: [B, L, D/2]
-        sin: [B, L, D/2]
+        cos: [B, L, D] (full head dim, built by ``ESMFold2RotaryEmbedding3D``)
+        sin: [B, L, D]
     """
-    ro_dim = cos.shape[-1] * 2
-    cos = cos.unsqueeze(2).repeat(1, 1, 1, 2)
-    sin = sin.unsqueeze(2).repeat(1, 1, 1, 2)
-    return torch.cat(
-        [x[..., :ro_dim] * cos + rotate_half(x[..., :ro_dim]) * sin, x[..., ro_dim:]],
-        dim=-1,
-    )
+    cos = cos.unsqueeze(2)
+    sin = sin.unsqueeze(2)
+    return x * cos + rotate_half(x) * sin
 
 
 def qk_norm(x: Tensor) -> Tensor:
@@ -277,13 +231,8 @@ def _resolve_atom_config(config: ESMFold2Config, structure_prediction: bool):
     swa = config.inputs.atom_encoder
     if structure_prediction:
         dm = config.structure_head.diffusion_module
-        return dm.c_atom, dm.c_token, dm.atom_num_blocks, dm.atom_num_heads, swa
-    return swa.d_atom, swa.d_token, swa.n_blocks, swa.n_heads, swa
-
-
-# ===========================================================================
-# ESMFold2SWA3DRoPEAttention
-# ===========================================================================
+        return dm.atom_hidden_size, dm.token_hidden_size, dm.atom_num_blocks, dm.atom_num_heads, swa
+    return swa.atom_hidden_size, swa.token_hidden_size, swa.n_blocks, swa.n_heads, swa
 
 
 def _swa_window_mask_function(rank: Tensor, valid: Tensor, half_window: int) -> Callable:
@@ -303,7 +252,7 @@ def _swa_window_mask_function(rank: Tensor, valid: Tensor, half_window: int) -> 
 
 
 class ESMFold2SWA3DRoPEAttention(nn.Module):
-    """Sliding window self-attention with 3D RoPE. Has Wqkv, gate_proj, out_proj.
+    """Sliding window self-attention with 3D RoPE. Has q/k/v/gate/out projections.
 
     The plain ``softmax(QKᵀ)V`` core is dispatched through the v5 attention
     interface (``config._attn_implementation``: ``eager`` / ``sdpa`` / ...), with
@@ -327,7 +276,9 @@ class ESMFold2SWA3DRoPEAttention(nn.Module):
         # causal masking when attention_mask happens to be None.
         self.is_causal = False
 
-        self.Wqkv = nn.Linear(d_model, 3 * d_model, bias=False)
+        self.q_proj = nn.Linear(d_model, d_model, bias=False)
+        self.k_proj = nn.Linear(d_model, d_model, bias=False)
+        self.v_proj = nn.Linear(d_model, d_model, bias=False)
         self.out_proj = nn.Linear(d_model, d_model, bias=False)
         self.gate_proj = nn.Linear(d_model, d_model, bias=False)
 
@@ -336,9 +287,9 @@ class ESMFold2SWA3DRoPEAttention(nn.Module):
         cos, sin = attention_params[0], attention_params[1]
 
         x_input = x
-        qkv = self.Wqkv(x)
-        qkv = qkv.view(B, N, 3, self.n_heads, self.head_dim).permute(2, 0, 1, 3, 4)
-        q, k, v = qkv.unbind(0)
+        q = self.q_proj(x).view(B, N, self.n_heads, self.head_dim)
+        k = self.k_proj(x).view(B, N, self.n_heads, self.head_dim)
+        v = self.v_proj(x).view(B, N, self.n_heads, self.head_dim)
         q, k = qk_norm(q), qk_norm(k)
 
         q = apply_rotary_emb_3d(q, cos, sin)
@@ -385,11 +336,6 @@ class ESMFold2SWA3DRoPEAttention(nn.Module):
         return self.out_proj(out)
 
 
-# ===========================================================================
-# ESMFold2SWAAtomBlock, ESMFold2SWAAtomTransformer
-# ===========================================================================
-
-
 def _rms_adaln(x: Tensor, scale: Tensor, shift: Tensor) -> Tensor:
     return F.rms_norm(x, (x.shape[-1],)) * (1 + scale) + shift
 
@@ -397,23 +343,23 @@ def _rms_adaln(x: Tensor, scale: Tensor, shift: Tensor) -> Tensor:
 class ESMFold2SWAAtomBlock(nn.Module):
     """adaLN-Zero + SWA attention + ESMFold2SwiGLU FFN.
 
-    Creates adaln_modulation = Sequential(SiLU(), Linear) -> keys like adaln_modulation.1.weight
+    The adaLN-Zero modulation is ``adaln_linear`` applied to ``silu(atom_cond)`` (zero-init gate).
     """
 
     def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
         d_atom, _d_token, _n_blocks, _n_heads, swa = _resolve_atom_config(config, structure_prediction)
         # adaln-Zero gate; zero-init lives in ESMFold2PreTrainedModel._init_weights.
-        self.adaln_modulation = nn.Sequential(nn.SiLU(), nn.Linear(d_atom, 6 * d_atom, bias=False))
+        self.adaln_linear = nn.Linear(d_atom, 6 * d_atom, bias=False)
 
         self.attn = ESMFold2SWA3DRoPEAttention(config, structure_prediction)
         self.ffn = ESMFold2SwiGLUFFN(d_atom, swa.expansion_ratio)
 
-    def forward(self, x: Tensor, c_l: Tensor, attention_params: tuple) -> Tensor:
-        mod = self.adaln_modulation(c_l)
-        if mod.dim() == 2:
-            mod = mod.unsqueeze(1)
-        shift_a, scale_a, gate_a, shift_f, scale_f, gate_f = mod.chunk(6, dim=-1)
+    def forward(self, x: Tensor, atom_cond: Tensor, attention_params: tuple) -> Tensor:
+        modulation = self.adaln_linear(F.silu(atom_cond))
+        if modulation.dim() == 2:
+            modulation = modulation.unsqueeze(1)
+        shift_a, scale_a, gate_a, shift_f, scale_f, gate_f = modulation.chunk(6, dim=-1)
 
         attn_input = _rms_adaln(x, scale_a, shift_a)
         attn_out = self.attn(attn_input, attention_params)
@@ -425,47 +371,51 @@ class ESMFold2SWAAtomBlock(nn.Module):
         return x
 
 
-@torch.compiler.disable
-def build_3d_rope(
-    ref_pos: Tensor,
-    ref_space_uid: Tensor,
-    head_dim: int,
-    n_spatial_per_axis: int = 4,
-    n_uid_pairs: int = 2,
-    spatial_base_freq: float = 10000.0,
-    uid_base_freq: float = 10.0,
-) -> tuple[Tensor, Tensor]:
-    """Build cos/sin for 3D RoPE + UID RoPE."""
-    device = ref_pos.device
-    B, N = ref_pos.shape[:2]
-    half_dim = head_dim // 2
-    n_spatial_total = 3 * n_spatial_per_axis
+class ESMFold2RotaryEmbedding3D(nn.Module):
+    """Rotary embedding over continuous 3D atom coordinates plus a discrete space UID.
 
-    spatial_inv_freq = 1.0 / (
-        spatial_base_freq
-        ** (torch.arange(0, n_spatial_per_axis, dtype=torch.float32, device=device) / n_spatial_per_axis)
-    )
-    uid_inv_freq = 1.0 / (
-        uid_base_freq ** (torch.arange(0, n_uid_pairs, dtype=torch.float32, device=device) / n_uid_pairs)
-    )
+    Unlike sequence RoPE, this encodes physical position (``ref_pos`` = x/y/z) and a
+    per-atom space UID rather than token indices, with separate spatial and UID base
+    frequencies. ``forward`` returns cos/sin already at the full head dim, so the caller
+    applies plain rotate-half RoPE (:func:`apply_rotary_emb_3d`). The inverse frequencies
+    are cheap to rebuild each call and are computed on the input device to stay bit-exact.
+    """
 
-    pos_f32 = ref_pos.float()
-    spatial_freqs = pos_f32.unsqueeze(-1) * spatial_inv_freq
-    spatial_freqs = spatial_freqs.reshape(B, N, n_spatial_total)
+    def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
+        super().__init__()
+        d_atom, _d_token, _n_blocks, n_heads, swa = _resolve_atom_config(config, structure_prediction)
+        self.head_dim = d_atom // n_heads
+        self.n_spatial_per_axis = swa.n_spatial_rope_pairs_per_axis
+        self.n_uid_pairs = swa.n_uid_rope_pairs
+        self.spatial_base_freq = swa.spatial_rope_base_frequency
+        self.uid_base_freq = swa.uid_rope_base_frequency
 
-    uid_f32 = ref_space_uid.float()
-    uid_freqs = uid_f32.unsqueeze(-1) * uid_inv_freq
+    def forward(self, ref_pos: Tensor, ref_space_uid: Tensor) -> tuple[Tensor, Tensor]:
+        device = ref_pos.device
+        B, N = ref_pos.shape[:2]
+        half_dim = self.head_dim // 2
+        n_spatial_total = 3 * self.n_spatial_per_axis
 
-    n_active = n_spatial_total + n_uid_pairs
-    freqs = torch.cat([spatial_freqs, uid_freqs], dim=-1)
+        spatial_inv_freq = 1.0 / (
+            self.spatial_base_freq
+            ** (torch.arange(0, self.n_spatial_per_axis, dtype=torch.float32, device=device) / self.n_spatial_per_axis)
+        )
+        uid_inv_freq = 1.0 / (
+            self.uid_base_freq
+            ** (torch.arange(0, self.n_uid_pairs, dtype=torch.float32, device=device) / self.n_uid_pairs)
+        )
 
-    if n_active < half_dim:
-        padding = torch.zeros(B, N, half_dim - n_active, device=device, dtype=torch.float32)
-        freqs = torch.cat([freqs, padding], dim=-1)
+        spatial_freqs = (ref_pos.float().unsqueeze(-1) * spatial_inv_freq).reshape(B, N, n_spatial_total)
+        uid_freqs = ref_space_uid.float().unsqueeze(-1) * uid_inv_freq
 
-    cos = freqs.cos().to(torch.bfloat16)
-    sin = freqs.sin().to(torch.bfloat16)
-    return cos, sin
+        freqs = torch.cat([spatial_freqs, uid_freqs], dim=-1)
+        n_active = n_spatial_total + self.n_uid_pairs
+        if n_active < half_dim:
+            freqs = torch.cat([freqs, freqs.new_zeros(B, N, half_dim - n_active)], dim=-1)
+
+        # Duplicate to the full head dim so the caller applies standard rotate-half RoPE.
+        emb = torch.cat([freqs, freqs], dim=-1)
+        return emb.cos().to(torch.bfloat16), emb.sin().to(torch.bfloat16)
 
 
 class ESMFold2SWAAtomTransformer(nn.Module):
@@ -473,36 +423,21 @@ class ESMFold2SWAAtomTransformer(nn.Module):
 
     def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
-        d_atom, _d_token, n_blocks, n_heads, swa = _resolve_atom_config(config, structure_prediction)
+        _d_atom, _d_token, n_blocks, _n_heads, swa = _resolve_atom_config(config, structure_prediction)
         self.swa_window_size = swa.swa_window_size
-        self.head_dim = d_atom // n_heads
-        self.spatial_rope_base_frequency = swa.spatial_rope_base_frequency
-        self.n_spatial_rope_pairs_per_axis = swa.n_spatial_rope_pairs_per_axis
-        self.n_uid_rope_pairs = swa.n_uid_rope_pairs
-        self.uid_rope_base_frequency = swa.uid_rope_base_frequency
+        self.rotary_emb = ESMFold2RotaryEmbedding3D(config, structure_prediction)
 
         self.blocks = nn.ModuleList([ESMFold2SWAAtomBlock(config, structure_prediction) for _ in range(n_blocks)])
 
-    def _build_3d_rope(self, ref_pos: Tensor, ref_space_uid: Tensor) -> tuple[Tensor, Tensor]:
-        return build_3d_rope(
-            ref_pos=ref_pos,
-            ref_space_uid=ref_space_uid,
-            head_dim=self.head_dim,
-            n_spatial_per_axis=self.n_spatial_rope_pairs_per_axis,
-            n_uid_pairs=self.n_uid_rope_pairs,
-            spatial_base_freq=self.spatial_rope_base_frequency,
-            uid_base_freq=self.uid_rope_base_frequency,
-        )
-
     def forward(
         self,
-        q_l: Tensor,
-        c_l: Tensor,
+        atom_queries: Tensor,
+        atom_cond: Tensor,
         attention_params: tuple,
     ) -> Tensor:
         for block in self.blocks:
-            q_l = block(q_l, c_l, attention_params)
-        return q_l
+            atom_queries = block(atom_queries, atom_cond, attention_params)
+        return atom_queries
 
 
 def scatter_atom_to_token(
@@ -532,11 +467,6 @@ def scatter_atom_to_token(
     out = torch.zeros(B, n_out, d, device=atom_features.device, dtype=atom_features.dtype)
     out.scatter_reduce_(1, idx_expanded, atom_features, reduce="mean", include_self=False)
     return out[:, :n_tokens, :]
-
-
-# ===========================================================================
-# ESMFold2AtomEncoder (for both inputs_embedder and diffusion_module)
-# ===========================================================================
 
 
 class ESMFold2AtomEncoder(nn.Module):
@@ -570,6 +500,42 @@ class ESMFold2AtomEncoder(nn.Module):
         out_dim = d_token if structure_prediction else d_token // 2
         self.atom_to_token_linear = nn.Linear(d_atom, out_dim, bias=False)
 
+    def _compute_step_invariants(
+        self,
+        ref_pos: Tensor,
+        atom_attention_mask: Tensor,
+        ref_space_uid: Tensor,
+        ref_charge: Tensor,
+        ref_element: Tensor,
+        ref_atom_name_chars: Tensor,
+        atom_to_token: Tensor,
+        num_diffusion_samples: int,
+    ) -> tuple[Tensor, tuple[Tensor, Tensor, Tensor], Tensor, int]:
+        """Tensors that don't change across diffusion steps (cached per fold): the atom base
+        embedding ``c_base``, 3D-RoPE ``(cos, sin, indices)``, the expanded atom mask, and n_tokens."""
+        B, N = ref_pos.shape[:2]
+        atom_feats = torch.cat(
+            [
+                ref_pos,
+                ref_charge.unsqueeze(-1),
+                atom_attention_mask.unsqueeze(-1),
+                ref_element,
+                ref_atom_name_chars.reshape(B, N, self.char_feature_dim),
+            ],
+            dim=-1,
+        )
+        c_base = self.atom_norm(self.atom_linear(atom_feats.to(self.atom_linear.weight.dtype)).float()).to(
+            self.atom_linear.weight.dtype
+        )
+        cos, sin = self.atom_transformer.rotary_emb(ref_pos, ref_space_uid)
+        cos = cos.repeat_interleave(num_diffusion_samples, 0)
+        sin = sin.repeat_interleave(num_diffusion_samples, 0)
+        mask_exp = atom_attention_mask.repeat_interleave(num_diffusion_samples, 0)
+        indices = torch.nonzero(mask_exp.flatten(), as_tuple=False).flatten()
+        attention_params = (cos, sin, indices)
+        n_tokens = int(atom_to_token.max().item()) + 1
+        return c_base, attention_params, mask_exp, n_tokens
+
     def forward(
         self,
         ref_pos: Tensor,
@@ -579,43 +545,31 @@ class ESMFold2AtomEncoder(nn.Module):
         ref_element: Tensor,
         ref_atom_name_chars: Tensor,
         atom_to_token: Tensor,
-        r_l: Tensor | None = None,
-        pred_r1: Tensor | None = None,
+        atom_coords: Tensor | None = None,
+        pred_coords: Tensor | None = None,
         num_diffusion_samples: int = 1,
         inference_cache: dict | None = None,
     ) -> tuple[Tensor, Tensor, Tensor, tuple]:
-        """Returns (a, q, c, attention_params).
+        """Returns (token_acts, atom_queries, atom_cond, attention_params).
 
         ``inference_cache`` caches step-invariant tensors (c_base, 3D RoPE,
         attention indices, n_tokens) across diffusion steps.
         """
-        B, N = ref_pos.shape[:2]
-
         layer_cache = None
         if inference_cache is not None:
             layer_cache = inference_cache.setdefault("atomencoder", {})
 
         if layer_cache is None or len(layer_cache) == 0:
-            atom_feats = torch.cat(
-                [
-                    ref_pos,
-                    ref_charge.unsqueeze(-1),
-                    atom_attention_mask.unsqueeze(-1),
-                    ref_element,
-                    ref_atom_name_chars.reshape(B, N, self.char_feature_dim),
-                ],
-                dim=-1,
+            c_base, attention_params, mask_exp, n_tokens = self._compute_step_invariants(
+                ref_pos=ref_pos,
+                atom_attention_mask=atom_attention_mask,
+                ref_space_uid=ref_space_uid,
+                ref_charge=ref_charge,
+                ref_element=ref_element,
+                ref_atom_name_chars=ref_atom_name_chars,
+                atom_to_token=atom_to_token,
+                num_diffusion_samples=num_diffusion_samples,
             )
-            c_base = self.atom_norm(self.atom_linear(atom_feats.to(self.atom_linear.weight.dtype)).float()).to(
-                self.atom_linear.weight.dtype
-            )
-            cos, sin = self.atom_transformer._build_3d_rope(ref_pos, ref_space_uid)
-            cos = cos.repeat_interleave(num_diffusion_samples, 0)
-            sin = sin.repeat_interleave(num_diffusion_samples, 0)
-            mask_exp = atom_attention_mask.repeat_interleave(num_diffusion_samples, 0)
-            indices = torch.nonzero(mask_exp.flatten(), as_tuple=False).flatten()
-            attention_params = (cos, sin, indices)
-            n_tokens = int(atom_to_token.max().item()) + 1
             if layer_cache is not None:
                 layer_cache["c_base"] = c_base
                 layer_cache["attention_params"] = attention_params
@@ -628,39 +582,34 @@ class ESMFold2AtomEncoder(nn.Module):
             mask_exp = layer_cache["mask_exp"]
             n_tokens = layer_cache["n_tokens"]
 
-        c = c_base
+        atom_cond = c_base
 
-        q = c
+        atom_queries = atom_cond
 
-        if self.structure_prediction and r_l is not None:
-            q = q.repeat_interleave(num_diffusion_samples, 0)
-            if pred_r1 is None:
-                pred_r1 = torch.zeros_like(r_l)
-            r_input = torch.cat([r_l, pred_r1], dim=-1)
-            r_to_q = self.coords_linear(r_input.to(self.coords_linear.weight.dtype))
-            q = q + r_to_q
+        if self.structure_prediction and atom_coords is not None:
+            atom_queries = atom_queries.repeat_interleave(num_diffusion_samples, 0)
+            if pred_coords is None:
+                pred_coords = torch.zeros_like(atom_coords)
+            coord_input = torch.cat([atom_coords, pred_coords], dim=-1)
+            coords_to_queries = self.coords_linear(coord_input.to(self.coords_linear.weight.dtype))
+            atom_queries = atom_queries + coords_to_queries
 
-        c = c.repeat_interleave(num_diffusion_samples, 0)
+        atom_cond = atom_cond.repeat_interleave(num_diffusion_samples, 0)
 
-        q = self.atom_transformer(
-            q_l=q,
-            c_l=c,
+        atom_queries = self.atom_transformer(
+            atom_queries=atom_queries,
+            atom_cond=atom_cond,
             attention_params=attention_params,
         )
 
-        q_to_a = F.relu(self.atom_to_token_linear(q))
+        queries_to_acts = F.relu(self.atom_to_token_linear(atom_queries))
         if layer_cache is not None and "atom_to_token_exp" in layer_cache:
             atom_to_token_exp = layer_cache["atom_to_token_exp"]
         else:
             atom_to_token_exp = atom_to_token.repeat_interleave(num_diffusion_samples, 0)
-        a = scatter_atom_to_token(q_to_a, atom_to_token_exp, n_tokens, atom_mask=mask_exp.bool())
+        token_acts = scatter_atom_to_token(queries_to_acts, atom_to_token_exp, n_tokens, atom_mask=mask_exp.bool())
 
-        return a, q, c, attention_params
-
-
-# ===========================================================================
-# Atom-token utilities
-# ===========================================================================
+        return token_acts, atom_queries, atom_cond, attention_params
 
 
 def _gather_along_dim1(source: Tensor, index: Tensor) -> Tensor:
@@ -682,11 +631,6 @@ def gather_token_to_atom(token_features: Tensor, atom_to_token_idx: Tensor) -> T
     return _gather_along_dim1(token_features, atom_to_token_idx)
 
 
-# ===========================================================================
-# ESMFold2AtomDecoder
-# ===========================================================================
-
-
 class ESMFold2AtomDecoder(nn.Module):
     """SWA atom decoder with token_to_atom_linear, atom_transformer, norm, output_linear.
 
@@ -706,33 +650,28 @@ class ESMFold2AtomDecoder(nn.Module):
 
     def forward(
         self,
-        a_i: Tensor,
-        q_l: Tensor,
-        c_l: Tensor,
-        p_lm: tuple,
+        token_acts: Tensor,
+        atom_queries: Tensor,
+        atom_cond: Tensor,
+        atom_pair: tuple,
         atom_to_token: Tensor,
         atom_attention_mask: Tensor,
         num_diffusion_samples: int = 1,
     ) -> Tensor:
-        """Returns r_update."""
+        """Returns coord_update."""
         atom_to_token_exp = atom_to_token.repeat_interleave(num_diffusion_samples, 0)
-        a_to_q = self.token_to_atom_linear(a_i)
+        a_to_q = self.token_to_atom_linear(token_acts)
         a_to_q = gather_token_to_atom(a_to_q, atom_to_token_exp)
-        q_l = q_l + a_to_q
+        atom_queries = atom_queries + a_to_q
 
-        q_l = self.atom_transformer(
-            q_l=q_l,
-            c_l=c_l,
-            attention_params=p_lm,
+        atom_queries = self.atom_transformer(
+            atom_queries=atom_queries,
+            atom_cond=atom_cond,
+            attention_params=atom_pair,
         )
 
-        r_l = self.output_linear(self.norm(q_l))
-        return r_l
-
-
-# ===========================================================================
-# ESMFold2AttentionPairBias (ESMFold2DiffusionTransformer attention block)
-# ===========================================================================
+        atom_coords = self.output_linear(self.norm(atom_queries))
+        return atom_coords
 
 
 class ESMFold2AttentionPairBias(nn.Module):
@@ -765,32 +704,32 @@ class ESMFold2AttentionPairBias(nn.Module):
             self.pair_norm = ESMFold2LayerNorm(d_pair, eps=1e-5)
             self.pair_bias_proj = nn.Linear(d_pair, num_heads, bias=False)
 
-    def compute_pair_bias(self, z: Tensor, bsz: int, num_diffusion_samples: int = 1) -> Tensor:
+    def compute_pair_bias(self, pair_repr: Tensor, bsz: int, num_diffusion_samples: int = 1) -> Tensor:
         """Project the (normed) pair representation to per-head attention biases.
 
-        Depends only on ``z`` and this block's fixed weights, so it is invariant
+        Depends only on ``pair_repr`` and this block's fixed weights, so it is invariant
         across diffusion sampling steps — the sampler computes it once and reuses
         it (see ``ESMFold2DiffusionTransformer.forward``). Bit-identical to computing it
         inline every step.
         """
-        if z.dim() == 4 and z.shape[0] != bsz and num_diffusion_samples > 1:
-            z = z.repeat_interleave(num_diffusion_samples, dim=0)
-        if z.dim() == 4:
-            return self.pair_bias_proj(self.pair_norm(z))
-        return z.unsqueeze(-1)
+        if pair_repr.dim() == 4 and pair_repr.shape[0] != bsz and num_diffusion_samples > 1:
+            pair_repr = pair_repr.repeat_interleave(num_diffusion_samples, dim=0)
+        if pair_repr.dim() == 4:
+            return self.pair_bias_proj(self.pair_norm(pair_repr))
+        return pair_repr.unsqueeze(-1)
 
     def forward(
         self,
-        a: Tensor,
-        s: Tensor,
-        z: Tensor,
+        token_acts: Tensor,
+        single_repr: Tensor,
+        pair_repr: Tensor,
         attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
         pair_bias: Tensor | None = None,
     ) -> Tensor:
-        bsz, n_queries, d_model = a.shape
+        bsz, n_queries, d_model = token_acts.shape
 
-        x = self.adaln(a, s)
+        x = self.adaln(token_acts, single_repr)
 
         n_keys = x.shape[1]
         q = self.q_proj(x).view(bsz, n_queries, self.num_heads, self.head_dim)
@@ -802,12 +741,12 @@ class ESMFold2AttentionPairBias(nn.Module):
         if attention_mask is not None and attention_mask.shape[0] != bsz and num_diffusion_samples > 1:
             attention_mask = attention_mask.repeat_interleave(num_diffusion_samples, dim=0)
 
-        g = torch.sigmoid(self.g_proj(x)).view(bsz, n_queries, self.num_heads, self.head_dim)
+        gate = torch.sigmoid(self.g_proj(x)).view(bsz, n_queries, self.num_heads, self.head_dim)
 
         # ``pair_bias`` is step-invariant; the diffusion sampler precomputes and
         # caches it across steps. Compute inline when not supplied (e.g. uncached).
         if pair_bias is None:
-            pair_bias = self.compute_pair_bias(z, bsz, num_diffusion_samples)
+            pair_bias = self.compute_pair_bias(pair_repr, bsz, num_diffusion_samples)
 
         attn_bias = pair_bias.permute(0, 3, 1, 2)  # [B,Q,K,H]->[B,H,Q,K] (H may be 1)
         if attention_mask is not None:
@@ -815,18 +754,13 @@ class ESMFold2AttentionPairBias(nn.Module):
             mask_bias = torch.where(attention_mask.bool()[:, None, None, :], 0.0, min_val)
             attn_bias = attn_bias + mask_bias
         qh, kh, vh = (t.transpose(1, 2) for t in (q, k, v))  # [B,H,Q,D]
-        ctx = F.scaled_dot_product_attention(qh, kh, vh, attn_mask=attn_bias.to(qh.dtype), scale=self.scale)
-        ctx = ctx.transpose(1, 2)  # [B,H,Q,D]->[B,Q,H,D]
+        context = F.scaled_dot_product_attention(qh, kh, vh, attn_mask=attn_bias.to(qh.dtype), scale=self.scale)
+        context = context.transpose(1, 2)  # [B,H,Q,D]->[B,Q,H,D]
 
-        ctx = g * ctx
-        out = self.out_proj(ctx.reshape(bsz, n_queries, d_model).to(v.dtype))
-        out = torch.sigmoid(self.out_gate(s)) * out
+        context = gate * context
+        out = self.out_proj(context.reshape(bsz, n_queries, d_model).to(v.dtype))
+        out = torch.sigmoid(self.out_gate(single_repr)) * out
         return out
-
-
-# ===========================================================================
-# ESMFold2ConditionedTransitionBlock
-# ===========================================================================
 
 
 class ESMFold2ConditionedTransitionBlock(nn.Module):
@@ -846,23 +780,12 @@ class ESMFold2ConditionedTransitionBlock(nn.Module):
         # adaln-Zero gate (weight 0, bias -2); init in ESMFold2PreTrainedModel._init_weights.
         self.output_gate = nn.Linear(d_cond, d_model, bias=True)
 
-        self.lin_swish = nn.Linear(d_model, 2 * hidden, bias=False)
-        self.lin_out = nn.Linear(hidden, d_model, bias=False)
+        self.ffn = ESMFold2SwiGLU(d_model, hidden, d_model, bias=False)
 
-    def forward(self, a: Tensor, s: Tensor) -> Tensor:
-        x = self.adaln(a, s)
-
-        swish_a, swish_b = self.lin_swish(x).chunk(2, dim=-1)
-        b = F.silu(swish_a) * swish_b
-        out = self.lin_out(b)
-
-        out = torch.sigmoid(self.output_gate(s)) * out
-        return out
-
-
-# ===========================================================================
-# ESMFold2DiffusionTransformer (token transformer)
-# ===========================================================================
+    def forward(self, token_acts: Tensor, single_repr: Tensor) -> Tensor:
+        x = self.adaln(token_acts, single_repr)
+        out = self.ffn(x)
+        return torch.sigmoid(self.output_gate(single_repr)) * out
 
 
 class ESMFold2DiffusionTransformer(nn.Module):
@@ -871,11 +794,11 @@ class ESMFold2DiffusionTransformer(nn.Module):
     def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
         dm = config.structure_head.diffusion_module
-        d_model = dm.c_token
-        d_pair = dm.c_z
+        d_model = dm.token_hidden_size
+        d_pair = config.pairwise_hidden_size  # == the (removed) dm.c_z; the trunk pair rep flows in at this width
         num_heads = dm.token_num_heads
         num_blocks = dm.token_num_blocks
-        d_cond = dm.c_token
+        d_cond = dm.token_hidden_size
         transition_multiplier = dm.transition_multiplier
 
         self.attn_blocks = nn.ModuleList(
@@ -902,43 +825,38 @@ class ESMFold2DiffusionTransformer(nn.Module):
 
     def forward(
         self,
-        a: Tensor,
-        s: Tensor,
-        z: Tensor,
+        token_acts: Tensor,
+        single_repr: Tensor,
+        pair_repr: Tensor,
         attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
         inference_cache: dict | None = None,
     ) -> Tensor:
-        x = a
-        bsz = a.shape[0]
+        x = token_acts
+        bsz = token_acts.shape[0]
         # Each block's pair bias depends only on the (step-invariant) conditioning
-        # pair ``z`` and fixed weights, so compute it once per block and reuse it
+        # pair repr and fixed weights, so compute it once per block and reuse it
         # across every diffusion sampling step. Bit-identical to recomputing it
         # each step; the cache lives in the sampler's per-fold ``inference_cache``.
         bias_cache = None if inference_cache is None else inference_cache.setdefault("token_pair_bias", {})
         for i, (attn, transition) in enumerate(zip(self.attn_blocks, self.transition_blocks)):
             if bias_cache is None:
-                pair_bias = attn.compute_pair_bias(z, bsz, num_diffusion_samples)
+                pair_bias = attn.compute_pair_bias(pair_repr, bsz, num_diffusion_samples)
             elif i in bias_cache:
                 pair_bias = bias_cache[i]
             else:
-                pair_bias = attn.compute_pair_bias(z, bsz, num_diffusion_samples)
+                pair_bias = attn.compute_pair_bias(pair_repr, bsz, num_diffusion_samples)
                 bias_cache[i] = pair_bias
             x = x + attn(
                 x,
-                s,
-                z,
+                single_repr,
+                pair_repr,
                 attention_mask=attention_mask,
                 num_diffusion_samples=num_diffusion_samples,
                 pair_bias=pair_bias,
             )
-            x = x + transition(x, s)
+            x = x + transition(x, single_repr)
         return x
-
-
-# ===========================================================================
-# ESMFold2DiffusionConditioning
-# ===========================================================================
 
 
 class ESMFold2DiffusionConditioning(nn.Module):
@@ -947,9 +865,12 @@ class ESMFold2DiffusionConditioning(nn.Module):
     def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
         dm = config.structure_head.diffusion_module
-        c_z = dm.c_z
-        c_s = dm.c_token  # the conditioning's single output is sized to c_token
-        c_s_inputs = dm.c_s_inputs
+        # c_z / c_s_inputs are forced equal to the parent's d_pair / inputs.d_inputs (the trunk pair
+        # rep and the embedder single-inputs tensor flow straight into the norms below), so read the
+        # canonical fields rather than re-declaring them on DiffusionModuleConfig.
+        c_z = config.pairwise_hidden_size
+        c_s = dm.token_hidden_size  # the conditioning's single output is sized to c_token
+        c_s_inputs = config.inputs.single_inputs_size
         fourier_dim = dm.fourier_dim
         transition_multiplier = dm.transition_multiplier
         # The norms/transitions use their default eps (1e-5), as before.
@@ -972,58 +893,55 @@ class ESMFold2DiffusionConditioning(nn.Module):
     def forward(
         self,
         t_hat: Tensor,
-        s_inputs: Tensor,
-        z_trunk: Tensor,
+        single_inputs: Tensor,
+        pair_trunk: Tensor,
         relative_position_encoding: Tensor,
         sigma_data: float | None = None,
         num_diffusion_samples: int = 1,
         inference_cache: dict[str, Tensor] | None = None,
     ) -> tuple[Tensor, Tensor]:
         sigma = self.sigma_data if sigma_data is None else float(sigma_data)
-        base_batch = z_trunk.shape[0]
+        base_batch = pair_trunk.shape[0]
         target_batch = base_batch * num_diffusion_samples
 
-        # z conditioning (cached across diffusion steps — independent of t_hat)
+        # pair conditioning (cached across diffusion steps — independent of t_hat)
         if inference_cache is not None and "z" in inference_cache:
-            z = inference_cache["z"]
+            pair_repr = inference_cache["z"]
         else:
-            z_rel = relative_position_encoding.to(dtype=torch.float32)
-            z = torch.cat([z_trunk.to(dtype=torch.float32), z_rel], dim=-1)
+            rel_pos = relative_position_encoding.to(dtype=torch.float32)
+            pair_repr = torch.cat([pair_trunk.to(dtype=torch.float32), rel_pos], dim=-1)
             # The relpos/coords conditioning is fp32; z_input_norm keeps it fp32,
             # then we hand off to z_proj in the model's compute dtype.
-            z = self.z_proj(self.z_input_norm(z).to(self.z_proj.weight.dtype))
+            pair_repr = self.z_proj(self.z_input_norm(pair_repr).to(self.z_proj.weight.dtype))
             for block in self.z_transitions:
-                z = z + block(z)
+                pair_repr = pair_repr + block(pair_repr)
             if inference_cache is not None:
-                inference_cache["z"] = z
+                inference_cache["z"] = pair_repr
 
-        # s conditioning
-        s_inputs_eff = s_inputs
-        if s_inputs_eff.shape[0] != target_batch:
-            s_inputs_eff = s_inputs_eff.repeat_interleave(num_diffusion_samples, 0)
+        # single conditioning
+        single_inputs_eff = single_inputs
+        if single_inputs_eff.shape[0] != target_batch:
+            single_inputs_eff = single_inputs_eff.repeat_interleave(num_diffusion_samples, 0)
 
-        s = self.s_proj(self.s_input_norm(s_inputs_eff.to(dtype=torch.float32)).to(self.s_proj.weight.dtype))
+        single_repr = self.s_proj(
+            self.s_input_norm(single_inputs_eff.to(dtype=torch.float32)).to(self.s_proj.weight.dtype)
+        )
 
         # Noise embedding
-        t = torch.as_tensor(t_hat, dtype=torch.float32, device=s.device).reshape(-1)
+        t = torch.as_tensor(t_hat, dtype=torch.float32, device=single_repr.device).reshape(-1)
         if t.numel() == 1:
             t = t.expand(target_batch)
         elif t.shape[0] != target_batch:
             t = t.repeat_interleave(num_diffusion_samples, 0)
         t_noise = 0.25 * torch.log((t / sigma).clamp(min=1e-20))
-        n = self.fourier(t_noise)
-        n = self.noise_proj(self.noise_norm(n.float()).to(self.noise_proj.weight.dtype))
-        s = s + n.unsqueeze(1)
+        noise_emb = self.fourier(t_noise)
+        noise_emb = self.noise_proj(self.noise_norm(noise_emb.float()).to(self.noise_proj.weight.dtype))
+        single_repr = single_repr + noise_emb.unsqueeze(1)
 
         for block in self.s_transitions:
-            s = s + block(s)
+            single_repr = single_repr + block(single_repr)
 
-        return s, z
-
-
-# ===========================================================================
-# ESMFold2DiffusionModule
-# ===========================================================================
+        return single_repr, pair_repr
 
 
 class ESMFold2DiffusionModule(nn.Module):
@@ -1032,7 +950,7 @@ class ESMFold2DiffusionModule(nn.Module):
     def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
         dm = config.structure_head.diffusion_module
-        c_token = dm.c_token
+        c_token = dm.token_hidden_size
         self.sigma_data = float(dm.sigma_data)
 
         self.conditioning = ESMFold2DiffusionConditioning(config)
@@ -1063,8 +981,8 @@ class ESMFold2DiffusionModule(nn.Module):
         ref_atom_name_chars: Tensor,
         ref_space_uid: Tensor,
         tok_idx: Tensor,
-        s_inputs: Tensor,
-        z_trunk: Tensor,
+        single_inputs: Tensor,
+        pair_trunk: Tensor,
         relative_position_encoding: Tensor,
         asym_id: Tensor,
         residue_index: Tensor,
@@ -1082,11 +1000,11 @@ class ESMFold2DiffusionModule(nn.Module):
         if t.numel() == 1:
             t = t.expand(bsz)
 
-        # Step 1: conditioning (pair z is cached across diffusion steps)
-        s, z = self.conditioning(
+        # Step 1: conditioning (pair repr is cached across diffusion steps)
+        single_repr, pair_repr = self.conditioning(
             t_hat=t,
-            s_inputs=s_inputs,
-            z_trunk=z_trunk,
+            single_inputs=single_inputs,
+            pair_trunk=pair_trunk,
             relative_position_encoding=relative_position_encoding,
             sigma_data=sigma,
             num_diffusion_samples=num_diffusion_samples,
@@ -1095,10 +1013,10 @@ class ESMFold2DiffusionModule(nn.Module):
 
         # Step 2: normalize noisy coords
         denom = torch.sqrt(t * t + sigma * sigma)
-        r_noisy = x_noisy / denom[:, None, None]
+        normalized_coords = x_noisy / denom[:, None, None]
 
         # Step 3: atom encoder
-        a, q_skip, c_skip, p_skip = self.atom_encoder(
+        token_acts, atom_queries_skip, atom_cond_skip, atom_pair_skip = self.atom_encoder(
             ref_pos=ref_pos,
             atom_attention_mask=ref_mask,
             ref_space_uid=ref_space_uid,
@@ -1106,33 +1024,33 @@ class ESMFold2DiffusionModule(nn.Module):
             ref_element=ref_element,
             ref_atom_name_chars=ref_atom_name_chars,
             atom_to_token=tok_idx,
-            r_l=r_noisy,
+            atom_coords=normalized_coords,
             num_diffusion_samples=num_diffusion_samples,
             inference_cache=inference_cache,
         )
 
-        # Step 4: add conditioned s
-        a = a + self.s_to_token(self.s_step_norm(s))
+        # Step 4: add conditioned single repr
+        token_acts = token_acts + self.s_to_token(self.s_step_norm(single_repr))
 
         # Step 5: token transformer (pair bias is cached across steps via inference_cache)
-        a = self.token_transformer(
-            a,
-            s,
-            z,
+        token_acts = self.token_transformer(
+            token_acts,
+            single_repr,
+            pair_repr,
             attention_mask=token_attention_mask,
             num_diffusion_samples=num_diffusion_samples,
             inference_cache=inference_cache,
         )
 
         # Step 6: token norm
-        a = self.token_norm(a)
+        token_acts = self.token_norm(token_acts)
 
         # Step 7: atom decoder
-        r_update = self.atom_decoder(
-            a_i=a,
-            q_l=q_skip,
-            c_l=c_skip,
-            p_lm=p_skip,
+        coord_update = self.atom_decoder(
+            token_acts=token_acts,
+            atom_queries=atom_queries_skip,
+            atom_cond=atom_cond_skip,
+            atom_pair=atom_pair_skip,
             atom_to_token=tok_idx,
             atom_attention_mask=ref_mask,
             num_diffusion_samples=num_diffusion_samples,
@@ -1142,14 +1060,9 @@ class ESMFold2DiffusionModule(nn.Module):
         sigma2 = sigma * sigma
         t2 = t * t
         out = (sigma2 / (sigma2 + t2))[:, None, None] * x_noisy
-        out = out + ((sigma * t) / torch.sqrt(sigma2 + t2))[:, None, None] * r_update
+        out = out + ((sigma * t) / torch.sqrt(sigma2 + t2))[:, None, None] * coord_update
 
         return out
-
-
-# ===========================================================================
-# ESMFold2DiffusionStructureHead
-# ===========================================================================
 
 
 class ESMFold2DiffusionStructureHead(nn.Module):
@@ -1187,8 +1100,8 @@ class ESMFold2DiffusionStructureHead(nn.Module):
             )
         p = float(self.inference_p)
         inv_p = 1.0 / p
-        k = torch.arange(steps, device=device, dtype=torch.float32)
-        base = self.inference_s_max**inv_p + (k / (steps - 1)) * (
+        ramp = torch.arange(steps, device=device, dtype=torch.float32)
+        base = self.inference_s_max**inv_p + (ramp / (steps - 1)) * (
             self.inference_s_min**inv_p - self.inference_s_max**inv_p
         )
         schedule = self.sigma_data * base.pow(p)
@@ -1262,10 +1175,30 @@ class ESMFold2DiffusionStructureHead(nn.Module):
     # ------------------------------------------------------------------
 
     @torch.inference_mode()
+    def _build_noise_schedule(
+        self, num_sampling_steps: int | None, device: torch.device, max_inference_sigma: float | None
+    ) -> tuple[Tensor, Tensor]:
+        """Karras σ schedule (Algorithm 18) + per-step γ churn factors.
+
+        When ``max_inference_sigma`` caps the schedule, the high-σ tail is truncated and the cap
+        is re-prepended so sampling still starts from the requested σ (see ``sample`` docstring).
+        """
+        steps = self.inference_num_steps if num_sampling_steps is None else int(num_sampling_steps)
+        schedule = self.inference_noise_schedule(steps, device)
+        if max_inference_sigma is not None:
+            schedule = schedule[schedule <= float(max_inference_sigma)]
+            schedule = F.pad(schedule, (1, 0), value=float(max_inference_sigma))
+        gammas = torch.where(
+            schedule > self.gamma_min,
+            torch.full_like(schedule, self.gamma_0),
+            torch.zeros_like(schedule),
+        )
+        return schedule, gammas
+
     def sample(
         self,
-        z_trunk: Tensor,
-        s_inputs: Tensor,
+        pair_trunk: Tensor,
+        single_inputs: Tensor,
         relative_position_encoding: Tensor,
         ref_pos: Tensor,
         ref_charge: Tensor,
@@ -1296,29 +1229,18 @@ class ESMFold2DiffusionStructureHead(nn.Module):
         requested step count post-truncation.
         """
         n_atoms = tok_idx.shape[1]
-        device = s_inputs.device
-        target_batch = s_inputs.shape[0] * num_diffusion_samples
+        device = single_inputs.device
+        target_batch = single_inputs.shape[0] * num_diffusion_samples
 
         inference_cache: dict[str, Tensor] | None = {} if use_inference_cache else None
 
-        steps = self.inference_num_steps if num_sampling_steps is None else int(num_sampling_steps)
-
-        schedule = self.inference_noise_schedule(steps, device)
-        if max_inference_sigma is not None:
-            schedule = schedule[schedule <= float(max_inference_sigma)]
-            schedule = F.pad(schedule, (1, 0), value=float(max_inference_sigma))
+        schedule, gammas = self._build_noise_schedule(num_sampling_steps, device, max_inference_sigma)
 
         lam = self.noise_scale if noise_scale is None else float(noise_scale)
         eta = self.step_scale if step_scale is None else float(step_scale)
 
         x = schedule[0] * torch.randn(target_batch, n_atoms, 3, device=device, dtype=torch.float32)
         atom_mask = ref_mask.repeat_interleave(num_diffusion_samples, 0).float()
-
-        gammas = torch.where(
-            schedule > self.gamma_min,
-            torch.full_like(schedule, self.gamma_0),
-            torch.zeros_like(schedule),
-        )
 
         x_denoised_prev: Tensor | None = None
 
@@ -1342,8 +1264,8 @@ class ESMFold2DiffusionStructureHead(nn.Module):
                 ref_atom_name_chars=ref_atom_name_chars,
                 ref_space_uid=ref_space_uid,
                 tok_idx=tok_idx,
-                s_inputs=s_inputs,
-                z_trunk=z_trunk,
+                single_inputs=single_inputs,
+                pair_trunk=pair_trunk,
                 relative_position_encoding=relative_position_encoding,
                 asym_id=asym_id,
                 residue_index=residue_index,
@@ -1369,11 +1291,6 @@ class ESMFold2DiffusionStructureHead(nn.Module):
         return {"sample_atom_coords": x}
 
 
-# ===========================================================================
-# ESMFold2RowAttentionPooling
-# ===========================================================================
-
-
 class ESMFold2RowAttentionPooling(nn.Module):
     """Row-wise attention pooling: attn_proj, out_proj."""
 
@@ -1393,11 +1310,6 @@ class ESMFold2RowAttentionPooling(nn.Module):
         weights = F.softmax(scores, dim=-1, dtype=torch.float32).to(scores.dtype)
         pooled = torch.einsum("bnm,bnmd->bnd", weights, z)
         return self.out_proj(pooled)
-
-
-# ===========================================================================
-# ESMFold2InputsEmbedder
-# ===========================================================================
 
 
 class ESMFold2InputsEmbedder(nn.Module):
@@ -1445,9 +1357,16 @@ class ESMFold2InputsEmbedder(nn.Module):
         )
 
 
-# ===========================================================================
-# ESMFold2ResIdxAsymIdSymIdEntityIdEncoding (trunk relative position)
-# ===========================================================================
+def _relative_position_one_hot(diff: Tensor, n_bins: int, keep_mask: Tensor) -> Tensor:
+    """One-hot encode a relative index difference into ``2 * n_bins + 2`` classes.
+
+    Classes ``[0, 2 * n_bins]`` hold the clipped relative offset; the final class
+    ``2 * n_bins + 1`` is the "out-of-context" bin assigned wherever ``keep_mask`` is False
+    (e.g. a pair spanning two chains).
+    """
+    binned = torch.clip(diff + n_bins, 0, 2 * n_bins)
+    binned = torch.where(keep_mask, binned, 2 * n_bins + 1)
+    return F.one_hot(binned, 2 * n_bins + 2)
 
 
 class ESMFold2ResIdxAsymIdSymIdEntityIdEncoding(nn.Module):
@@ -1486,34 +1405,19 @@ class ESMFold2ResIdxAsymIdSymIdEntityIdEncoding(nn.Module):
         bij_same_residue = residue_index.unsqueeze(2) == residue_index.unsqueeze(1)
         bij_same_entity = entity_id.unsqueeze(2) == entity_id.unsqueeze(1)
 
-        dij_residue = residue_index.unsqueeze(2) - residue_index.unsqueeze(1)
-        dij_residue = torch.clip(
-            dij_residue + self.n_relative_residx_bins,
-            0,
-            2 * self.n_relative_residx_bins,
+        # Three relative encodings, all clip -> mask-out -> one-hot (see _relative_position_one_hot):
+        # residue offset within a chain, token offset within a residue, and chain (sym_id) offset
+        # across chains. The chain encoding keeps *cross*-chain pairs, so its mask is inverted.
+        residx_bins, chain_bins = self.n_relative_residx_bins, self.n_relative_chain_bins
+        aij_rel_pos = _relative_position_one_hot(
+            residue_index.unsqueeze(2) - residue_index.unsqueeze(1), residx_bins, bij_same_chain
         )
-        dij_residue = torch.where(bij_same_chain, dij_residue, 2 * self.n_relative_residx_bins + 1)
-        aij_rel_pos = F.one_hot(dij_residue, 2 * self.n_relative_residx_bins + 2)
-
-        dij_token = torch.clip(
-            token_index.unsqueeze(2) - token_index.unsqueeze(1) + self.n_relative_residx_bins,
-            0,
-            2 * self.n_relative_residx_bins,
+        aij_rel_token = _relative_position_one_hot(
+            token_index.unsqueeze(2) - token_index.unsqueeze(1), residx_bins, bij_same_chain & bij_same_residue
         )
-        dij_token = torch.where(
-            bij_same_chain & bij_same_residue,
-            dij_token,
-            2 * self.n_relative_residx_bins + 1,
+        aij_rel_chain = _relative_position_one_hot(
+            sym_id.unsqueeze(2) - sym_id.unsqueeze(1), chain_bins, ~bij_same_chain
         )
-        aij_rel_token = F.one_hot(dij_token, 2 * self.n_relative_residx_bins + 2)
-
-        dij_chain = torch.clip(
-            sym_id.unsqueeze(2) - sym_id.unsqueeze(1) + self.n_relative_chain_bins,
-            0,
-            2 * self.n_relative_chain_bins,
-        )
-        dij_chain = torch.where(bij_same_chain, 2 * self.n_relative_chain_bins + 1, dij_chain)
-        aij_rel_chain = F.one_hot(dij_chain, 2 * self.n_relative_chain_bins + 2)
 
         feats = torch.cat(
             [
@@ -1528,22 +1432,14 @@ class ESMFold2ResIdxAsymIdSymIdEntityIdEncoding(nn.Module):
         return self.embed(feats.to(self.embed.weight.dtype))
 
 
-# ===========================================================================
-# ESMFold2SingleToPair (for ESMFold2LanguageModelShim)
-# ===========================================================================
-
-
 class ESMFold2SingleToPair(nn.Module):
-    """downproject, output_mlp (Sequential of Linear, GELU, Linear)."""
+    """downproject -> outer product/difference -> two-layer MLP (fc1, GELU, fc2)."""
 
     def __init__(self, input_dim: int, downproject_dim: int, output_dim: int) -> None:
         super().__init__()
         self.downproject = nn.Linear(input_dim, downproject_dim)
-        self.output_mlp = nn.Sequential(
-            nn.Linear(2 * downproject_dim, output_dim),
-            nn.GELU(),
-            nn.Linear(output_dim, output_dim),
-        )
+        self.output_fc1 = nn.Linear(2 * downproject_dim, output_dim)
+        self.output_fc2 = nn.Linear(output_dim, output_dim)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.downproject(x)
@@ -1551,12 +1447,7 @@ class ESMFold2SingleToPair(nn.Module):
             [(x.unsqueeze(2) * x.unsqueeze(1)), (x.unsqueeze(2) - x.unsqueeze(1))],
             dim=3,
         )
-        return self.output_mlp(x)
-
-
-# ===========================================================================
-# ESMFold2LanguageModelShim
-# ===========================================================================
+        return self.output_fc2(F.gelu(self.output_fc1(x)))
 
 
 class ESMFold2LanguageModelShim(nn.Module):
@@ -1564,15 +1455,17 @@ class ESMFold2LanguageModelShim(nn.Module):
 
     Contains:
     - base_z_combine: nn.Parameter [num_layers+1]
-    - base_z_linear: Sequential(ESMFold2LayerNorm(d_model), Linear(d_model, d_z, bias=False))
-    - base_z_mlp: Sequential(ESMFold2SingleToPair(d_z, d_z, d_z), ESMFold2LayerNorm(d_z))
+    - base_z_input_norm -> base_z_proj: ESMFold2LayerNorm(d_model) then Linear(d_model, d_z, bias=False)
+    - base_z_to_pair -> base_z_output_norm: ESMFold2SingleToPair(d_z, d_z, d_z) then ESMFold2LayerNorm(d_z)
     """
 
     def __init__(self, d_z: int = 256, d_model: int = 2560, num_layers: int = 80) -> None:
         super().__init__()
 
-        self.base_z_mlp = nn.Sequential(ESMFold2SingleToPair(d_z, d_z, d_z), ESMFold2LayerNorm(d_z))
-        self.base_z_linear = nn.Sequential(ESMFold2LayerNorm(d_model), nn.Linear(d_model, d_z, bias=False))
+        self.base_z_to_pair = ESMFold2SingleToPair(d_z, d_z, d_z)
+        self.base_z_output_norm = ESMFold2LayerNorm(d_z)
+        self.base_z_input_norm = ESMFold2LayerNorm(d_model)
+        self.base_z_proj = nn.Linear(d_model, d_z, bias=False)
         self.base_z_combine = nn.Parameter(torch.zeros(num_layers + 1))
 
     def forward(self, hidden_states: Tensor) -> Tensor:
@@ -1586,15 +1479,15 @@ class ESMFold2LanguageModelShim(nn.Module):
         """
         # The ESMC backbone may be loaded at a different precision than the trunk
         # (e.g. bf16 backbone with an fp32 trunk); align to the projection dtype.
-        hidden_states = hidden_states.to(self.base_z_linear[1].weight.dtype)
-        # base_z_linear[0] is an fp32-pinned LayerNorm; upcast in, downcast out.
-        normed = self.base_z_linear[0](hidden_states)
-        lm_z = self.base_z_linear[1](normed)  # [B, L, 81, d_z]
+        hidden_states = hidden_states.to(self.base_z_proj.weight.dtype)
+        # base_z_input_norm is an fp32-pinned LayerNorm; upcast in, downcast out.
+        normed = self.base_z_input_norm(hidden_states)
+        lm_z = self.base_z_proj(normed)  # [B, L, 81, d_z]
         weights = self.base_z_combine.softmax(0)  # [81]
         lm_z = (weights @ lm_z).squeeze(-2)  # [B, L, d_z]
-        # base_z_mlp[1] is an fp32-pinned LayerNorm; upcast in, downcast out.
-        pair = self.base_z_mlp[0](lm_z)
-        lm_z = self.base_z_mlp[1](pair)  # [B, L, L, d_z]
+        # base_z_output_norm is an fp32-pinned LayerNorm; upcast in, downcast out.
+        pair = self.base_z_to_pair(lm_z)
+        lm_z = self.base_z_output_norm(pair)  # [B, L, L, d_z]
         return lm_z
 
 
@@ -1603,9 +1496,6 @@ _EPS = 1e-5
 _DEFAULT_CHUNK_SIZE = 64
 
 
-# ===========================================================================
-# ESMFold2TriangleMultiplicativeUpdate
-# ===========================================================================
 @use_kernel_forward_from_hub("ESMFold2TriangleMultiplication")
 class ESMFold2TriangleMultiplicativeBlock(nn.Module):
     """Triangle multiplicative update block with gated signal routing.
@@ -1692,11 +1582,6 @@ class ESMFold2TriangleMultiplicativeUpdate(nn.Module):
         return self._engine(z, visibility=mask)
 
 
-# ===========================================================================
-# ESMFold2FoldingTrunk: ESMFold2Transition, ESMFold2PairUpdateBlock, ESMFold2FoldingTrunk
-# ===========================================================================
-
-
 class ESMFold2Transition(nn.Module):
     """LayerNorm + ESMFold2SwiGLU feed-forward residual block, chunked along the token axis."""
 
@@ -1714,10 +1599,10 @@ class ESMFold2Transition(nn.Module):
         if self._chunk_size is None or x.shape[1] <= self._chunk_size:
             return x + self.ffn(self.norm(x))
         out_list: list[Tensor] = []
-        for s in range(0, x.shape[1], self._chunk_size):
-            e = min(s + self._chunk_size, x.shape[1])
-            sl = x[:, s:e]
-            out_list.append(sl + self.ffn(self.norm(sl)))
+        for start in range(0, x.shape[1], self._chunk_size):
+            end = min(start + self._chunk_size, x.shape[1])
+            chunk_x = x[:, start:end]
+            out_list.append(chunk_x + self.ffn(self.norm(chunk_x)))
         return torch.cat(out_list, dim=1)
 
 
@@ -1758,17 +1643,12 @@ class ESMFold2FoldingTrunk(nn.Module):
 
     def forward(self, pair: Tensor, pair_attention_mask: Tensor | None = None) -> Tensor:
         for block in self.blocks:
-            fn = partial(block, pair_attention_mask=pair_attention_mask)
+            block_fn = partial(block, pair_attention_mask=pair_attention_mask)
             if torch.is_grad_enabled():
-                pair = checkpoint(fn, pair, use_reentrant=False)
+                pair = checkpoint(block_fn, pair, use_reentrant=False)
             else:
-                pair = fn(pair)
+                pair = block_fn(pair)
         return pair
-
-
-# ===========================================================================
-# MSA Encoder
-# ===========================================================================
 
 
 class ESMFold2OuterProductMean(nn.Module):
@@ -1803,28 +1683,28 @@ class ESMFold2OuterProductMean(nn.Module):
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self._chunk_size = chunk_size
 
-    def forward(self, m: Tensor, msa_attention_mask: Tensor) -> Tensor:
-        m_norm = self.norm(m)
-        x = self.W(m_norm) * msa_attention_mask.unsqueeze(-1).to(m_norm.dtype)
-        a, b = x.chunk(2, dim=-1)
-        mask_f = msa_attention_mask.to(a.dtype)
+    def forward(self, msa_repr: Tensor, msa_attention_mask: Tensor) -> Tensor:
+        msa_normed = self.norm(msa_repr)
+        x = self.W(msa_normed) * msa_attention_mask.unsqueeze(-1).to(msa_normed.dtype)
+        left, right = x.chunk(2, dim=-1)
+        mask_f = msa_attention_mask.to(left.dtype)
         n_valid = (mask_f @ mask_f.transpose(-1, -2)).unsqueeze(-1).clamp(min=1.0)
         if self._chunk_size is None:
-            outer = torch.einsum("bimc,bjmd->bijcd", a, b).flatten(-2)
+            outer = torch.einsum("bimc,bjmd->bijcd", left, right).flatten(-2)
             if self.divide_outer_before_proj:
                 return self.Wout(outer / n_valid)
             return self.Wout(outer) / n_valid
         # Chunk along the left (i) axis so the peak einsum intermediate is
         # [B, chunk, L, c, d] instead of [B, L, L, c, d].
-        L = a.shape[1]
+        L = left.shape[1]
         out_chunks: list[Tensor] = []
-        for s in range(0, L, self._chunk_size):
-            e = min(s + self._chunk_size, L)
-            outer_chunk = torch.einsum("bimc,bjmd->bijcd", a[:, s:e], b).flatten(-2)
+        for start in range(0, L, self._chunk_size):
+            end = min(start + self._chunk_size, L)
+            outer_chunk = torch.einsum("bimc,bjmd->bijcd", left[:, start:end], right).flatten(-2)
             if self.divide_outer_before_proj:
-                out_chunks.append(self.Wout(outer_chunk / n_valid[:, s:e]))
+                out_chunks.append(self.Wout(outer_chunk / n_valid[:, start:end]))
             else:
-                out_chunks.append(self.Wout(outer_chunk) / n_valid[:, s:e])
+                out_chunks.append(self.Wout(outer_chunk) / n_valid[:, start:end])
         return torch.cat(out_chunks, dim=1)
 
 
@@ -1836,7 +1716,8 @@ class ESMFold2MSAPairWeightedAveraging(nn.Module):
         self.n_heads = n_heads
         self.head_width = head_width
         self.norm_single = ESMFold2LayerNorm(d_msa)
-        self.compute_bias = nn.Sequential(ESMFold2LayerNorm(d_pair), nn.Linear(d_pair, n_heads, bias=False))
+        self.bias_norm = ESMFold2LayerNorm(d_pair)
+        self.bias_proj = nn.Linear(d_pair, n_heads, bias=False)
         self.Wv = nn.Linear(d_msa, n_heads * head_width, bias=False)
         self.Wgate = nn.Linear(d_msa, n_heads * head_width, bias=False)
         self.Wout = nn.Linear(n_heads * head_width, d_msa, bias=False)
@@ -1854,7 +1735,7 @@ class ESMFold2MSAPairWeightedAveraging(nn.Module):
         h, dh = self.n_heads, self.head_width
 
         msa_normed = self.norm_single(msa_repr)
-        bias = self.compute_bias[1](self.compute_bias[0](pair_repr))  # [B, L, L, n_heads]
+        bias = self.bias_proj(self.bias_norm(pair_repr))  # [B, L, L, n_heads]
         bias.masked_fill_(~pair_attention_mask.unsqueeze(-1).bool(), -1e5)
         attn = torch.softmax(bias, dim=-2, dtype=torch.float32).to(bias.dtype)  # softmax over j
 
@@ -1924,19 +1805,6 @@ class ESMFold2Output(ModelOutput):
     pair_chains_iptm: Tensor | None = None
 
 
-def gather_rep_atom_coords(coords: Tensor, rep_atom_idx: Tensor) -> Tensor:
-    """Gather representative atom coordinates for each token.
-
-    Args:
-        coords: [B, A, 3]
-        rep_atom_idx: [B, L] int64
-
-    Returns:
-        [B, L, 3]
-    """
-    return _gather_along_dim1(coords, rep_atom_idx)
-
-
 def _compute_intra_token_idx(atom_to_token: Tensor) -> Tensor:
     """Compute local atom index within each token (vectorised).
 
@@ -1987,9 +1855,9 @@ class ESMFold2ConfidenceHead(nn.Module):
     def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
         ch = config.confidence_head
-        d_single = config.d_single
-        d_pair = config.d_pair
-        d_inputs = config.inputs.d_inputs
+        d_single = config.hidden_size
+        d_pair = config.pairwise_hidden_size
+        d_inputs = config.inputs.single_inputs_size
 
         boundaries = torch.linspace(ch.min_dist, ch.max_dist, ch.distogram_bins - 1)
         self.register_buffer("boundaries", boundaries)
@@ -2040,22 +1908,25 @@ class ESMFold2ConfidenceHead(nn.Module):
             return x.reshape(b * mult, n, c)
         return x
 
-    def forward(
+    def _build_pair_and_single(
         self,
-        s_inputs: Tensor,
+        single_inputs: Tensor,
         z: Tensor,
         x_pred: Tensor,
         distogram_atom_idx: Tensor,
         token_attention_mask: Tensor,
         atom_to_token: Tensor,
         atom_attention_mask: Tensor,
-        asym_id: Tensor,
-        mol_type: Tensor,
-        num_diffusion_samples: int = 1,
-        relative_position_encoding: Tensor | None = None,
-        token_bonds_encoding: Tensor | None = None,
-    ) -> dict[str, Tensor]:
-        s_inputs_normed = self.s_inputs_norm(s_inputs)
+        num_diffusion_samples: int,
+        relative_position_encoding: Tensor | None,
+        token_bonds_encoding: Tensor | None,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, int]:
+        """Build the per-sample pair + single representations shared by every confidence head.
+
+        Returns ``(single, pair, mask, rep_distances, rep_idx_m, atom_to_token_m, atom_mask_m, Bm)``
+        where the ``*_m`` tensors are repeated across the diffusion-sample batch axis.
+        """
+        s_inputs_normed = self.s_inputs_norm(single_inputs)
 
         z_base = self.z_norm(z)
         if relative_position_encoding is not None:
@@ -2076,7 +1947,7 @@ class ESMFold2ConfidenceHead(nn.Module):
         mask = self._repeat_batch(token_attention_mask, num_diffusion_samples)
         Bm = pair.shape[0]
 
-        rep_coords = gather_rep_atom_coords(x_pred_flat, rep_idx_m)
+        rep_coords = _gather_along_dim1(x_pred_flat, rep_idx_m)
         rep_distances = torch.cdist(rep_coords, rep_coords, compute_mode="donot_use_mm_for_euclid_dist")
         distogram_bins = (rep_distances.unsqueeze(-1) > self.boundaries).sum(dim=-1).long()
         pair = pair + self.dist_bin_pairwise_embed(distogram_bins)
@@ -2092,6 +1963,20 @@ class ESMFold2ConfidenceHead(nn.Module):
         pair = pair.to(self.pae_head.weight.dtype)
         single = self.row_attention_pooling(pair, mask)
 
+        return single, pair, mask, rep_distances, rep_idx_m, atom_to_token_m, atom_mask_m, Bm
+
+    def _compute_atom_confidences(
+        self,
+        single: Tensor,
+        atom_to_token_m: Tensor,
+        atom_mask_m: Tensor,
+        rep_idx_m: Tensor,
+        rep_distances: Tensor,
+        expanded_type: Tensor,
+        expanded_asym: Tensor,
+        Bm: int,
+    ) -> dict[str, Tensor]:
+        """Per-atom confidence outputs off the single representation (pLDDT family + resolved)."""
         atom_mask_f = atom_mask_m.float()
         s_at_atoms = gather_token_to_atom(single, atom_to_token_m)
         s_at_atoms_ln = self.plddt_ln(s_at_atoms)
@@ -2112,8 +1997,6 @@ class ESMFold2ConfidenceHead(nn.Module):
 
         complex_plddt = (plddt_per_atom * atom_mask_f).sum(dim=-1) / (atom_mask_f.sum(dim=-1) + _CONFIDENCE_EPS)
 
-        expanded_type = self._repeat_batch(mol_type, num_diffusion_samples)
-        expanded_asym = self._repeat_batch(asym_id, num_diffusion_samples)
         is_ligand = (expanded_type == 4).float()  # 4 = non-polymer (ligand) molecule type
         inter_chain = (expanded_asym.unsqueeze(-1) != expanded_asym.unsqueeze(-2)).float()
         near_contact = (rep_distances < 8).float()
@@ -2129,20 +2012,25 @@ class ESMFold2ConfidenceHead(nn.Module):
 
         plddt_ca = plddt_per_atom.gather(1, rep_idx_m)
 
-        # PAE
-        pae_logits = self.pae_head(self.pae_ln(pair))
-        pae = _categorical_mean(pae_logits, start=0.0, end=32.0).detach()
-
-        # PDE
-        pde_logits = self.pde_head(self.pde_ln(pair))
-        pde = _categorical_mean(pde_logits, start=0.0, end=32.0).detach()
-
-        # Resolved (per-atom binary).
+        # Resolved (per-atom binary): same per-atom single features, its own weight.
         s_at_atoms_res = self.resolved_ln(s_at_atoms)
         w_res = self.resolved_weight[intra_idx]
         resolved_logits = torch.einsum("...c,...cb->...b", s_at_atoms_res, w_res)
 
-        # pTM / ipTM from pae_logits.
+        return {
+            "plddt_logits": plddt_logits,
+            "plddt": plddt.detach(),
+            "plddt_per_atom": plddt_per_atom.detach(),
+            "plddt_ca": plddt_ca.detach(),
+            "complex_plddt": complex_plddt.detach(),
+            "complex_iplddt": complex_iplddt.detach(),
+            "resolved_logits": resolved_logits,
+        }
+
+    def _compute_ptm_iptm(
+        self, pae_logits: Tensor, mask: Tensor, expanded_asym: Tensor, Bm: int
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """pTM / ipTM / per-chain-pair ipTM derived from the PAE logits."""
         n_bins = pae_logits.shape[-1]
         bin_width = 32.0 / n_bins
         bin_centers = torch.arange(0.5 * bin_width, 32.0, bin_width, device=pae_logits.device)
@@ -2174,21 +2062,66 @@ class ESMFold2ConfidenceHead(nn.Module):
                 denom = pair_m.sum(dim=(-1, -2)) + _CONFIDENCE_EPS
                 pair_chains_iptm[:, c1, c2] = (tm_expected * pair_m).sum(dim=(-1, -2)) / denom
 
+        return ptm.detach(), iptm.detach(), pair_chains_iptm.detach()
+
+    def forward(
+        self,
+        single_inputs: Tensor,
+        z: Tensor,
+        x_pred: Tensor,
+        distogram_atom_idx: Tensor,
+        token_attention_mask: Tensor,
+        atom_to_token: Tensor,
+        atom_attention_mask: Tensor,
+        asym_id: Tensor,
+        mol_type: Tensor,
+        num_diffusion_samples: int = 1,
+        relative_position_encoding: Tensor | None = None,
+        token_bonds_encoding: Tensor | None = None,
+    ) -> dict[str, Tensor]:
+        single, pair, mask, rep_distances, rep_idx_m, atom_to_token_m, atom_mask_m, Bm = self._build_pair_and_single(
+            single_inputs=single_inputs,
+            z=z,
+            x_pred=x_pred,
+            distogram_atom_idx=distogram_atom_idx,
+            token_attention_mask=token_attention_mask,
+            atom_to_token=atom_to_token,
+            atom_attention_mask=atom_attention_mask,
+            num_diffusion_samples=num_diffusion_samples,
+            relative_position_encoding=relative_position_encoding,
+            token_bonds_encoding=token_bonds_encoding,
+        )
+
+        expanded_type = self._repeat_batch(mol_type, num_diffusion_samples)
+        expanded_asym = self._repeat_batch(asym_id, num_diffusion_samples)
+        atom_confidences = self._compute_atom_confidences(
+            single=single,
+            atom_to_token_m=atom_to_token_m,
+            atom_mask_m=atom_mask_m,
+            rep_idx_m=rep_idx_m,
+            rep_distances=rep_distances,
+            expanded_type=expanded_type,
+            expanded_asym=expanded_asym,
+            Bm=Bm,
+        )
+
+        pae_logits = self.pae_head(self.pae_ln(pair))
+        pae = _categorical_mean(pae_logits, start=0.0, end=32.0).detach()
+
+        pde_logits = self.pde_head(self.pde_ln(pair))
+        pde = _categorical_mean(pde_logits, start=0.0, end=32.0).detach()
+
+        ptm, iptm, pair_chains_iptm = self._compute_ptm_iptm(pae_logits, mask, expanded_asym, Bm)
+
         return {
-            "plddt_logits": plddt_logits,
-            "plddt": plddt.detach(),
-            "plddt_per_atom": plddt_per_atom.detach(),
-            "plddt_ca": plddt_ca.detach(),
-            "complex_plddt": complex_plddt.detach(),
-            "complex_iplddt": complex_iplddt.detach(),
+            **atom_confidences,
             "pae_logits": pae_logits,
             "pae": pae,
             "pde_logits": pde_logits,
             "pde": pde,
-            "resolved_logits": resolved_logits,
-            "ptm": ptm.detach(),
-            "iptm": iptm.detach(),
-            "pair_chains_iptm": pair_chains_iptm.detach(),
+            "ptm": ptm,
+            "iptm": iptm,
+            "pair_chains_iptm": pair_chains_iptm,
         }
 
 
@@ -2233,7 +2166,7 @@ class ESMFold2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, ESMFold2AdaptiveLayerNorm):
             init.ones_(module.s_scale)
         elif isinstance(module, ESMFold2SWAAtomBlock):
-            init.zeros_(module.adaln_modulation[1].weight)
+            init.zeros_(module.adaln_linear.weight)
         elif isinstance(module, ESMFold2AttentionPairBias):
             if getattr(module, "out_gate", None) is not None:
                 init.zeros_(module.out_gate.weight)
@@ -2246,11 +2179,6 @@ class ESMFold2PreTrainedModel(PreTrainedModel):
             init.zeros_(module.s_to_token.weight)
         elif isinstance(module, ESMFold2LanguageModelShim):
             init.zeros_(module.base_z_combine)
-
-
-# ===========================================================================
-# ESMFold2 — language-model backbone helpers
-# ===========================================================================
 
 
 def compute_lm_hidden_states(
@@ -2388,8 +2316,8 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
 
     def __init__(self, config: ESMFold2Config) -> None:
         super().__init__(config)
-        d_inputs = config.inputs.d_inputs
-        d_pair = config.d_pair
+        d_inputs = config.inputs.single_inputs_size
+        d_pair = config.pairwise_hidden_size
 
         self.inputs_embedder = ESMFold2InputsEmbedder(config)
         self.z_init_1 = nn.Linear(d_inputs, d_pair, bias=False)
@@ -2424,7 +2352,9 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         self.parcae_log_delta = nn.Parameter(torch.empty(d_pair, dtype=torch.float32))
         self.parcae_b_cont = nn.Parameter(torch.empty(d_pair, d_pair))
         self.parcae_readout = nn.Linear(d_pair, d_pair, bias=False)
-        self.parcae_coda = ESMFold2FoldingTrunk(n_layers=config.parcae.coda_n_layers, d_pair=d_pair, expansion_ratio=4)
+        self.parcae_coda = ESMFold2FoldingTrunk(
+            n_layers=config.parcae.num_coda_layers, d_pair=d_pair, expansion_ratio=4
+        )
 
         # Heads --------------------------------------------------------------
         self.structure_head = ESMFold2DiffusionStructureHead(config)
@@ -2469,16 +2399,105 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
             )
 
     def _discretized_dynamics(self) -> tuple[Tensor, Tensor]:
+        # Discretized linear state-space dynamics for the parcae recurrence: ``state_decay`` is
+        # the per-channel state transition (Ā), ``input_matrix`` the discretized input projection (B̄).
         delta = F.softplus(self.parcae_log_delta)
-        a = torch.exp(-delta * torch.exp(self.parcae_log_a))
-        b = delta[:, None] * self.parcae_b_cont
-        return a, b
+        state_decay = torch.exp(-delta * torch.exp(self.parcae_log_a))
+        input_matrix = delta[:, None] * self.parcae_b_cont
+        return state_decay, input_matrix
 
     def _init_pair_state(self, ref: Tensor) -> Tensor:
         std = math.sqrt(2.0 / (5.0 * ref.shape[-1]))
         state = torch.empty_like(ref, dtype=torch.float32)
         nn.init.trunc_normal_(state, mean=0.0, std=std, a=-3 * std, b=3 * std)
         return state.to(dtype=ref.dtype)
+
+    def _prepare_features(
+        self,
+        res_type: Tensor,
+        tok_mask: Tensor,
+        msa: Tensor | None,
+        msa_attention_mask: Tensor | None,
+        deletion_mean: Tensor | None,
+        ref_element: Tensor,
+        ref_atom_name_chars: Tensor,
+        atom_attention_mask: Tensor,
+        atom_to_token: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+        """One-hot / mask the raw structural inputs into embedder-ready features.
+
+        Returns ``(res_type_oh, profile, deletion_mean, ref_element_oh,
+        ref_atom_name_chars_oh, atom_to_token)`` with ``atom_to_token`` zeroed at padding.
+        """
+        if res_type.dim() == 2:
+            res_type_oh = F.one_hot(res_type.long(), num_classes=self.config.num_res_types).float()
+            res_type_oh = res_type_oh * tok_mask.unsqueeze(-1).float()
+        else:
+            res_type_oh = res_type.float()
+
+        if msa is not None:
+            msa_oh_profile = F.one_hot(msa.long(), num_classes=self.config.num_res_types).float()
+            if msa_attention_mask is not None:
+                mask_f = msa_attention_mask.float().unsqueeze(-1)
+                msa_oh_profile = msa_oh_profile * mask_f
+                valid_seq_count = msa_attention_mask.float().sum(dim=1).clamp(min=1)
+                profile = msa_oh_profile.sum(dim=1) / valid_seq_count.unsqueeze(-1)
+            else:
+                profile = msa_oh_profile.mean(dim=1)
+        else:
+            profile = res_type_oh
+
+        if deletion_mean is None:
+            deletion_mean = torch.zeros(res_type.shape[0], res_type.shape[1], device=res_type.device)
+
+        ref_element_oh = F.one_hot(ref_element.long(), num_classes=self.config.max_atomic_number).float()
+        ref_atom_name_chars_oh = F.one_hot(ref_atom_name_chars.long(), num_classes=self.config.char_vocab_size).float()
+        # Bias-free downstream Linears require zeroed padding.
+        atm_mask_f = atom_attention_mask.float()
+        ref_element_oh = ref_element_oh * atm_mask_f.unsqueeze(-1)
+        ref_atom_name_chars_oh = ref_atom_name_chars_oh * atm_mask_f.unsqueeze(-1).unsqueeze(-1)
+        atom_to_token = atom_to_token * atom_attention_mask.long()
+
+        return res_type_oh, profile, deletion_mean, ref_element_oh, ref_atom_name_chars_oh, atom_to_token
+
+    def _build_msa_kwargs(
+        self,
+        msa: Tensor | None,
+        msa_attention_mask: Tensor | None,
+        has_deletion: Tensor | None,
+        deletion_value: Tensor | None,
+        tok_mask: Tensor,
+        single_inputs: Tensor,
+    ) -> dict | None:
+        """Assemble the transposed/padded one-hot MSA tensors the MSA encoder consumes."""
+        if self.msa_encoder is None or msa is None:
+            return None
+        B_msa, M, L_msa = msa.shape
+        msa_oh = F.one_hot(msa.permute(0, 2, 1).long(), num_classes=self.config.num_res_types).float()
+        msa_attn = (
+            msa_attention_mask.permute(0, 2, 1).float()
+            if msa_attention_mask is not None
+            else tok_mask[:, :, None].expand(-1, -1, M).float()
+        )
+        # Bias-free ESMFold2MSAEncoder.embed requires zeroed padding.
+        msa_oh = msa_oh * msa_attn.unsqueeze(-1)
+        has_deletion_t = (
+            has_deletion.permute(0, 2, 1).float()
+            if has_deletion is not None
+            else torch.zeros(B_msa, L_msa, M, device=msa.device)
+        )
+        deletion_value_t = (
+            deletion_value.permute(0, 2, 1).float()
+            if deletion_value is not None
+            else torch.zeros(B_msa, L_msa, M, device=msa.device)
+        )
+        return {
+            "single_inputs": single_inputs,
+            "msa_oh": msa_oh,
+            "has_deletion": has_deletion_t,
+            "deletion_value": deletion_value_t,
+            "msa_attention_mask": msa_attn,
+        }
 
     def _run_one_loop(
         self,
@@ -2487,8 +2506,8 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         lm_z: Tensor | None,
         _msa_kwargs: dict | None,
         pair_mask: Tensor,
-        a: Tensor,
-        b_mat: Tensor,
+        state_decay: Tensor,
+        input_matrix: Tensor,
         total_steps: int,
     ) -> Tensor:
         # Helper method (not inline) so per-iter L²×c_z locals free on return (else
@@ -2525,7 +2544,7 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
                 z_inject_pair = z_inject_pair + refined_lm_z.to(z_inject_pair.dtype)
 
             injected_pair = self.parcae_input_norm(z_inject_pair)
-            z = a * z + F.linear(injected_pair.to(z.dtype), b_mat)
+            z = state_decay * z + F.linear(injected_pair.to(z.dtype), input_matrix)
             z = self.folding_trunk(z, pair_attention_mask=pair_mask)
 
         return z
@@ -2571,36 +2590,21 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         )
         total_steps = max(1, n_loops + 1)
 
-        if res_type.dim() == 2:
-            res_type_oh = F.one_hot(res_type.long(), num_classes=self.config.num_res_types).float()
-            res_type_oh = res_type_oh * tok_mask.unsqueeze(-1).float()
-        else:
-            res_type_oh = res_type.float()
+        res_type_oh, profile, deletion_mean, ref_element_oh, ref_atom_name_chars_oh, atom_to_token = (
+            self._prepare_features(
+                res_type=res_type,
+                tok_mask=tok_mask,
+                msa=msa,
+                msa_attention_mask=msa_attention_mask,
+                deletion_mean=deletion_mean,
+                ref_element=ref_element,
+                ref_atom_name_chars=ref_atom_name_chars,
+                atom_attention_mask=atm_mask,
+                atom_to_token=atom_to_token,
+            )
+        )
 
-        if msa is not None:
-            msa_oh_profile = F.one_hot(msa.long(), num_classes=self.config.num_res_types).float()
-            if msa_attention_mask is not None:
-                mask_f = msa_attention_mask.float().unsqueeze(-1)
-                msa_oh_profile = msa_oh_profile * mask_f
-                valid_seq_count = msa_attention_mask.float().sum(dim=1).clamp(min=1)
-                profile = msa_oh_profile.sum(dim=1) / valid_seq_count.unsqueeze(-1)
-            else:
-                profile = msa_oh_profile.mean(dim=1)
-        else:
-            profile = res_type_oh
-
-        if deletion_mean is None:
-            deletion_mean = torch.zeros(res_type.shape[0], res_type.shape[1], device=res_type.device)
-
-        ref_element_oh = F.one_hot(ref_element.long(), num_classes=self.config.max_atomic_number).float()
-        ref_atom_name_chars_oh = F.one_hot(ref_atom_name_chars.long(), num_classes=self.config.char_vocab_size).float()
-        # Bias-free downstream Linears require zeroed padding.
-        atm_mask_f = atm_mask.float()
-        ref_element_oh = ref_element_oh * atm_mask_f.unsqueeze(-1)
-        ref_atom_name_chars_oh = ref_atom_name_chars_oh * atm_mask_f.unsqueeze(-1).unsqueeze(-1)
-        atom_to_token = atom_to_token * atm_mask.long()
-
-        x_inputs = self.inputs_embedder(
+        single_inputs = self.inputs_embedder(
             aatype=res_type_oh,
             profile=profile.float(),
             deletion_mean=deletion_mean.float(),
@@ -2613,7 +2617,7 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
             atom_to_token=atom_to_token,
         )
 
-        z_init = self.z_init_1(x_inputs).unsqueeze(2) + self.z_init_2(x_inputs).unsqueeze(1)
+        z_init = self.z_init_1(single_inputs).unsqueeze(2) + self.z_init_2(single_inputs).unsqueeze(1)
 
         relative_position_encoding = self.rel_pos(
             residue_index=residue_index,
@@ -2636,38 +2640,18 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
 
         z = self._init_pair_state(z_init)
 
-        a, b = self._discretized_dynamics()
-        a = a.view(1, 1, 1, -1).to(device=z.device, dtype=z.dtype)
-        b_mat = b.to(device=z.device, dtype=z.dtype)
+        state_decay, input_matrix = self._discretized_dynamics()
+        state_decay = state_decay.view(1, 1, 1, -1).to(device=z.device, dtype=z.dtype)
+        input_matrix = input_matrix.to(device=z.device, dtype=z.dtype)
 
-        _msa_kwargs: dict | None = None
-        if self.msa_encoder is not None and msa is not None:
-            B_msa, M, L_msa = msa.shape
-            msa_oh = F.one_hot(msa.permute(0, 2, 1).long(), num_classes=self.config.num_res_types).float()
-            msa_attn = (
-                msa_attention_mask.permute(0, 2, 1).float()
-                if msa_attention_mask is not None
-                else tok_mask[:, :, None].expand(-1, -1, M).float()
-            )
-            # Bias-free ESMFold2MSAEncoder.embed requires zeroed padding.
-            msa_oh = msa_oh * msa_attn.unsqueeze(-1)
-            hd = (
-                has_deletion.permute(0, 2, 1).float()
-                if has_deletion is not None
-                else torch.zeros(B_msa, L_msa, M, device=msa.device)
-            )
-            dv = (
-                deletion_value.permute(0, 2, 1).float()
-                if deletion_value is not None
-                else torch.zeros(B_msa, L_msa, M, device=msa.device)
-            )
-            _msa_kwargs = {
-                "x_inputs": x_inputs,
-                "msa_oh": msa_oh,
-                "has_deletion": hd,
-                "deletion_value": dv,
-                "msa_attention_mask": msa_attn,
-            }
+        _msa_kwargs = self._build_msa_kwargs(
+            msa=msa,
+            msa_attention_mask=msa_attention_mask,
+            has_deletion=has_deletion,
+            deletion_value=deletion_value,
+            tok_mask=tok_mask,
+            single_inputs=single_inputs,
+        )
 
         z = self._run_one_loop(
             z=z,
@@ -2675,11 +2659,11 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
             lm_z=lm_z,
             _msa_kwargs=_msa_kwargs,
             pair_mask=pair_mask,
-            a=a,
-            b_mat=b_mat,
+            state_decay=state_decay,
+            input_matrix=input_matrix,
             total_steps=total_steps,
         )
-        del z_init, lm_z, _msa_kwargs, a, b_mat
+        del z_init, lm_z, _msa_kwargs, state_decay, input_matrix
 
         z = self.parcae_readout(z)
         z = self.parcae_coda(z, pair_attention_mask=pair_mask)
@@ -2688,8 +2672,8 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         distogram_logits = self.distogram_head((z + z.transpose(-2, -3)).to(self.distogram_head.weight.dtype))
 
         structure_output = self.structure_head.sample(
-            z_trunk=z,
-            s_inputs=x_inputs,
+            pair_trunk=z,
+            single_inputs=single_inputs,
             relative_position_encoding=relative_position_encoding,
             ref_pos=ref_pos,
             ref_charge=ref_charge,
@@ -2713,7 +2697,7 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
             raise RuntimeError("The diffusion structure head did not return sampled coordinates.")
 
         confidence_output = self.confidence_head(
-            s_inputs=x_inputs.detach(),
+            single_inputs=single_inputs.detach(),
             z=z.detach().float(),
             x_pred=sample_coords.detach(),
             distogram_atom_idx=disto_idx,
@@ -2764,11 +2748,11 @@ class ESMFold2MSAEncoderBlock(nn.Module):
     def __init__(self, config: ESMFold2Config, is_final_block: bool = False) -> None:
         super().__init__()
         me = config.msa_encoder
-        d_msa = me.d_msa
-        d_pair = config.d_pair
-        d_hidden = me.d_hidden
+        d_msa = me.hidden_size
+        d_pair = config.pairwise_hidden_size
+        d_hidden = me.outer_hidden_size
         n_heads_msa = me.n_heads_msa
-        msa_head_width = me.msa_head_width
+        msa_head_width = me.head_width
         self.is_final_block = is_final_block
         self.outer_product_mean = ESMFold2OuterProductMean(d_msa, d_hidden, d_pair)
         if not is_final_block:
@@ -2790,19 +2774,19 @@ class ESMFold2MSAEncoderBlock(nn.Module):
 
     def forward(
         self,
-        m: Tensor,
+        msa_repr: Tensor,
         pair: Tensor,
         msa_attention_mask: Tensor,
         pair_attention_mask: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        pair = pair + self.outer_product_mean(m, msa_attention_mask)
+        pair = pair + self.outer_product_mean(msa_repr, msa_attention_mask)
         if not self.is_final_block:
-            m = m + self.msa_pair_weighted_averaging(m, pair, pair_attention_mask)
-            m = self.msa_transition(m)
+            msa_repr = msa_repr + self.msa_pair_weighted_averaging(msa_repr, pair, pair_attention_mask)
+            msa_repr = self.msa_transition(msa_repr)
         pair = pair + self.tri_mul_out(pair, mask=pair_attention_mask)
         pair = pair + self.tri_mul_in(pair, mask=pair_attention_mask)
         pair = self.pair_transition(pair)
-        return m, pair
+        return msa_repr, pair
 
 
 class ESMFold2MSAEncoder(nn.Module):
@@ -2811,8 +2795,8 @@ class ESMFold2MSAEncoder(nn.Module):
     def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
         me = config.msa_encoder
-        d_msa = me.d_msa
-        d_inputs = config.inputs.d_inputs
+        d_msa = me.hidden_size
+        d_inputs = config.inputs.single_inputs_size
         n_layers = me.n_layers
         # num_res_types one-hot + has_deletion + deletion_value.
         self.embed = nn.Linear(config.num_res_types + 2, d_msa, bias=False)
@@ -2828,19 +2812,19 @@ class ESMFold2MSAEncoder(nn.Module):
     def forward(
         self,
         x_pair: Tensor,
-        x_inputs: Tensor,
+        single_inputs: Tensor,
         msa_oh: Tensor,
         has_deletion: Tensor,
         deletion_value: Tensor,
         msa_attention_mask: Tensor,
     ) -> Tensor:
         # All inputs are pre-transposed to [B, L, M, ...] before calling.
-        m_feat = torch.cat([msa_oh, has_deletion.unsqueeze(-1), deletion_value.unsqueeze(-1)], dim=-1)
-        m = self.embed(m_feat.to(self.embed.weight.dtype)) + self.project_inputs(x_inputs).unsqueeze(2)
+        msa_feat = torch.cat([msa_oh, has_deletion.unsqueeze(-1), deletion_value.unsqueeze(-1)], dim=-1)
+        msa_repr = self.embed(msa_feat.to(self.embed.weight.dtype)) + self.project_inputs(single_inputs).unsqueeze(2)
         tok_mask = msa_attention_mask[:, :, 0].bool()
         pair_attention_mask = tok_mask.unsqueeze(2) & tok_mask.unsqueeze(1)
         for block in self.blocks:
-            m, x_pair = block(m, x_pair, msa_attention_mask, pair_attention_mask)
+            msa_repr, x_pair = block(msa_repr, x_pair, msa_attention_mask, pair_attention_mask)
         return x_pair
 
 

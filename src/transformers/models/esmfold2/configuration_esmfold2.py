@@ -23,11 +23,6 @@ from ..esmc.configuration_esmc import ESMCConfig
 logger = logging.get_logger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Nested sub-configs (registered via the parent's ``sub_configs``)
-# ---------------------------------------------------------------------------
-
-
 @strict
 class MSAEncoderConfig(PreTrainedConfig):
     """Config for the optional MSA encoder module (Large MSA models only)."""
@@ -35,22 +30,30 @@ class MSAEncoderConfig(PreTrainedConfig):
     attribute_map = {
         "n_layers": "num_hidden_layers",
         "n_heads_msa": "num_attention_heads",
+        # TODO(temporary): checkpoint-config aliases for the pre-rename field names;
+        # drop once the merged ESMFold2+ESMC checkpoint is regenerated with the new keys.
+        "d_msa": "hidden_size",
+        "d_hidden": "outer_hidden_size",
+        "msa_head_width": "head_width",
     }
 
     enabled: bool | None = False
-    d_msa: int | None = 128
-    d_hidden: int | None = 32
+    hidden_size: int | None = 128
+    outer_hidden_size: int | None = 32
     num_hidden_layers: int | None = 4
     num_attention_heads: int | None = 8
-    msa_head_width: int | None = 32
+    head_width: int | None = 32
 
 
 @strict
 class ParcaeConfig(PreTrainedConfig):
     """Release-only config for the parcae diffusion-loop scheduler."""
 
+    # TODO(temporary): checkpoint-config alias; drop at checkpoint regen.
+    attribute_map = {"coda_n_layers": "num_coda_layers"}
+
     enabled: bool | None = True
-    coda_n_layers: int | None = 2
+    num_coda_layers: int | None = 2
 
 
 @strict
@@ -72,10 +75,13 @@ class AtomAttentionConfig(PreTrainedConfig):
     attribute_map = {
         "n_blocks": "num_hidden_layers",
         "n_heads": "num_attention_heads",
+        # TODO(temporary): checkpoint-config aliases; drop at checkpoint regen.
+        "d_atom": "atom_hidden_size",
+        "d_token": "token_hidden_size",
     }
 
-    d_atom: int | None = 128
-    d_token: int | None = 768
+    atom_hidden_size: int | None = 128
+    token_hidden_size: int | None = 768
     num_hidden_layers: int | None = 3
     num_attention_heads: int | None = 4
     swa_window_size: int | None = 128
@@ -102,9 +108,11 @@ class FoldingTrunkConfig(PreTrainedConfig):
 class InputsEmbedderConfig(PreTrainedConfig):
     """Config for the inputs embedder (wraps the atom encoder)."""
 
+    # TODO(temporary): checkpoint-config alias; drop at checkpoint regen.
+    attribute_map = {"d_inputs": "single_inputs_size"}
     sub_configs = {"atom_encoder": AtomAttentionConfig}
 
-    d_inputs: int | None = 451
+    single_inputs_size: int | None = 451
     atom_encoder: dict | AtomAttentionConfig | None = None
 
     def __post_init__(self, **kwargs):
@@ -119,11 +127,12 @@ class InputsEmbedderConfig(PreTrainedConfig):
 class DiffusionModuleConfig(PreTrainedConfig):
     """Config for the DiffusionModule."""
 
+    # TODO(temporary): checkpoint-config aliases; drop at checkpoint regen.
+    attribute_map = {"c_atom": "atom_hidden_size", "c_token": "token_hidden_size"}
+
     sigma_data: float | None = 16.0
-    c_atom: int | None = 128
-    c_token: int | None = 768
-    c_z: int | None = 256
-    c_s_inputs: int | None = 451
+    atom_hidden_size: int | None = 128
+    token_hidden_size: int | None = 768
     fourier_dim: int | None = 256
     atom_num_blocks: int | None = 3
     atom_num_heads: int | None = 4
@@ -182,11 +191,6 @@ class ConfidenceHeadConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-# ---------------------------------------------------------------------------
-# Top-level config
-# ---------------------------------------------------------------------------
-
-
 @auto_docstring(checkpoint="biohub/ESMFold2")
 @strict
 class ESMFold2Config(PreTrainedConfig):
@@ -194,9 +198,9 @@ class ESMFold2Config(PreTrainedConfig):
     type (`str`, *optional*, defaults to `"release"`):
         Architecture variant. Only `"release"` is supported in this port (the
         `"experimental"` variant is deferred to a follow-up).
-    d_single (`int`, *optional*, defaults to 384):
+    hidden_size (`int`, *optional*, defaults to 384):
         Dimensionality of single (per-residue) representations.
-    d_pair (`int`, *optional*, defaults to 256):
+    pairwise_hidden_size (`int`, *optional*, defaults to 256):
         Dimensionality of pair (residue-residue) representations.
     n_relative_residx_bins (`int`, *optional*, defaults to 32):
         Number of bins for relative residue index encoding.
@@ -253,6 +257,9 @@ class ESMFold2Config(PreTrainedConfig):
     """
 
     model_type = "esmfold2"
+    # TODO(temporary): checkpoint-config aliases for the pre-rename field names;
+    # drop once the merged ESMFold2+ESMC checkpoint is regenerated with the new keys.
+    attribute_map = {"d_single": "hidden_size", "d_pair": "pairwise_hidden_size"}
     sub_configs = {
         "inputs": InputsEmbedderConfig,
         "folding_trunk": FoldingTrunkConfig,
@@ -265,8 +272,8 @@ class ESMFold2Config(PreTrainedConfig):
     }
 
     type: str | None = "release"
-    d_single: int | None = 384
-    d_pair: int | None = 256
+    hidden_size: int | None = 384
+    pairwise_hidden_size: int | None = 256
     n_relative_residx_bins: int | None = 32
     n_relative_chain_bins: int | None = 2
     num_loops: int | None = 10
