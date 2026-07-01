@@ -328,6 +328,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("moonshine", "MoonshineModel"),
         ("moonshine_streaming", "MoonshineStreamingModel"),
         ("moshi", "MoshiModel"),
+        ("moss-audio-tokenizer", "MossAudioTokenizerModel"),
+        ("moss_tts_delay", "MossTTSDelayModel"),
         ("mpnet", "MPNetModel"),
         ("mpt", "MptModel"),
         ("mra", "MraModel"),
@@ -1790,6 +1792,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("csm", "CsmForConditionalGeneration"),
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
         ("higgs_audio_v2", "HiggsAudioV2ForConditionalGeneration"),
+        ("moss_tts_delay", "MossTTSDelayModel"),
         ("musicgen", "MusicgenForConditionalGeneration"),
         ("musicgen_melody", "MusicgenMelodyForConditionalGeneration"),
         ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration"),
@@ -1948,6 +1951,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     [
         ("dac", "DacModel"),
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
+        ("moss-audio-tokenizer", "MossAudioTokenizerModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("xcodec2", "Xcodec2Model"),
     ]
