@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "architecture-artifact-v0.schema.json",
+  "title": "Experimental Transformers Architecture IR Artifact",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "model_type",
+    "metadata",
+    "entrypoints",
+    "config",
+    "components",
+    "templates",
+    "repeats",
+    "edges",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "architecture-artifact-v0"
+    },
+    "model_type": {
+      "type": "string"
+    },
+    "entrypoints": {
+      "type": "object"
+    },
+    "config": {
+      "type": "object",
+      "required": ["class_name", "module", "model_type", "fields"]
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path_pattern", "kind", "class_name", "module", "children"]
+      }
+    },
+    "templates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path_pattern", "kind", "class_name", "module", "children"]
+      }
+    },
+    "repeats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "body",
+          "repeated_class_name",
+          "count",
+          "count_expr",
+          "count_source",
+          "index_symbol",
+          "container_path_pattern",
+          "item_path_pattern",
+          "provenance"
+        ]
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "target", "kind"],
+        "properties": {
+          "kind": {
+            "enum": ["data", "residual", "mask", "position", "cross_attention"]
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "warnings": {
+      "type": "array"
+    }
+  }
+}
