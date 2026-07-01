@@ -206,9 +206,7 @@ class ProcessorTesterMixin:
         # complete set, or because model_id points to a tiny fixture repo (model_id != cls.model_id)
         # that may only contain a subset of components (e.g. just the tokenizer), in which case each
         # missing component falls back to cls.model_id (e.g. the image processor).
-        needs_individual_loading = bool(custom_components) or (
-            cls.model_id is not None and model_id != cls.model_id
-        )
+        needs_individual_loading = bool(custom_components) or (cls.model_id is not None and model_id != cls.model_id)
         if needs_individual_loading:
             for attribute in cls.processor_class.get_attributes():
                 if attribute not in custom_components:
