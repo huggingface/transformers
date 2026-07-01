@@ -41,7 +41,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import DynamicCache, NemotronHForCausalLM, NemotronHModel
+    from transformers import DynamicCache, NemotronHForCausalLM, NemotronHModel, StaticCache
 
 
 class NemotronHModelTester:
@@ -55,7 +55,7 @@ class NemotronHModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        layers_block_type=["mamba", "moe", "mamba", "attention", "moe"],
+        layers_block_type=["linear_attention", "moe", "linear_attention", "full_attention", "moe"],
         num_attention_heads=4,
         num_key_value_heads=2,
         head_dim=32,
@@ -291,7 +291,7 @@ class NemotronHModelTester:
         # Find the index of the first mamba layer
         mamba_layer_idx = None
         for idx, layer_type in enumerate(config.layers_block_type):
-            if layer_type == "mamba":
+            if layer_type == "linear_attention":
                 mamba_layer_idx = idx
                 break
 
@@ -403,7 +403,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # Raise a useful error, asking to explicitly override the method
-        if not isinstance(past_key_values, DynamicCache):
+        if not isinstance(past_key_values, (DynamicCache, StaticCache)):
             raise ValueError("The cache does not use the correct Cache")
 
         # Use the correct config
@@ -429,11 +429,11 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 self.assertEqual(layer.conv_states, None)
                 self.assertEqual(layer.recurrent_states, None)
             # Attention layer cache
-            elif layer_type == "attention":
+            elif layer_type == "full_attention":
                 self.assertEqual(layer.keys.shape, attention_shape)
                 self.assertEqual(layer.values.shape, attention_shape)
             # Mamba layer cache
-            elif layer_type == "mamba":
+            elif layer_type == "linear_attention":
                 self.assertEqual(layer.conv_states.shape, conv_shape)
                 self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
             else:
@@ -656,7 +656,9 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         # Valid list - should work
         config = NemotronHConfig(
-            vocab_size=100, hidden_size=32, layers_block_type=["mamba", "moe", "attention", "moe"]
+            vocab_size=100,
+            hidden_size=32,
+            layers_block_type=["linear_attention", "moe", "full_attention", "moe"],
         )
         self.assertEqual(len(config.layers_block_type), 4)
         self.assertEqual(config.num_hidden_layers, 4)
@@ -666,20 +668,27 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             NemotronHConfig(
                 vocab_size=100,
                 hidden_size=32,
-                layers_block_type=["mamba", "moe", "attention", "invalid"],  # "invalid" is not valid
+                layers_block_type=[
+                    "linear_attention",
+                    "moe",
+                    "full_attention",
+                    "invalid",
+                ],  # "invalid" is not valid
             )
 
     def test_layers_block_type(self):
         """Test that layers_block_type works correctly and backward compatibility"""
         # Create config with explicit list
         config = NemotronHConfig(
-            vocab_size=100, hidden_size=32, layers_block_type=["mamba", "moe", "attention", "moe"]
+            vocab_size=100,
+            hidden_size=32,
+            layers_block_type=["linear_attention", "moe", "full_attention", "moe"],
         )
 
         # Test direct access to layers_block_type
-        self.assertEqual(config.layers_block_type[0], "mamba")
+        self.assertEqual(config.layers_block_type[0], "linear_attention")
         self.assertEqual(config.layers_block_type[1], "moe")
-        self.assertEqual(config.layers_block_type[2], "attention")
+        self.assertEqual(config.layers_block_type[2], "full_attention")
         self.assertEqual(config.layers_block_type[3], "moe")
 
         # Test that num_hidden_layers is derived from layers_block_type length
@@ -691,10 +700,10 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # Test the model tester config
         config2 = self.model_tester.get_config()
         self.assertEqual(len(config2.layers_block_type), 5)
-        self.assertEqual(config2.layers_block_type[0], "mamba")
+        self.assertEqual(config2.layers_block_type[0], "linear_attention")
         self.assertEqual(config2.layers_block_type[1], "moe")
-        self.assertEqual(config2.layers_block_type[2], "mamba")
-        self.assertEqual(config2.layers_block_type[3], "attention")
+        self.assertEqual(config2.layers_block_type[2], "linear_attention")
+        self.assertEqual(config2.layers_block_type[3], "full_attention")
         self.assertEqual(config2.layers_block_type[4], "moe")
 
     def test_generate_with_and_without_cache(self):
@@ -756,14 +765,15 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config = NemotronHConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="ME*E")
 
         # Test that it's converted to layers_block_type
-        self.assertEqual(config.layers_block_type, ["mamba", "moe", "attention", "moe"])
+        self.assertEqual(config.layers_block_type, ["linear_attention", "moe", "full_attention", "moe"])
         self.assertEqual(config.num_hidden_layers, 4)
         self.assertEqual(config.hybrid_override_pattern, "ME*E")
 
         # Test with longer pattern
         config2 = NemotronHConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="MEME*EME")
         self.assertEqual(
-            config2.layers_block_type, ["mamba", "moe", "mamba", "moe", "attention", "moe", "mamba", "moe"]
+            config2.layers_block_type,
+            ["linear_attention", "moe", "linear_attention", "moe", "full_attention", "moe", "linear_attention", "moe"],
         )
         self.assertEqual(config2.num_hidden_layers, 8)
 
@@ -806,19 +816,22 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             # Verify conversion
             self.assertEqual(len(config.layers_block_type), 6)
             self.assertEqual(config.num_hidden_layers, 6)
-            self.assertEqual(config.layers_block_type, ["mamba", "moe", "mamba", "moe", "attention", "moe"])
+            self.assertEqual(
+                config.layers_block_type,
+                ["linear_attention", "moe", "linear_attention", "moe", "full_attention", "moe"],
+            )
             self.assertEqual(config.hybrid_override_pattern, "MEME*E")
 
     def test_mtp_backward_compatibility(self):
         """Test MTP backward compatibility with mtp_hybrid_override_pattern"""
         config = NemotronHConfig(
-            layers_block_type=["mamba", "moe", "attention", "moe"],
+            layers_block_type=["linear_attention", "moe", "full_attention", "moe"],
             num_nextn_predict_layers=2,
             mtp_hybrid_override_pattern="*E",
         )
 
         # Verify conversion
-        self.assertEqual(config.mtp_layers_block_type, ["attention", "moe"])
+        self.assertEqual(config.mtp_layers_block_type, ["full_attention", "moe"])
         self.assertEqual(config.mtp_hybrid_override_pattern, "*E")
 
     def test_config_roundtrip_save_load(self):
@@ -835,8 +848,11 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             # Load
             config2 = NemotronHConfig.from_pretrained(tmpdir)
 
-            # Verify
-            self.assertEqual(config2.layers_block_type, ["mamba", "attention", "moe", "attention"])
+            # Verify (legacy "mamba" / "attention" remap to current names on load)
+            self.assertEqual(
+                config2.layers_block_type,
+                ["linear_attention", "full_attention", "moe", "full_attention"],
+            )
             self.assertEqual(config2.num_hidden_layers, 4)
             self.assertEqual(config2.vocab_size, 100)
             self.assertEqual(config2.hidden_size, 32)
@@ -846,10 +862,13 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # Test _pattern_to_list
         pattern = "M*EME*"
         layers_list = NemotronHConfig._pattern_to_list(pattern)
-        self.assertEqual(layers_list, ["mamba", "attention", "moe", "mamba", "moe", "attention"])
+        self.assertEqual(
+            layers_list,
+            ["linear_attention", "full_attention", "moe", "linear_attention", "moe", "full_attention"],
+        )
 
         # Test _list_to_pattern
-        layers_list = ["mamba", "moe", "attention", "moe"]
+        layers_list = ["linear_attention", "moe", "full_attention", "moe"]
         pattern = NemotronHConfig._list_to_pattern(layers_list)
         self.assertEqual(pattern, "ME*E")
 

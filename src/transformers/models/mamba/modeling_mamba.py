@@ -120,6 +120,8 @@ class MambaMixer(nn.Module):
 
         self.warn_slow_implementation()
 
+        self.layer_type = config.layer_types[layer_idx]
+
     @torch.no_grad()
     def init_mamba_weights(self):
         A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32, device=self.A_log.device)[None, :]
