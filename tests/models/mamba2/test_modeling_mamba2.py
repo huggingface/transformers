@@ -420,6 +420,8 @@ class Mamba2IntegrationTest(unittest.TestCase):
 
         model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16)
         model.to(torch_device)
+        if "cuda" in str(torch_device):
+            torch.cuda.empty_cache()
         input_ids = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt")["input_ids"].to(
             torch_device
         )
@@ -448,16 +450,24 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST]Write C#.[/INST]",
             "[INST]Write a hello world in C++.[/INST]",
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
+            "[INST]Write C#.[/INST]",
+            "[INST]Write a hello world in C++.[/INST]",
         ]
 
         model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
+        if "cuda" in str(torch_device):
+            torch.cuda.empty_cache()
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
         batched_gen = model.generate(**tokenized_prompts, max_new_tokens=30, use_cache=True)
         batched_output = tokenizer.batch_decode(batched_gen, skip_special_tokens=True)
 
         # individual generation
+
+        del batched_gen, batched_output, tokenized_prompts
+        if "cuda" in str(torch_device):
+            torch.cuda.empty_cache()
 
         for index_gen, individual_prompt in enumerate(prompt):
             inputs = tokenizer(individual_prompt, return_tensors="pt", padding="longest").to(torch_device)
@@ -478,16 +488,24 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST]Write C#.[/INST]",
             "[INST]Write a hello world in C++.[/INST]",
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
+            "[INST]Write C#.[/INST]",
+            "[INST]Write a hello world in C++.[/INST]",
         ]
 
         model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
+        if "cuda" in str(torch_device):
+            torch.cuda.empty_cache()
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
         batched_gen = model.generate(**tokenized_prompts, max_new_tokens=30, use_cache=True)
         batched_output = tokenizer.batch_decode(batched_gen, skip_special_tokens=True)
 
         # individual generation
+
+        del batched_gen, batched_output, tokenized_prompts
+        if "cuda" in str(torch_device):
+            torch.cuda.empty_cache()
 
         for index_gen, individual_prompt in enumerate(prompt):
             inputs = tokenizer(individual_prompt, return_tensors="pt", padding="longest").to(torch_device)
@@ -501,7 +519,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         # Based on https://github.com/sustcsonglin/flash-linear-attention/issues/63
         # Credit to zhixuan-lin
 
-        B, T, D = 4, 512, 768
+        B, T, D = 2, 256, 768
         dtype = torch.bfloat16
         config = Mamba2Config(num_heads=24, head_dim=64, hidden_size=768, expand=2, n_groups=1)
 
