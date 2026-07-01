@@ -1177,7 +1177,6 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("llava", {"pil": "LlavaImageProcessorPil", "torchvision": "LlavaImageProcessor"}),
         ("llava_next", {"pil": "LlavaNextImageProcessorPil", "torchvision": "LlavaNextImageProcessor"}),
         ("llava_onevision", {"pil": "LlavaOnevisionImageProcessorPil", "torchvision": "LlavaOnevisionImageProcessor"}),
-        ("locateanything", {"pil": "LocateAnythingImageProcessor"}),
         ("mask2former", {"pil": "Mask2FormerImageProcessorPil", "torchvision": "Mask2FormerImageProcessor"}),
         ("maskformer", {"pil": "MaskFormerImageProcessorPil", "torchvision": "MaskFormerImageProcessor"}),
         ("minicpmv4_6", {"pil": "MiniCPMV4_6ImageProcessorPil", "torchvision": "MiniCPMV4_6ImageProcessor"}),
