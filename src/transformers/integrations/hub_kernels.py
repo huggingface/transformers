@@ -355,8 +355,49 @@ if is_kernels_available():
             mapping = get_kernel_mapping_transformers()
         register_kernel_mapping(mapping)
 
+    _processing_kernels: dict[str, dict] = {}
+
+    def register_processing_kernel(name, repo_id, version=None, revision=None):
+        def register(adapter):
+            _processing_kernels[name] = {
+                "adapter": adapter,
+                "repo_id": repo_id,
+                "version": version,
+                "revision": revision,
+                "module": None,
+                "loaded": False,
+            }
+            return adapter
+
+        return register
+
+    def run_processing_kernel(name, *args, **kwargs):
+        entry = _processing_kernels.get(name)
+        if not _kernels_enabled or entry is None or entry["adapter"] is None:
+            return None
+        if not entry["loaded"]:
+            entry["loaded"] = True
+            version, revision = entry["version"], entry["revision"]
+            if version is None and revision is None:
+                version = 1
+            try:
+                entry["module"] = get_kernel(
+                    entry["repo_id"], revision=revision, version=version, allow_all_kernels=ALLOW_ALL_KERNELS
+                )
+            except Exception as error:
+                logger.warning_once(f"could not load processing kernel '{name}' from {entry['repo_id']}: {error}")
+        if entry["module"] is None:
+            return None
+        return entry["adapter"](entry["module"], *args, **kwargs)
+
 else:
     _kernels_enabled = False
+
+    def register_processing_kernel(name, repo_id, version=None, revision=None):
+        return lambda adapter: adapter
+
+    def run_processing_kernel(name, *args, **kwargs):
+        return None
 
     # Stub to make decorators int transformers work when `kernels`
     # is not installed.
@@ -856,7 +897,9 @@ __all__ = [
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
     "register_kernel_replacements_and_fusions",
+    "register_processing_kernel",
     "replace_kernel_forward_from_hub",
+    "run_processing_kernel",
     "use_kernel_forward_from_hub",
     "use_kernel_func_from_hub",
     "use_kernelized_func",
