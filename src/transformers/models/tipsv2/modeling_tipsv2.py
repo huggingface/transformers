@@ -566,7 +566,12 @@ class Tipsv2VisionModel(Tipsv2VisionPreTrainedModel):
 )
 class Tipsv2VisionBackbone(BackboneMixin, Tipsv2VisionPreTrainedModel):
     def __init__(self, config: "Tipsv2Config | Tipsv2VisionConfig"):
-        super().__init__(config)
+        # reassign config to vision_config for compatibility with AutoBackbone
+        if isinstance(config, Tipsv2Config):
+            config = config.vision_config
+            super().__init__(config)
+        else:
+            super().__init__(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = Tipsv2VisionEmbeddings(config)
         self.encoder = Tipsv2VisionEncoder(config)
