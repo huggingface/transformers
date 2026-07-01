@@ -168,36 +168,45 @@ class DtensorShardOperation:
 
                 return source[tuple(slice_parts)].to(device=device, dtype=dtype)
 
-        # MoE path: drop the piece if this rank does not own tensor_idx
-        # along axis 0. Once shard_tensor has been called for all N pieces,
-        # the caller (MergeModulelist) stacks the kept slices along axis 0 to
-        # form this rank's local shard of the param.
-        shards_axis0 = any(self._normalize_param_dim(placement.dim) == 0 for _, placement in dim_placements)
+        # MoE path
+        # tensor_idx identifies the axis-0 piece in param space (not in source.shape).
+        normalized_dim_placements = [
+            (mesh_dim, placement, self._normalize_param_dim(placement.dim)) for mesh_dim, placement in dim_placements
+        ]
+
+        # if this rank owns expert `tensor_idx` along axis 0, we need to slice the inner dimensions, else we drop it
+        has_axis0_shard = any(param_dim == 0 for _, _, param_dim in normalized_dim_placements)
         owns_tensor_idx = self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
-        if shards_axis0 and not owns_tensor_idx:
+        if has_axis0_shard and not owns_tensor_idx:
             return None
 
-        # Inner dims use only _apply_contiguous_shard (one piece per dim), so a
-        # single slice suffices
-        inner_dim_placements = [
-            (mesh_dim, placement)
-            for mesh_dim, placement in dim_placements
-            if self._normalize_param_dim(placement.dim) != 0
-        ]
-        if not inner_dim_placements:
-            return source[...].to(device=device, dtype=dtype)
-        source_ranges_by_dim: list[tuple[int, int]] = [(0, size) for size in source_shape]
-        # placement.dim is indexed in param space (e.g. axis 2 of [N, in, out]).
-        # source is in source space (e.g. axis 1 of [in, out]), so we translate
-        # from one to the other by stripping the leading axis.
-        for mesh_dim, placement in inner_dim_placements:
-            sub_mesh = self._get_sub_mesh(mesh_dim)
-            rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
-            param_dim = self._normalize_param_dim(placement.dim)
-            source_dim = param_dim - 1
-            interval_pieces = self._apply_contiguous_shard([source_ranges_by_dim[source_dim]], rank, world_size)
-            source_ranges_by_dim[source_dim] = interval_pieces[0] if interval_pieces else (0, 0)
-        return source[tuple(slice(s, e) for s, e in source_ranges_by_dim)].to(device=device, dtype=dtype)
+        # `param_dim` indexes the full parameter layout [N, in, out] (expert axis first).
+        # In per-expert loading, leading axis is absent ([in, out]).
+        # Therefore we need to shift the dimensions by 1 to the left so that sharding operations can be applied to the inner dimensions.
+        #   param [N, in, out]  ↔  source [in, out]
+        #   Shard(param dim 1)  →  slice source dim 0
+        #   Shard(param dim 2)  →  slice source dim 1
+        planned_ops_by_source_dim = [[] for _ in source_shape]
+        for mesh_dim, _, param_dim in normalized_dim_placements:
+            if param_dim > 0:
+                source_dim = param_dim - 1
+                sub_mesh = self._get_sub_mesh(mesh_dim)
+                rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
+                planned_ops_by_source_dim[source_dim].append((rank, world_size))
+
+        intervals_by_source_dim = [[(0, size)] for size in source_shape]
+        for source_dim, planned_ops in enumerate(planned_ops_by_source_dim):
+            intervals = intervals_by_source_dim[source_dim]
+            for rank, world_size in planned_ops:
+                intervals = self._apply_contiguous_shard(intervals, rank, world_size)
+            intervals_by_source_dim[source_dim] = intervals
+
+        slice_parts = []
+        for intervals in intervals_by_source_dim:
+            start, end = intervals[0] if intervals else (0, 0)
+            slice_parts.append(slice(start, end))
+
+        return source[tuple(slice_parts)].to(device=device, dtype=dtype)
 
     def _apply_strided_shard(
         self, intervals: list[tuple[int, int]], rank: int, world_size: int, split_factor: int
