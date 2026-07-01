@@ -64,13 +64,12 @@ class DeepGEMM:
     transform_weights_for_mega_moe: Callable
     get_symm_buffer_for_mega_moe: Callable
     fp8_fp4_mega_moe: Callable
-    # M/K-dimension alignment for TMA-based contiguous grouped GEMM. Sourced from
-    # `get_mk_alignment_for_contiguous_layout()` at load time. The kernel exposes a
-    # `set_mk_alignment_for_contiguous_layout` setter, but we don't call it: the
-    # build-time default (128) was empirically the best across MoE workloads
-    # (bench showed kernel-recommended 240 is slower and 256 doesn't even compile).
-    # Same stance as vLLM, which caches and never sets it.
-    m_alignment: int
+    # M/K-dimension alignment for TMA-based contiguous grouped GEMM. The kernel
+    # exposes a `set_mk_alignment_for_contiguous_layout` setter but we don't call
+    # it: 128 was empirically the best across MoE workloads (bench showed the
+    # kernel-recommended 240 is slower and 256 doesn't compile). Same stance as
+    # vLLM, which caches and never sets it.
+    m_alignment: int = 128
 
 
 @functools.cache
@@ -122,7 +121,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     transform_sf_into_required_layout = getattr(kernel, "transform_sf_into_required_layout", None)
     transform_weights_for_mega_moe = getattr(kernel, "transform_weights_for_mega_moe", None)
     get_symm_buffer_for_mega_moe = getattr(kernel, "get_symm_buffer_for_mega_moe", None)
-    get_mk_alignment = getattr(kernel, "get_mk_alignment_for_contiguous_layout", None)
     fp8_fp4_mega_moe = getattr(kernel, "fp8_fp4_mega_moe", None)
 
     missing = [
@@ -137,7 +135,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
             ("transform_sf_into_required_layout", transform_sf_into_required_layout),
             ("transform_weights_for_mega_moe", transform_weights_for_mega_moe),
             ("get_symm_buffer_for_mega_moe", get_symm_buffer_for_mega_moe),
-            ("get_mk_alignment_for_contiguous_layout", get_mk_alignment),
             ("fp8_fp4_mega_moe", fp8_fp4_mega_moe),
         ]
         if attr is None
@@ -148,6 +145,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
             f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
             f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
+
     return DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
         grouped_fp8_fp4_matmul_nt=grouped_fp8_fp4_matmul_nt,
@@ -159,7 +157,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         transform_weights_for_mega_moe=transform_weights_for_mega_moe,
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
-        m_alignment=int(get_mk_alignment()),
     )
 
 
@@ -270,8 +267,7 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
       - `float8_e8m0fnu` on SM90: SM90 dispatch only accepts FP32 SFs, so cast
         UE8M0 → FP32 (exact upcast — UE8M0 is the biased-exponent half of a
         pow-of-2 FP32, so `.float()` rebuilds the original FP32 scale exactly).
-      - `float32`: per-token / per-block SFs from `per_token_cast_to_fp8` or
-        on-disk weights — round to UE8M0 on SM100 (see `_ceil_to_ue8m0`).
+      - `float32`: per-token / per-block SFs — round to UE8M0 on SM100.
       - `int32`: already-packed UE8M0 — pass through.
 
     When `expected_mn` is set and the SF's M-dim is smaller (block-quantized
