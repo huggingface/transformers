@@ -13,19 +13,27 @@
 # limitations under the License.
 
 import os
-import socket
 
 import torch
+import torch.distributed as dist
 from datasets import load_dataset
 from accelerate import ParallelismConfig
-from transformers import AutoModelForCausalLM, AutoConfig
-from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers import AutoModelForCausalLM, AutoConfig, AutoTokenizer
 
 from peft import get_peft_model
-from trl import ModelConfig, ScriptArguments, SFTConfig, SFTTrainer, TrlParser, get_peft_config
+from trl import ModelConfig, ScriptArguments, SFTConfig, TrlParser, get_peft_config
 
 
 def main(script_args, training_args, model_args):
+    if not dist.is_initialized():
+        backend = dist.Backend.default_device_backend_map.get("neuron")
+        dist.init_process_group(backend=backend)
+    rank = dist.get_rank()
+
+    def log(msg):
+        if rank == 0:
+            print(msg, flush=True)
+
     # ---------------------------------------------------------------------------
     # Tensor Parallelism
     # ---------------------------------------------------------------------------
@@ -76,23 +84,76 @@ def main(script_args, training_args, model_args):
         print("Compiling model")
         model = torch.compile(model, backend="neuron")
 
+    device = torch.device("neuron")
+    model = model.to(device)
     model.train()
 
-    # model.to("neuron")
+    # ---------------------------------------------------------------------------
+    # Dataset
+    # ---------------------------------------------------------------------------
+    tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, trust_remote_code=True)
+    if not tokenizer.pad_token:
+        tokenizer.pad_token = tokenizer.eos_token
 
-    training_args.loss_type = "nll"
+    log("Loading and packing dataset")
+    raw = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
+    max_len = training_args.max_length or 1024
 
-    dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
+    all_tokens = []
+    for example in raw[script_args.dataset_train_split]:
+        if "messages" in example:
+            text = tokenizer.apply_chat_template(example["messages"], tokenize=False)
+        elif "text" in example:
+            text = example["text"]
+        else:
+            continue
+        all_tokens.extend(tokenizer.encode(text, add_special_tokens=True))
+        all_tokens.append(tokenizer.eos_token_id)
 
-    trainer = SFTTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=dataset[script_args.dataset_train_split],
-        eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+    n_seqs = len(all_tokens) // (max_len + 1)
+    packed = torch.tensor(all_tokens[: n_seqs * (max_len + 1)]).view(n_seqs, max_len + 1)
+    log(f"Packed {n_seqs} sequences of length {max_len}")
+
+    # Shard across data-parallel ranks
+    world_size = dist.get_world_size()
+    dp_size = world_size // tp_size
+    dp_rank = rank // tp_size
+    rows_per_dp = len(packed) // dp_size
+    local_data = packed[dp_rank * rows_per_dp : (dp_rank + 1) * rows_per_dp]
+
+    # ---------------------------------------------------------------------------
+    # Optimizer & training loop
+    # ---------------------------------------------------------------------------
+    optimizer = torch.optim.AdamW(
+        [p for p in model.parameters() if p.requires_grad],
+        lr=training_args.learning_rate,
+        foreach=False,
     )
 
-    trainer.train()
-    trainer.save_model(training_args.output_dir)
+    batch_size = training_args.per_device_train_batch_size
+    grad_accum = training_args.gradient_accumulation_steps
+    max_steps = training_args.max_steps if training_args.max_steps > 0 else 100
+
+    step = 0
+    for i in range(0, rows_per_dp, batch_size * grad_accum):
+        optimizer.zero_grad()
+        for j in range(grad_accum):
+            idx = i + j * batch_size
+            if idx >= rows_per_dp:
+                break
+            batch = local_data[idx : idx + batch_size]
+            inputs = batch[:, :-1].to(device)
+            labels = batch[:, 1:].to(device)
+            loss = model(inputs, labels=labels).loss
+            (loss / grad_accum).backward()
+        optimizer.step()
+        step += 1
+        if step % training_args.logging_steps == 0:
+            log(f"step={step}/{max_steps} loss={loss.item():.4f}")
+        if 0 < max_steps <= step:
+            break
+
+    dist.destroy_process_group()
 
 
 if __name__ == "__main__":
