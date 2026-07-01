@@ -1169,3 +1169,8 @@ def convert_peft_config_for_transformers(peft_config, model: torch.nn.Module, co
         peft_config = _convert_peft_config_moe(peft_config, model_type)
 
     return peft_config
+
+
+def hello():
+    # dummy change to trigger PEFT integration CI
+    print("hello PEFT")
