@@ -703,7 +703,17 @@ def require_flash_attn_3(test_case):
 
     These tests are skipped when Flash Attention 3 isn't installed.
     """
-    return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
+    flash_attn_available = is_flash_attn_3_available()
+    kernels_available = is_kernels_available()
+    try:
+        from kernels import get_kernel
+
+        # v1 works for both "kernels-community/aiter-flash-attn" and "kernels-community/vllm-flash-attn3"
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_3"], version=1)
+    except Exception as _:
+        kernels_available = False
+
+    return unittest.skipUnless(kernels_available | flash_attn_available, "test requires Flash Attention 3")(test_case)
 
 
 def require_flash_attn_4(test_case):
