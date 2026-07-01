@@ -444,7 +444,10 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
         spatial_merge_size = inputs.get("merge_sizes", 1)
 
     inputs["cu_seqlens"] = get_vision_cu_seqlens(grid_thw)
-    inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size)
+    # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
+    # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
+    include_temporal = _find_submodule_attr(model, "axis_dim") is not None
+    inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
 
     window_size = _find_submodule_attr(model, "window_size")
     patch_size = _find_submodule_attr(model, "patch_size")
