@@ -28,6 +28,7 @@ from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import 
     SkipDescriptor,
     get_heterogeneous_modeling_spec,
 )
+from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByAttributeValue
 
 
 if TYPE_CHECKING:
@@ -206,7 +207,7 @@ def _patch_layer_forward_for_attention_mask_selection(
     @wraps(orig_forward)
     def _patched_forward(self, *args, **kwargs):
         attention_mask = kwargs.get("attention_mask")
-        if isinstance(attention_mask, dict):
+        if isinstance(attention_mask, AttentionMasksByAttributeValue):
             kwargs["attention_mask"] = attention_mask[mask_key]
         return orig_forward(*args, **kwargs)
 

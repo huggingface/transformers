@@ -1096,6 +1096,12 @@ class Cache:
             )
         self.layers = layers if layers is not None else []
         self.layer_class_to_replicate = layer_class_to_replicate
+        # Some construction paths provide layers that already contain KV state.
+        self._updated_kv_layer_indices = {
+            layer_idx
+            for layer_idx, layer in enumerate(self.layers)
+            if isinstance(layer, CacheLayerMixin) and layer.get_seq_length() > 0
+        }
         self.offloading = offloading
         if self.offloading:
             self.only_non_sliding = offload_only_non_sliding
@@ -1172,6 +1178,9 @@ class Cache:
             self.prefetch(layer_idx + 1, self.only_non_sliding)
 
         keys, values = self.layers[layer_idx].update(key_states, value_states, *args, **kwargs)
+
+        if key_states.shape[-2] > 0:
+            self._updated_kv_layer_indices.add(layer_idx)
 
         if self.offloading:
             self.offload(layer_idx, self.only_non_sliding)
@@ -1276,8 +1285,14 @@ class Cache:
             # Init the layer
             layer.lazy_initialization(fake_kv_tensor, fake_kv_tensor)
 
-    def get_seq_length(self, layer_idx: int = 0) -> int:
-        """Returns the sequence length of the cache for the given layer."""
+    def get_seq_length(self, layer_idx: int | None = None) -> int:
+        """Returns the sequence length of the cache for the given layer, or the lowest-index updated KV layer when omitted."""
+        if layer_idx is None:
+            layer_idx = next(
+                (idx for idx in range(len(self.layers)) if idx in self._updated_kv_layer_indices),
+                0,
+            )
+
         if layer_idx >= len(self.layers):
             return 0
 
@@ -1299,6 +1314,10 @@ class Cache:
                 )
 
         return self.layers[layer_idx].get_seq_length()
+
+    def get_updated_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
+        """Returns the first provided KV layer index that has received a non-empty update."""
+        return next((layer_idx for layer_idx in layer_indices if layer_idx in self._updated_kv_layer_indices), None)
 
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """
@@ -1376,6 +1395,7 @@ class Cache:
         """Recursively reset all layers tensors"""
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].reset()
+        self._updated_kv_layer_indices.clear()
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorder the cache for beam search"""
@@ -1824,9 +1844,13 @@ class EncoderDecoderCache(Cache):
         """
         return len(self.self_attention_cache)
 
-    def get_seq_length(self, layer_idx: int = 0) -> int:
+    def get_seq_length(self, layer_idx: int | None = None) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         return self.self_attention_cache.get_seq_length(layer_idx)
+
+    def get_updated_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
+        """Returns the first provided self-attention KV layer index that has received a non-empty update."""
+        return self.self_attention_cache.get_updated_kv_layer_idx(layer_indices)
 
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
@@ -1880,6 +1904,10 @@ class EncoderDecoderCache(Cache):
     @property
     def is_sliding(self):
         return self.self_attention_cache.is_sliding
+
+    @property
+    def is_linear(self):
+        return self.self_attention_cache.is_linear
 
     @property
     def is_compileable(self) -> bool:

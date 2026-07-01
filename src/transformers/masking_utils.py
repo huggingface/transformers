@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Any
 
 import torch
 import torch.nn.functional as F
 
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
+from .integrations.heterogeneity.masking_utils import (
+    AttentionMasksByAttributeValue,
+    create_attention_masks_by_attribute_value,
+)
 from .utils import is_torch_xpu_available, logging
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_tracing
@@ -787,6 +790,24 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor | N
     return packed_sequence_mask
 
 
+def _get_mask_layer_idx(past_key_values: Cache | None, *, is_sliding: bool) -> int:
+    if past_key_values is None:
+        return 0
+
+    candidate_indices = [
+        layer_idx
+        for layer_idx, (layer_is_linear, layer_is_sliding) in enumerate(
+            zip(past_key_values.is_linear, past_key_values.is_sliding)
+        )
+        if not layer_is_linear and layer_is_sliding == is_sliding
+    ]
+    if not candidate_indices:
+        return 0
+
+    updated_layer_idx = past_key_values.get_updated_kv_layer_idx(candidate_indices)
+    return candidate_indices[0] if updated_layer_idx is None else updated_layer_idx
+
+
 def _preprocess_mask_arguments(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -945,10 +966,7 @@ def create_causal_mask(
         )
 
     # If we have an hybrid cache structure, here we want to create the mask for the full layers
-    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(False)
-    else:
-        layer_idx = 0
+    layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=False)
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -1052,10 +1070,7 @@ def create_bidirectional_mask(
             useful to easily overlay another mask on top, for example for image tokens handling.
     """
     # If we have an hybrid cache structure, here we want to create the mask for the full layers
-    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(False)
-    else:
-        layer_idx = 0
+    layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=False)
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
@@ -1125,8 +1140,7 @@ def create_sliding_window_causal_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
-    layer_idx: int | None = None,
-) -> torch.Tensor | BlockMask | None:
+) -> torch.Tensor | BlockMask | AttentionMasksByAttributeValue | None:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
     of attention pattern was mostly democratized by Mistral. If `past_key_values` has an hybrid cache structure, this
@@ -1158,35 +1172,25 @@ def create_sliding_window_causal_mask(
             A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
-        layer_idx (`int`, optional):
-            The layer index to create the mask for.
     """
     attribute_name = "sliding_window"
+    mask_kwargs = {
+        "config": config,
+        "inputs_embeds": inputs_embeds,
+        "attention_mask": attention_mask,
+        "past_key_values": past_key_values,
+        "position_ids": position_ids,
+        "or_mask_function": or_mask_function,
+        "and_mask_function": and_mask_function,
+        "block_sequence_ids": block_sequence_ids,
+    }
     if config.is_heterogeneous and attribute_name in config.per_layer_attributes:
-        return _create_heterogeneous_mask_dict(
+        return create_attention_masks_by_attribute_value(
             _create_sliding_window_causal_mask,
-            "sliding_window",
-            config=config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-            or_mask_function=or_mask_function,
-            and_mask_function=and_mask_function,
-            block_sequence_ids=block_sequence_ids,
+            attribute_name,
+            **mask_kwargs,
         )
-    else:
-        return _create_sliding_window_causal_mask(
-            config=config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-            or_mask_function=or_mask_function,
-            and_mask_function=and_mask_function,
-            block_sequence_ids=block_sequence_ids,
-            layer_idx=layer_idx,
-        )
+    return _create_sliding_window_causal_mask(**mask_kwargs)
 
 
 def _create_sliding_window_causal_mask(
@@ -1212,12 +1216,9 @@ def _create_sliding_window_causal_mask(
             and_mask_function=and_mask_function,
         )
 
-    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
+    # If no layer is specified, select a sliding-attention layer, preferring one with cached KV state.
     if layer_idx is None:
-        if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-            layer_idx = past_key_values.is_sliding.index(True)
-        else:
-            layer_idx = 0
+        layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=True)
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -1321,10 +1322,7 @@ def create_bidirectional_sliding_window_mask(
             useful to easily overlay another mask on top, for example for image tokens handling.
     """
     # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
-    if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(True)
-    else:
-        layer_idx = 0
+    layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=True)
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
@@ -1385,8 +1383,7 @@ def create_chunked_causal_mask(
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
-    layer_idx: int | None = None,
-) -> torch.Tensor | BlockMask | None:
+) -> torch.Tensor | BlockMask | AttentionMasksByAttributeValue | None:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
     of attention pattern was mostly democratized by Llama4. If `past_key_values` has an hybrid cache structure, this
@@ -1414,33 +1411,24 @@ def create_chunked_causal_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
-        layer_idx (`int`, optional):
-            The layer index to create the mask for.
     """
     attribute_name = "attention_chunk_size"
+    mask_kwargs = {
+        "config": config,
+        "inputs_embeds": inputs_embeds,
+        "attention_mask": attention_mask,
+        "past_key_values": past_key_values,
+        "position_ids": position_ids,
+        "or_mask_function": or_mask_function,
+        "and_mask_function": and_mask_function,
+    }
     if config.is_heterogeneous and attribute_name in config.per_layer_attributes:
-        return _create_heterogeneous_mask_dict(
+        return create_attention_masks_by_attribute_value(
             _create_chunked_causal_mask,
-            "attention_chunk_size",
-            config=config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-            or_mask_function=or_mask_function,
-            and_mask_function=and_mask_function,
+            attribute_name,
+            **mask_kwargs,
         )
-    else:
-        return _create_chunked_causal_mask(
-            config=config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-            or_mask_function=or_mask_function,
-            and_mask_function=and_mask_function,
-            layer_idx=layer_idx,
-        )
+    return _create_chunked_causal_mask(**mask_kwargs)
 
 
 def _create_chunked_causal_mask(
@@ -1455,10 +1443,7 @@ def _create_chunked_causal_mask(
 ) -> torch.Tensor | BlockMask | None:
     # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
     if layer_idx is None:
-        if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-            layer_idx = past_key_values.is_sliding.index(True)
-        else:
-            layer_idx = 0
+        layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=True)
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -1534,22 +1519,6 @@ def _create_chunked_causal_mask(
         device=device,
     )
     return causal_mask
-
-
-def _create_heterogeneous_mask_dict(
-    create_mask_fn: Callable, attribute_name: str, config: PreTrainedConfig, *args: Any, **kwargs: Any
-) -> dict[int, torch.Tensor]:
-    mask_dict = {}
-    for layer_idx in range(config.num_hidden_layers):
-        layer_config = config.per_layer_config[layer_idx]
-        attribute_value = getattr(layer_config, attribute_name)
-        if attribute_value is None:
-            continue
-
-        if attribute_value not in mask_dict:
-            mask_dict[attribute_value] = create_mask_fn(layer_config, *args, **kwargs, layer_idx=layer_idx)
-
-    return mask_dict
 
 
 LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {

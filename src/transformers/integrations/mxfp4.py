@@ -672,10 +672,14 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
             continue
         if module.__class__.__name__ == "GptOssExperts" and not quantization_config.dequantize:
             if model.config.is_heterogeneous:
-                layer_idx_str = next((p for p in reversed(module_name.split(".")) if p.isdigit()), None)
-                if layer_idx_str is None:
-                    raise ValueError(f"Could not find layer index in module name: {module_name}")
-                layer_idx = int(layer_idx_str)
+                module_path_parts = module_name.split(".")
+                try:
+                    layer_idx_component = module_path_parts.index("layers") + 1
+                    layer_idx = int(module_path_parts[layer_idx_component])
+                except (ValueError, IndexError):
+                    raise ValueError(
+                        f"Expected GptOssExperts experts under a `layers.<index>` path, got: {module_name}"
+                    ) from None
                 config = model.config.per_layer_config[layer_idx]
             else:
                 config = model.config
