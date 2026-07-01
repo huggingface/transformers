@@ -240,3 +240,7 @@ model = Qwen3TTSForConditionalGeneration.from_pretrained(
 ## Qwen3TTSTokenizerSingleCodebookDecoderDiTModel
 
 [[autodoc]] Qwen3TTSTokenizerSingleCodebookDecoderDiTModel
+
+## Qwen3TTSTokenizerSingleCodebookFeatureExtractor
+
+[[autodoc]] Qwen3TTSTokenizerSingleCodebookFeatureExtractor

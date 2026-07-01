@@ -261,8 +261,8 @@ IGNORE_NON_TESTED = (
         "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model.
         "Qwen3TTSTalkerForConditionalGeneration",  # Building part of bigger (tested) model.
         "Qwen3TTSForConditionalGeneration",  # Not a regular model. Tested through integration tests.
-        "Qwen3TTSTokenizerV1DecoderBigVGANModel",  # Building part of bigger (tested) model.
-        "Qwen3TTSTokenizerV1DecoderDiTModel",  # Building part of bigger (tested) model.
+        "Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel",  # Building part of bigger (tested) model.
+        "Qwen3TTSTokenizerSingleCodebookDecoderDiTModel",  # Building part of bigger (tested) model.
         "Qwen3TTSTokenizerV1Model",  # Building part of bigger (tested) model.
         "Qwen3TTSTokenizerV2DecoderBlock",  # Building part of bigger (tested) model.
         "Qwen3TTSTokenizerV2TransformerModel",  # Building part of bigger (tested) model.
