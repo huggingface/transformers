@@ -1,8 +1,15 @@
 import gc
+import tempfile
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
-from transformers.testing_utils import backend_empty_cache, require_compressed_tensors, require_torch, torch_device
+from transformers.testing_utils import (
+    backend_empty_cache,
+    require_compressed_tensors,
+    require_torch,
+    require_torch_accelerator,
+    torch_device,
+)
 from transformers.utils import is_torch_available
 
 
@@ -87,11 +94,9 @@ class CompressedTensorsTest(unittest.TestCase):
         perplexity = torch.exp(outputs.loss)
         self.assertLessEqual(perplexity, expected_perplexity)
 
+    @require_torch_accelerator
     def test_tinyllama_fp8_uses_fp8_kernel(self):
         """Verify FP8 model uses CompressedTensorsFP8Linear on GPU/XPU."""
-        if not (torch.cuda.is_available() or (hasattr(torch, "xpu") and torch.xpu.is_available())):
-            self.skipTest("FP8 kernel path requires GPU or XPU")
-
         from transformers.integrations.compressed_tensors_fp8 import CompressedTensorsFP8Linear
 
         model = AutoModelForCausalLM.from_pretrained(self.tinyllama_fp8, device_map="auto")
@@ -104,6 +109,43 @@ class CompressedTensorsTest(unittest.TestCase):
             if isinstance(module, CompressedTensorsFP8Linear):
                 self.assertEqual(module.weight.dtype, torch.float8_e4m3fn)
                 break
+
+    def test_tinyllama_fp8_dequantize(self):
+        """With `dequantize=True` the FP8 kernel path is disabled and weights are dequantized."""
+        from transformers.integrations.compressed_tensors_fp8 import CompressedTensorsFP8Linear
+
+        quantization_config = CompressedTensorsConfig(dequantize=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.tinyllama_fp8, device_map="auto", quantization_config=quantization_config
+        )
+
+        fp8_count = sum(1 for m in model.modules() if isinstance(m, CompressedTensorsFP8Linear))
+        self.assertEqual(fp8_count, 0, "dequantize=True should NOT use CompressedTensorsFP8Linear")
+
+        # Model should still generate sensible outputs after dequantization.
+        tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_fp8)
+        inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            outputs = model(**inputs, labels=inputs["input_ids"])
+        self.assertLessEqual(torch.exp(outputs.loss), 20.0)
+
+    @require_torch_accelerator
+    def test_tinyllama_fp8_save_reload(self):
+        """An FP8 model should still work after saving and reloading."""
+        model = AutoModelForCausalLM.from_pretrained(self.tinyllama_fp8, device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_fp8)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            del model
+            gc.collect()
+            backend_empty_cache(torch_device)
+
+            reloaded = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map="auto")
+            inputs = tokenizer(self.prompt, return_tensors="pt").to(reloaded.device)
+            with torch.no_grad():
+                outputs = reloaded(**inputs, labels=inputs["input_ids"])
+            self.assertLessEqual(torch.exp(outputs.loss), 20.0)
 
     def test_non_fp8_model_unaffected(self):
         """Verify non-FP8 models (e.g. INT8) do not use the FP8 kernel path."""

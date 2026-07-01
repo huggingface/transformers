@@ -227,44 +227,26 @@ class CompressedTensorsFp8Dequantize(ConversionOps):
 
     @staticmethod
     def _scale_pattern_for(weight_pattern: str) -> str:
-        # Strip the optional ``$`` regex anchor so we can match the underlying name.
+        # ``foo.weight`` -> ``foo.weight_scale``, keeping any trailing ``$`` anchor.
         anchored = weight_pattern.endswith("$")
         base = weight_pattern[:-1] if anchored else weight_pattern
-        if base.endswith(".weight"):
-            scale = base[: -len(".weight")] + ".weight_scale"
-        elif base == "weight":
-            scale = "weight_scale"
-        else:
-            scale = base + "_scale"
+        scale = base[: -len(".weight")] + ".weight_scale"
         return scale + "$" if anchored else scale
 
     @staticmethod
     def _dequantize_one(quantized: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-        quantized_float = quantized.to(torch.float32)
-        if scale.dim() == 1:
-            # Per-channel: (N,) scale, broadcast over the K dimension.
-            dequantized = quantized_float * scale.unsqueeze(-1)
-        else:
-            # Per-tensor scalar or already-broadcastable scale.
-            dequantized = quantized_float * scale
-        return dequantized.to(torch.bfloat16)
+        # Per-channel scale is 1D (N,) and broadcasts over the K dimension; per-tensor
+        # scale is a scalar. unsqueeze handles the 1D case, scalars broadcast as-is.
+        scale = scale.unsqueeze(-1) if scale.dim() == 1 else scale
+        return (quantized.to(torch.float32) * scale).to(torch.bfloat16)
 
     def convert(self, input_dict, full_layer_name=None, **kwargs):
         weight_keys = [k for k in input_dict if "weight" in k and "weight_scale" not in k]
-        scale_keys = [k for k in input_dict if "weight_scale" in k]
 
-        # No scale alongside (e.g. RMSNorm weights that match the weight pattern but
-        # ship no scale) — pass the weight through untouched.
-        if not scale_keys:
-            weight_key = weight_keys[0]
-            return {full_layer_name: input_dict[weight_key]}
-
-        # Dequantize each weight pattern that has a sibling scale, pairing per-expert
-        # tensors by index and preserving the list structure for downstream merge ops.
-        # Scale entries are dropped so only weights remain in the chain.
         result: dict = {}
         for key in weight_keys:
             scale_key = self._scale_pattern_for(key)
+            # RMSNorm-like weights match the pattern but ship no scale: pass through.
             if scale_key not in input_dict:
                 result[key] = input_dict[key]
                 continue
