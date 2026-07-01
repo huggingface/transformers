@@ -17,9 +17,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
-from torch import nn
-
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -47,11 +46,11 @@ from ..qwen3.modeling_qwen3 import (
     Qwen3PreTrainedModel,
     Qwen3RMSNorm,
 )
-from ..voxtral.modeling_voxtral import VoxtralMultiModalProjector
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeRotaryEmbedding,
     Qwen3OmniMoeTalkerTextMLP,
 )
+from ..voxtral.modeling_voxtral import VoxtralMultiModalProjector
 from .generation_qwen3_tts import Qwen3TTSGenerationMixin
 
 
@@ -898,6 +897,7 @@ class Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(Qwen3TTSPreTraine
         )
         model_kwargs["generation_steps"] = outputs.generation_steps
         return model_kwargs
+
 
 class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerationMixin):
     """Main Qwen3-TTS model for text-to-acoustic generation."""

@@ -11,8 +11,8 @@ from torch.nn.utils.rnn import pad_sequence
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import PreTrainedModel
 from ...modeling_rope_utils import RopeParameters
+from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.hub import cached_file
 from ..cohere.modeling_cohere import CohereRotaryEmbedding
@@ -33,7 +33,6 @@ from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecVectorQuanti
 logger = logging.get_logger(__name__)
 
 # Configuration classes for Qwen3TTSTokenizerSingleCodebook
-
 
 
 @strict
@@ -395,6 +394,7 @@ class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel(Qwen2_5OmniToken2WavBig
                 for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)
             ]
         )
+
 
 def _v1_get_T_after_cnn(L_in, dilation=1):
     for padding, kernel_size, stride in [(1, 3, 1), (1, 3, 2)]:
@@ -1023,10 +1023,12 @@ class Qwen3TTSTokenizerSingleCodebookEncoder(Qwen3TTSTokenizerSingleCodebookEnco
         return indices, indice_lens
 
     def quantize_features(self, input_features, feature_attention_mask):
-        input_features = input_features.to(dtype=self.tokenizer.conv1.weight.dtype, device=self.tokenizer.conv1.weight.device)
+        input_features = input_features.to(
+            dtype=self.tokenizer.conv1.weight.dtype, device=self.tokenizer.conv1.weight.device
+        )
         feature_attention_mask = feature_attention_mask.to(device=input_features.device)
         mels = [
-            features[:, : feature_length]
+            features[:, :feature_length]
             for features, feature_length in zip(input_features, feature_attention_mask.sum(dim=-1).tolist())
         ]
         return self.mel2code(mels)
@@ -1415,6 +1417,8 @@ class Qwen3TTSTokenizerSingleCodebookDecoder(Qwen2_5OmniToken2WavModel):
         )
         waveform = self.bigvgan(mel_spectrogram)
         return waveform
+
+
 __all__ = [
     "Qwen3TTSTokenizerSingleCodebookPreTrainedModel",
     "Qwen3TTSTokenizerSingleCodebookDecoderPreTrainedModel",

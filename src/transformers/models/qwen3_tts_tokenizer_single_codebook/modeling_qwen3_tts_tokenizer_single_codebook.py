@@ -6,9 +6,11 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
 import operator
+from collections.abc import Callable
 from dataclasses import dataclass
-from functools import cache
+from functools import cached_property
 from itertools import accumulate
+from typing import Optional
 
 import numpy as np
 import torch
@@ -18,8 +20,10 @@ from torch.nn import Parameter
 from torch.nn.utils.rnn import pad_sequence
 
 from ...modeling_outputs import ModelOutput
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging
+from ...utils.generic import maybe_autocast
 from ...utils.hub import cached_file
 from .configuration_qwen3_tts_tokenizer_single_codebook import (
     Qwen3TTSTokenizerSingleCodebookConfig,
@@ -390,8 +394,13 @@ class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel(Qwen3TTSTokenizerSingle
         super().__init__(config)
         self.num_residual_blocks = len(config.resblock_kernel_sizes)
         self.num_upsample_layers = len(config.upsample_rates)
-        # Override conv_pre: kernel 5 + padding 2 instead of parent's kernel 7 + padding 3
-        self.conv_pre = nn.Conv1d(config.mel_dim, config.upsample_initial_channel, 5, 1, padding=2)
+        self.conv_pre = nn.Conv1d(
+            config.mel_dim,
+            config.upsample_initial_channel,
+            config.conv_pre_kernel_size,
+            config.conv_pre_stride,
+            padding=config.conv_pre_padding,
+        )
 
         # Removing extra ModuleList breaks official state dict
         ups = [
@@ -409,14 +418,13 @@ class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel(Qwen3TTSTokenizerSingle
             for layer_idx, (stride, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes))
         ]
         self.ups = nn.ModuleList(ups)
-        # Override resblocks: SingleCodebook uses causal AMPBlock with causal_type parameter
         self.resblocks = nn.ModuleList(
             [
                 Qwen3TTSTokenizerSingleCodebookAMPBlock(
                     config.upsample_initial_channel // (2 ** (layer_idx + 1)),
                     kernel_size,
                     dilation,
-                    "1" if layer_idx > 1 else "2",
+                    config.resblock_causal_types[layer_idx],
                 )
                 for layer_idx in range(self.num_upsample_layers)
                 for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)
@@ -464,11 +472,8 @@ class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel(Qwen3TTSTokenizerSingle
         return torch.clamp(output_waveform, min=-1.0, max=1.0).squeeze().cpu()
 
 
-#  VQ core classes (inference-only port of core_vq.py)
-
-
 class Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(nn.Module):
-    """Codebook with Euclidean distance (inference subset)."""
+    """Codebook with Euclidean distance."""
 
     def __init__(
         self,
@@ -481,38 +486,41 @@ class Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(nn.Module):
         threshold_ema_dead_code=2.0,
     ):
         super().__init__()
-        self.decay = decay
+        embed = torch.zeros(codebook_size, dim)
         self.codebook_size = codebook_size
+        self.register_buffer("inited", torch.Tensor([not kmeans_init]))
+        self.register_buffer("cluster_size", torch.zeros(codebook_size))
+        self.register_buffer("embed", embed)
+        self.register_buffer("embed_avg", embed.clone())
+        self.decay = decay
         self.kmeans_iters = kmeans_iters
         self.epsilon = epsilon
         self.threshold_ema_dead_code = threshold_ema_dead_code
-        # buffers are held by DistributedResidualVectorQuantization and passed at call-time
-        self.inited = None
-        self.cluster_size = None
-        self.embed = None
-        self.embed_avg = None
 
-    def quantize(self, x):
+    def quantize(self, hidden_states):
         embed = self.embed.t()
-        dist = -(x.pow(2).sum(1, keepdim=True) - 2 * x @ embed + embed.pow(2).sum(0, keepdim=True))
-        return dist.max(dim=-1).indices
+        scaled_states = hidden_states.pow(2).sum(1, keepdim=True)
+        dist = -(scaled_states - 2 * hidden_states @ embed + embed.pow(2).sum(0, keepdim=True))
+        embed_ind = dist.max(dim=-1).indices
+        return embed_ind
 
-    def dequantize(self, embed_ind):
-        return F.embedding(embed_ind, self.embed)
+    def encode(self, hidden_states):
+        shape = hidden_states.shape
+        hidden_states = hidden_states.reshape((-1, shape[-1]))
+        embed_ind = self.quantize(hidden_states)
+        embed_ind = embed_ind.view(*shape[:-1])
+        return embed_ind
 
-    def encode(self, x, buffers):
-        self.inited, self.cluster_size, self.embed, self.embed_avg = buffers
-        shape = x.shape
-        x = x.reshape(-1, x.shape[-1])
-        embed_ind = self.quantize(x)
-        return embed_ind.view(*shape[:-1])
-
-    def decode(self, embed_ind, buffers):
-        self.inited, self.cluster_size, self.embed, self.embed_avg = buffers
-        return self.dequantize(embed_ind)
+    def decode(self, embed_ind):
+        quantized = F.embedding(embed_ind.to(self.embed.device), self.embed)
+        return quantized
 
 
 class Qwen3TTSTokenizerSingleCodebookVectorQuantization(nn.Module):
+    """
+    Vector quantization implementation. Currently supports only euclidean distance.
+    """
+
     def __init__(
         self,
         dim,
@@ -530,7 +538,7 @@ class Qwen3TTSTokenizerSingleCodebookVectorQuantization(nn.Module):
         requires_projection = _codebook_dim != dim
         self.project_in = nn.Linear(dim, _codebook_dim) if requires_projection else nn.Identity()
         self.project_out = nn.Linear(_codebook_dim, dim) if requires_projection else nn.Identity()
-        self._codebook = Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(
+        self.codebook = Qwen3TTSTokenizerSingleCodebookEuclideanCodebook(
             dim=_codebook_dim,
             codebook_size=codebook_size,
             kmeans_init=kmeans_init,
@@ -541,52 +549,38 @@ class Qwen3TTSTokenizerSingleCodebookVectorQuantization(nn.Module):
         )
         self.codebook_size = codebook_size
 
-    def encode(self, x, buffers):
+    def encode(self, x):
         x = self.project_in(x)
-        return self._codebook.encode(x, buffers)
+        return self.codebook.encode(x)
 
-    def decode(self, embed_ind, buffers):
-        quantize = self._codebook.decode(embed_ind, buffers)
+    def decode(self, embed_ind):
+        quantize = self.codebook.decode(embed_ind)
         return self.project_out(quantize)
 
 
 class Qwen3TTSTokenizerSingleCodebookDistributedRVQ(nn.Module):
-    """Distributed residual VQ (inference subset of DistributedResidualVectorQuantization)."""
+    """Residual VQ with one codebook per quantizer."""
 
     def __init__(self, *, num_quantizers, quantize_dropout=False, rand_num_quant=None, **kwargs):
         super().__init__()
-        codebook_size = kwargs["codebook_size"]
-        codebook_dim = kwargs.get("codebook_dim") or kwargs["dim"]
-        kmeans_init = kwargs["kmeans_init"]
-
-        if isinstance(kmeans_init, bool):
-            if not kmeans_init:
-                embed = torch.empty(num_quantizers, codebook_size, codebook_dim)
-                nn.init.kaiming_uniform_(embed)
-                inited = True
-            else:
-                embed = torch.zeros(num_quantizers, codebook_size, codebook_dim)
-                inited = False
-        else:
+        if not isinstance(kwargs["kmeans_init"], bool):
             raise TypeError("kmeans_init should be bool")
-
-        self.register_buffer("inited", torch.Tensor([[inited]] * num_quantizers))
-        self.register_buffer("cluster_size", torch.zeros(num_quantizers, codebook_size))
-        self.register_buffer("embed", embed)
-        self.register_buffer("embed_avg", embed.clone())
 
         self.layers = nn.ModuleList(
             [Qwen3TTSTokenizerSingleCodebookVectorQuantization(**kwargs) for _ in range(num_quantizers)]
         )
+        if not kwargs["kmeans_init"]:
+            for layer in self.layers:
+                nn.init.kaiming_uniform_(layer.codebook.embed)
+                layer.codebook.embed_avg.copy_(layer.codebook.embed)
 
     def encode(self, x, n_q=None):
         residual = x
         all_indices = []
         n_q = n_q or len(self.layers)
-        for i, layer in enumerate(self.layers[:n_q]):
-            buffers = [self.inited[i], self.cluster_size[i], self.embed[i], self.embed_avg[i]]
-            indices = layer.encode(residual, buffers)
-            quantized = layer.decode(indices, buffers)
+        for layer in self.layers[:n_q]:
+            indices = layer.encode(residual)
+            quantized = layer.decode(indices)
             residual = residual - quantized
             all_indices.append(indices)
         return torch.stack(all_indices)
@@ -594,8 +588,7 @@ class Qwen3TTSTokenizerSingleCodebookDistributedRVQ(nn.Module):
     def decode(self, q_indices):
         quantized_out = torch.tensor(0.0, device=q_indices.device)
         for i, indices in enumerate(q_indices):
-            buffers = [self.inited[i], self.cluster_size[i], self.embed[i], self.embed_avg[i]]
-            quantized_out = quantized_out + self.layers[i].decode(indices, buffers)
+            quantized_out = quantized_out + self.layers[i].decode(indices)
         return quantized_out
 
 
@@ -1074,60 +1067,12 @@ class Qwen3TTSTokenizerSingleCodebookEncoderPreTrainedModel(Qwen3TTSTokenizerSin
     _can_compile_fullgraph = False
 
 
-@cache
-def _v1_mel_filters(device, n_mels: int) -> torch.Tensor:
-    """Compute mel filterbank using audio_utils (Whisper-compatible: 16kHz, n_fft=400)."""
-    from ...audio_utils import mel_filter_bank
-
-    if n_mels not in {80, 128}:
-        raise ValueError(f"Unsupported n_mels: {n_mels}")
-    mel = mel_filter_bank(
-        num_frequency_bins=1 + 400 // 2,
-        num_mel_filters=n_mels,
-        min_frequency=0.0,
-        max_frequency=8000.0,
-        sampling_rate=16000,
-        norm="slaney",
-        mel_scale="slaney",
-    )
-    return torch.from_numpy(mel).to(device)
-
-
-def _v1_log_mel_spectrogram(audio, n_mels=80, padding=0, device=None):
-    if not torch.is_tensor(audio):
-        audio = torch.from_numpy(audio)
-    if device is not None:
-        audio = audio.to(device)
-    if padding > 0:
-        audio = F.pad(audio, (0, padding))
-    window = torch.hann_window(400).to(audio.device)
-    stft = torch.stft(audio, 400, 160, window=window, return_complex=True)
-    magnitudes = stft[..., :-1].abs() ** 2
-    filters = _v1_mel_filters(audio.device, n_mels)
-    mel_spec = filters @ magnitudes
-    log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-    log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
-    log_spec = (log_spec + 4.0) / 4.0
-    return log_spec
-
-
 def _v1_get_T_after_cnn(L_in, dilation=1):
     for padding, kernel_size, stride in [(1, 3, 1), (1, 3, 2)]:
         L_out = L_in + 2 * padding - dilation * (kernel_size - 1) - 1
         L_out = 1 + L_out // stride
         L_in = L_out
     return L_out
-
-
-def _v1_get_mel_audio(audio, padding=False, audio_vq_ds_rate=1, n_mels=128):
-    audio_len = len(audio)
-    if padding:
-        reduction = 160 * 2 * audio_vq_ds_rate
-        audio_pad = math.ceil(audio_len / reduction) * reduction - audio_len
-        mel = _v1_log_mel_spectrogram(audio, n_mels=n_mels, padding=audio_pad)
-    else:
-        mel = _v1_log_mel_spectrogram(audio, n_mels=n_mels)
-    return mel
 
 
 class Qwen3TTSTokenizerSingleCodebookEncoder(Qwen3TTSTokenizerSingleCodebookEncoderPreTrainedModel):
@@ -1153,17 +1098,8 @@ class Qwen3TTSTokenizerSingleCodebookEncoder(Qwen3TTSTokenizerSingleCodebookEnco
             audio_vq_pe=config.audio_vq_pe,
             audio_vq_ds_rate=config.audio_vq_ds_rate,
         )
-        self.padding = True
         self.audio_vq_ds_rate = self.tokenizer.audio_vq_ds_rate
         self.post_init()
-
-    def speech2mel(self, speechs):
-        return [
-            _v1_get_mel_audio(speech, padding=self.padding, audio_vq_ds_rate=self.audio_vq_ds_rate)
-            .to(speech.dtype)
-            .to(self.tokenizer.conv1.weight.device)
-            for speech in speechs
-        ]
 
     def mel2code(self, mels):
         audio_mellens = [mel.size(-1) for mel in mels]
@@ -1181,8 +1117,15 @@ class Qwen3TTSTokenizerSingleCodebookEncoder(Qwen3TTSTokenizerSingleCodebookEnco
         indices = pad_sequence(torch.split(indices, indice_lens), batch_first=True, padding_value=0)
         return indices, indice_lens
 
-    def quantize_speech(self, speechs):
-        mels = self.speech2mel(speechs)
+    def quantize_features(self, input_features, feature_attention_mask):
+        input_features = input_features.to(
+            dtype=self.tokenizer.conv1.weight.dtype, device=self.tokenizer.conv1.weight.device
+        )
+        feature_attention_mask = feature_attention_mask.to(device=input_features.device)
+        mels = [
+            features[:, :feature_length]
+            for features, feature_length in zip(input_features, feature_attention_mask.sum(dim=-1).tolist())
+        ]
         return self.mel2code(mels)
 
 
@@ -1243,6 +1186,8 @@ class Qwen3TTSTokenizerSingleCodebookModel(Qwen3TTSTokenizerSingleCodebookPreTra
     def encode(
         self,
         input_values: torch.Tensor,
+        input_features: torch.Tensor,
+        feature_attention_mask: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         return_dict: bool | None = None,
     ) -> tuple | Qwen3TTSTokenizerSingleCodebookEncoderOutput:
@@ -1250,16 +1195,22 @@ class Qwen3TTSTokenizerSingleCodebookModel(Qwen3TTSTokenizerSingleCodebookPreTra
         Encodes input audio waveforms into discrete codes, x-vectors, and reference mel spectrograms.
 
         Args:
+            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, feature_sequence_length)`):
+                Log-mel features extracted by [`Qwen3TTSTokenizerSingleCodebookFeatureExtractor`].
+            feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+                Mask indicating valid log-mel feature frames.
             input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                Float values of the input audio waveform.
+                Float values of the input audio waveform, used for x-vector/reference-mel extraction.
             padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Binary mask where 1 = valid, 0 = padding.
             return_dict (`bool`, *optional*):
                 Whether to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+        if padding_mask is None:
+            padding_mask = torch.ones_like(input_values, dtype=torch.bool)
         wavs = [value[: mask.sum()] for value, mask in zip(input_values, padding_mask)]
-        codes, codes_lens = self.encoder.quantize_speech(wavs)
+        codes, codes_lens = self.encoder.quantize_features(input_features, feature_attention_mask)
         codes = [c[:length] for c, length in zip(codes, codes_lens)]
 
         xvectors = []
@@ -1305,13 +1256,88 @@ class Qwen3TTSTokenizerSingleCodebookModel(Qwen3TTSTokenizerSingleCodebookPreTra
         return Qwen3TTSTokenizerSingleCodebookDecoderOutput(audio_values=audio_values)
 
 
-class CausalConv1d(nn.Conv1d):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.causal_padding = self.dilation[0] * (self.kernel_size[0] - 1)
+class Qwen3TTSTokenizerSingleCodebookConv1dCacheLayer:
+    def __init__(self):
+        self.cache: torch.Tensor | None = None
+        self.is_initialized: bool = False
 
-    def forward(self, x):
-        return self._conv_forward(F.pad(x, [self.causal_padding, 0]), self.weight, self.bias)
+    def lazy_initialization(self, hidden_states, conv_module):
+        self.left_pad = conv_module.left_pad
+        self.in_channels = conv_module.in_channels
+        self.cache = torch.zeros(
+            hidden_states.shape[0],
+            self.in_channels,
+            self.left_pad,
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cache)
+
+        self.is_initialized = True
+
+    def update(self, hidden_states, conv_module=None):
+        if not self.is_initialized and conv_module is not None:
+            self.lazy_initialization(hidden_states, conv_module)
+        elif not self.is_initialized:
+            raise ValueError(
+                "Qwen3TTSTokenizerSingleCodebookConv1dCacheLayer is not initialized. Make sure to provide conv_module to the update method."
+            )
+
+        # get the padding states
+        if self.left_pad > 0:
+            shortfall = max(0, self.left_pad - hidden_states.shape[-1])
+            if shortfall > 0:
+                padding_states = torch.cat([self.cache[:, :, -shortfall:], hidden_states], dim=-1)
+            else:
+                padding_states = hidden_states[:, :, -self.left_pad :]
+        else:
+            padding_states = torch.empty(
+                hidden_states.shape[0], self.in_channels, 0, dtype=hidden_states.dtype, device=hidden_states.device
+            )
+
+        current_cache = self.cache.clone()
+        self.cache.copy_(padding_states)
+
+        return current_cache
+
+
+class Qwen3TTSTokenizerSingleCodebookConv1dPaddingCache:
+    def __init__(self):
+        self.layers = {}
+
+    def update(self, hidden_states, cache_key, conv_module):
+        if cache_key not in self.layers:
+            self.layers[cache_key] = Qwen3TTSTokenizerSingleCodebookConv1dCacheLayer()
+
+        padding_states = self.layers[cache_key].update(hidden_states, conv_module)
+        padded_hidden_states = torch.cat([padding_states, hidden_states], dim=-1)
+        return padded_hidden_states
+
+
+class CausalConv1d(nn.Conv1d):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, bias=True):
+        # Non-streaming use: cache_key is unused (padding_cache is always None in forward).
+        super().__init__(in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, bias=bias)
+        self.cache_key = ""
+
+    @cached_property
+    def left_pad(self):
+        effective_kernel_size = (self.kernel_size[0] - 1) * self.dilation[0] + 1
+        return effective_kernel_size - self.stride[0]
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        padding_cache: Qwen3TTSTokenizerSingleCodebookConv1dPaddingCache | None = None,
+    ) -> torch.Tensor:
+        if padding_cache is not None:
+            x = padding_cache.update(x, self.cache_key, self)
+        else:
+            x = nn.functional.pad(x, (self.left_pad, 0))
+
+        return super().forward(x)
 
 
 class Qwen3TTSTokenizerSingleCodebookAMPBlock(torch.nn.Module):
@@ -1393,25 +1419,68 @@ class Qwen3TTSTokenizerSingleCodebookDecoderPreTrainedModel(Qwen3TTSTokenizerSin
     _can_compile_fullgraph = False
 
 
-class Qwen3TTSTokenizerSingleCodebookDecoderDiTRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+class Qwen3TTSTokenizerSingleCodebookDiTRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, dim, base=10000):
+    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig, device=None):
         super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
-    def forward(self, x):
-        batch_size, seq_len = x.shape[0], x.shape[1]
-        t = torch.arange(seq_len, device=x.device)
-        device_type = x.device.type if x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = t.unsqueeze(1).float() @ self.inv_freq.unsqueeze(0).float()
-            freqs = torch.stack((freqs, freqs), dim=-1)
-            freqs = freqs.reshape(*freqs.shape[:-2], -1)
-            freqs = freqs.repeat(batch_size, *([1] * freqs.dim()))
-            cos = freqs.cos()
-            sin = freqs.sin()
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Qwen3TTSTokenizerSingleCodebookDiTConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -1869,8 +1938,8 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen3TTSTokenizerSingleCode
 
         self.text_embed = DiTCodecEmbedding(config.num_embeds, config.emb_dim, config.repeats)
         self.input_embed = DiTInputEmbedding(config)
-        # Uses a simpler rotary embedding that takes only x (no position_ids)
-        self.rotary_embed = Qwen3TTSTokenizerSingleCodebookDecoderDiTRotaryEmbedding(config.head_dim)
+        # Interleaved (GPT-J style) rotary, reused from Cohere; same config-driven init as the base DiT rotary
+        self.rotary_embed = Qwen3TTSTokenizerSingleCodebookDiTRotaryEmbedding(config)
 
         self.hidden_size = config.hidden_size
         self.layers = config.num_hidden_layers
