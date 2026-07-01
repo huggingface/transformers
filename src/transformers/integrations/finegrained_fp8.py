@@ -83,14 +83,24 @@ class FineGrainedFP8:
     moe_fused_batched: Callable
 
 
-@functools.cache
+_FINEGRAINED_FP8: FineGrainedFP8 | None = None
+
+
 def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     """
     Load the finegrained-fp8 Triton kernel once and return its entry points.
 
+    Cached in the module-global ``_FINEGRAINED_FP8`` (populated on first call) instead of via
+    ``functools.cache``: Dynamo traces through the lru wrapper and warns on every compiled call,
+    whereas a plain global check/return traces cleanly.
+
     Raises `ImportError` if the `kernels` package is missing, or the kernel or required
     symbols cannot be found.
     """
+    global _FINEGRAINED_FP8
+    if _FINEGRAINED_FP8 is not None:
+        return _FINEGRAINED_FP8
+
     if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(
@@ -130,13 +140,14 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
 
-    return FineGrainedFP8(
+    _FINEGRAINED_FP8 = FineGrainedFP8(
         matmul_2d=matmul_2d,
         matmul_batched=matmul_batched,
         matmul_grouped=matmul_grouped,
         moe_fused_grouped=moe_fused_grouped,
         moe_fused_batched=moe_fused_batched,
     )
+    return _FINEGRAINED_FP8
 
 
 @torch._dynamo.allow_in_graph
