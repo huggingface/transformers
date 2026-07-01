@@ -3652,10 +3652,9 @@ class GenerationMixin(ContinuousMixin):
                 else:
                     # Greedy decoding: with ensemble weight, compare against argmax(v) instead of argmax(p)
                     if assistant_ensemble_weight is not None and candidate_logits is not None:
-                        w = assistant_ensemble_weight
                         p_probs = new_logits[:, :candidate_length, :].softmax(dim=-1)
                         q_probs = candidate_logits.softmax(dim=-1)
-                        nu_probs = w * p_probs + (1.0 - w) * q_probs
+                        nu_probs = assistant_ensemble_weight * p_probs + (1.0 - assistant_ensemble_weight) * q_probs
                         # For the bonus token position (candidate_length), use target distribution
                         bonus_logits = new_logits[:, candidate_length:, :]
                         selected_tokens = torch.cat([nu_probs.argmax(dim=-1), bonus_logits.argmax(dim=-1)], dim=-1)
@@ -3898,8 +3897,7 @@ def _speculative_sampling(
 
     # Compute acceptance ratio. With ensemble weight w < 1, use v(x)/q(x) = 1 - w + w*(p(x)/q(x))
     if assistant_ensemble_weight is not None:
-        w = assistant_ensemble_weight
-        probability_ratio = 1.0 - w + w * (p_i / q_i)
+        probability_ratio = 1.0 - assistant_ensemble_weight + assistant_ensemble_weight * (p_i / q_i)
     else:
         probability_ratio = p_i / q_i
 
@@ -3926,8 +3924,9 @@ def _speculative_sampling(
             # distribution as [p-q]+, so we compute the standard fallback directly for numerical stability.
             p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0)
             p_prime_sum = p_prime.sum()
-            if p_prime_sum <= torch.finfo(p_prime.dtype).tiny:
-                # Fallback to target distribution if residual is numerically zero
+            if assistant_ensemble_weight is not None and p_prime_sum <= torch.finfo(p_prime.dtype).tiny:
+                # Ensemble-only fallback: when `p ≈ q` the residual is numerically zero, so we fall
+                # back to the target distribution. Standard (lossless) SD keeps its original behavior.
                 p_prime = p_n_plus_1
             else:
                 p_prime.div_(p_prime_sum)
