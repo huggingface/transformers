@@ -117,6 +117,8 @@
         title: Kernels
       - local: kernel_doc/loading_kernels
         title: Loading kernels
+      - local: kernel_doc/writing_kernels
+        title: Writing kernels
       title: Kernels
     - local: perf_torch_compile
       title: torch.compile
@@ -219,8 +221,10 @@
       title: Accelerator selection
     - local: accelerate
       title: Accelerate
+    - local: ddp
+      title: DDP
     - local: fsdp
-      title: FullyShardedDataParallel
+      title: FSDP2
     - local: deepspeed
       title: DeepSpeed ZeRO
     - local: deepspeed_alst
@@ -243,7 +247,7 @@
     - local: perf_hardware
       title: Building a GPU workstation
     - local: model_memory_anatomy
-      title: Model training anatomy
+      title: GPU memory usage
     title: Hardware
   title: Training
 - isExpanded: false
@@ -1119,14 +1123,18 @@
         title: MusicGen
       - local: model_doc/musicgen_melody
         title: MusicGen Melody
+      - local: model_doc/nemotron3_5_asr
+        title: Nemotron 3.5 ASR
       - local: model_doc/nemotron_asr_streaming
-        title: NemotronAsrStreaming
+        title: Nemotron ASR Streaming
       - local: model_doc/parakeet
         title: Parakeet
       - local: model_doc/pe_audio
         title: PE Audio
       - local: model_doc/pop2piano
         title: Pop2Piano
+      - local: model_doc/qwen3_asr
+        title: Qwen3 ASR
       - local: model_doc/seamless_m4t
         title: Seamless-M4T
       - local: model_doc/seamless_m4t_v2
@@ -1165,6 +1173,8 @@
         title: Whisper
       - local: model_doc/xcodec
         title: X-Codec
+      - local: model_doc/xcodec2
+        title: X-Codec2
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2
