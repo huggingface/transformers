@@ -73,13 +73,23 @@ class DeepGEMM:
     m_alignment: int
 
 
-@functools.cache
+_DEEPGEMM: DeepGEMM | None = None
+
+
 def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     """Load DeepGEMM once; raise `ImportError` if env or any required symbol is missing.
 
     `requires_sm100` raises a Blackwell-specific error for callers (FP4 / Mega MoE)
     that won't work on Hopper, instead of the generic SM90+ message.
+
+    Cached in the module-global ``_DEEPGEMM`` instead of ``functools.cache`` (which Dynamo warns
+    about tracing through). The env/arch checks run on every non-compiled call — not only the
+    first — so a stricter ``requires_sm100`` request is still validated after a permissive load.
     """
+    global _DEEPGEMM
+    if _DEEPGEMM is not None:
+        return _DEEPGEMM
+
     if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(
@@ -148,7 +158,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
             f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
             f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
-    return DeepGEMM(
+    _DEEPGEMM = DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
         grouped_fp8_fp4_matmul_nt=grouped_fp8_fp4_matmul_nt,
         grouped_fp8_fp4_matmul_nn=grouped_fp8_fp4_matmul_nn,
@@ -161,6 +171,7 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
         m_alignment=int(get_mk_alignment()),
     )
+    return _DEEPGEMM
 
 
 @torch._dynamo.allow_in_graph

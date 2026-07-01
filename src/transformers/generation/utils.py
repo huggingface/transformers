@@ -2156,21 +2156,31 @@ class GenerationMixin(ContinuousMixin):
         return can_compile
 
     @contextmanager
-    def _optimize_model_for_decode(self: "GenerativePreTrainedModel"):
+    def _optimize_model_for_decode(self: "GenerativePreTrainedModel", batch_size: int):
         original_experts_implementation = self.config._experts_implementation
-        # On non-CPU devices, 'batched_mm' can trade off a bit of memory (by duplicating selected experts weights)
-        # for much better speed during decoding, especially for smaller inputs. On CPU, grouped_mm is usually better.
-        if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
+        # On non-CPU devices, the "batched" kernels run the per-token hidden-state projections as
+        # GEMVs (one routed row at a time) instead of grouped GEMMs — much faster for small decode
+        # inputs, but past ~32 sequences the grouped GEMMs amortize and win, so cap the switch at
+        # batch_size <= 32.
+        should_switch = (
+            isinstance(original_experts_implementation, str)
+            and original_experts_implementation.endswith("grouped_mm")
+            and self.device.type != "cpu"
+            and batch_size <= 32
+        )
+        if should_switch:
+            decode_experts_implementation = original_experts_implementation.replace("grouped_mm", "batched_mm")
             logger.info_once(
-                "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "
-                "If you experience any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
+                f"We will be switching to '{decode_experts_implementation}' for the decoding stage as it is much "
+                f"more performant than '{original_experts_implementation}' on smaller inputs. If you experience "
+                "any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
             )
-            self.set_experts_implementation("batched_mm")
+            self.set_experts_implementation(decode_experts_implementation)
 
         try:
             yield
         finally:
-            if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
+            if should_switch:
                 self.set_experts_implementation(original_experts_implementation)
 
     def _get_deprecated_gen_repo(
@@ -2855,7 +2865,7 @@ class GenerationMixin(ContinuousMixin):
                 model_inputs = self.prepare_inputs_for_generation(
                     input_ids, next_sequence_length=next_sequence_length, **model_kwargs
                 )
-                with self._optimize_model_for_decode():
+                with self._optimize_model_for_decode(input_ids.shape[0]):
                     outputs = model_forward(**model_inputs, return_dict=True)
             prefill_consumed = True
             model_kwargs = self._update_model_kwargs_for_generation(

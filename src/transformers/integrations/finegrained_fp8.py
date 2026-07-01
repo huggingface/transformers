@@ -76,19 +76,31 @@ def _first_attr(obj, *names):
 class FineGrainedFP8:
     """Entry points exposed by the `kernels-community/finegrained-fp8` Triton kernel."""
 
-    matmul: Callable
-    batched_matmul: Callable
-    grouped_matmul: Callable
+    matmul_2d: Callable
+    matmul_batched: Callable
+    matmul_grouped: Callable
+    moe_fused_grouped: Callable
+    moe_fused_batched: Callable
 
 
-@functools.cache
+_FINEGRAINED_FP8: FineGrainedFP8 | None = None
+
+
 def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     """
     Load the finegrained-fp8 Triton kernel once and return its entry points.
 
+    Cached in the module-global ``_FINEGRAINED_FP8`` (populated on first call) instead of via
+    ``functools.cache``: Dynamo traces through the lru wrapper and warns on every compiled call,
+    whereas a plain global check/return traces cleanly.
+
     Raises `ImportError` if the `kernels` package is missing, or the kernel or required
     symbols cannot be found.
     """
+    global _FINEGRAINED_FP8
+    if _FINEGRAINED_FP8 is not None:
+        return _FINEGRAINED_FP8
+
     if not is_torchdynamo_compiling():
         if not is_kernels_available():
             raise ImportError(
@@ -104,16 +116,20 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             "has a build matching the current torch/CUDA."
         )
 
-    matmul = getattr(kernel, "matmul_2d", None)
-    batched_matmul = getattr(kernel, "matmul_batched", None)
-    grouped_matmul = getattr(kernel, "matmul_grouped", None)
+    matmul_2d = getattr(kernel, "matmul_2d", None)
+    matmul_batched = getattr(kernel, "matmul_batched", None)
+    matmul_grouped = getattr(kernel, "matmul_grouped", None)
+    moe_fused_grouped = getattr(kernel, "moe_fused_grouped", None)
+    moe_fused_batched = getattr(kernel, "moe_fused_batched", None)
 
     missing = [
         name
         for name, attr in [
-            ("matmul_2d", matmul),
-            ("matmul_batched", batched_matmul),
-            ("matmul_grouped", grouped_matmul),
+            ("matmul_2d", matmul_2d),
+            ("matmul_batched", matmul_batched),
+            ("matmul_grouped", matmul_grouped),
+            ("moe_fused_grouped", moe_fused_grouped),
+            ("moe_fused_batched", moe_fused_batched),
         ]
         if attr is None
     ]
@@ -124,11 +140,14 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
             f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
 
-    return FineGrainedFP8(
-        matmul=matmul,
-        batched_matmul=batched_matmul,
-        grouped_matmul=grouped_matmul,
+    _FINEGRAINED_FP8 = FineGrainedFP8(
+        matmul_2d=matmul_2d,
+        matmul_batched=matmul_batched,
+        matmul_grouped=matmul_grouped,
+        moe_fused_grouped=moe_fused_grouped,
+        moe_fused_batched=moe_fused_batched,
     )
+    return _FINEGRAINED_FP8
 
 
 @torch._dynamo.allow_in_graph
@@ -192,7 +211,7 @@ def finegrained_fp8_linear(
     dispatcher routes FP4 (``int8``-packed) weights automatically.
     """
     finegrained_fp8 = load_finegrained_fp8_kernel()
-    output = finegrained_fp8.matmul(
+    output = finegrained_fp8.matmul_2d(
         input,
         weight,
         weight_scale_inv,
@@ -388,7 +407,7 @@ class FP8GroupedLinear(FP8Linear):
         offsets = torch.arange(1, self.n_groups + 1, device=x.device, dtype=torch.int32) * tokens_per_group
 
         finegrained_fp8 = load_finegrained_fp8_kernel()
-        y = finegrained_fp8.grouped_matmul(
+        y = finegrained_fp8.matmul_grouped(
             x,
             w,
             scale_inv,
@@ -437,7 +456,7 @@ def fp8_batched_mm_experts_forward(
     weight_scale_down = to_local(self.down_proj_scale_inv)
 
     # --- Up projection per expert (FP8 batched) ---
-    proj_out = finegrained_fp8.batched_matmul(
+    proj_out = finegrained_fp8.matmul_batched(
         selected_hidden_states,
         weight_up,
         weight_scale_up,
@@ -454,7 +473,7 @@ def fp8_batched_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 batched) ---
-    proj_out = finegrained_fp8.batched_matmul(
+    proj_out = finegrained_fp8.matmul_batched(
         proj_out,
         weight_down,
         weight_scale_down,
@@ -525,7 +544,7 @@ def fp8_grouped_mm_experts_forward(
     weight_scale_down = to_local(self.down_proj_scale_inv)
 
     # --- Up projection per expert (FP8 grouped) ---
-    proj_out = finegrained_fp8.grouped_matmul(
+    proj_out = finegrained_fp8.matmul_grouped(
         selected_hidden_states_g,
         weight_up,
         weight_scale_up,
@@ -543,7 +562,7 @@ def fp8_grouped_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 grouped) ---
-    proj_out = finegrained_fp8.grouped_matmul(
+    proj_out = finegrained_fp8.matmul_grouped(
         proj_out,
         weight_down,
         weight_scale_down,
@@ -568,6 +587,77 @@ def fp8_grouped_mm_experts_forward(
     final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
+
+
+_FUSED_ACT_FNS = {"silu": "silu", "swish": "silu", "gelu": "gelu", "relu": "relu"}
+
+
+def _fp8_fused_mm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    *,
+    op_name: str,
+) -> torch.Tensor:
+    if self.activation_scheme == "static":
+        raise NotImplementedError(
+            f"{op_name} experts dispatch does not support activation_scheme='static'; "
+            "use the default eager dispatch or activation_scheme='dynamic'."
+        )
+    if not self.has_gate:
+        raise NotImplementedError(
+            f"{op_name} experts dispatch requires gated experts (a combined gate_up projection)."
+        )
+
+    act_name = _first_attr(self.config, "hidden_activation", "hidden_act")
+    act_fn = _FUSED_ACT_FNS.get(act_name)
+    if act_fn is None:
+        raise NotImplementedError(
+            f"{op_name} experts dispatch supports act_fn in {{silu, gelu, relu}}, got {act_name!r}."
+        )
+
+    finegrained_fp8 = load_finegrained_fp8_kernel()
+    fused_op = getattr(finegrained_fp8, op_name, None)
+    if fused_op is None:
+        raise NotImplementedError(
+            f"the loaded finegrained_fp8 kernel has no {op_name!r}; update the "
+            "kernels-community/finegrained-fp8 kernel."
+        )
+
+    out = fused_op(
+        hidden_states,
+        top_k_index,
+        top_k_weights,
+        to_local(self.gate_up_proj),
+        to_local(self.down_proj),
+        to_local(self.gate_up_proj_scale_inv),
+        to_local(self.down_proj_scale_inv),
+        self.block_size,
+        act_fn=act_fn,
+        swiglu_alpha=self.swiglu_alpha,
+        swiglu_limit=self.swiglu_limit,
+        simulate_unfused=True,
+    )
+    return out
+
+
+def fp8_fused_grouped_mm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    return _fp8_fused_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights, op_name="moe_fused_grouped")
+
+
+def fp8_fused_batched_mm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    return _fp8_fused_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights, op_name="moe_fused_batched")
 
 
 class FP8Experts(nn.Module):
@@ -608,10 +698,9 @@ class FP8Experts(nn.Module):
         self.activation_scheme = activation_scheme
         self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
+        self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
-        self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
-        self.limit = getattr(config, "swiglu_limit", None)
 
         # Expert weight precision is FP8 by default; DeepSeek V4-style models declare
         # `config.expert_dtype = "fp4"` for FP4-packed expert weights. FP4 storage:
@@ -658,14 +747,14 @@ class FP8Experts(nn.Module):
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
         if self.swiglu_alpha is not None:
-            # Clamped SwiGLU-OAI gate (same math as the model's non-quantized experts).
+            # Clamped/scaled SwiGLU gate (same math as the model's non-quantized experts).
             gate = gate.clamp(max=self.swiglu_limit)
             up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
             glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
             return (up + 1.0) * glu
-        elif self.limit is not None:
-            gate = gate.clamp(max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
+        elif self.swiglu_limit is not None:
+            gate = gate.clamp(max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.act_fn(gate) * up
 
     def forward(
@@ -737,6 +826,8 @@ class FP8ExpertsInterface(ExpertsInterface):
         "batched_mm": fp8_batched_mm_experts_forward,
         "grouped_mm": fp8_grouped_mm_experts_forward,
         "deepgemm": deepgemm_fp8_fp4_experts_forward,
+        "fused_grouped_mm": fp8_fused_grouped_mm_experts_forward,
+        "fused_batched_mm": fp8_fused_batched_mm_experts_forward,
         "deepgemm_megamoe": deepgemm_fp8_fp4_megamoe_experts_forward,
     }
 

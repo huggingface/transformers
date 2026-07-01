@@ -20,7 +20,6 @@ Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 
 from __future__ import annotations
 
-import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -45,14 +44,23 @@ class SonicMoE:
     moe_general_routing_inputs: Callable
 
 
-@functools.cache
+_SONICMOE: SonicMoE | None = None
+
+
 def _load_sonicmoe_kernel() -> SonicMoE:
     """
     Load sonic-moe once and return its entry points.
 
+    Cached in the module-global ``_SONICMOE`` (populated on first call) instead of via
+    ``functools.cache``: Dynamo traces through the lru wrapper and warns on every compiled call,
+    whereas a plain global check/return traces cleanly.
+
     Raises `ImportError` if CUDA/hardware requirements are not met, or if the kernel or
     required symbols are not found.
     """
+    global _SONICMOE
+    if _SONICMOE is not None:
+        return _SONICMOE
 
     if not torch.cuda.is_available():
         raise ImportError(
@@ -91,10 +99,11 @@ def _load_sonicmoe_kernel() -> SonicMoE:
             "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
         )
 
-    return SonicMoE(
+    _SONICMOE = SonicMoE(
         activation_type_enum=activation_type_enum,
         moe_general_routing_inputs=moe_general_routing_inputs,
     )
+    return _SONICMOE
 
 
 @torch._dynamo.allow_in_graph
@@ -154,6 +163,12 @@ def sonicmoe_experts_forward(
         raise ValueError("sonicmoe requires gated experts (has_gate=True)")
     if hidden_states.device.type != "cuda":
         raise ValueError("sonicmoe requires CUDA device")
+    if getattr(self, "swiglu_alpha", None) is not None or getattr(self, "swiglu_limit", None) is not None:
+        raise NotImplementedError(
+            "sonicmoe experts dispatch does not support clamped/scaled SwiGLU (swiglu_alpha / "
+            "swiglu_limit); use the grouped_mm or deepgemm experts implementation, or open a PR to add "
+            "it in the sonic-moe repo."
+        )
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
