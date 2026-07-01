@@ -240,7 +240,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
 
             dec = model.decode(audio_codes=audio_codes).audio_values
             n_recon = len(exp_recon)
-            torch.testing.assert_close(dec.squeeze().cpu()[:n_recon], exp_recon, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(dec.squeeze().cpu()[:n_recon], exp_recon, rtol=1e-6, atol=1e-6)
 
             # compare codec error
             codec_error = compute_rmse(inputs["input_values"], dec).item()
