@@ -24,6 +24,8 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 
+from parameterized import parameterized
+
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
@@ -63,6 +65,9 @@ SEQ_LEN = 64
 NUM_STEPS = 20
 LR = 3e-4
 SEED = 42
+DDP_FSDP_RTOL = 1e-5
+DDP_FSDP_ATOL = 1e-5
+
 FSDP_TOP_MODEL_NAMES = {
     # Models with `base_model_fsdp_plan` + head-class `_fsdp_plan` on this branch.
     "llama",
@@ -73,6 +78,12 @@ FSDP_TOP_MODEL_NAMES = {
 # =============================================================================
 # Distributed helpers (top-level for pickling by mp.spawn)
 # =============================================================================
+
+
+def _find_free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 
 def _get_distributed_device_type():
@@ -117,6 +128,28 @@ def _get_available_fsdp_workers():
     return backend_device_count(_get_distributed_device_type())
 
 
+def _set_determinism(seed):
+    torch.use_deterministic_algorithms(True)
+    if _get_distributed_device_type() == "cuda" and torch.cuda.is_available():
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
+    set_seed(seed)
+
+
+def _create_shared_tmpdir(rank):
+    if rank == 0:
+        tmpdir_obj = tempfile.TemporaryDirectory()
+        tmpdir_list = [tmpdir_obj.name]
+    else:
+        tmpdir_obj = None
+        tmpdir_list = [None]
+    dist.broadcast_object_list(tmpdir_list, src=0)
+    return tmpdir_list[0], tmpdir_obj
+
+
 def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_size, port, results_file):
     os.environ["WORLD_SIZE"] = str(world_size)
     os.environ["RANK"] = str(rank)
@@ -125,7 +158,6 @@ def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_si
     os.environ["MASTER_PORT"] = str(port)
 
     _set_determinism(SEED)
-
     dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
     _set_rank_device(rank)
 
@@ -156,19 +188,8 @@ def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_si
     dist.destroy_process_group()
 
 
-def _set_determinism(seed):
-    torch.use_deterministic_algorithms(True)
-    if _get_distributed_device_type() == "cuda" and torch.cuda.is_available():
-        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cuda.matmul.allow_tf32 = False
-        torch.backends.cudnn.allow_tf32 = False
-    set_seed(seed)
-
-
 # =============================================================================
-# Training & comparison helpers (top-level for pickling)
+# Training helpers (top-level for pickling)
 # =============================================================================
 
 
@@ -181,16 +202,19 @@ def _build_repeated_training_batches(config, device, num_steps):
     return [(input_ids, labels)] * num_steps
 
 
-def _create_shared_tmpdir(rank):
-    if rank == 0:
-        tmpdir_obj = tempfile.TemporaryDirectory()
-        tmpdir = tmpdir_obj.name
-        tmpdir_list = [tmpdir]
-    else:
-        tmpdir_obj = None
-        tmpdir_list = [None]
-    dist.broadcast_object_list(tmpdir_list, src=0)
-    return tmpdir_list[0], tmpdir_obj
+def _run_training_steps(model, optimizer, batches, *, track_grad_norms=True):
+    """Forward/backward/step over batches. Returns (losses, grad_norms)."""
+    losses, grad_norms = [], []
+    for input_ids, labels in batches:
+        optimizer.zero_grad()
+        loss = model(input_ids=input_ids, labels=labels, use_cache=False).loss
+        loss.backward()
+        if track_grad_norms:
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float("inf"))
+            grad_norms.append(grad_norm)
+        optimizer.step()
+        losses.append(loss.detach().item())
+    return losses, grad_norms
 
 
 def _gather_ddp_state_dict(model):
@@ -220,6 +244,25 @@ def _save_init_pretrained(rank, config, dtype):
     return tmpdir, tmpdir_obj
 
 
+def _load_fsdp_model_from_init_checkpoint(rank, config, dtype, *, distributed_config=None, tie_word_embeddings=None):
+    """Save deterministic init weights, load FSDP model, cleanup init tmpdir."""
+    if tie_word_embeddings is not None:
+        config.tie_word_embeddings = tie_word_embeddings
+
+    init_dir, init_tmpdir_obj = _save_init_pretrained(rank, config, dtype)
+    try:
+        _set_determinism(SEED)
+        kwargs = {}
+        if distributed_config is not None:
+            kwargs["distributed_config"] = distributed_config
+        model = AutoModelForCausalLM.from_pretrained(init_dir, **kwargs)
+        dist.barrier()
+        return model
+    finally:
+        if rank == 0 and init_tmpdir_obj is not None:
+            init_tmpdir_obj.cleanup()
+
+
 def _save_training_state(model, optimizer, training_state_dir):
     """Save optimizer (canonical DCP path) plus per-rank RNG for resume."""
     save_optimizer_distributed(model, optimizer, os.path.join(training_state_dir, "optim"))
@@ -239,6 +282,75 @@ def _load_training_state(model, optimizer, training_state_dir):
         _set_accelerator_rng_state(rng["accel"])
 
 
+def _checkpoint_and_resume(pre_model, pre_optimizer, dtype, distributed_config, lr):
+    """Save model+optimizer, scramble RNG, reload and restore training state."""
+    rank = dist.get_rank()
+    tmpdir, tmpdir_obj = _create_shared_tmpdir(rank)
+    try:
+        model_dir = os.path.join(tmpdir, "model")
+        training_state_dir = os.path.join(tmpdir, "training_state")
+
+        pre_model.save_pretrained(model_dir, is_main_process=(rank == 0))
+        _save_training_state(pre_model, pre_optimizer, training_state_dir)
+        dist.barrier()
+
+        # Intentionally scramble RNG to prove checkpoint restore works
+        _set_determinism(SEED + 1234)
+        resumed_model = AutoModelForCausalLM.from_pretrained(
+            model_dir, torch_dtype=dtype, distributed_config=distributed_config
+        )
+        resumed_model.train()
+        resumed_optimizer = torch.optim.Adam(resumed_model.parameters(), lr=lr)
+        _load_training_state(resumed_model, resumed_optimizer, training_state_dir)
+        dist.barrier()
+        return resumed_model, resumed_optimizer
+    finally:
+        if rank == 0:
+            tmpdir_obj.cleanup()
+
+
+def _assert_state_dicts_equal(before, after, *, rtol, atol, msg_prefix=""):
+    for key in before:
+        assert key in after, f"{msg_prefix}Key {key} missing after load"
+        torch.testing.assert_close(
+            before[key],
+            after[key],
+            rtol=rtol,
+            atol=atol,
+            msg=f"{msg_prefix}Weight mismatch for {key}",
+        )
+
+
+def _assert_ddp_fsdp_match(
+    ddp_losses, fsdp_losses, ddp_grad_norms, fsdp_grad_norms, ddp_state, fsdp_state, test_label
+):
+    for step in range(len(ddp_losses)):
+        torch.testing.assert_close(
+            torch.tensor(ddp_losses[step]),
+            torch.tensor(fsdp_losses[step]),
+            rtol=DDP_FSDP_RTOL,
+            atol=DDP_FSDP_ATOL,
+            msg=f"Loss mismatch at step {step}: DDP={ddp_losses[step]}, {test_label}={fsdp_losses[step]}",
+        )
+        torch.testing.assert_close(
+            torch.tensor(ddp_grad_norms[step]),
+            torch.tensor(fsdp_grad_norms[step]),
+            rtol=DDP_FSDP_RTOL,
+            atol=DDP_FSDP_ATOL,
+            msg=f"Grad norm mismatch at step {step}: DDP={ddp_grad_norms[step]}, {test_label}={fsdp_grad_norms[step]}",
+        )
+
+    for key in ddp_state:
+        assert key in fsdp_state, f"Key {key} missing from {test_label} state dict"
+        torch.testing.assert_close(
+            ddp_state[key],
+            fsdp_state[key],
+            rtol=DDP_FSDP_RTOL,
+            atol=DDP_FSDP_ATOL,
+            msg=f"Weight mismatch for {key}: DDP vs {test_label}",
+        )
+
+
 def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
     _set_determinism(SEED)
     model = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype).to(device)
@@ -250,18 +362,7 @@ def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
     ddp_model.train()
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=lr)
 
-    losses, grad_norms = [], []
-    for input_ids, labels in batches:
-        optimizer.zero_grad()
-        output = ddp_model(input_ids=input_ids, labels=labels, use_cache=False)
-        loss = output.loss
-        loss.backward()
-        grad_norm = torch.nn.utils.clip_grad_norm_(ddp_model.parameters(), max_norm=float("inf"))
-        optimizer.step()
-
-        losses.append(loss.detach().item())
-        grad_norms.append(grad_norm)
-
+    losses, grad_norms = _run_training_steps(ddp_model, optimizer, batches)
     state_dict = _gather_ddp_state_dict(ddp_model)
 
     del optimizer, ddp_model, model
@@ -281,75 +382,38 @@ def train_fsdp2(
     fsdp_cpu_offload=False,
     fsdp_mixed_precision=False,
 ):
-    # -- Phase 1: Pre-checkpoint run -- train only the first `checkpoint_step` steps, then save
-    _set_determinism(SEED)
     distributed_config = DistributedConfig(
         fsdp_size=dist.get_world_size(),
         fsdp_cpu_offload=fsdp_cpu_offload,
         fsdp_mixed_precision=fsdp_mixed_precision,
     )
+
+    # Phase 1: Pre-checkpoint run
+    _set_determinism(SEED)
     pre_ckpt_model = AutoModelForCausalLM.from_pretrained(
         init_model_dir, torch_dtype=dtype, distributed_config=distributed_config
     )
     pre_ckpt_model.train()
     pre_ckpt_optimizer = torch.optim.Adam(pre_ckpt_model.parameters(), lr=lr)
+    pre_ckpt_losses, pre_ckpt_grad_norms = _run_training_steps(
+        pre_ckpt_model, pre_ckpt_optimizer, batches[:checkpoint_step]
+    )
 
-    pre_ckpt_losses, pre_ckpt_grad_norms = [], []
-    for step in range(0, checkpoint_step):
-        input_ids, labels = batches[step]
-        pre_ckpt_optimizer.zero_grad()
-        output = pre_ckpt_model(input_ids=input_ids, labels=labels, use_cache=False)
-        loss = output.loss
-        loss.backward()
-        grad_norm = torch.nn.utils.clip_grad_norm_(pre_ckpt_model.parameters(), max_norm=float("inf"))
-        pre_ckpt_optimizer.step()
+    # Phase 2: Save checkpoint, then load into a fresh model
+    resumed_model, resumed_optimizer = _checkpoint_and_resume(
+        pre_ckpt_model, pre_ckpt_optimizer, dtype, distributed_config, lr
+    )
 
-        pre_ckpt_losses.append(loss.detach().item())
-        pre_ckpt_grad_norms.append(grad_norm)
+    # Phase 3: Post-checkpoint run
+    post_ckpt_losses, post_ckpt_grad_norms = _run_training_steps(
+        resumed_model, resumed_optimizer, batches[checkpoint_step:]
+    )
 
-    # -- Phase 2: Save checkpoint, then load into a fresh model
-    tmpdir, tmpdir_obj = _create_shared_tmpdir(rank)
-    try:
-        model_dir = os.path.join(tmpdir, "model")
-        training_state_dir = os.path.join(tmpdir, "training_state")
-
-        pre_ckpt_model.save_pretrained(model_dir, is_main_process=(rank == 0))
-        _save_training_state(pre_ckpt_model, pre_ckpt_optimizer, training_state_dir)
-        dist.barrier()
-
-        # Intentionally scramble RNG to prove checkpoint restore works
-        _set_determinism(SEED + 1234)
-        resumed_model = AutoModelForCausalLM.from_pretrained(
-            model_dir, torch_dtype=dtype, distributed_config=distributed_config
-        )
-        resumed_model.train()
-        resumed_optimizer = torch.optim.Adam(resumed_model.parameters(), lr=lr)
-
-        _load_training_state(resumed_model, resumed_optimizer, training_state_dir)
-        dist.barrier()
-    finally:
-        if rank == 0:
-            tmpdir_obj.cleanup()
-
-    # -- Phase 3: Post-checkpoint run -- continue training the remaining steps from the resumed model
-    post_ckpt_losses, post_ckpt_grad_norms = [], []
-    for step in range(checkpoint_step, len(batches)):
-        input_ids, labels = batches[step]
-        resumed_optimizer.zero_grad()
-        output = resumed_model(input_ids=input_ids, labels=labels, use_cache=False)
-        loss = output.loss
-        loss.backward()
-        grad_norm = torch.nn.utils.clip_grad_norm_(resumed_model.parameters(), max_norm=float("inf"))
-        resumed_optimizer.step()
-
-        post_ckpt_losses.append(loss.detach().item())
-        post_ckpt_grad_norms.append(grad_norm)
-
-    combined_losses = pre_ckpt_losses + post_ckpt_losses
-    combined_grad_norms = pre_ckpt_grad_norms + post_ckpt_grad_norms
-    combined_state_dict = gather_full_state_dict(resumed_model)
-
-    return combined_losses, combined_grad_norms, combined_state_dict
+    return (
+        pre_ckpt_losses + post_ckpt_losses,
+        pre_ckpt_grad_norms + post_ckpt_grad_norms,
+        gather_full_state_dict(resumed_model),
+    )
 
 
 # =============================================================================
@@ -363,27 +427,13 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
     device = _get_rank_device(rank)
     config = config_class.from_dict(config_dict)
-
     batches = _build_repeated_training_batches(config, device, 3)
-
     distributed_config = DistributedConfig(fsdp_size=dist.get_world_size())
 
-    init_tmpdir, init_tmpdir_obj = _save_init_pretrained(rank, config, torch.float32)
-    try:
-        _set_determinism(SEED)
-        model = AutoModelForCausalLM.from_pretrained(init_tmpdir, distributed_config=distributed_config)
-        dist.barrier()
-    finally:
-        if rank == 0 and init_tmpdir_obj is not None:
-            init_tmpdir_obj.cleanup()
+    model = _load_fsdp_model_from_init_checkpoint(rank, config, torch.float32, distributed_config=distributed_config)
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-
-    for input_ids, labels in batches:
-        optimizer.zero_grad()
-        output = model(input_ids=input_ids, labels=labels, use_cache=False)
-        output.loss.backward()
-        optimizer.step()
+    _run_training_steps(model, optimizer, batches, track_grad_norms=False)
 
     state_dict_before = gather_full_state_dict(model)
 
@@ -391,24 +441,19 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
     try:
         model.save_pretrained(tmpdir, is_main_process=(rank == 0))
         dist.barrier()
-
         new_model = AutoModelForCausalLM.from_pretrained(tmpdir, distributed_config=distributed_config)
         dist.barrier()
     finally:
         if rank == 0:
             tmpdir_obj.cleanup()
 
-    state_dict_after = gather_full_state_dict(new_model)
-
-    for key in state_dict_before:
-        assert key in state_dict_after, f"Key {key} missing after load"
-        torch.testing.assert_close(
-            state_dict_before[key],
-            state_dict_after[key],
-            rtol=0,
-            atol=0,
-            msg=f"Weight mismatch for {key} after save/load",
-        )
+    _assert_state_dicts_equal(
+        state_dict_before,
+        gather_full_state_dict(new_model),
+        rtol=0,
+        atol=0,
+        msg_prefix="After save/load: ",
+    )
 
     if rank == 0:
         logger.debug(f"FSDP2 save/load test passed: all {len(state_dict_before)} parameters match exactly.")
@@ -419,25 +464,19 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     init_test_logger()
 
     config = config_class.from_dict(config_dict)
-    config.tie_word_embeddings = tie_word_embeddings
-
-    init_tmpdir, init_tmpdir_obj = _save_init_pretrained(rank, config, torch.float32)
-    try:
-        _set_determinism(SEED)
-        model = AutoModelForCausalLM.from_pretrained(
-            init_tmpdir, distributed_config=DistributedConfig(fsdp_size=dist.get_world_size())
-        )
-        dist.barrier()
-    finally:
-        if rank == 0 and init_tmpdir_obj is not None:
-            init_tmpdir_obj.cleanup()
+    model = _load_fsdp_model_from_init_checkpoint(
+        rank,
+        config,
+        torch.float32,
+        tie_word_embeddings=tie_word_embeddings,
+        distributed_config=DistributedConfig(fsdp_size=dist.get_world_size()),
+    )
 
     expected_targets = {""} | _fsdp_target_module_names(model)
-
     actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 
     if rank == 0:
-        logger.debug(f"  Weights tied: {config.tie_word_embeddings}")
+        logger.debug(f"  Weights tied: {tie_word_embeddings}")
         logger.debug(f"  Expected FSDP targets: {sorted(expected_targets)}")
         logger.debug(f"  Actual FSDP targets:   {sorted(actual_targets)}")
 
@@ -480,7 +519,6 @@ def _test_fsdp2_plan_vs_ddp_impl(
     batches = _build_repeated_training_batches(config, device, NUM_STEPS)
     try:
         ddp_losses, ddp_grad_norms, ddp_state_dict = train_ddp(rank, batches, LR, device, dtype, init_model_dir)
-
         fsdp_losses, fsdp_grad_norms, fsdp_state_dict = train_fsdp2(
             rank,
             batches,
@@ -495,31 +533,15 @@ def _test_fsdp2_plan_vs_ddp_impl(
         if rank == 0 and init_tmpdir_obj is not None:
             init_tmpdir_obj.cleanup()
 
-    for step in range(len(ddp_losses)):
-        torch.testing.assert_close(
-            torch.tensor(ddp_losses[step]),
-            torch.tensor(fsdp_losses[step]),
-            rtol=1e-5,
-            atol=1e-5,
-            msg=f"Loss mismatch at step {step}: DDP={ddp_losses[step]}, {test_label}={fsdp_losses[step]}",
-        )
-        torch.testing.assert_close(
-            torch.tensor(ddp_grad_norms[step]),
-            torch.tensor(fsdp_grad_norms[step]),
-            rtol=1e-5,
-            atol=1e-5,
-            msg=f"Grad norm mismatch at step {step}: DDP={ddp_grad_norms[step]}, {test_label}={fsdp_grad_norms[step]}",
-        )
-
-    for key in ddp_state_dict:
-        assert key in fsdp_state_dict, f"Key {key} missing from {test_label} state dict"
-        torch.testing.assert_close(
-            ddp_state_dict[key],
-            fsdp_state_dict[key],
-            rtol=1e-5,
-            atol=1e-5,
-            msg=f"Weight mismatch for {key}: DDP vs {test_label}",
-        )
+    _assert_ddp_fsdp_match(
+        ddp_losses,
+        fsdp_losses,
+        ddp_grad_norms,
+        fsdp_grad_norms,
+        ddp_state_dict,
+        fsdp_state_dict,
+        test_label,
+    )
 
     if rank == 0:
         logger.debug(f"DDP and {test_label} comparison checks passed.")
@@ -528,6 +550,25 @@ def _test_fsdp2_plan_vs_ddp_impl(
 # =============================================================================
 # Mixin class
 # =============================================================================
+
+
+def _shrink_config_for_fsdp(config):
+    config.vocab_size = 256
+    config.hidden_size = 64
+    config.intermediate_size = 128
+    if hasattr(config, "ffn_config"):
+        if hasattr(config.ffn_config, "ffn_hidden_size"):
+            config.ffn_config.ffn_hidden_size = config.hidden_size
+        if hasattr(config.ffn_config, "hidden_size"):
+            config.ffn_config.hidden_size = config.intermediate_size
+    if hasattr(config, "num_attention_heads"):
+        config.num_attention_heads = 4
+    if hasattr(config, "num_key_value_heads"):
+        config.num_key_value_heads = 4
+    if hasattr(config, "moe_intermediate_size"):
+        config.moe_intermediate_size = 32
+    if hasattr(config, "vocab_size_per_layer_input"):
+        config.vocab_size_per_layer_input = config.vocab_size
 
 
 class FSDPTesterMixin(ABC):
@@ -579,24 +620,8 @@ class FSDPTesterMixin(ABC):
     def _get_tiny_config(self):
         """Get config class and serialized dict for passing to spawned processes."""
         config = self.model_tester.get_config()
-        config.vocab_size = 256
-        config.hidden_size = 64
-        config.intermediate_size = 128
-        if hasattr(config, "ffn_config"):
-            if hasattr(config.ffn_config, "ffn_hidden_size"):
-                config.ffn_config.ffn_hidden_size = config.hidden_size
-            if hasattr(config.ffn_config, "hidden_size"):
-                config.ffn_config.hidden_size = config.intermediate_size
-        if hasattr(config, "num_attention_heads"):
-            config.num_attention_heads = 4
-        if hasattr(config, "num_key_value_heads"):
-            config.num_key_value_heads = 4
-        if hasattr(config, "moe_intermediate_size"):
-            config.moe_intermediate_size = 32
-        if hasattr(config, "vocab_size_per_layer_input"):
-            config.vocab_size_per_layer_input = config.vocab_size
-        config_dict = config.to_diff_dict()
-        return type(config), config_dict
+        _shrink_config_for_fsdp(config)
+        return type(config), config.to_diff_dict()
 
     def _run_fsdp2_distributed_test(self, test_name, test_impl, *test_args, **test_kwargs):
         self._skip_if_fsdp_model_not_selected()
@@ -606,10 +631,7 @@ class FSDPTesterMixin(ABC):
         func_args = (config_class, config_dict, *test_args)
 
         results_file = tempfile.mktemp(suffix=".json")
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("", 0))
-            port = s.getsockname()[1]
-
+        port = _find_free_port()
         try:
             mp.spawn(
                 _fsdp_global_wrapper,
@@ -644,31 +666,27 @@ class FSDPTesterMixin(ABC):
         finally:
             logger.info("[FSDP] %s test: test_fsdp_plan_declared (%.1fs)", status, time.perf_counter() - start_time)
 
-    @is_fsdp_test
+    @parameterized.expand(["untied", "tied"])
     @require_torch_greater_or_equal("2.6")
-    def test_fsdp2_sharding_structure_untied(self):
+    @is_fsdp_test
+    def test_fsdp2_sharding_structure(self, label):
         self._run_fsdp2_distributed_test(
-            "test_fsdp2_sharding_structure_untied", _test_fsdp2_sharding_structure_impl, False
+            f"test_fsdp2_sharding_structure_{label}",
+            _test_fsdp2_sharding_structure_impl,
+            label == "tied",
         )
 
-    @is_fsdp_test
     @require_torch_greater_or_equal("2.6")
-    def test_fsdp2_sharding_structure_tied(self):
-        self._run_fsdp2_distributed_test(
-            "test_fsdp2_sharding_structure_tied", _test_fsdp2_sharding_structure_impl, True
-        )
-
     @is_fsdp_test
-    @require_torch_greater_or_equal("2.6")
     def test_fsdp2_save_load(self):
         self._run_fsdp2_distributed_test("test_fsdp2_save_load", _test_fsdp2_save_load_impl)
 
-    @is_fsdp_test
+    @parameterized.expand(["untied", "tied"])
     @require_torch_greater_or_equal("2.6")
-    def test_fsdp2_plan_vs_ddp_untied(self):
-        self._run_fsdp2_distributed_test("test_fsdp2_plan_vs_ddp_untied", _test_fsdp2_plan_vs_ddp_impl, False)
-
     @is_fsdp_test
-    @require_torch_greater_or_equal("2.6")
-    def test_fsdp2_plan_vs_ddp_tied(self):
-        self._run_fsdp2_distributed_test("test_fsdp2_plan_vs_ddp_tied", _test_fsdp2_plan_vs_ddp_impl, True)
+    def test_fsdp2_plan_vs_ddp(self, label):
+        self._run_fsdp2_distributed_test(
+            f"test_fsdp2_plan_vs_ddp_{label}",
+            _test_fsdp2_plan_vs_ddp_impl,
+            label == "tied",
+        )
