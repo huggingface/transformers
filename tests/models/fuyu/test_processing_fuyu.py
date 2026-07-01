@@ -38,6 +38,8 @@ if is_torch_available():
 class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = FuyuProcessor
     model_id = "adept/fuyu-8b"
+    # Fuyu uses a tokenizer with a very large vocabulary (~262K tokens), making tests slow and
+    # memory-intensive. tiny_model_id points to a trimmed tokenizer repo to keep tests lightweight.
     tiny_model_id = "hf-internal-testing/fuyu-tiny-tokenizer"
 
     @classmethod
@@ -139,6 +141,8 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         SINGLE_RESIZED_PADDED_UNPACKED_TOKEN_INPUTS = torch.Tensor([[ 71011,  71011,  71011,  71019,  71011,  71011,  71011,  71019,  71011, 71011,  71011,  71019,  71011,  71011,  71011,  71019,  71011,  71011, 71011,  71019,  71011,  71011,  71011,  71019,  71011,  71011,  71011, 71019,  71011,  71011,  71011,  71019,  71011,  71011,  71011,  71019, 71011,  71011,  71011,  71019,      1, 128340,  71374,  71389, 120412, 71377,  71835,  71374,  73615,  71375,  71399,  71435,  71122]])
         # fmt: on
 
+        # Load once and reuse across all assertions in this test to avoid repeatedly loading the
+        # full processor (which carries the large 262K-vocab tokenizer).
         processor = self.get_processor(use_full=True)
 
         # Batch of two images - equally sized
