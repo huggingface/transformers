@@ -764,6 +764,10 @@ class Qwen3TTSTalkerCodePredictorModel(Qwen3Model):
     }
 
     def __init__(self, config: Qwen3TTSTalkerCodePredictorConfig, embedding_dim: int):
+        r"""
+        embedding_dim (`int`):
+            Dimension of each per-codebook input embedding in `codec_embedding`.
+        """
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size

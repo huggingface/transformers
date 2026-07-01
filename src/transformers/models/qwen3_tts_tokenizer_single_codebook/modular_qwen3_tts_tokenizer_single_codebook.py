@@ -18,13 +18,13 @@ from ...utils.hub import cached_file
 from ..cohere.modeling_cohere import CohereRotaryEmbedding
 from ..qwen2_5_omni.configuration_qwen2_5_omni import Qwen2_5OmniBigVGANConfig
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
-    AMPBlock,
     DiTDecoderLayer,
+    Qwen2_5OmniAMPBlock,
+    Qwen2_5OmniAntiAliasedActivation1d,
+    Qwen2_5OmniSnakeBeta,
     Qwen2_5OmniToken2WavBigVGANModel,
     Qwen2_5OmniToken2WavDiTModel,
     Qwen2_5OmniToken2WavModel,
-    SnakeBeta,
-    TorchActivation1d,
 )
 from ..voxtral_realtime.modeling_voxtral_realtime import VoxtralRealtimeCausalConv1d
 from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecVectorQuantization
@@ -1168,7 +1168,15 @@ class CausalConv1d(VoxtralRealtimeCausalConv1d):
         self.cache_key = ""
 
 
-class Qwen3TTSTokenizerSingleCodebookAMPBlock(AMPBlock):
+class Qwen3TTSTokenizerSingleCodebookSnakeBeta(Qwen2_5OmniSnakeBeta):
+    pass
+
+
+class Qwen3TTSTokenizerSingleCodebookAntiAliasedActivation1d(Qwen2_5OmniAntiAliasedActivation1d):
+    pass
+
+
+class Qwen3TTSTokenizerSingleCodebookAMPBlock(Qwen2_5OmniAMPBlock):
     """AMPBlock with CausalConv1d support for Qwen3TTS."""
 
     def __init__(
@@ -1213,7 +1221,12 @@ class Qwen3TTSTokenizerSingleCodebookAMPBlock(AMPBlock):
 
         self.num_layers = len(self.convs1) + len(self.convs2)
         self.activations = nn.ModuleList(
-            [TorchActivation1d(activation=SnakeBeta(channels)) for _ in range(self.num_layers)]
+            [
+                Qwen3TTSTokenizerSingleCodebookAntiAliasedActivation1d(
+                    activation=Qwen3TTSTokenizerSingleCodebookSnakeBeta(channels)
+                )
+                for _ in range(self.num_layers)
+            ]
         )
 
         if causal_type == "2":
@@ -1221,7 +1234,9 @@ class Qwen3TTSTokenizerSingleCodebookAMPBlock(AMPBlock):
                 channels, channels, kernel_size, stride=1, padding=self._get_padding(kernel_size, 1)
             )
 
-            self.pre_act = TorchActivation1d(activation=SnakeBeta(channels))
+            self.pre_act = Qwen3TTSTokenizerSingleCodebookAntiAliasedActivation1d(
+                activation=Qwen3TTSTokenizerSingleCodebookSnakeBeta(channels)
+            )
         else:
             self.pre_conv = nn.Identity()
             self.pre_act = nn.Identity()
@@ -1420,6 +1435,11 @@ class Qwen3TTSTokenizerSingleCodebookDecoder(Qwen2_5OmniToken2WavModel):
 
 
 __all__ = [
+    "Qwen3TTSTokenizerSingleCodebookConfig",
+    "Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig",
+    "Qwen3TTSTokenizerSingleCodebookDecoderConfig",
+    "Qwen3TTSTokenizerSingleCodebookDiTConfig",
+    "Qwen3TTSTokenizerSingleCodebookEncoderConfig",
     "Qwen3TTSTokenizerSingleCodebookPreTrainedModel",
     "Qwen3TTSTokenizerSingleCodebookDecoderPreTrainedModel",
     "Qwen3TTSTokenizerSingleCodebookDecoderDiTModel",

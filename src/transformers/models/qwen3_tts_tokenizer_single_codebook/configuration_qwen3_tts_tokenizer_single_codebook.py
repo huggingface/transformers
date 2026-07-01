@@ -344,3 +344,12 @@ class Qwen3TTSTokenizerSingleCodebookConfig(PreTrainedConfig):
         self.output_sample_rate = output_sample_rate
         self.decode_upsample_rate = decode_upsample_rate
         self.encode_downsample_rate = encode_downsample_rate
+
+
+__all__ = [
+    "Qwen3TTSTokenizerSingleCodebookConfig",
+    "Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig",
+    "Qwen3TTSTokenizerSingleCodebookDecoderConfig",
+    "Qwen3TTSTokenizerSingleCodebookDiTConfig",
+    "Qwen3TTSTokenizerSingleCodebookEncoderConfig",
+]
