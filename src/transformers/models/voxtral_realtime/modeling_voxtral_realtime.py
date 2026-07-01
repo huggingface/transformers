@@ -224,9 +224,12 @@ class VoxtralRealtimeCausalConv1d(nn.Conv1d):
         cache_key: str,
         stride: int = 1,
         dilation: int = 1,
+        groups: int = 1,
         bias: bool = True,
     ):
-        super().__init__(in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, bias=bias)
+        super().__init__(
+            in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, groups=groups, bias=bias
+        )
         self.cache_key = cache_key
 
     @cached_property
@@ -1226,8 +1229,8 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         need_new_cache = (
             not hasattr(self, "_encoder_cache")
             or cache_to_check.offloading != offload_cache
-            or cache_to_check.max_batch_size != batch_size
-            or cache_to_check.max_cache_len < max_cache_len
+            or cache_to_check.batch_size != batch_size
+            or cache_to_check.get_max_length() < max_cache_len
         )
 
         if need_new_cache:

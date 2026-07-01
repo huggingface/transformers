@@ -281,6 +281,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
+            image_features = image_features.flatten(0, 1)
             torch_compilable_check(
                 n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0] * image_features.shape[1]}",
@@ -289,6 +290,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
+            video_features = video_features.flatten(0, 1)
             torch_compilable_check(
                 n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0] * video_features.shape[1]}",

@@ -33,7 +33,6 @@ FALLBACK_DEFAULTS = {
     "max_blocks_per_request": 32,
     "q_padding_interval_size": 64,
     "kv_padding_interval_size": 64 * 256,  # 64 blocks of 256 tokens ie. 16384 tokens
-    "max_cached_graphs": 32,
 }
 
 
@@ -49,9 +48,7 @@ def resolve_continuous_batching_config(
     # Look at whether the user explicitly asked for the decode fast path before we assign a default value
     user_requested_decode_path = cb_config.max_blocks_per_request is not None
     # Same for cuda graphs, if the user signals they want CUDA graphs via any padding/cached-graph parameter
-    cuda_graph_requested = any(
-        [cb_config.q_padding_interval_size, cb_config.kv_padding_interval_size, cb_config.max_cached_graphs]
-    )
+    cuda_graph_requested = any([cb_config.q_padding_interval_size, cb_config.kv_padding_interval_size])
 
     # Resolve missing attributes for which we have hints. Must happen before no-hints resolve.
     resolve_using_hints(cb_config, workload_hints)
@@ -112,8 +109,6 @@ def resolve_without_hints(cb_config: ContinuousBatchingConfig) -> None:
         cb_config.q_padding_interval_size = FALLBACK_DEFAULTS["q_padding_interval_size"]
     if cb_config.kv_padding_interval_size == 0:
         cb_config.kv_padding_interval_size = FALLBACK_DEFAULTS["kv_padding_interval_size"]
-    if cb_config.max_cached_graphs == 0:
-        cb_config.max_cached_graphs = FALLBACK_DEFAULTS["max_cached_graphs"]
 
 
 def ensure_decode_fast_path_is_available(
@@ -123,9 +118,8 @@ def ensure_decode_fast_path_is_available(
     available, and no user-provided max blocks per request, set it to the fallback default."""
     # Then, if the decode fast path is not turned off, check if it is available
     if cb_config.max_blocks_per_request != 0:
-        # NOTE: For CUDA, block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
         cuda_available = torch.cuda.is_available()
-        fa_cuda = is_flash_attention_requested(config, version=3) and cuda_available
+        fa_cuda = is_flash_attention_requested(config, version=[2, 3]) and cuda_available
         # XPU support is given through its kernel variation `kernels-community/flash-attn2`
         xpu_available = is_torch_xpu_available()
         fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
@@ -145,7 +139,7 @@ def ensure_decode_fast_path_is_available(
                 logger.warning(
                     f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
                     "because the attention implementation and device combination is not supported. Supported "
-                    "combinations are Flash Attention 3 on CUDA, or Flash Attention 2 on XPU through "
+                    "combinations are Flash Attention 2/3 on CUDA, or Flash Attention 2 on XPU through "
                     "`kernels-community/flash-attn2`. "
                     f"Got {config._attn_implementation = }, {cuda_available = }, {xpu_available = }."
                 )
