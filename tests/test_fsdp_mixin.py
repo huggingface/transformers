@@ -337,14 +337,8 @@ def train_fsdp2(
     dtype,
     init_model_dir,
     checkpoint_step,
-    fsdp_cpu_offload=False,
-    fsdp_mixed_precision=False,
 ):
-    distributed_config = DistributedConfig(
-        fsdp_size=dist.get_world_size(),
-        fsdp_cpu_offload=fsdp_cpu_offload,
-        fsdp_mixed_precision=fsdp_mixed_precision,
-    )
+    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size())
 
     # Phase 1: Pre-checkpoint run
     _set_determinism(SEED)
@@ -453,27 +447,16 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
         logger.debug(f"  FSDP sharding structure OK ({len(actual_targets)} targets)")
 
 
-def _test_fsdp2_plan_vs_ddp_impl(
-    rank, config_class, config_dict, tie_word_embeddings, policy_options=None, dtype=None
-):
+def _test_fsdp2_plan_vs_ddp_impl(rank, config_class, config_dict, tie_word_embeddings, dtype=None):
     """Validate DDP-vs-FSDP2 trace matching using the model's declared FSDP plan."""
     init_test_logger()
 
     if dtype is None:
         dtype = torch.float32
 
-    policy_options = policy_options or []
-    assert "mixed_precision" not in policy_options, (
-        "Use the mixed-precision specific tests when enabling mixed_precision policy."
-    )
-
     device = _get_rank_device(rank)
     config = config_class.from_dict(config_dict)
     config.tie_word_embeddings = tie_word_embeddings
-
-    fsdp_cpu_offload = "cpu_offload" in policy_options
-    fsdp_mixed_precision = "mixed_precision" in policy_options
-    test_label = f"FSDP2{'+policies' if policy_options else ''}"
 
     checkpoint_step = NUM_STEPS // 2
     init_model_dir, init_tmpdir_obj = _save_init_pretrained(rank, config, dtype)
@@ -487,8 +470,6 @@ def _test_fsdp2_plan_vs_ddp_impl(
             dtype,
             init_model_dir=init_model_dir,
             checkpoint_step=checkpoint_step,
-            fsdp_cpu_offload=fsdp_cpu_offload,
-            fsdp_mixed_precision=fsdp_mixed_precision,
         )
     finally:
         if rank == 0 and init_tmpdir_obj is not None:
@@ -500,28 +481,28 @@ def _test_fsdp2_plan_vs_ddp_impl(
             torch.tensor(fsdp_losses[step]),
             rtol=DDP_FSDP_RTOL,
             atol=DDP_FSDP_ATOL,
-            msg=f"Loss mismatch at step {step}: DDP={ddp_losses[step]}, {test_label}={fsdp_losses[step]}",
+            msg=f"Loss mismatch at step {step}: DDP={ddp_losses[step]}, FSDP2={fsdp_losses[step]}",
         )
         torch.testing.assert_close(
             torch.tensor(ddp_grad_norms[step]),
             torch.tensor(fsdp_grad_norms[step]),
             rtol=DDP_FSDP_RTOL,
             atol=DDP_FSDP_ATOL,
-            msg=f"Grad norm mismatch at step {step}: DDP={ddp_grad_norms[step]}, {test_label}={fsdp_grad_norms[step]}",
+            msg=f"Grad norm mismatch at step {step}: DDP={ddp_grad_norms[step]}, FSDP2={fsdp_grad_norms[step]}",
         )
 
     for key in ddp_state_dict:
-        assert key in fsdp_state_dict, f"Key {key} missing from {test_label} state dict"
+        assert key in fsdp_state_dict, f"Key {key} missing from FSDP2 state dict"
         torch.testing.assert_close(
             ddp_state_dict[key],
             fsdp_state_dict[key],
             rtol=DDP_FSDP_RTOL,
             atol=DDP_FSDP_ATOL,
-            msg=f"Weight mismatch for {key}: DDP vs {test_label}",
+            msg=f"Weight mismatch for {key}: DDP vs FSDP2",
         )
 
     if rank == 0:
-        logger.debug(f"DDP and {test_label} comparison checks passed.")
+        logger.debug("DDP and FSDP2 comparison checks passed.")
 
 
 # =============================================================================
@@ -531,7 +512,7 @@ def _test_fsdp2_plan_vs_ddp_impl(
 
 class FSDPTesterMixin(ABC):
     fsdp_nproc_per_node: int = 2
-    skip_fsdp_tests: bool = False
+    #TODO(3outeille): do we put the CONSTANTS in the mixin class ?
 
     @property
     @abstractmethod
@@ -539,22 +520,20 @@ class FSDPTesterMixin(ABC):
         """The model tester instance (e.g., CausalLMModelTester)."""
         ...
 
-    def _skip_if_fsdp_disabled(self):
-        if self.skip_fsdp_tests:
-            self.skipTest("FSDP tests disabled for this model (skip_fsdp_tests=True)")
-
     def _skip_if_insufficient_devices(self):
-        self._skip_if_fsdp_disabled()
         available_workers = _get_available_fsdp_workers()
         if available_workers < self.fsdp_nproc_per_node:
             self.skipTest(f"Need at least {self.fsdp_nproc_per_node} FSDP workers, have {available_workers}")
 
-    def _skip_if_fsdp_distributed_not_enabled(self):
-        # Trigger tests only if the model has an FSDP plan (base_model_fsdp_plan)
+    def _has_fsdp_plan(self) -> bool:
         config = self.model_tester.get_config()
-        if not (hasattr(config, "base_model_fsdp_plan") and config.base_model_fsdp_plan is not None):
+        return hasattr(config, "base_model_fsdp_plan") and config.base_model_fsdp_plan is not None
+
+    def _skip_if_fsdp_distributed_not_enabled(self):
+        if not self._has_fsdp_plan():
             self.skipTest("Model does not have an FSDP plan (base_model_fsdp_plan)")
-        
+
+        config = self.model_tester.get_config()
         # Only top-N models are tested, set FSDP_DISTRIBUTED_TEST_MODEL_TYPES = None to run all tests.
         if FSDP_DISTRIBUTED_TEST_MODEL_TYPES is not None and config.model_type not in FSDP_DISTRIBUTED_TEST_MODEL_TYPES:
             self.skipTest(
@@ -622,21 +601,11 @@ class FSDPTesterMixin(ABC):
     @is_fsdp_test
     def test_fsdp_plan_declared(self):
         """The model exposes a non-empty `_fsdp_plan` derived from config + class-level overrides."""
-        self._skip_if_fsdp_disabled()
-        start_time = time.perf_counter()
-        logger.info("[FSDP] Starting test: test_fsdp_plan_declared")
-        status = "FAIL"
-        try:
-            config = self.model_tester.get_config()
-            if not (hasattr(config, "base_model_fsdp_plan") and config.base_model_fsdp_plan is not None):
-                self.skipTest("Model does not have an FSDP plan (base_model_fsdp_plan)")
-            model = self._create_model_on_meta(config)
+        if not self._has_fsdp_plan():
+            self.skipTest("Model does not have an FSDP plan (base_model_fsdp_plan)")
 
-            plan = getattr(model, "_fsdp_plan", None)
-            self.assertTrue(plan, f"No _fsdp_plan declared for {type(model).__name__}")
-            status = "PASS"
-        finally:
-            logger.info("[FSDP] %s test: test_fsdp_plan_declared (%.1fs)", status, time.perf_counter() - start_time)
+        model = self._create_model_on_meta(self.model_tester.get_config())
+        self.assertTrue(model._fsdp_plan, f"No _fsdp_plan declared for {type(model).__name__}")
 
     @parameterized.expand(["untied", "tied"])
     @require_torch_greater_or_equal("2.6")
