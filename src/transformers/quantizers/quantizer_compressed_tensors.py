@@ -171,7 +171,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         return [
             WeightConverter(
-                source_patterns=["weight_scale$"],
+                source_patterns=["weight_scale"],
                 target_patterns=["weight_scale"],
                 operations=[CompressedTensorsScaleConvert()],
             ),
