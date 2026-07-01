@@ -53,8 +53,6 @@ from .core_model_loading import (
 )
 from .distributed import DistributedConfig
 from .distributed.utils import (
-    _distributed_barrier,
-    gather_full_state_dict,
     init_device_mesh,
     save_model_checkpoint_distributed,
 )
@@ -3543,15 +3541,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             save_model_checkpoint_distributed(self, save_directory)
             return
 
-        # Get the model state_dict (handles FSDP unshard + TP gather in one call)
-        used_distributed_gather = False
         if state_dict is None:
             if getattr(self, "device_mesh", None) is not None:
-                # Pass self (not model_to_save) so device_mesh/tp_size/tp_plan are available
-                state_dict = gather_full_state_dict(self)
-                used_distributed_gather = True
-            else:
-                state_dict = model_to_save.state_dict()
+                #TODO(3outeille): check again
+                raise ValueError(
+                    "Saving an FSDP-sharded model requires save_pretrained(..., distributed_checkpoint=True)."
+                )
+            state_dict = model_to_save.state_dict()
 
         # if any model parameters are offloaded, we need to know it for later
         is_offloaded = False
@@ -3578,7 +3574,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     del state_dict[ignore_key]
 
         # If model was sharded with legacy TP, gather full tensors for saving
-        if self._tp_size is not None and not used_distributed_gather:
+        if self._tp_size is not None:
             state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
 
         # Remove tied weights as safetensors do not handle them
@@ -3685,13 +3681,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 token=token,
                 create_pr=create_pr,
             )
-
-        # `gather_full_state_dict` concentrates the full state on rank 0 only;
-        # other ranks then loop over an empty shard list and would race ahead
-        # of rank 0's safetensors writes. Barrier so any subsequent
-        # `from_pretrained` on this path sees the consolidated files.
-        if used_distributed_gather:
-            _distributed_barrier()
 
     @wraps(PushToHubMixin.push_to_hub)
     def push_to_hub(self, *args, **kwargs):

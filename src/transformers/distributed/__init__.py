@@ -22,7 +22,6 @@ _import_structure = {
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module", "verify_fsdp_plan"],
     "utils": [
         "distribute_model",
-        "gather_full_state_dict",
         "init_device_mesh",
         "load_optimizer_distributed",
         "save_model_checkpoint_distributed",
@@ -38,7 +37,6 @@ if TYPE_CHECKING:
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module, verify_fsdp_plan
     from .utils import (
         distribute_model,
-        gather_full_state_dict,
         init_device_mesh,
         load_optimizer_distributed,
         save_model_checkpoint_distributed,
