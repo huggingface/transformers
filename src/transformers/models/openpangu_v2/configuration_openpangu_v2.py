@@ -1,5 +1,6 @@
 # coding=utf-8
-# Copyright 2024 The OpenPangu Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright (c) 2026 Huawei Technologies Co., Ltd. All Rights Reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """ OpenPangu_v2 model configuration"""
 
 from transformers.configuration_utils import PreTrainedConfig
