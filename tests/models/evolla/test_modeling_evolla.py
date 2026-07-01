@@ -317,6 +317,10 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_flex_attention_with_grads(self):
         pass
 
+    @unittest.skip("Evolla has a special arch that doesnt='t fit with testing assumptions")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
 
 @require_torch
 class EvollaModelIntegrationTest(TestCasePlus):

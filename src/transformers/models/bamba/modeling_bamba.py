@@ -115,6 +115,8 @@ class BambaRotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        dim = int(dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
 

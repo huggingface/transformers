@@ -5724,6 +5724,246 @@ class ModelTesterMixin:
             # Using kernels should not raise a `ValueError`
             model.use_kernels = True
 
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        """
+        Tests that we can initialize a model with RoPE scaling in the config, that it can run a forward pass, and
+        that a few basic model output properties are honored.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        text_config = config.get_text_config(decoder=True)
+        base_model_class = None
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+            ]:
+                base_model_class = model_class
+                break
+
+        if base_model_class is None:
+            self.skipTest("This model has no `base_model_class` defined in tester.")
+
+        if not _config_supports_rope_scaling(text_config):
+            self.skipTest("This model does not support RoPE scaling")
+
+        # TODO: raushan, add separate tests for mrope in MultimodalTester
+        if text_config.rope_parameters.get("mrope_section") is not None:
+            self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
+
+        if not hasattr(text_config, "vocab_size"):
+            self.skipTest("This model has no vocab size defined and the test doesn't yet support non-text modalities.")
+
+        short_input = ids_tensor([1, 10], text_config.vocab_size)
+        long_input = ids_tensor([1, int(text_config.max_position_embeddings * 1.5)], text_config.vocab_size)
+        short_model_kwargs = long_model_kwargs = {}
+
+        if config.is_encoder_decoder:
+            short_model_kwargs = {"decoder_input_ids": short_input.clone()}
+            long_model_kwargs = {"decoder_input_ids": long_input.clone()}
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": "default",
+                "rope_theta": 10_000.0,
+                "original_max_position_embeddings": 16384,
+            },
+        )
+        original_model = base_model_class(config)
+        original_model.to(torch_device)
+        original_model.eval()
+        original_short_output = original_model(short_input, **short_model_kwargs)
+        original_long_output = original_model(long_input, **long_model_kwargs)
+
+        # Some models don't return last hidden states and use custom naming, just skip the test
+        # Not worth trying to infer the output field names, prob old or rarely used model
+        if getattr(original_short_output, "last_hidden_state", None) is not None:
+            original_short_output = original_short_output.last_hidden_state
+            original_long_output = original_long_output.last_hidden_state
+
+            set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+            _set_config_rope_params(
+                text_config,
+                {
+                    "rope_type": scaling_type,
+                    "factor": 10.0,
+                    "rope_theta": 10_000.0,
+                },
+            )
+            scaled_model = base_model_class(config)
+            scaled_model.to(torch_device)
+            scaled_model.eval()
+            scaled_short_output = scaled_model(short_input, **short_model_kwargs).last_hidden_state
+            scaled_long_output = scaled_model(long_input, **long_model_kwargs).last_hidden_state
+
+            # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
+            # maximum sequence length, so the outputs for the short input should match.
+            if scaling_type == "dynamic":
+                torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+            else:
+                self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+
+            # The output should be different for long inputs
+            self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+
+    def test_model_rope_scaling_frequencies(self):
+        """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        text_config = config.get_text_config(decoder=True)
+        base_model_class = None
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+            ]:
+                base_model_class = model_class
+                break
+
+        if base_model_class is None:
+            self.skipTest("This model has no `base_model_class` defined in tester.")
+
+        if not _config_supports_rope_scaling(text_config):
+            self.skipTest("This model does not support RoPE scaling")
+
+        # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
+        # named location of the RoPE layer class.
+        base_model = base_model_class(config)
+        possible_rope_attributes = [
+            "pos_emb",
+            "rotary_emb",  # most common case
+            "global_rotary_emb",
+            "local_rotary_emb",
+        ]
+        rope_class = None
+        for name, module in base_model.named_modules():
+            # FIXME: raushan, vision RoPE layers are not standard and can't be tested here
+            # thus skip if modules doesn't operate on config. See https://github.com/huggingface/transformers/issues/46443
+            if any(potential_name in name for potential_name in possible_rope_attributes) and (
+                len(params := list(inspect.signature(module.__init__).parameters.values())) > 1
+                and params[0].name == "config"
+            ):
+                rope_class = type(module)
+                break
+
+        if rope_class is None:
+            self.skipTest("This model has no standardized RoPE module found.")
+
+        # TODO: raushan, add separate tests for mrope in MultimodalTester
+        if text_config.rope_parameters.get("mrope_section") is not None:
+            self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
+
+        scaling_factor = 10
+        short_input_length = 10
+        partial_rotary_factor = text_config.rope_parameters.get("partial_rotary_factor", 1.0)
+        long_input_length = int(text_config.max_position_embeddings * 1.5)
+        is_nested_rope = (
+            "rope_theta" not in text_config.rope_parameters.keys()
+            and "rope_theta" in list(text_config.rope_parameters.values())[0]
+        )
+
+        kwargs = {}
+        if is_nested_rope:
+            kwargs = {"layer_type": list(text_config.rope_parameters.keys())[0]}
+
+        # Inputs
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
+        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        position_ids_short = position_ids_short.unsqueeze(0)
+        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = position_ids_long.unsqueeze(0)
+
+        # Sanity check original RoPE
+        _set_config_rope_params(
+            text_config,
+            {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": partial_rotary_factor},
+        )
+        original_rope = rope_class(config=text_config, device=torch_device)
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short, **kwargs)
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long, **kwargs)
+        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+
+        # Sanity check linear RoPE scaling
+        # New position "x" should match original position with index "x/scaling_factor"
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": "linear",
+                "factor": scaling_factor,
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+            },
+        )
+        linear_scaling_rope = rope_class(config=text_config, device=torch_device)
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, **kwargs)
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, **kwargs)
+        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        for new_position in range(0, long_input_length, scaling_factor):
+            original_position = int(new_position // scaling_factor)
+            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
+            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+
+        # Sanity check Dynamic NTK RoPE scaling
+        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
+        # with scaling_factor (or that `inv_freq` decreases)
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": "dynamic",
+                "factor": scaling_factor,
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+            },
+        )
+        ntk_scaling_rope = rope_class(config=text_config, device=torch_device)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, **kwargs)
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, **kwargs)
+        torch.testing.assert_close(ntk_cos_short, original_cos_short)
+        torch.testing.assert_close(ntk_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_sin_long, original_sin_long)
+        # CHeck each layer type for nested RoPE configs
+        if not is_nested_rope:
+            self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+        else:
+            for layer_type in text_config.layer_types:
+                self.assertTrue(
+                    (
+                        getattr(ntk_scaling_rope, f"{layer_type}_inv_freq")
+                        <= getattr(original_rope, f"{layer_type}_inv_freq")
+                    ).all()
+                )
+
+        # Sanity check Yarn RoPE scaling
+        # Scaling should be over the entire input
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": "yarn",
+                "factor": scaling_factor,
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+            },
+        )
+        yarn_scaling_rope = rope_class(config=text_config, device=torch_device)
+        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, **kwargs)
+        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, **kwargs)
+        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_short, original_cos_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_long, original_sin_long)
+
 
 global_rng = random.Random()
 
@@ -5844,3 +6084,30 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
         values.append(rng.random() * scale)
 
     return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
+
+
+def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
+    """Returns whether a certain model config supports RoPE scaling parameterization."""
+    # Has rope_scaling -> model was designed with rope scaling in mind
+    # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well
+    main_config_has_rope = hasattr(config, "rope_parameters")
+    return main_config_has_rope
+
+
+def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
+    """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
+    config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
+
+    # Nested rope parameters per layer type, not all models with `layer-types` use different RoPE thus we check `issubset`
+    if getattr(config, "layer_types", None) is not None and set(config.rope_parameters.keys()).issubset(
+        config.layer_types
+    ):
+        for layer_type in config.layer_types:
+            config.rope_parameters.setdefault(layer_type, {})
+            config.rope_parameters[layer_type].update(rope_params)
+    else:
+        config.rope_parameters.update(rope_params)
+
+    for sub_config in config.sub_configs.keys():
+        _set_config_rope_params(getattr(config, sub_config), rope_params)
+    return config
