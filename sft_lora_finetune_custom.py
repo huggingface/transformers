@@ -7,6 +7,7 @@ Supports TP sharding across Neuron cores for memory-efficient training.
 import argparse
 import math
 import os
+import socket
 import time
 
 import torch
@@ -138,6 +139,7 @@ def main():
     parser.add_argument("--warmup_steps", type=int, default=100)
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
+    parser.add_argument("--max_steps", type=int, default=100)
     parser.add_argument("--logging_steps", type=int, default=10)
     parser.add_argument("--save_steps", type=int, default=500)
     parser.add_argument("--lora_r", type=int, default=32)
@@ -266,6 +268,7 @@ def main():
 
     # Training loop
     step = 0
+    _last_shape = None
     for epoch in range(args.num_train_epochs):
         batch_stride = args.per_device_train_batch_size * args.gradient_accumulation_steps
 
@@ -286,7 +289,9 @@ def main():
                 inputs = batch[:, :-1].to(device)
                 labels = batch[:, 1:].to(device)
 
-                print(f"inputs: {inputs.shape}, labels: {labels.shape}")
+                if inputs.shape != _last_shape:
+                    print(f"inputs: {inputs.shape}, labels: {labels.shape}")
+                    _last_shape = inputs.shape
 
                 # Forward and backward
                 loss = model(inputs, labels=labels).loss
@@ -318,6 +323,12 @@ def main():
                 log(f"Saving checkpoint to {save_path}")
                 model.save_pretrained(save_path)
                 tokenizer.save_pretrained(save_path)
+
+            if 0 < args.max_steps <= step:
+                break
+
+        if 0 < args.max_steps <= step:
+            break
 
     # Save final model
     if rank == 0:

@@ -13,12 +13,15 @@
 # limitations under the License.
 
 import os
+import socket
 
 import torch
 from datasets import load_dataset
 from accelerate import ParallelismConfig
 from transformers import AutoModelForCausalLM, AutoConfig
+from transformers.modeling_outputs import CausalLMOutputWithPast
 
+from peft import get_peft_model
 from trl import ModelConfig, ScriptArguments, SFTConfig, SFTTrainer, TrlParser, get_peft_config
 
 
@@ -47,21 +50,37 @@ def main(script_args, training_args, model_args):
     config = AutoConfig.from_pretrained(
         model_args.model_name_or_path,
         revision=model_args.model_revision,
-        trust_remote_code=model_args.trust_remote_code,
+        trust_remote_code=True,
     )
-    config.attention_dropout = 0.0
+    dtype = torch.bfloat16 if training_args.bf16 else torch.float32
     model = AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         config=config,
         revision=model_args.model_revision,
-        trust_remote_code=model_args.trust_remote_code,
-        attn_implementation=model_args.attn_implementation,
-        torch_dtype=model_args.dtype,
+        trust_remote_code=True,
+        # attn_implementation=model_args.attn_implementation,
+        torch_dtype=dtype,
+        low_cpu_mem_usage=True,
         **kwargs,
     )
 
+    peft_config = get_peft_config(model_args)
+    if peft_config is not None:
+        model = get_peft_model(model, peft_config)
+
+    model.enable_input_require_grads()
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    model.config.use_cache = False
+
     if int(os.environ.get("COMPILE", "0")):
+        print("Compiling model")
         model = torch.compile(model, backend="neuron")
+
+    model.train()
+
+    # model.to("neuron")
+
+    training_args.loss_type = "nll"
 
     dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
 
@@ -70,7 +89,6 @@ def main(script_args, training_args, model_args):
         args=training_args,
         train_dataset=dataset[script_args.dataset_train_split],
         eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
-        peft_config=get_peft_config(model_args),
     )
 
     trainer.train()
@@ -80,4 +98,7 @@ def main(script_args, training_args, model_args):
 if __name__ == "__main__":
     parser = TrlParser((ScriptArguments, SFTConfig, ModelConfig))
     script_args, training_args, model_args, _ = parser.parse_args_and_config(return_remaining_strings=True)
+    if training_args.max_steps < 0:
+        print("max_steps not set, defaulting to 100 for profiling")
+        training_args.max_steps = 100
     main(script_args, training_args, model_args)
