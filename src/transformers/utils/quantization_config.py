@@ -1169,8 +1169,10 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
 
     def post_init(self):
-        if not self.dequantize and not self.is_quantization_compressed:
+        if not self.dequantize and not self.is_quantization_compressed and not self.is_fp8:
             # Compressed execution only applies to compressed checkpoints; dequantize otherwise.
+            # FP8 checkpoints are excluded: even when not stored in COMPRESSED status (e.g. FROZEN
+            # per-tensor static FP8), the weights are already FP8 and run through the FP8 kernels.
             self.dequantize = True
             self.run_compressed = False
 
