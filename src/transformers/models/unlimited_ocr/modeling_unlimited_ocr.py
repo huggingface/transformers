@@ -37,7 +37,7 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
-from ...masking_utils import create_causal_mask
+from ...masking_utils import and_masks, causal_mask_function, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -1333,6 +1333,23 @@ class UnlimitedOcrTextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+def create_reference_sliding_window_causal_mask(**kwargs):
+    past_key_values = kwargs["past_key_values"]
+    inputs_embeds = kwargs["inputs_embeds"]
+
+    layer = next(layer for layer in past_key_values.layers if layer.layer_type == "reference_sliding_attention")
+    prefill_length = float("inf") if layer.prefill_length is None else layer.prefill_length
+    _, kv_offset = layer.get_mask_sizes(query_length=inputs_embeds.shape[1])
+
+    def prefill_overlay(batch_idx, head_idx, q_idx, kv_idx):
+        # Remove kv_offset to retrieve the kv_index with respect to prefill
+        return kv_idx - kv_offset < prefill_length
+
+    return create_sliding_window_causal_mask(
+        or_mask_function=and_masks(causal_mask_function, prefill_overlay), **kwargs
+    )
+
+
 @auto_docstring
 class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
     def __init__(self, config: UnlimitedOcrTextConfig):
@@ -1388,21 +1405,6 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-
-            from ...masking_utils import and_masks, causal_mask_function, create_sliding_window_causal_mask
-
-            def create_reference_sliding_window_causal_mask(**kwargs):
-                cache_layer = past_key_values.layers[0]
-                prefill_length = float("inf") if cache_layer.prefill_length is None else cache_layer.prefill_length
-                _, kv_offset = cache_layer.get_mask_sizes(query_length=inputs_embeds.shape[1])
-
-                def prefill_overlay(batch_idx, head_idx, q_idx, kv_idx):
-                    # Remove kv_offset to retrieve the kv_index with respect to prefill
-                    return kv_idx - kv_offset < prefill_length
-
-                return create_sliding_window_causal_mask(
-                    or_mask_function=and_masks(causal_mask_function, prefill_overlay), **kwargs
-                )
 
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),

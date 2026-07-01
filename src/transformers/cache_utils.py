@@ -370,8 +370,8 @@ class DynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         else:
             kv_length = self.cumulative_length + query_length
 
-        # Returned kv_offset is with respect to sliding window keys.
-        # Remove kv_offset from kv_idx to retrieve the prefill indices.
+        # Returned kv_offset is with respect to sliding window keys.
+        # Remove kv_offset from kv_idx to retrieve the prefill indices.
         return kv_length, kv_offset
 
     def get_max_length(self) -> int:
@@ -873,7 +873,9 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
-        is_full = self.prefill_length is not None and self.cumulative_length_int >= self.prefill_length + self.sliding_window
+        is_full = (
+            self.prefill_length is not None and self.cumulative_length_int >= self.prefill_length + self.sliding_window
+        )
 
         kv_offset = 0
         # Prefill
@@ -884,7 +886,10 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             kv_offset = max(self.cumulative_length_int - self.prefill_length - self.sliding_window + 1, 0)
             kv_length = self.prefill_length + self.sliding_window - 1 + query_length
         # Decode: cache not yet full, but becoming full on this update
-        elif self.prefill_length is not None and self.cumulative_length_int + query_length > self.prefill_length + self.sliding_window:
+        elif (
+            self.prefill_length is not None
+            and self.cumulative_length_int + query_length > self.prefill_length + self.sliding_window
+        ):
             kv_length = self.cumulative_length_int + query_length
         # Decode: cache not yet full but we return the local size as it's static
         else:
