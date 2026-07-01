@@ -637,7 +637,15 @@ class CohereAsrForConditionalGeneration(CohereAsrPreTrainedModel, GenerationMixi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            # forward already right-shifts the target into decoder_input_ids, so labels are
+            # aligned with logits; pass shift_labels to stop ForCausalLMLoss shifting again.
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                shift_labels=labels,
+                **kwargs,
+            )
 
         return Seq2SeqLMOutput(
             loss=loss,

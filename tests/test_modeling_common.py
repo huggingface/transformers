@@ -79,6 +79,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
@@ -1731,6 +1732,122 @@ class ModelTesterMixin:
                                     self.assertTrue(
                                         v.grad is not None, f"{k} in {model_class.__name__} has no gradient!"
                                     )
+
+    def test_encoder_decoder_loss_no_double_shift(self):
+        """
+        Encoder-decoder models build ``decoder_input_ids`` by right-shifting the target, so the logits are
+        already aligned with ``labels``. The training loss must therefore be computed against ``labels``
+        directly: if it shifts a second time (e.g. by routing through ``ForCausalLMLoss`` without passing
+        ``shift_labels``) the model trains against ``labels[..., 1:]`` -- an off-by-one in the loss.
+
+        This is a generic regression guard for that double-shift bug. It checks that each encoder-decoder
+        model's loss is closer to the loss against ``labels`` than to the loss against the right-shifted
+        ``labels[..., 1:]``.
+        """
+        tested_any = False
+        for model_class in self.all_model_classes:
+            try:
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            except ImportError as error:
+                self.skipTest(reason=f"Could not prepare inputs: {str(error).strip()}")
+            if not getattr(config, "is_encoder_decoder", False):
+                continue
+
+            config.return_dict = True
+            config.use_cache = False
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            labels = inputs.get("labels")
+            if (
+                not isinstance(labels, torch.Tensor)
+                and model_class.__name__ in get_values(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES)
+                and "labels" in inspect.signature(model_class.forward).parameters
+            ):
+                input_tensor = next(
+                    (value for value in inputs.values() if isinstance(value, torch.Tensor) and value.ndim > 0), None
+                )
+                if input_tensor is None:
+                    continue
+                decoder_input_ids = inputs.get("decoder_input_ids")
+                if isinstance(decoder_input_ids, torch.Tensor) and decoder_input_ids.ndim == 2:
+                    seq_len = decoder_input_ids.shape[-1]
+                else:
+                    seq_len = getattr(
+                        self.model_tester, "decoder_seq_length", getattr(self.model_tester, "seq_length", 0)
+                    )
+                labels = torch.zeros((input_tensor.shape[0], max(2, seq_len)), dtype=torch.long, device=torch_device)
+                inputs["labels"] = labels
+            if not isinstance(labels, torch.Tensor) or labels.ndim != 2:
+                # no supervised token-target path -> nothing to check
+                continue
+
+            # The harness fills labels with zeros, which makes the aligned and double-shifted targets
+            # numerically indistinguishable. Use non-degenerate labels of length >= 2 and let the model
+            # build the right-shifted decoder_input_ids from them, so the two targets actually differ.
+            vocab_size = getattr(config, "vocab_size", None) or getattr(
+                getattr(config, "text_config", None), "vocab_size", None
+            )
+            if vocab_size is None or vocab_size < 4:
+                continue
+            batch_size, seq_len = labels.shape[0], max(2, labels.shape[-1])
+            set_seed(42)
+            labels = torch.randint(3, vocab_size, (batch_size, seq_len), device=torch_device)
+            inputs["labels"] = labels
+            input_ids = inputs.get("input_ids")
+            decoder_input_ids = inputs.get("decoder_input_ids")
+            if (
+                isinstance(input_ids, torch.Tensor)
+                and isinstance(decoder_input_ids, torch.Tensor)
+                and input_ids.shape == decoder_input_ids.shape
+                and torch.equal(input_ids, decoder_input_ids)
+            ):
+                # Some encoder-decoder image-text models use input_ids as the decoder target path.
+                inputs["input_ids"] = labels
+            # force the model to derive decoder inputs and masks from labels (the shift under test)
+            inputs.pop("decoder_input_ids", None)
+            inputs.pop("decoder_attention_mask", None)
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            try:
+                with torch.no_grad():
+                    output = model(**inputs)
+            except (TypeError, RuntimeError, ValueError, IndexError):
+                # model needs inputs this generic path does not supply -> not applicable
+                continue
+
+            loss = getattr(output, "loss", None)
+            logits = getattr(output, "logits", None)
+            if loss is None or not isinstance(logits, torch.Tensor) or logits.ndim != 3:
+                continue
+            if logits.shape[1] != labels.shape[1] or labels.max().item() >= logits.shape[-1]:
+                # logits not aligned 1:1 with labels (e.g. logits_to_keep / extra tokens) -> skip
+                continue
+
+            vocab = logits.shape[-1]
+            logits = logits.float()
+            aligned = nn.functional.cross_entropy(logits.reshape(-1, vocab), labels.reshape(-1), ignore_index=-100)
+            double_shifted = nn.functional.cross_entropy(
+                logits[:, :-1, :].reshape(-1, vocab), labels[:, 1:].reshape(-1), ignore_index=-100
+            )
+            if aligned.item() == double_shifted.item():
+                # degenerate case where the two targets are numerically indistinguishable
+                continue
+
+            tested_any = True
+            self.assertLess(
+                (loss - aligned).abs().item(),
+                (loss - double_shifted).abs().item(),
+                msg=(
+                    f"{model_class.__name__}: training loss is closer to the double-shifted target "
+                    f"`labels[..., 1:]` than to `labels`. decoder_input_ids are already right-shifted, "
+                    f"so the loss must not shift labels a second time."
+                ),
+            )
+
+        if not tested_any:
+            self.skipTest(reason="No encoder-decoder model class with a checkable supervised loss path")
 
     def test_training(self):
         if not self.model_tester.is_training:
