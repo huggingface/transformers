@@ -275,38 +275,41 @@ class DtensorShardOperation:
         device: torch.device | str | int | None,
         dtype: torch.dtype | None,
     ) -> torch.Tensor:
-        concat_dim: int | None = None
-        base_slices: list[slice] = []
+        multi_interval_dims = [dim_idx for dim_idx, dim_intervals in enumerate(intervals) if len(dim_intervals) > 1]
+        if len(multi_interval_dims) > 1:
+            # NOTE(3outeille): not sure yet which scenario will have StridedShard
+            # placements on both row and column. Thus, delay implementing this for now.
+            raise ValueError(
+                "Current shard-on-read only supports disjoint ranges on a single checkpoint dimension."
+            )
+        concat_dim = multi_interval_dims[0] if multi_interval_dims else None
 
+        base_slices = []
         for dim_idx, dim_intervals in enumerate(intervals):
-            if len(dim_intervals) == 1:
+            if dim_idx == concat_dim:
+                # Disconnected intervals on this dim — placeholder; filled per interval below.
+                base_slices.append(slice(None))
+            else:
+                # Single contiguous slice on this dim.
                 start, end = dim_intervals[0]
                 base_slices.append(slice(start, end))
-            else:
-                if concat_dim is not None:
-                    # NOTE(3outeille): not sure yet which scenario will have StridedShard placements on both row and column. Thus, delay implementing this for now.
-                    raise ValueError(
-                        "Current shard-on-read only supports disjoint ranges on a single checkpoint dimension."
-                    )
-                concat_dim = dim_idx
-                base_slices.append(slice(None))  # filled per piece below
 
         # Fast path: every dim is one contiguous interval, read in a single slice.
         if concat_dim is None:
             return source[tuple(base_slices)].to(device=device, dtype=dtype)
 
         # Multi-interval dim: keep base slices fixed and vary concat_dim only.
-        base_slices_tuple: tuple[slice, ...] = tuple(base_slices)
-        pieces: list[torch.Tensor] = []
-        for piece_start, piece_end in intervals[concat_dim]:
-            piece_slices = (
+        base_slices_tuple = tuple(base_slices)
+        interval_tensors = []
+        for interval_start, interval_end in intervals[concat_dim]:
+            interval_slices = (
                 *base_slices_tuple[:concat_dim],
-                slice(piece_start, piece_end),
+                slice(interval_start, interval_end),
                 *base_slices_tuple[concat_dim + 1 :],
             )
-            pieces.append(source[piece_slices])
+            interval_tensors.append(source[interval_slices])
 
-        return torch.cat(pieces, dim=concat_dim).to(device=device, dtype=dtype)
+        return torch.cat(interval_tensors, dim=concat_dim).to(device=device, dtype=dtype)
 
     def _get_sub_mesh(self, mesh_dim: int):
         if self.device_mesh.ndim == 1:
