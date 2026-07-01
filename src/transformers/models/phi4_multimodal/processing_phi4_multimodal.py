@@ -24,6 +24,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -39,10 +40,11 @@ class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Phi4MultimodalProcessor(ProcessorMixin):
+    @deprecate_kwarg("audio_processor", new_name="feature_extractor", version="v5.20")
     def __init__(
         self,
         image_processor,
-        audio_processor,
+        feature_extractor,
         tokenizer,
         **kwargs,
     ):
@@ -50,7 +52,12 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.image_token_id
         self.audio_token = tokenizer.audio_token
         self.audio_token_id = tokenizer.audio_token_id
-        super().__init__(image_processor, audio_processor, tokenizer, **kwargs)
+        super().__init__(image_processor, feature_extractor, tokenizer, **kwargs)
+
+    @property
+    def audio_processor(self):
+        logger.warning_once("`audio_processor` is deprecated! Use `feature_extractor` instead!")
+        return self.feature_extractor
 
     @auto_docstring
     def __call__(
@@ -78,7 +85,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         audio_kwargs = output_kwargs["audio_kwargs"]
 
         image_inputs = self.image_processor(images, **image_kwargs) if images is not None else {}
-        audio_inputs = self.audio_processor(audio, **audio_kwargs) if audio is not None else {}
+        audio_inputs = self.feature_extractor(audio, **audio_kwargs) if audio is not None else {}
 
         # We pop here for images as we don't need it later
         num_img_tokens = image_inputs.pop("num_img_tokens", [])

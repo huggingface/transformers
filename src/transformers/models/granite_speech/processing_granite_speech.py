@@ -19,6 +19,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_python import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import requires_backends
 
 
@@ -30,9 +31,10 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class GraniteSpeechProcessor(ProcessorMixin):
+    @deprecate_kwarg("audio_processor", new_name="feature_extractor", version="v5.20")
     def __init__(
         self,
-        audio_processor,
+        feature_extractor,
         tokenizer,
         audio_token="<|audio|>",
         chat_template=None,
@@ -44,7 +46,12 @@ class GraniteSpeechProcessor(ProcessorMixin):
             audio tokens inserted depends on the audio feature dimensions extracted by the audio processor.
         """
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
-        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+
+    @property
+    def audio_processor(self):
+        logger.warning_once("`audio_processor` is deprecated! Use `feature_extractor` instead!")
+        return self.feature_extractor
 
     @auto_docstring
     def __call__(
@@ -64,7 +71,7 @@ class GraniteSpeechProcessor(ProcessorMixin):
             # text / audio inputs here because some inference engines will
             # trigger the conditions due to the way they call multimodal
             # processors, e.g., vLLM.
-            audio_inputs = self.audio_processor(audio, device=device)
+            audio_inputs = self.feature_extractor(audio, device=device)
 
             # TODO (@alex-jw-brooks); we should add a util to get_num_audio_tokens
             # from feature lengths and call it here, rather than returning it
