@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_step3p7.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The LLAMA4 and HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The StepFun and HuggingFace Inc. team. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,131 +27,111 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.cache_utils import Cache
-from transformers.modeling_outputs import BaseModelOutputWithPooling
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from transformers.processing_utils import Unpack
-from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_int
-
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...utils import torch_compilable_check
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+    torch_int,
+)
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
 
 
-#  Vision encoder
-class Step3p7VisionRope2D(nn.Module):
-    """Cacheable 2D rotary positional embedding for the vision encoder.
+class Step3p7VisionRotaryEmbedding(nn.Module):
+    """2D RoPE for the Step3p7 vision encoder.
 
-    Uses an interleaved-pairs frequency layout (repeat_interleave) which requires
-    a pair-wise rotate_half, distinct from the block-split convention used in the
-    text decoder.
+    Inherits frequency computation from :class:`Gemma4VisionRotaryEmbedding`
+    (``position_ids``-based interface, standard ``inv_freq``), but overrides
+    ``forward`` to use ``repeat_interleave(2)`` (interleaved pairs) instead of
+    Gemma4's ``cat((freqs, freqs))`` (block repetition), preserving the Step3p7
+    checkpoint's rotational convention.
     """
 
-    def __init__(
-        self,
-        dim: int,
-        max_grid_height: int,
-        max_grid_width: int,
-        use_cls_token: bool = False,
-        theta: int | float = 10000,
-        max_freq: int = 10,
-        num_freqs: int = 1,
-        theta_rescale_factor: float = 1.0,
-    ):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: Step3p7VisionConfig, device=None):
         super().__init__()
-        self.dim = dim
-        self.max_grid_height = max_grid_height
-        self.max_grid_width = max_grid_width
-        self.use_cls_token = use_cls_token
-        self.theta = theta * theta_rescale_factor ** (dim / (dim - 2))
-        self.max_freq = max_freq
-        self.num_freqs = num_freqs
-        cache = self._compute_2d_freqs()
-        self.register_buffer("freqs_cache", cache, persistent=False)
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-        """Pair-wise rotate: [a1,b1, a2,b2,...] → [-b1,a1, -b2,a2,...]."""
-        x = x.reshape(*x.shape[:-1], -1, 2)
-        x1, x2 = x.unbind(dim=-1)
-        return torch.stack((-x2, x1), dim=-1).reshape(*x.shape[:-2], -1)
+    def compute_default_rope_parameters(
+        config: Step3p7VisionConfig | None = None,
+        device: torch.device | None = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
-    def _compute_inv_freq(self, base: int | float, dim: int) -> torch.Tensor:
-        return 1.0 / (base ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+        # The reference implementation computes RoPE frequencies INDEPENDENTLY
+        # for each spatial dimension using the partitioned head_dim (head_dim // ndim),
+        # so both x and y dimensions get identical frequency ranges.
+        # This is different from splitting the global inv_freq between dimensions.
+        spatial_dim = dim // 2
 
-    def _compute_freqs(self, t: torch.Tensor, inv_freq: torch.Tensor) -> torch.Tensor:
-        freqs = torch.einsum("..., f -> ... f", t.type(inv_freq.dtype), inv_freq)
-        return freqs.repeat_interleave(2, dim=-1)
-
-    def _compute_2d_freqs(self) -> torch.Tensor:
-        grid_h_range = torch.arange(self.max_grid_height, dtype=torch.float)
-        grid_w_range = torch.arange(self.max_grid_width, dtype=torch.float)
-        if self.use_cls_token:
-            grid_h_range += 1
-            grid_w_range += 1
-        inv_freq = self._compute_inv_freq(self.theta, self.dim // 2)
-        freqs_h = self._compute_freqs(grid_h_range, inv_freq)[:, None].expand(
-            self.max_grid_height, self.max_grid_width, -1
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (
+            base
+            ** (torch.arange(0, spatial_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / spatial_dim)
         )
-        freqs_w = self._compute_freqs(grid_w_range, inv_freq)[None, :].expand(
-            self.max_grid_height, self.max_grid_width, -1
-        )
-        freqs = torch.cat([freqs_w, freqs_h], dim=-1).reshape(self.max_grid_height * self.max_grid_width, -1)
-        if self.use_cls_token:
-            freqs = torch.cat([torch.zeros(1, freqs.shape[-1]), freqs], dim=0)
-        return freqs[None, None, ...]
+        return inv_freq, attention_factor
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor, grid_hw: tuple[int, int]):
-        if grid_hw[0] != self.max_grid_height or grid_hw[1] != self.max_grid_width:
-            rows = torch.arange(grid_hw[0], device=q.device).view(-1, 1)
-            cols = torch.arange(grid_hw[1], device=q.device).view(1, -1)
-            positions = (rows * self.max_grid_width + cols).reshape(-1).to(torch.long)
-            if self.use_cls_token:
-                positions = torch.cat([torch.zeros(1, device=q.device), positions + 1], dim=0)
-            freqs = self.freqs_cache.index_select(2, positions)
-        else:
-            freqs = self.freqs_cache
-        dtype = q.dtype
-        q = (q * freqs.cos() + self._rotate_half(q) * freqs.sin()).to(dtype)
-        k = (k * freqs.cos() + self._rotate_half(k) * freqs.sin()).to(dtype)
-        return q, k
+    @torch.no_grad()
+    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            x: reference tensor for device/dtype (not rotated here).
+            position_ids: ``(B, seq, 2)`` integer (h, w) grid coordinates.
 
-    def get_cos_sin(
-        self, grid_hw: tuple[int, int], device: torch.device | None = None, dtype: torch.dtype | None = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return (cos, sin) shaped (seq_len, head_dim) for the given grid, for use as position_embeddings."""
-        if grid_hw[0] != self.max_grid_height or grid_hw[1] != self.max_grid_width:
-            rows = torch.arange(grid_hw[0], device=device or self.freqs_cache.device).view(-1, 1)
-            cols = torch.arange(grid_hw[1], device=device or self.freqs_cache.device).view(1, -1)
-            positions = (rows * self.max_grid_width + cols).reshape(-1).to(torch.long)
-            freqs = self.freqs_cache.index_select(2, positions)
-        else:
-            freqs = self.freqs_cache
-        freqs = freqs.squeeze(0).squeeze(0)  # (seq_len, head_dim)
-        if device is not None:
-            freqs = freqs.to(device=device)
-        if dtype is not None:
-            freqs = freqs.to(dtype=dtype)
-        return freqs.cos(), freqs.sin()
-
-
-class Step3p7VisionLayerScale(nn.Module):
-    """Per-channel residual scaling used when ls_init_value is set."""
-
-    def __init__(self, dim: int, init_values: float):
-        super().__init__()
-        self.scale = nn.Parameter(torch.full((dim,), init_values))
-
-    def forward(self, x: torch.Tensor):
-        return self.scale * x
+        Returns:
+            ``(cos, sin)``, each of shape ``(B, seq, head_dim)``.
+        """
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        all_cos, all_sin = [], []
+        for i in range(2):
+            dim_pos = position_ids[:, :, i][:, None, :].float()
+            with maybe_autocast(device_type=device_type, enabled=False):
+                freqs = (inv_freq_expanded.float() @ dim_pos.float()).transpose(1, 2)
+                emb = freqs.repeat_interleave(2, dim=-1)  # interleaved; Gemma4 uses cat((freqs, freqs))
+                all_cos.append(emb.cos() * self.attention_scaling)
+                all_sin.append(emb.sin() * self.attention_scaling)
+        return torch.cat(all_cos, dim=-1).to(dtype=x.dtype), torch.cat(all_sin, dim=-1).to(dtype=x.dtype)
 
 
 class Step3p7VisionMLP(nn.Module):
@@ -167,6 +147,73 @@ class Step3p7VisionMLP(nn.Module):
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+#  Vision encoder
+
+
+def _rotate_half_interleaved(x: torch.Tensor) -> torch.Tensor:
+    """Pair-wise rotation: [a1,b1, a2,b2,...] → [-b1,a1, -b2,a2,...].
+
+    Interleaved convention used by Step3p7 vision RoPE; distinct from the
+    block-split ``rotate_half`` used in the text decoder.
+    """
+    x = x.reshape(*x.shape[:-1], -1, 2)
+    x1, x2 = x.unbind(dim=-1)
+    return torch.stack((-x2, x1), dim=-1).reshape(*x.shape[:-2], -1)
+
+
+def apply_rotary_pos_emb_vision(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Apply 2-D RoPE with interleaved (pair-wise) rotation convention.
+
+    Replaces the block-split ``rotate_half`` used by MiniMaxM3VL with
+    ``_rotate_half_interleaved`` to match the Step3p7 checkpoint's rotational
+    layout produced by :class:`Step3p7VisionRotaryEmbedding`.
+    """
+    cos = cos.unsqueeze(2)
+    sin = sin.unsqueeze(2)
+    q = (q * cos + _rotate_half_interleaved(q) * sin).to(q.dtype)
+    k = (k * cos + _rotate_half_interleaved(k) * sin).to(k.dtype)
+    return q, k
 
 
 class Step3p7VisionAttention(nn.Module):
@@ -197,75 +244,69 @@ class Step3p7VisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
+
         queries = self.q_proj(hidden_states).view(hidden_shape)
         keys = self.k_proj(hidden_states).view(hidden_shape)
         values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
         cos, sin = position_embeddings
-        # expand (seq_len, head_dim) → (1, seq_len, 1, head_dim) for broadcasting
-        cos, sin = cos[None, :, None, :], sin[None, :, None, :]
-        # pair-wise (interleaved) rotation — distinct from the block-split used in the text decoder
-        queries = (queries * cos + Step3p7VisionRope2D._rotate_half(queries) * sin).to(queries.dtype)
-        keys = (keys * cos + Step3p7VisionRope2D._rotate_half(keys) * sin).to(keys.dtype)
+        queries, keys = apply_rotary_pos_emb_vision(queries, keys, cos, sin)
         queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
-        attn_output = F.scaled_dot_product_attention(queries, keys, values, scale=self.scale)
-        attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
-        return self.out_proj(attn_output), None
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return self.out_proj(attn_output), attn_weights
 
 
 class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Step3p7VisionConfig):
+    """Vision encoder layer with layer scale.
+
+    Inherits ``lambda_1``/``lambda_2`` naming from
+    :class:`~transformers.models.internvl.modeling_internvl.InternVLVisionLayer`
+    and adds RoPE-aware 2-D attention via ``position_embeddings`` forwarding.
+    """
+
+    def __init__(self, config: Step3p7VisionConfig) -> None:
         super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.self_attn = Step3p7VisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Step3p7VisionMLP(config)
-        self.layer_scale1 = Step3p7VisionLayerScale(config.hidden_size, config.layer_scale_init_value)
-        self.layer_scale2 = Step3p7VisionLayerScale(config.hidden_size, config.layer_scale_init_value)
+        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.lambda_1 = nn.Parameter(config.layer_scale_init_value * torch.ones(config.hidden_size))
+        self.lambda_2 = nn.Parameter(config.layer_scale_init_value * torch.ones(config.hidden_size))
 
-    @auto_docstring
     def forward(
-        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None, **kwargs
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
     ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask, **kwargs)
-        hidden_states = residual + self.layer_scale1(hidden_states)
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + self.layer_scale2(hidden_states)
-        return hidden_states
-
-
-class Step3p7VisionEncoder(nn.Module):
-    """Stack of vision encoder blocks; holds the shared 2-D RoPE."""
-
-    def __init__(self, config: Step3p7VisionConfig):
-        super().__init__()
-        self.layers = nn.ModuleList([Step3p7VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        head_dim = config.hidden_size // config.num_attention_heads
-        grid = config.image_size // config.patch_size
-        self.rotary_emb = Step3p7VisionRope2D(
-            dim=head_dim,
-            max_grid_height=grid,
-            max_grid_width=grid,
-            theta=getattr(config, "rope_theta", 10000),
-            max_freq=getattr(config, "rope_max_freq", 10),
-            num_freqs=getattr(config, "rope_num_freqs", 1),
-            theta_rescale_factor=getattr(config, "rope_theta_rescale_factor", 1.0),
+        attn_out, _ = self.self_attn(
+            self.layernorm_before(hidden_states),
+            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
+            **kwargs,
         )
-
-    def forward(self, hidden_states: torch.Tensor, grid_hw: tuple[int, int]) -> torch.Tensor:
-        cos, sin = self.rotary_emb.get_cos_sin(grid_hw, device=hidden_states.device, dtype=hidden_states.dtype)
-        for block in self.layers:
-            hidden_states = block(hidden_states, attention_mask=None, position_embeddings=(cos, sin))
-        return hidden_states
+        hidden_states = self.lambda_1 * attn_out + hidden_states
+        return self.lambda_2 * self.mlp(self.layernorm_after(hidden_states)) + hidden_states
 
 
 class Step3p7VisionEmbeddings(nn.Module):
@@ -310,7 +351,7 @@ class Step3p7VisionEmbeddings(nn.Module):
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
             size=(new_height, new_width),
-            mode="bilinear",
+            mode="bilinear",  # intentionally bilinear; SiGLIP uses bicubic
             align_corners=False,
         )
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
@@ -330,28 +371,50 @@ class Step3p7VisionEmbeddings(nn.Module):
 
 
 class Step3p7VisionModel(nn.Module):
+    """Vision encoder: patch embeddings → 2-D RoPE transformer layers → conv downsampler.
+
+    The rotary embedding (``self.rotary_emb``) and layer stack (``self.layers``) are
+    held directly on this module, following the Gemma4 convention of not wrapping
+    them in a separate ``Encoder`` submodule.
+    """
+
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
         self.config = config
         self.embeddings = Step3p7VisionEmbeddings(config)
         self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.encoder = Step3p7VisionEncoder(config)
-        self.downsampler = nn.Sequential(
-            nn.Conv2d(config.hidden_size, config.hidden_size * 2, kernel_size=3, stride=2, padding=1),
-            nn.Conv2d(config.hidden_size * 2, config.hidden_size * 4, kernel_size=3, stride=2, padding=1),
+        self.rotary_emb = Step3p7VisionRotaryEmbedding(config)
+        self.layers = nn.ModuleList([Step3p7VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.downsampler1 = nn.Conv2d(config.hidden_size, config.hidden_size * 2, kernel_size=3, stride=2, padding=1)
+        self.downsampler2 = nn.Conv2d(
+            config.hidden_size * 2, config.hidden_size * 4, kernel_size=3, stride=2, padding=1
         )
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
         _, _, height, width = pixel_values.shape
-        grid_h, grid_w = height // self.embeddings.patch_size, width // self.embeddings.patch_size
+        grid_h = height // self.embeddings.patch_size
+        grid_w = width // self.embeddings.patch_size
         hidden_state = self.embeddings(pixel_values, interpolate_pos_encoding=True)
         hidden_state = self.pre_layernorm(hidden_state)
-        hidden_state = self.encoder(hidden_state, grid_hw=(grid_h, grid_w))
+        # Build (h, w) position_ids for 2-D RoPE: shape (1, grid_h * grid_w, 2)
+        rows = torch.arange(grid_h, device=hidden_state.device).view(-1, 1).expand(grid_h, grid_w)
+        cols = torch.arange(grid_w, device=hidden_state.device).view(1, -1).expand(grid_h, grid_w)
+        position_ids = torch.stack([rows, cols], dim=-1).reshape(1, -1, 2)
+        position_embeddings = self.rotary_emb(hidden_state, position_ids)
+        all_hidden_states = (hidden_state,) if output_hidden_states else None
+        for layer in self.layers:
+            hidden_state = layer(hidden_state, position_embeddings=position_embeddings)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_state,)
         batch_size, num_patches, channels = hidden_state.shape
         grid_size = int(num_patches**0.5)
         hidden_state = hidden_state.permute(0, 2, 1).view(batch_size, channels, grid_size, grid_size)
-        hidden_state = self.downsampler(hidden_state)
-        return hidden_state.flatten(2).permute(0, 2, 1)
+        hidden_state = self.downsampler1(hidden_state)
+        hidden_state = self.downsampler2(hidden_state)
+        return BaseModelOutput(
+            last_hidden_state=hidden_state.flatten(2).permute(0, 2, 1),
+            hidden_states=all_hidden_states,
+        )
 
 
 # Text model
@@ -368,14 +431,13 @@ class Step3p7PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        # issues from _move_missing_keys_from_meta_to_device, this runs after that migration step, so the correct values are restored.
-        if hasattr(module, "_compute_2d_freqs") and hasattr(module, "freqs_cache"):
-            cache = module._compute_2d_freqs()
-            module.register_buffer("freqs_cache", cache, persistent=False)
         if isinstance(module, Step3p7VisionEmbeddings):
             module.register_buffer(
                 "position_ids", torch.arange(module.num_positions).expand((1, -1)), persistent=False
             )
+        elif isinstance(module, Step3p7VisionEncoderLayer):
+            nn.init.constant_(module.lambda_1, self.config.vision_config.layer_scale_init_value)
+            nn.init.constant_(module.lambda_2, self.config.vision_config.layer_scale_init_value)
 
 
 class Step3p7RotaryEmbedding(nn.Module):
@@ -582,43 +644,6 @@ class Step3p7SparseMoeBlock(nn.Module):
         return hidden_states
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -662,20 +687,152 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+class Step3p7Indexer(nn.Module):
+    r"""Lightning Indexer for MiniMax M3 sparse attention.
+
+    Scores each query against every key with a small `index_n_heads`-head
+    dot-product branch, then max-pools those per-key scores into *blocks* of
+    `index_block_size` keys and keeps, per query, the top-`index_topk_blocks`
+    key blocks plus the `index_local_blocks` blocks immediately preceding the
+    query (always visible). Selection therefore happens at the granularity of a
+    *block of keys* rather than individual keys: the expensive main attention
+    only has to attend the handful of selected key blocks, which is what makes
+    it block-sparse (and cheaper) on long sequences.
+
+    The `index_local_blocks` boosting their score so they always win key slots, the
+    same way the deployment block-sparse kernel (MiniMax `topk_sparse`) does it.
+
+    `forward` returns the per-query selected key-block indices
+    `[B, S_q, index_topk_blocks]`. Valid indices are left-packed and `-1`
+    right-pads the unused slots (future/empty blocks), and the local boost makes
+    selections deduplicated -- the exact contract the block-sparse attention
+    kernel consumes (it counts the valid entries, then reads them sequentially
+    and would double-count a repeated block). The eager/SDPA path instead calls
+    `build_block_mask`, which expands the indices into the dense
+    `[B, 1, S_q, S_k]` additive mask the standard attention interface expects
+    (`0` at every allowed (query, key) pair, `-inf` elsewhere).
+
+    Like DeepSeek-V4's indexer this is purely a *selection* branch: it has no
+    value projection and produces no residual output of its own (the upstream
+    checkpoint disables the index-value path on every sparse layer).
+
+    TODO: blocks are anchored to absolute key *slots* (the contiguous reshape in
+    `forward` and `q_block = slot // block_size`), so left-padding shifts the block
+    boundaries and the selection diverges from an unpadded run -- only right-padding
+    is equivalent (same limitation as DeepSeek-V4; see `test_right_padding_does_not_leak`
+    / the skipped `test_left_padding_compatibility`). For *true* left-padding equivalence
+    we'd make blocking content-relative instead of slot-relative:
+      1. derive block ids from `position_ids` (content positions, 0 at each row's first
+         real token) rather than from absolute slots, and
+      2. replace the contiguous `view(..., num_key_blocks, block_size).amax(-1)` key pool
+         with a per-row position-binned pool (e.g. `scatter_reduce` over `key_position //
+         block_size`), so pad never shifts the boundaries, and
+      3. mask padded keys' scores to `-inf` before the pool so a pad key can't win a block
+         a top-k slot.
+    """
+
+    def __init__(self, config: Step3p7TextConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = config.index_head_dim
+        self.num_heads = config.index_n_heads
+        self.block_size = config.index_block_size
+        self.topk_blocks = config.index_topk_blocks
+        self.local_blocks = config.index_local_blocks
+        self.q_proj = nn.Linear(config.hidden_size, config.index_n_heads * config.index_head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.index_head_dim, bias=False)
+        self.q_norm = Step3p7RMSNorm(config.index_head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Step3p7RMSNorm(config.index_head_dim, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        past_key_values: Cache | None,
+        position_ids: torch.Tensor,
+    ) -> torch.Tensor:
+        batch, q_len, _ = hidden_states.shape
+        idx_q = self.q_proj(hidden_states).view(batch, q_len, -1, self.head_dim)
+        idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
+        idx_k = self.k_proj(hidden_states).view(batch, q_len, 1, self.head_dim)
+        idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, Sq, D]
+        cos, sin = position_embeddings
+        idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
+
+        if past_key_values is not None:
+            idx_k = past_key_values.layers[self.layer_idx].update_index(idx_k)
+
+        k_len = idx_k.shape[2]
+        num_key_blocks = -(-k_len // self.block_size)  # ceil-div
+        pad = num_key_blocks * self.block_size - k_len
+
+        scores = torch.matmul(idx_q.float(), idx_k.float().transpose(-1, -2))
+        k_positions = torch.arange(k_len, device=idx_q.device)
+        token_future = k_positions[None, None, None, :] > position_ids[:, None, :, None]  # [B, 1, S_q, S_k]
+        scores = scores.masked_fill(token_future, float("-inf"))
+        if pad:
+            scores = F.pad(scores, (0, pad), value=float("-inf"))
+        scores = scores.view(batch, self.num_heads, q_len, num_key_blocks, self.block_size)
+        block_scores = scores.amax(dim=-1).amax(dim=1)  # -> [B, S_q, num_key_blocks]
+
+        q_block = position_ids // self.block_size  # [B, S_q]
+
+        if self.local_blocks > 0:
+            local = torch.arange(self.local_blocks, device=idx_q.device)
+            local_idx = (q_block[..., None] - local.view(1, 1, -1)).clamp(min=0)  # [B, S_q, local]
+            block_scores.scatter_(-1, local_idx, float("inf"))
+
+        # Slots that fall on a future/empty block keep their `-inf`
+        # score, which top-k sorts to the end, so tagging them `-1` yields left-packed block indices
+        # with `-1` right-padding which is the format expect by block-sparse attention kernel.
+        topk = min(self.topk_blocks, num_key_blocks)
+        topk_scores, topk_indices = block_scores.topk(topk, dim=-1)  # [B, S_q, topk]
+        return topk_indices.masked_fill(topk_scores == float("-inf"), -1)
+
+    def build_block_mask(
+        self,
+        block_indices: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        key_length: int,
+        dtype: torch.dtype,
+        device: torch.device,
+        position_ids: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        We build the full 4D attention mask (Batch, query, key, head)
+        """
+        batch, q_len, _ = block_indices.shape
+        num_key_blocks = -(-key_length // self.block_size)
+
+        # Scatter the kept blocks to `0`; `-1` slots land in a throwaway column we drop afterwards.
+        safe = block_indices.masked_fill(block_indices < 0, num_key_blocks)
+        bias = block_indices.new_full((batch, q_len, num_key_blocks + 1), float("-inf"), dtype=dtype)
+        bias.scatter_(-1, safe, 0.0)
+        bias = bias[..., :num_key_blocks]
+
+        # Broadcast the per-block keep/drop verdict back onto every key (block granularity), add head axis.
+        block_keep = (bias == 0.0).repeat_interleave(self.block_size, dim=-1)[..., :key_length].unsqueeze(1)
+
+        # Compose block-selection with the existing mask, then emit a single additive float mask.
+        if attention_mask is not None:
+            padding_mask = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
+            keep = block_keep & padding_mask
+        else:
+            k_positions = torch.arange(key_length, device=device)
+            token_future = k_positions[None, None, None, :] > position_ids[:, None, :, None]  # [B, 1, S_q, S_k]
+            keep = block_keep & ~token_future
+        min_dtype = torch.finfo(dtype).min
+        return torch.zeros(keep.shape, dtype=dtype, device=device).masked_fill(~keep, min_dtype)
+
+
 class Step3p7Attention(nn.Module):
     """
     M3 attention: per-head Gemma QK-norm + partial RoPE, optionally sparse indexer selection which require position IDs.
     """
 
-    def __init__(self, config: Step3p7TextConfig, layer_idx):
+    def __init__(self, config: Step3p7TextConfig, layer_idx: int):
         super().__init__()
-        self.layer_type = config.layer_types[layer_idx]
-        config = copy.copy(config)
-        if self.layer_type == "sliding_attention":
-            config.num_attention_heads = config.num_sliding_attention_heads
-            config.rope_parameters = {"rope_type": "default", "rope_theta": config.rope_theta}
-        else:
-            config.rope_parameters = config.rope_scaling or {"rope_type": "default", "rope_theta": config.rope_theta}
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -690,12 +847,12 @@ class Step3p7Attention(nn.Module):
         self.q_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.indexer = (
-            None  # Step3p7 has no minimax_m3_sparse layers; prevents converter from copying MiniMaxM3VLIndexer
+            Step3p7Indexer(config, layer_idx) if config.layer_types[layer_idx] == "minimax_m3_sparse" else None
         )
         self.num_attention_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
+        layer_type = config.layer_types[layer_idx]
+        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.g_proj = nn.Linear(config.hidden_size, config.num_attention_heads, bias=False)
 
     def forward(
         self,
@@ -922,6 +1079,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
         pixel_values: torch.Tensor,
         pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -934,12 +1092,24 @@ class Step3p7Model(Step3p7PreTrainedModel):
             pixel_values = pixel_values.view(-1, *pixel_values.shape[-3:])
         if pixel_values_local is not None:
             pixel_values_local = pixel_values_local.view(-1, *pixel_values_local.shape[-3:])
-            if pixel_values_local.shape[0] == 0:
-                pixel_values_local = None
 
-        image_features = self.multi_modal_projector(self.vision_model(pixel_values.to(self.dtype).to(self.device)))
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else getattr(self.config.vision_config, "output_hidden_states", False)
+        )
+        vision_output = self.vision_model(
+            pixel_values.to(self.dtype).to(self.device),
+            output_hidden_states=output_hidden_states,
+        )
+        image_features = self.multi_modal_projector(vision_output.last_hidden_state)
         patch_image_features = (
-            self.multi_modal_projector(self.vision_model(pixel_values_local.to(self.dtype).to(self.device)))
+            self.multi_modal_projector(
+                self.vision_model(
+                    pixel_values_local.to(self.dtype).to(self.device),
+                    output_hidden_states=False,
+                ).last_hidden_state
+            )
             if pixel_values_local is not None
             else None
         )
@@ -957,7 +1127,11 @@ class Step3p7Model(Step3p7PreTrainedModel):
             cur_feature.append(image_features[i].view(-1, image_features.shape[-1]))
             cur_patch_idx += num_patch
             merged.append(torch.cat(cur_feature) if len(cur_feature) > 1 else cur_feature[0])
-        return BaseModelOutputWithPooling(pooler_output=torch.cat(merged, dim=0))
+        return BaseModelOutputWithPooling(
+            last_hidden_state=vision_output.last_hidden_state,
+            pooler_output=torch.cat(merged, dim=0),
+            hidden_states=vision_output.hidden_states,
+        )
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -1194,15 +1368,6 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             model_inputs["num_local_patches"] = num_local_patches
 
         return model_inputs
-
-    def get_input_embeddings(self):
-        return self.model.language_model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.language_model.embed_tokens = value
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
 
 __all__ = ["Step3p7ForConditionalGeneration", "Step3p7Model"]

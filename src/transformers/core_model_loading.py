@@ -1180,6 +1180,25 @@ class WeightConverter(WeightTransform):
         if ".*." in layer_name:
             full_name = layer_name.replace(".*.", ".0.")
 
+        # Expand \1 backreferences in operation output keys. Operations (Chunk, Concatenate) use
+        # self.target_patterns directly as dict keys, but process_target_pattern replaces capturing
+        # groups like (\d+) with the literal \1 backreference. The prefix/suffix expansion below
+        # relies on substring matching, which fails when keys have \1 instead of the actual number.
+        if any(r"\1" in k for k in collected_tensors):
+            expanded: dict = {}
+            for k, v in collected_tensors.items():
+                if r"\1" in k:
+                    for pat in self._original_target_patterns:
+                        try:
+                            m = re.search(pat, full_name)
+                        except re.error:
+                            continue
+                        if m and m.lastindex:
+                            k = k.replace(r"\1", m.group(1))
+                            break
+                expanded[k] = v
+            collected_tensors = expanded
+
         try:
             prefix, _, suffix = next(full_name.partition(k) for k in collected_tensors.keys() if k in full_name)
             # Rename the tensors
@@ -1797,7 +1816,11 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
             param = param[0] if isinstance(param, list) else param
             if isinstance(mapping, WeightConverter):
                 # Bring converter outputs from converter namespace into checkpoint namespace.
-                target_name, _ = rename_source_key(target_name, inverted_renamings, [])
+                # For single-output converters (e.g. Concatenate), layer_name already has the
+                # correct expanded key (backreferences resolved); target_name from the operation
+                # may contain unexpanded backreferences like \1.
+                key_to_rename = layer_name if len(realized) == 1 else target_name
+                target_name, _ = rename_source_key(key_to_rename, inverted_renamings, [])
             new_state_dict[target_name] = param
 
     return new_state_dict

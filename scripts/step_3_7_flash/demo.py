@@ -31,38 +31,43 @@ def _resolve_model_dir(model_dir: str | Path) -> Path:
 
 
 def _convert_hub_checkpoint(hub_dir: Path, out_dir: Path) -> Path:
-    """Convert hub-format checkpoint → transformers format, save to out_dir."""
-    import json
-    import sys as _sys
-    _here = Path(__file__).resolve().parent
-    if str(_here) not in _sys.path:
-        _sys.path.insert(0, str(_here))
-    from convert_config import convert as convert_cfg
-    from transformers.models.step_3_7_flash.convert_step3p7_weights_to_hf import convert_state_dict
+    """Convert hub-format checkpoint → transformers format, save to out_dir.
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    raw_cfg = convert_cfg(hub_dir / "config.json")
-    (out_dir / "config.json").write_text(json.dumps(raw_cfg, indent=2) + "\n")
-    num_hidden_layers = (raw_cfg.get("text_config") or raw_cfg).get("num_hidden_layers")
+    Weight renaming is applied automatically by `from_pretrained` via the
+    `step3p7` entry in `conversion_mapping.py` — see `convert_checkpoint`.
+    """
+    from transformers.models.step_3_7_flash.convert_step3p7_weights_to_hf import convert_checkpoint
 
-    for weight_file in ("pytorch_model.bin", "model.safetensors"):
+    convert_checkpoint(input_dir=str(hub_dir), output_dir=str(out_dir))
+    return out_dir
+
+
+def _load_raw_state_dict(hub_dir: Path) -> dict[str, torch.Tensor]:
+    """Load a checkpoint's weight file as-is, with no key renaming."""
+    for weight_file in ("model.safetensors", "pytorch_model.bin"):
         src = hub_dir / weight_file
         if src.exists():
             if weight_file.endswith(".safetensors"):
                 from safetensors.torch import load_file
-                hub_sd = load_file(src)
-            else:
-                hub_sd = torch.load(src, map_location="cpu", weights_only=True)
-            break
-    else:
-        raise FileNotFoundError(f"No weight file found in {hub_dir}")
+                return load_file(src)
+            return torch.load(src, map_location="cpu", weights_only=True)
+    raise FileNotFoundError(f"No weight file found in {hub_dir}")
 
-    new_sd = convert_state_dict(hub_sd, num_hidden_layers=num_hidden_layers)
-    for stale in ("model.safetensors", "pytorch_model.bin"):
-        (out_dir / stale).unlink(missing_ok=True)
-    torch.save(new_sd, out_dir / "pytorch_model.bin")
-    print(f"Converted {len(hub_sd)} → {len(new_sd)} keys → {out_dir}/")
-    return out_dir
+
+def _apply_key_mapping(
+    state_dict: dict[str, torch.Tensor], key_mapping: dict[str, str]
+) -> dict[str, torch.Tensor]:
+    """Rename `state_dict` keys via ordered regex (pattern -> replacement); first match wins per key."""
+    import re
+
+    renamed = {}
+    for key, value in state_dict.items():
+        for pattern, replacement in key_mapping.items():
+            if re.search(pattern, key):
+                key = re.sub(pattern, replacement, key, count=1)
+                break
+        renamed[key] = value
+    return renamed
 
 
 def _run_original_forward(
@@ -86,14 +91,36 @@ def _run_original_forward(
 
     print(f"Loading original-code model from {hub_dir} ...")
     orig_cfg = OrigConfig.from_pretrained(hub_dir)
-    orig_model = OrigModel.from_pretrained(hub_dir, config=orig_cfg).eval()
+    # Load the state dict directly rather than via `from_pretrained`: this vendor
+    # reference copy shares both its class name and `config.model_type` ("step3p7")
+    # with the new-code model, so `from_pretrained`'s automatic weight-conversion
+    # lookup (keyed on those same identifiers) would additionally apply the new
+    # code's key-renaming mapping on top of this class's own `_checkpoint_conversion_mapping`,
+    # double-renaming keys. Apply only this class's own mapping instead.
+    orig_model = OrigModel(orig_cfg)
+    state_dict = _load_raw_state_dict(hub_dir)
+    state_dict = _apply_key_mapping(state_dict, OrigModel._checkpoint_conversion_mapping)
+    missing, unexpected = orig_model.load_state_dict(state_dict, strict=False)
+    if missing or unexpected:
+        print(f"  [original-code] missing={len(missing)} unexpected={len(unexpected)} keys")
+    orig_model.eval()
+
+    # Non-persistent buffers (e.g. RoPE freqs_cache) are not saved in the
+    # checkpoint and may be left as uninitialized memory when from_pretrained
+    # uses a meta-device init path.  Recompute them by re-running __init__
+    # on every EncoderRope2D submodule.
+    from transformers.models.step_3_7_flash_original.modeling_step3p7 import EncoderRope2D
+    for module in orig_model.modules():
+        if isinstance(module, EncoderRope2D):
+            cache = module._compute_2d_freqs()
+            module.register_buffer("freqs_cache", cache, persistent=False)
 
     with torch.no_grad():
         orig_text = orig_model(input_ids=input_ids, use_cache=False).logits
         out = orig_model.model(
             input_ids=ids_with_image,
             pixel_values=pixel_values,
-            num_local_patches=[0],
+            num_patches=[0],
             use_cache=False,
         )
         orig_pv = orig_model.lm_head(out.last_hidden_state)
