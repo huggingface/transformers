@@ -131,8 +131,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
             if weight_sources:
                 packed_weight = [p + "_packed$" for p in weight_sources]
-                scale_sources = [p[: -len(".weight")] + ".weight_scale$" for p in weight_sources]
-                shape_sources = [p[: -len(".weight")] + ".weight_shape$" for p in weight_sources]
+                scale_sources = [p + "_scale$" for p in weight_sources]
+                shape_sources = [p + "_shape$" for p in weight_sources]
                 other = [p for p in conv.source_patterns if not p.endswith(".weight")]
                 new_sources = packed_weight + scale_sources + shape_sources + other
                 new_ops = [DecompressExperts(self)] + list(conv.operations)
