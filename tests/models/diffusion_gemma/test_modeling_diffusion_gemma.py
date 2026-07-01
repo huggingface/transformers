@@ -248,6 +248,43 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
     def test_disk_offload_safetensors(self):
         pass
 
+    def test_gradient_checkpointing_matches_no_checkpointing(self):
+        """
+        Gradient checkpointing relies on the encoder writing its KV cache outside the checkpointed layer calls and
+        on the decoder keeping the read-only cache (`_can_checkpoint_with_cache`). Both must reproduce the exact
+        same loss and gradients as the non-checkpointed forward, including encoder gradients through the cache.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # Checkpointing only engages in train mode, so determinism requires disabling dropout instead of eval()
+        config.text_config.attention_dropout = 0.0
+        config.vision_config.dropout = 0.0
+        config.vision_config.attention_dropout = 0.0
+        model = DiffusionGemmaForBlockDiffusion(config).to(torch_device)
+        inputs = self._prepare_for_class(inputs_dict, DiffusionGemmaForBlockDiffusion)
+
+        def loss_and_grads(checkpointing):
+            model.zero_grad(set_to_none=True)
+            if checkpointing:
+                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+            else:
+                model.gradient_checkpointing_disable()
+            model.train()
+            loss = model(**inputs).logits.float().mean()
+            loss.backward()
+            return loss.detach(), {name: p.grad.clone() for name, p in model.named_parameters() if p.grad is not None}
+
+        loss_ref, grads_ref = loss_and_grads(checkpointing=False)
+        loss_checkpointed, grads_checkpointed = loss_and_grads(checkpointing=True)
+
+        # Snapshot/restore makes the recomputation bit-exact on CPU; accelerators can reorder accumulation in the
+        # backward, so relax the tolerance there.
+        rtol = atol = 0 if torch_device == "cpu" else 1e-5
+        torch.testing.assert_close(loss_checkpointed, loss_ref, rtol=rtol, atol=atol)
+        self.assertEqual(grads_checkpointed.keys(), grads_ref.keys())
+        self.assertTrue(any("encoder" in name for name in grads_checkpointed))
+        for name in grads_ref:
+            torch.testing.assert_close(grads_checkpointed[name], grads_ref[name], rtol=rtol, atol=atol)
+
     # Tests designed specifically for `DiffusionGemma`, excluding generation tests.
     def test_tied_weights(self):
         """
