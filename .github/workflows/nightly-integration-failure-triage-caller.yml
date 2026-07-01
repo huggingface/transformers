@@ -16,6 +16,10 @@ on:
         description: "Compute the report but do not dispatch to Serge"
         type: boolean
         default: false
+      max_groups:
+        description: "Cap failure groups dispatched to Serge (set to 1 for a single-task test run; empty = normal)"
+        type: string
+        default: ""
 
 # Permissions are granted here and bound the reusable workflow's job token.
 permissions:
@@ -39,4 +43,5 @@ jobs:
     uses: huggingface/transformers-ci/.github/workflows/integration-failure-triage.yml@main # main
     with:
       dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+      max_groups: ${{ github.event_name == 'workflow_dispatch' && inputs.max_groups || '' }}
     secrets: inherit
