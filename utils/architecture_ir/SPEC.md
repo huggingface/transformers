@@ -57,8 +57,14 @@ what is evaluated.
 - `schema_version`: `"architecture-template-v0"`.
 
 > The template MAY additionally carry values observed under the model's **default** config at generation time (for
-> example `config.fields` and a repeat's optional `count`). These are **provenance/defaults**, not the authoritative
-> parametric form. The authoritative parametric form is always the config expression string.
+> example a repeat's optional `count`). These are **provenance/defaults**, not the authoritative parametric form. The
+> authoritative parametric form is always the config expression string.
+>
+> The template MUST NOT serialize the full checkpoint/default config. Instead `config` carries two compact, curated
+> maps: **`referenced_fields`** (exactly the config knobs referenced by config expressions in the artifact, with their
+> default values — the authoritative parametric surface) and **`salient_fields`** (a whitelist of architecture-defining
+> scalar defaults such as `hidden_size`, `num_attention_heads`, `hidden_act`). Label maps, tokenizer ids, runtime flags,
+> version strings, and nested config objects are deliberately excluded.
 
 ### 2.2 `ResolvedGraph`
 
@@ -100,8 +106,25 @@ Components are split across two arrays:
 - `templates`: reusable **repeat bodies** and their descendants — serialized once, referenced by repeats.
 
 `kind` is an open vocabulary (validated as a string). v0 recognizers commonly emit: `model`, `embedding`, `position`,
-`attention`, `cross_attention`, `feed_forward`, `normalization`, `pooler`, `transformer_block`, `encoder`, `decoder`,
-`stack`, `repeated_container`. Consumers MUST tolerate unknown `kind` values.
+`attention`, `cross_attention`, `feed_forward`, `moe`, `normalization`, `pooler`, `transformer_block`, `encoder`,
+`decoder`, `stack`, `repeated_container`. Consumers MUST tolerate unknown `kind` values.
+
+### Semantic facts (`architecture` + component `attributes`)
+
+Beyond `kind`, the generator derives normalized **semantic facts** (generically, from config + module tree — no
+per-model special-casing):
+
+- A top-level **`architecture`** block with model-level facts: `view` (`decoder`/`encoder`/`enc_dec`/`multimodal`),
+  `family` (task family via the Auto\* mappings, e.g. `causal_lm`/`masked_lm`/`seq2seq`), `attention_variant`
+  (`MHA`/`GQA`/`MQA`/`MLA`), `positional` (`rope`/`relative`/`alibi`/`learned`), `is_moe` (+ `moe` params),
+  `sliding_window`, `tie_word_embeddings`. Fields that don't apply are omitted; a value being absent means
+  "not present / undeterminable".
+- Per-component **`attributes`**: attention components carry `{variant, n_heads, n_kv_heads, head_dim, rope,
+  sliding_window}`; normalization components carry `{norm_type}` (`rms`/`layer`/…); MoE components carry
+  `{num_experts, experts_per_token, …}`.
+
+These facts also drive the reserved edge kinds: decoder-side self-attention emits `cache_read`/`cache_write` edges to a
+`state:kv_cache` pseudo-node, and a MoE block emits a `route` edge to its experts container.
 
 ---
 
@@ -156,6 +179,24 @@ not themselves components.
 All eight kinds are part of the v0 contract and are valid in both schemas. `route`, `cache_read`, and `cache_write`
 are **defined but not yet emitted** by the v0 recognizers for `llama`/`bert`/`t5`; they are reserved for MoE and
 cached-attention recognizers. Consumers MUST accept all eight kinds and SHOULD tolerate additional kinds gracefully.
+
+### Observed dataflow (`dataflow`)
+
+Structural edges are inferred from the module tree. To **ground** the top-level flow in what actually executes, the
+generator additionally runs one forward pass on the meta-device model (meta tensors carry shapes but allocate ~no
+memory) and records the top-level stages in real call order, with their tensor shapes. This is emitted as an optional
+top-level `dataflow` object: `input`, `output`, and an ordered `stages` list, each stage carrying its semantic `id`
+(mapped from the executing module), `module_name`/`class_name` (provenance), and `in_shape`/`out_shape`.
+
+Because the template is config-parametric, observed **integer** shapes are **symbolized**: a dim is either an integer
+or a token — `"B"` (batch), `"S"` (sequence), or a config expression such as `"config.hidden_size"` when the dim
+matches a salient config value. So `[1, 8, 4096]` is serialized as `["B", "S", "config.hidden_size"]`, and a
+`ResolvedGraph` consumer can evaluate it per checkpoint.
+
+Observed consecutive-stage `data` edges that the structural pass missed are added to `edges` (tagged with a
+`"provenance": "observed_forward"` field); `position`/`mask` stages are excluded from that chain since they are not
+main-path carriers. The `dataflow` block is **best-effort and optional**: models whose forward can't run on meta
+(data-dependent control flow, unusual inputs) simply omit it and keep their structural edges.
 
 ---
 
@@ -227,21 +268,41 @@ The v0 generator instantiates models from configuration only, on the meta device
 
 ---
 
-## 10. Future: modular inheritance (reserved, not implemented)
+## 10. Modular inheritance
 
-The IR is expected to eventually support **architecture inheritance**, mirroring the philosophy of Modular Transformers
-while staying independent from Python implementation details. Instead of duplicating an entire architecture, an
-artifact would extend another and apply semantic patches (e.g. replace attention, add a projector, modify an edge,
-override config defaults).
+Many Transformers models are defined as a `modular_<name>.py` whose classes inherit from another model
+(`class GemmaModel(LlamaModel)`). The IR captures this inheritance — mirroring the philosophy of Modular Transformers
+while staying independent from Python implementation details — via three top-level fields on `ArchitectureTemplate`:
 
-For this, two fields are **reserved** at the top level of `ArchitectureTemplate`:
+- **`extends`**: the dominant parent `model_type` this architecture inherits from, or `null` for standalone models.
+- **`modularity`**: a diff summary — `is_modular`, `parent_model(s)`, per-bucket `totals`
+  (`overridden`/`added`/`deleted`/`new_classes`/`trivial`), and a single-number **`diff_size`**
+  (`overridden + added + deleted + 3·new_classes`). `diff_size` is an automatic, per-model measure of how modular a
+  model is: a clean modular model (e.g. `qwen2` extending `llama`) has a tiny diff; a model that declares a parent but
+  overrides nothing while adding many classes has a large one. It doubles as a **modularity linter**.
+- **`patches`**: the per-class change sets, each projected onto a semantic `component_kind` (e.g. `GemmaAttention` →
+  `attention`) alongside the provenance `target_class`/`parent_class`/`parent_model` and the `overridden`/`added`/
+  `deleted` method & attr lists. Empty for standalone models.
 
-- `extends`: the `model_type` (or template reference) this template inherits from.
-- `patches`: an ordered list of semantic patch operations applied to the base.
+### How it is computed
 
-**v0 does not implement modular diffing.** These fields are documented and accepted by the schema (as optional) so that
-consumers can be forward-compatible, but the v0 generator does not emit them, and no patch grammar is standardized yet.
-A full modular-diff grammar will be specified in a later revision.
+The generator parses the model's `modular_<name>.py` with the stdlib `ast` (no `libcst` dependency, no torch, no import
+of the model) and mirrors the semantics of `utils/modular_model_converter.py`:
+
+- a method/attr present in **both** the modular class and its named parent class → **overridden**;
+- present **only** in the modular class → **added**;
+- a deletion sentinel (`attr = AttributeError(...)` / `def f(): raise AttributeError`) → **deleted**.
+
+The parent model of each class is read from the modular file's `from ..<model>.modeling_<model> import <Class>` imports.
+Computation is best-effort: on any failure the artifact still carries a `modularity` summary marking the model
+non-modular with a `note`, keeping the artifact shape stable.
+
+### Not yet implemented
+
+`patches` are keyed to Python classes projected onto semantic kinds — not yet to individual semantic component **IDs**
+(e.g. `decoder_layer.self_attn`), and there is no patch grammar for edge/config-default overrides or for *applying* a
+patch to reconstruct a child template from its parent. Those remain future work; the current payload is a faithful,
+schema-stable representation of the modular diff and the modularity metric.
 
 ---
 

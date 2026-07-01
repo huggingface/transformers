@@ -34,11 +34,19 @@ resolving a template against a checkpoint `config.json`.
 Each generated artifact is an `ArchitectureTemplate`, validated by `schema/architecture-template-v0.schema.json`, and
 contains:
 
-- config class and config fields from local defaults
+- config class plus a compact `referenced_fields` (config knobs referenced by config expressions) and `salient_fields`
+  (curated architecture-defining scalar defaults) — the full config is intentionally not serialized
 - resolved config/model entrypoints
 - compact semantic components and reusable templates
 - repeated `ModuleList` blocks collapsed into symbolic repeats when detectable
-- coarse semantic edges with `data`, `residual`, `mask`, `position`, and `cross_attention` kinds
+- coarse semantic edges (`data`, `residual`, `mask`, `position`, `cross_attention`, `route`, `cache_read`,
+  `cache_write`)
+- an `architecture` block of normalized semantic facts (view, task family, attention variant, positional scheme, MoE
+  params) plus per-component `attributes`
+- a `modularity` block + `extends`/`patches`: the modular-diff of the model's `modular_<name>.py` vs its parent,
+  including a `diff_size` modularity metric
+- an observed `dataflow` block: top-level flow from a real meta forward, with config-parametric (symbolized) tensor
+  shapes like `["B", "S", "config.hidden_size"]`
 - path-pattern provenance such as `model.layers.{i}.self_attn`
 
 The canonical `artifacts/<model_type>.json` files do not serialize every module instance. For example, repeated Llama
@@ -73,7 +81,11 @@ generator. Architecture-specific behavior should be added as reusable semantic r
 
 Known limitations:
 
-- dataflow is semantic and coarse, not an executable graph
-- forward methods are not traced, and `torch.fx` / `torch.export` are not primary sources
+- dataflow is semantic and coarse, not an executable graph; the observed `dataflow` block is top-level only (a
+  forward that can't run on meta simply omits it)
+- full forward methods are not traced, and `torch.fx` / `torch.export` are not primary sources
+- `patches` are keyed to Python classes projected onto semantic kinds, not yet to individual semantic component IDs;
+  there is no grammar for *applying* a patch to reconstruct a child from its parent
+- `cache_read`/`cache_write` edges cover decoder self-attention; cross-attention KV caching is not yet modeled
 - repeat detection currently focuses on homogeneous `ModuleList` containers
 - edge recognition is based on module names/classes and common Transformer conventions

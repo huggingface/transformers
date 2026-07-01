@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from typing import Any
 
 from .semantic_model import Component, Edge, Repeat
+
+
+# Class/path token patterns for non-vanilla component families.
+_MOE_RE = re.compile(r"(experts?|router|moe|sparsemoe|sparse_moe|routed)", re.IGNORECASE)
+_MAMBA_RE = re.compile(r"(mamba|ssm|selectivescan|\bs4\b)", re.IGNORECASE)
+_LINEAR_ATTN_RE = re.compile(r"(deltanet|linearattention|lineattn|gateddelta|\bgla\b|retention|rwkv)", re.IGNORECASE)
 
 
 # Edge kinds defined by architecture-template-v0 / resolved-graph-v0. The v0
@@ -62,6 +69,8 @@ def classify_component(path: str, class_name: str) -> str:
         return "cross_attention"
     if any(token in semantic_key for token in ("position", "rotary", "relative_attention_bias")):
         return "position"
+    if _MOE_RE.search(semantic_key):
+        return "moe"
     if "embedding" in class_lower or path_lower.endswith("embed_tokens") or path_lower == "shared":
         return "embedding"
     if "attention" in class_lower or path_lower.endswith("attention") or path_lower.endswith("self_attn"):
@@ -87,6 +96,51 @@ def classify_component(path: str, class_name: str) -> str:
     if class_lower.endswith("stack"):
         return "stack"
     return "module"
+
+
+def classify_class_name(class_name: str) -> str | None:
+    """Best-effort semantic kind for a bare Python class name (no module path context).
+
+    Used to project modular class-level changes onto semantic component kinds (e.g.
+    ``GemmaAttention`` -> ``attention``). Returns ``None`` when the class name carries no
+    obvious semantic signal, so callers can distinguish "unknown" from a real kind.
+    """
+    class_lower = class_name.lower()
+    if "crossattention" in class_lower or "encdecattention" in class_lower:
+        return "cross_attention"
+    if any(token in class_lower for token in ("rotaryembedding", "rotary", "relativeattentionbias")):
+        return "position"
+    if _MOE_RE.search(class_lower):
+        return "moe"
+    if _MAMBA_RE.search(class_lower):
+        return "state_space"
+    if _LINEAR_ATTN_RE.search(class_lower):
+        return "linear_attention"
+    if class_lower.endswith("embedding") or class_lower.endswith("embeddings"):
+        return "embedding"
+    if "attention" in class_lower or class_lower.endswith("attn") or class_lower.endswith("sdpa"):
+        return "attention"
+    if any(token in class_lower for token in ("mlp", "feedforward", "densereludense", "denseactdense", "ffn")):
+        return "feed_forward"
+    if "rmsnorm" in class_lower or "layernorm" in class_lower or class_lower.endswith("norm"):
+        return "normalization"
+    if class_lower.endswith("pooler"):
+        return "pooler"
+    if _looks_like_transformer_block(class_lower):
+        return "transformer_block"
+    if class_lower.endswith("model") or class_lower.endswith("pretrainedmodel"):
+        return "model"
+    if class_lower.endswith("config"):
+        return "config"
+    if class_lower.endswith("forcausallm") or class_lower.endswith("forconditionalgeneration"):
+        return "lm_head"
+    if "forsequenceclassification" in class_lower or "fortokenclassification" in class_lower:
+        return "head"
+    if class_lower.endswith("encoder"):
+        return "encoder"
+    if class_lower.endswith("decoder"):
+        return "decoder"
+    return None
 
 
 def detect_repeats(components: list[Component], config: Any) -> list[Repeat]:

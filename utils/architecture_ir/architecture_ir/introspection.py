@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import inspect
+import os
 import re
 from collections.abc import Mapping
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+from .dataflow import capture_dataflow, symbolize_shape
+from .enrich import architecture_facts, attention_spec, moe_spec, norm_type
+from .modular import compute_modularity, modularity_payload
 from .recognizers import build_edges, classify_component, detect_repeats, summarize_semantic_components
 from .semantic_model import SCHEMA_VERSION, ArchitectureArtifact, Component, Edge, Repeat
 
@@ -15,7 +20,164 @@ def build_architecture_artifact(model_type: str, resolved: Any) -> dict[str, Any
     components = inspect_module_tree(resolved.model)
     repeats = detect_repeats(components, resolved.config)
     edges = build_edges(components)
-    return _build_compact_artifact(model_type, resolved, components, repeats, edges)
+    artifact = _build_compact_artifact(model_type, resolved, components, repeats, edges)
+    _enrich_artifact(artifact, model_type, resolved.config)
+    artifact.update(_modular_payload(model_type, resolved))
+    _attach_dataflow(artifact, resolved)
+    return artifact
+
+
+def _enrich_artifact(artifact: dict[str, Any], model_type: str, config: Any) -> None:
+    """Add semantic-depth facts: model-level ``architecture`` block, per-component attributes,
+    and the cache/route edges that decoder attention and MoE routing imply."""
+    facts = architecture_facts(model_type, config)
+    artifact["architecture"] = facts
+    view = facts.get("view")
+
+    attn = attention_spec(config)
+    moe = moe_spec(config)
+    for component in [*artifact["components"], *artifact["templates"]]:
+        kind = component["kind"]
+        if kind in {"attention", "cross_attention"} and attn:
+            component["attributes"] = dict(attn)
+        elif kind == "normalization":
+            component["attributes"] = {"norm_type": norm_type(component["class_name"])}
+        elif kind == "moe" and moe:
+            component["attributes"] = dict(moe)
+
+    _attach_cache_edges(artifact, view)
+    _attach_route_edges(artifact)
+
+
+def _attach_cache_edges(artifact: dict[str, Any], view: str | None) -> None:
+    """Emit cache_read/cache_write for self-attention that maintains a KV cache (decoder side)."""
+    existing = {(edge["source"], edge["target"], edge["kind"]) for edge in artifact["edges"]}
+    for component in [*artifact["components"], *artifact["templates"]]:
+        if component["kind"] != "attention":
+            continue
+        on_decoder_side = view == "decoder" or (view == "enc_dec" and "decoder" in component.get("path_pattern", ""))
+        if not on_decoder_side:
+            continue
+        for source, target, kind in (
+            ("state:kv_cache", component["id"], "cache_read"),
+            (component["id"], "state:kv_cache", "cache_write"),
+        ):
+            if (source, target, kind) not in existing:
+                existing.add((source, target, kind))
+                artifact["edges"].append({"source": source, "target": target, "kind": kind})
+
+
+def _attach_route_edges(artifact: dict[str, Any]) -> None:
+    """Emit a route edge from each MoE block to its experts container, when detectable."""
+    existing = {(edge["source"], edge["target"], edge["kind"]) for edge in artifact["edges"]}
+    ids = {c["id"] for c in [*artifact["components"], *artifact["templates"]]}
+    for component in [*artifact["components"], *artifact["templates"]]:
+        if component["kind"] != "moe":
+            continue
+        for child_id in component.get("children", []):
+            if child_id in ids and ("expert" in child_id.lower()):
+                key = (component["id"], child_id, "route")
+                if key not in existing:
+                    existing.add(key)
+                    artifact["edges"].append({"source": component["id"], "target": child_id, "kind": "route"})
+
+
+def _attach_dataflow(artifact: dict[str, Any], resolved: Any) -> None:
+    """Ground the top-level flow in an observed meta forward: attach shapes + observed edges.
+
+    Best-effort: models whose forward can't run on meta keep their structural edges and simply
+    get no ``dataflow`` block.
+    """
+    try:
+        observed = capture_dataflow(resolved.model, resolved.config)
+    except Exception:
+        observed = None
+    if observed is None:
+        return
+
+    stage_id = _stage_id_lookup(artifact)
+    config = resolved.config
+    stages = []
+    for stage in observed["stages"]:
+        component_id = stage_id.get(f"model.{stage['name']}")
+        stages.append(
+            {
+                "id": component_id,
+                "module_name": stage["name"],
+                "class_name": stage["class_name"],
+                "in_shape": symbolize_shape(stage["in_shape"], config),
+                "out_shape": symbolize_shape(stage["out_shape"], config),
+            }
+        )
+
+    artifact["dataflow"] = {
+        "source": "observed_forward_meta",
+        "input": {
+            "name": observed["input"]["name"],
+            "shape": symbolize_shape(observed["input"]["shape"], config),
+        },
+        "output": {"shape": symbolize_shape(observed["output"]["shape"], config)},
+        "stages": stages,
+    }
+
+    # Add any observed consecutive-stage data edges missing from the structural set. Position
+    # modules (e.g. rotary embeddings) execute on the main path but are not data-path carriers —
+    # they reach attention via the "position" edge — so exclude them from the data chain.
+    existing = {(edge["source"], edge["target"], edge["kind"]) for edge in artifact["edges"]}
+    kind_by_id = _kind_by_id(artifact)
+    mapped_ids = [
+        stage["id"]
+        for stage in stages
+        if stage["id"] is not None and kind_by_id.get(stage["id"]) not in {"position", "mask"}
+    ]
+    for source, target in zip(mapped_ids, mapped_ids[1:]):
+        if source == target or (source, target, "data") in existing:
+            continue
+        existing.add((source, target, "data"))
+        artifact["edges"].append(
+            {"source": source, "target": target, "kind": "data", "provenance": "observed_forward"}
+        )
+
+
+def _stage_id_lookup(artifact: dict[str, Any]) -> dict[str, str]:
+    """Map a top-level symbolic path (``model.<child>``) to its semantic component/repeat id."""
+    lookup: dict[str, str] = {}
+    for component in artifact["components"]:
+        lookup[component["path_pattern"]] = component["id"]
+    for repeat in artifact["repeats"]:
+        lookup[repeat["container_path_pattern"]] = repeat["id"]
+    return lookup
+
+
+def _kind_by_id(artifact: dict[str, Any]) -> dict[str, str]:
+    kinds = {component["id"]: component["kind"] for component in artifact["components"]}
+    kinds.update({template["id"]: template["kind"] for template in artifact["templates"]})
+    kinds.update({repeat["id"]: "symbolic_repeat" for repeat in artifact["repeats"]})
+    return kinds
+
+
+def _modular_payload(model_type: str, resolved: Any) -> dict[str, Any]:
+    """Compute the modular-diff payload (extends / modularity / patches) from source.
+
+    Best-effort and never fatal: on any failure we still emit a ``modularity`` summary marking
+    the model non-modular with a note, so the artifact shape stays stable.
+    """
+    try:
+        model_dir = os.path.dirname(inspect.getfile(resolved.config.__class__))
+        return modularity_payload(compute_modularity(model_dir, model_type))
+    except Exception as error:
+        return {
+            "extends": None,
+            "modularity": {
+                "is_modular": False,
+                "parent_model": None,
+                "parent_models": [],
+                "diff_size": 0,
+                "totals": {"overridden": 0, "added": 0, "deleted": 0, "new_classes": 0, "trivial": 0},
+                "note": f"modularity unavailable: {error.__class__.__name__}",
+            },
+            "patches": [],
+        }
 
 
 def build_expanded_architecture_artifact(model_type: str, resolved: Any) -> ArchitectureArtifact:
@@ -26,7 +188,7 @@ def build_expanded_architecture_artifact(model_type: str, resolved: Any) -> Arch
         schema_version=SCHEMA_VERSION,
         model_type=model_type,
         entrypoints=resolved.entrypoints,
-        config=_config_payload(resolved.config),
+        config=_config_payload(resolved.config, [repeat.expression for repeat in repeats]),
         components=components,
         semantic_components=summarize_semantic_components(components),
         hierarchy=_hierarchy_payload(components),
@@ -116,6 +278,8 @@ def _build_compact_artifact(
     kind_by_id.update({template["id"]: template["kind"] for template in compact_templates})
     kind_by_id.update({repeat["id"]: "repeat" for repeat in compact_repeats})
 
+    referenced_fields = _referenced_config_field_names([repeat.get("count_expr") for repeat in compact_repeats])
+
     return {
         "schema_version": SCHEMA_VERSION,
         "model_type": model_type,
@@ -128,7 +292,7 @@ def _build_compact_artifact(
             ),
         },
         "entrypoints": resolved.entrypoints,
-        "config": _config_payload(resolved.config),
+        "config": _config_payload(resolved.config, referenced_fields),
         "components": compact_components,
         "templates": compact_templates,
         "repeats": compact_repeats,
@@ -361,6 +525,7 @@ def _include_canonical_component(component: Component) -> bool:
         "attention",
         "cross_attention",
         "feed_forward",
+        "moe",
         "normalization",
         "pooler",
         "transformer_block",
@@ -498,13 +663,65 @@ def _snake_case(value: str) -> str:
     return value.lower()
 
 
-def _config_payload(config: Any) -> dict[str, Any]:
+# Architecture-defining scalar config fields worth carrying in the compact template.
+# Deliberately a small whitelist of shape/behaviour knobs: we do NOT dump the full config
+# (label maps, token ids, runtime flags, version strings, nested dicts) into the artifact.
+_SALIENT_CONFIG_FIELDS = (
+    "hidden_size",
+    "intermediate_size",
+    "vocab_size",
+    "num_attention_heads",
+    "num_key_value_heads",
+    "head_dim",
+    "num_hidden_layers",
+    "num_layers",
+    "num_decoder_layers",
+    "max_position_embeddings",
+    "sliding_window",
+    "num_experts",
+    "num_local_experts",
+    "num_experts_per_tok",
+    "n_routed_experts",
+    "hidden_act",
+    "is_encoder_decoder",
+    "tie_word_embeddings",
+)
+
+_CONFIG_EXPR_FIELD_RE = re.compile(r"\bconfig\.([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _referenced_config_field_names(expressions: list[str | None]) -> list[str]:
+    """Config field names referenced by config expressions in the artifact (e.g. count_expr)."""
+    names: list[str] = []
+    seen: set[str] = set()
+    for expression in expressions:
+        if not isinstance(expression, str):
+            continue
+        for name in _CONFIG_EXPR_FIELD_RE.findall(expression):
+            if name not in seen:
+                seen.add(name)
+                names.append(name)
+    return names
+
+
+def _config_payload(config: Any, referenced_field_names: list[str]) -> dict[str, Any]:
     fields = config.to_dict() if hasattr(config, "to_dict") else dict(config.__dict__)
+
+    referenced = {name: _json_safe(fields[name]) for name in referenced_field_names if name in fields}
+    salient = {
+        name: _json_safe(fields[name])
+        for name in _SALIENT_CONFIG_FIELDS
+        if name in fields and _is_simple_value(fields[name])
+    }
     return {
         "class_name": config.__class__.__name__,
         "module": config.__class__.__module__,
         "model_type": getattr(config, "model_type", None),
-        "fields": _json_safe(fields),
+        # Config knobs the artifact is parameterized by (referenced by config expressions),
+        # with their default values as observed at generation time.
+        "referenced_fields": referenced,
+        # Curated architecture-defining scalar defaults; NOT the full config.
+        "salient_fields": salient,
     }
 
 

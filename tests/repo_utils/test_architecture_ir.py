@@ -106,8 +106,43 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
                 self.assertEqual(artifacts[model_type]["schema_version"], "architecture-template-v0")
                 self.assertEqual(artifacts[model_type]["metadata"]["level"], "architecture_template")
 
+                # The full config must NOT be serialized: only referenced + salient scalar fields.
+                config = artifacts[model_type]["config"]
+                self.assertIn("referenced_fields", config)
+                self.assertIn("salient_fields", config)
+                self.assertNotIn("fields", config)
+                config_text = json.dumps(config)
+                for junk in ("id2label", "transformers_version", "return_dict", "output_attentions", "bos_token_id"):
+                    self.assertNotIn(junk, config_text)
+
                 artifact_text = json.dumps(artifacts[model_type], indent=2)
                 self.assertLessEqual(artifact_text.count("\n"), 700)
+
+            # referenced_fields must expose exactly the config knobs the repeats reference.
+            self.assertEqual(artifacts["llama"]["config"]["referenced_fields"], {"num_hidden_layers": 32})
+            self.assertEqual(artifacts["llama"]["config"]["salient_fields"]["hidden_size"], 4096)
+            self.assertEqual(set(artifacts["t5"]["config"]["referenced_fields"]), {"num_layers", "num_decoder_layers"})
+
+            # Semantic-depth facts: view / family / attention variant / positional scheme.
+            self.assertEqual(artifacts["llama"]["architecture"]["view"], "decoder")
+            self.assertEqual(artifacts["llama"]["architecture"]["family"], "causal_lm")
+            self.assertEqual(artifacts["llama"]["architecture"]["attention_variant"], "MHA")
+            self.assertEqual(artifacts["llama"]["architecture"]["positional"], "rope")
+            self.assertEqual(artifacts["bert"]["architecture"]["view"], "encoder")
+            self.assertEqual(artifacts["bert"]["architecture"]["family"], "masked_lm")
+            self.assertEqual(artifacts["bert"]["architecture"]["positional"], "learned")
+            self.assertEqual(artifacts["t5"]["architecture"]["view"], "enc_dec")
+            self.assertEqual(artifacts["t5"]["architecture"]["positional"], "relative")
+
+            # Attention components carry normalized attributes.
+            llama_attn = next(c for c in artifacts["llama"]["templates"] if c["kind"] == "attention")
+            self.assertEqual(llama_attn["attributes"]["variant"], "MHA")
+            self.assertTrue(llama_attn["attributes"]["rope"])
+
+            # Reserved edge kinds are now emitted: decoder self-attention has a KV cache;
+            # an encoder (bert) has none.
+            self.assertTrue([e for e in artifacts["llama"]["edges"] if "cache" in e["kind"]])
+            self.assertEqual([e for e in artifacts["bert"]["edges"] if "cache" in e["kind"]], [])
 
             llama_repeats = _repeats_by_id(artifacts["llama"])
             self.assertEqual(llama_repeats["decoder_layers"]["body"], "decoder_layer")
@@ -197,6 +232,136 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
 
             if HAS_JSONSCHEMA:
                 jsonschema.validate(instance=resolved, schema=_load_schema("resolved-graph-v0.schema.json"))
+
+    def test_moe_semantic_depth_and_route_edges(self):
+        from transformers.models.auto import configuration_auto, modeling_auto
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with (
+                patch.dict(os.environ, {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}),
+                patch.object(
+                    configuration_auto.AutoConfig,
+                    "from_pretrained",
+                    side_effect=AssertionError("must not load checkpoint configs."),
+                ),
+                patch.object(
+                    modeling_auto.AutoModel,
+                    "from_pretrained",
+                    side_effect=AssertionError("must not load checkpoint weights."),
+                ),
+            ):
+                generate_architecture_ir.main(["--architectures", "mixtral", "--output-dir", tmp_dir])
+
+            with (Path(tmp_dir) / "artifacts" / "mixtral.json").open(encoding="utf-8") as handle:
+                artifact = json.load(handle)
+
+            arch = artifact["architecture"]
+            self.assertTrue(arch["is_moe"])
+            self.assertEqual(arch["moe"]["num_experts"], 8)
+            self.assertEqual(arch["moe"]["experts_per_token"], 2)
+            # Mixtral uses grouped-query attention.
+            self.assertEqual(arch["attention_variant"], "GQA")
+
+            # A MoE block routes to its experts (reserved 'route' edge kind is now emitted).
+            route_edges = [e for e in artifact["edges"] if e["kind"] == "route"]
+            self.assertTrue(route_edges)
+            self.assertTrue(any("expert" in e["target"].lower() for e in route_edges))
+
+            if HAS_JSONSCHEMA:
+                jsonschema.validate(instance=artifact, schema=_load_schema("architecture-template-v0.schema.json"))
+
+    def test_observed_dataflow_has_symbolic_shapes(self):
+        from transformers.models.auto import configuration_auto, modeling_auto
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with (
+                patch.dict(os.environ, {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}),
+                patch.object(
+                    configuration_auto.AutoConfig,
+                    "from_pretrained",
+                    side_effect=AssertionError("must not load checkpoint configs."),
+                ),
+                patch.object(
+                    modeling_auto.AutoModel,
+                    "from_pretrained",
+                    side_effect=AssertionError("must not load checkpoint weights."),
+                ),
+            ):
+                generate_architecture_ir.main(["--architectures", "llama", "--output-dir", tmp_dir])
+
+            with (Path(tmp_dir) / "artifacts" / "llama.json").open(encoding="utf-8") as handle:
+                artifact = json.load(handle)
+
+            self.assertIn("dataflow", artifact)
+            dataflow = artifact["dataflow"]
+            self.assertEqual(dataflow["source"], "observed_forward_meta")
+
+            # Shapes are symbolized (config-parametric), not baked concrete integers.
+            self.assertEqual(dataflow["input"]["shape"], ["B", "S"])
+            self.assertEqual(dataflow["output"]["shape"], ["B", "S", "config.hidden_size"])
+
+            stages = {stage["id"]: stage for stage in dataflow["stages"] if stage["id"]}
+            self.assertEqual(stages["embed_tokens"]["out_shape"], ["B", "S", "config.hidden_size"])
+            self.assertEqual(stages["decoder_layers"]["out_shape"], ["B", "S", "config.hidden_size"])
+            # The concrete default hidden size must not leak into the observed shapes.
+            self.assertNotIn("4096", json.dumps(dataflow))
+
+            # Observed data edges skip position modules (rotary is not a data-path carrier).
+            observed_data = {
+                (e["source"], e["target"]) for e in artifact["edges"] if e.get("provenance") == "observed_forward"
+            }
+            self.assertNotIn("rotary_emb", {node for edge in observed_data for node in edge})
+
+    def test_modular_diff_extends_and_patches(self):
+        from transformers.models.auto import configuration_auto, modeling_auto
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with (
+                patch.dict(os.environ, {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}),
+                patch.object(
+                    configuration_auto.AutoConfig,
+                    "from_pretrained",
+                    side_effect=AssertionError("must not load checkpoint configs."),
+                ),
+                patch.object(
+                    modeling_auto.AutoModel,
+                    "from_pretrained",
+                    side_effect=AssertionError("must not load checkpoint weights."),
+                ),
+            ):
+                generate_architecture_ir.main(["--architectures", "gemma", "qwen2", "bert", "--output-dir", tmp_dir])
+
+            artifacts = {}
+            for model_type in ("gemma", "qwen2", "bert"):
+                with (Path(tmp_dir) / "artifacts" / f"{model_type}.json").open(encoding="utf-8") as handle:
+                    artifacts[model_type] = json.load(handle)
+
+            # bert is standalone: no modular file.
+            bert = artifacts["bert"]
+            self.assertIsNone(bert["extends"])
+            self.assertFalse(bert["modularity"]["is_modular"])
+            self.assertEqual(bert["patches"], [])
+
+            # gemma and qwen2 are modular and inherit from llama.
+            for model_type in ("gemma", "qwen2"):
+                art = artifacts[model_type]
+                self.assertEqual(art["extends"], "llama")
+                self.assertTrue(art["modularity"]["is_modular"])
+                self.assertGreater(len(art["patches"]), 0)
+                self.assertGreater(art["modularity"]["diff_size"], 0)
+
+            # qwen2 is a canonical clean-modular exemplar: its attention is overridden, not rebuilt.
+            qwen2 = artifacts["qwen2"]
+            attn_patches = [p for p in qwen2["patches"] if p["component_kind"] == "attention"]
+            self.assertTrue(attn_patches)
+            self.assertTrue(all(p["relation"] == "inherits" for p in attn_patches))
+            # A clean modular model is much smaller than a heavier one.
+            self.assertLess(qwen2["modularity"]["diff_size"], artifacts["gemma"]["modularity"]["diff_size"])
+
+            if HAS_JSONSCHEMA:
+                template_schema = _load_schema("architecture-template-v0.schema.json")
+                for art in artifacts.values():
+                    jsonschema.validate(instance=art, schema=template_schema)
 
     def test_missing_config_field_is_a_warning_not_a_failure(self):
         template = {
