@@ -1,0 +1,477 @@
+# Copyright 2026 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import math
+from dataclasses import dataclass
+
+import torch
+import torch.nn as nn
+from huggingface_hub.dataclasses import strict
+
+from ...activations import ACT2FN
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..llama.modeling_llama import LlamaMLP
+from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
+from ..voxtral.modeling_voxtral import (
+    VoxtralModel,
+    VoxtralMultiModalProjector,
+    VoxtralPreTrainedModel,
+)
+from .generation_vibevoice import VibeVoiceGenerationMixin
+
+
+@auto_docstring(checkpoint="bezzam/VibeVoice-1.5B-hf")
+@strict
+class VibeVoiceConfig(PreTrainedConfig):
+    r"""
+    semantic_model_config (`Union[AutoConfig, dict]`, *optional*):
+        The config object or dictionary of the semantic tokenizer encoder. This tokenizer extracts semantic features from audio.
+    audio_bos_token_id (`int`, *optional*, defaults to 151652):
+        The token ID indicating the start of audio tokens.
+    audio_eos_token_id (`int`, *optional*, defaults to 151653):
+        The token ID indicating the end of audio tokens.
+    num_head_layers (`int`, *optional*, defaults to 4):
+        Number of layers in the diffusion head.
+    frequency_embedding_size (`int`, *optional*, defaults to 256):
+        The size of the sinusoidal frequency embedding for timestep encoding in the diffusion head.
+    num_diffusion_steps (`int`, *optional*, defaults to 10):
+        The number of diffusion steps used during inference.
+
+    ```python
+    >>> from transformers import VibeVoiceForConditionalGeneration, VibeVoiceConfig
+
+    >>> # Initializing a VibeVoice configuration
+    >>> configuration = VibeVoiceConfig()
+
+    >>> # Initializing a 1.5B model with random weights
+    >>> model = VibeVoiceForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "vibevoice"
+    sub_configs = {
+        "audio_config": AutoConfig,
+        "semantic_model_config": AutoConfig,
+        "text_config": AutoConfig,
+    }
+
+    # Default tensor parallel plan for base model `Qwen2`
+    base_model_tp_plan = {
+        "language_model.layers.*.self_attn.q_proj": "colwise",
+        "language_model.layers.*.self_attn.k_proj": "colwise",
+        "language_model.layers.*.self_attn.v_proj": "colwise",
+        "language_model.layers.*.self_attn.o_proj": "rowwise",
+        "language_model.layers.*.mlp.gate_proj": "colwise",
+        "language_model.layers.*.mlp.up_proj": "colwise",
+        "language_model.layers.*.mlp.down_proj": "rowwise",
+    }
+
+    audio_config: dict | PreTrainedConfig | None = None
+    semantic_model_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    pad_token_id: int = 151643
+    eos_token_id: int = 151643
+    audio_bos_token_id: int = 151652
+    audio_eos_token_id: int = 151653
+    audio_token_id: int = 151654
+    num_head_layers: int = 4
+    intermediate_size: int = 4608
+    rms_norm_eps: float = 1e-5
+    hidden_act: str = "silu"
+    frequency_embedding_size: int = 256
+    num_diffusion_steps: int = 10
+    mlp_bias: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.audio_config, dict):
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "vibevoice_acoustic_tokenizer")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer"]()
+
+        if isinstance(self.semantic_model_config, dict):
+            self.semantic_model_config["model_type"] = self.semantic_model_config.get(
+                "model_type", "vibevoice_acoustic_tokenizer_encoder"
+            )
+            self.semantic_model_config = CONFIG_MAPPING[self.semantic_model_config["model_type"]](
+                **self.semantic_model_config
+            )
+        elif self.semantic_model_config is None:
+            self.semantic_model_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](hidden_size=128)
+
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen2"]()
+
+        self.vocab_size = self.text_config.vocab_size
+        self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", False)
+        super().__post_init__(**kwargs)
+
+    # NOTE (ebezzam) for modular usage of `LlamaMLP`
+    @property
+    def hidden_size(self) -> int:
+        return self.text_config.hidden_size
+
+
+@dataclass
+@auto_docstring(custom_intro="""Base class for VibeVoice outputs, with hidden states and attentions.""")
+class VibeVoiceBaseModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+        Extracted audio features that can be used for conditioning the language model.
+    """
+
+    audio_features: torch.FloatTensor | None = None
+
+
+@dataclass
+@auto_docstring(custom_intro="""VibeVoice causal language model outputs.""")
+class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    diffusion_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` for diffusion are provided):
+        Diffusion head loss (for acoustic token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+        Extracted audio features that can be used for conditioning the language model.
+    """
+
+    loss: torch.FloatTensor | None = None
+    diffusion_loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    audio_features: torch.FloatTensor | None = None
+
+
+class VibeVoiceRMSNorm(Qwen2RMSNorm):
+    pass
+
+
+class VibeVoiceDiffusionHeadTimestepEmbedder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.layer_1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
+        self.act = ACT2FN[config.hidden_act]
+        self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+
+    def forward(self, timesteps, max_period=10000):
+        dim = self.config.frequency_embedding_size // 2
+        freq = torch.exp(-math.log(max_period) * torch.arange(dim, dtype=torch.float32) / dim)
+        args = timesteps[:, None].float() * freq[None].to(timesteps.device)
+        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        if self.config.frequency_embedding_size % 2:
+            embedding = nn.functional.pad(embedding, (0, 1))
+        return self.layer_2(self.act(self.layer_1(embedding.to(timesteps.dtype))))
+
+
+class VibeVoiceMLP(LlamaMLP):
+    pass
+
+
+class VibeVoiceDiffusionHeadAdaLayerNorm(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_chunks = 3
+        self.ffn = VibeVoiceMLP(config)
+        self.norm = VibeVoiceRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.linear = nn.Linear(config.hidden_size, config.hidden_size * self.num_chunks, bias=False)
+
+    def forward(self, hidden_states, condition):
+        shift_ffn, scale_ffn, gate_ffn = self.linear(self.act_fn(condition)).chunk(self.num_chunks, dim=-1)
+        modulated_hidden_states = self.norm(hidden_states) * (1 + scale_ffn) + shift_ffn
+        hidden_states = hidden_states + gate_ffn * self.ffn(modulated_hidden_states)
+        return hidden_states
+
+
+class VibeVoiceDiffusionHeadFinalLayer(nn.Module):
+    def __init__(self, config, output_size):
+        super().__init__()
+        self.num_chunks = 2
+        # Inline RMS normalization since there is no weight scaling (unlike `VibeVoiceRMSNorm`)
+        self.norm_eps = config.rms_norm_eps
+        self.linear_1 = nn.Linear(config.hidden_size, self.num_chunks * config.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.linear_2 = nn.Linear(config.hidden_size, output_size, bias=False)
+
+    def forward(self, hidden_states, condition):
+        shift, scale = self.linear_1(self.act_fn(condition)).chunk(self.num_chunks, dim=-1)
+        hidden_states = hidden_states * torch.rsqrt(hidden_states.pow(2).mean(-1, keepdim=True) + self.norm_eps)
+        hidden_states = hidden_states * (1 + scale) + shift
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
+class VibeVoiceDiffusionHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.noisy_images_proj = nn.Linear(config.audio_config.hidden_size, config.hidden_size, bias=False)
+        self.cond_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.timestep_embedder = VibeVoiceDiffusionHeadTimestepEmbedder(config)
+        self.layers = nn.ModuleList(
+            [VibeVoiceDiffusionHeadAdaLayerNorm(config) for _ in range(config.num_head_layers)]
+        )
+        self.final_layer = VibeVoiceDiffusionHeadFinalLayer(config, output_size=config.audio_config.hidden_size)
+
+    def forward(self, noisy_images, timesteps, condition):
+        """
+        Forward pass of the prediction head. Returns the predicted noise/velocity.
+        """
+        hidden_states = self.noisy_images_proj(noisy_images)
+        embedded_timesteps = self.timestep_embedder(timesteps)
+        condition = self.cond_proj(condition)
+        condition = condition + embedded_timesteps
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, condition)
+        hidden_states = self.final_layer(hidden_states, condition)
+        return hidden_states
+
+
+class VibeVoiceMultiModalProjector(VoxtralMultiModalProjector):
+    def __init__(self, input_dim, output_dim):
+        super().__init__()
+        self.linear_1 = nn.Linear(input_dim, output_dim)
+        self.act = VibeVoiceRMSNorm(output_dim, eps=1e-6)
+        self.linear_2 = nn.Linear(output_dim, output_dim)
+
+
+@auto_docstring
+class VibeVoicePreTrainedModel(VoxtralPreTrainedModel):
+    _supports_cache_class = False
+    _can_compile_fullgraph = False
+    _no_split_modules = ["VibeVoiceDiffusionHead"]
+
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if hasattr(module, "latent_scaling_factor"):
+            nn.init.constant_(module.latent_scaling_factor, 1.0)
+        if hasattr(module, "latent_bias_factor"):
+            nn.init.constant_(module.latent_bias_factor, 0.0)
+
+
+@auto_docstring(
+    custom_intro="""
+    The VibeVoice model which consists of audio tokenizers and an LLM backbone, without a language modeling head.
+    """
+)
+class VibeVoiceModel(VoxtralModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.multi_modal_projector = VibeVoiceMultiModalProjector(
+            config.audio_config.hidden_size, config.text_config.hidden_size
+        )
+        self.semantic_tokenizer_encoder = AutoModel.from_config(config.semantic_model_config)
+        self.semantic_connector = VibeVoiceMultiModalProjector(
+            config.semantic_model_config.hidden_size, config.text_config.hidden_size
+        )
+        self.diffusion_head = VibeVoiceDiffusionHead(config)
+        self.latent_scaling_factor = nn.Parameter(torch.tensor(1.0))
+        self.latent_bias_factor = nn.Parameter(torch.tensor(0.0))
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="This method is used to get the audio embeddings (that replace placeholder audio tokens in the "
+        "input sequence) and the acoustic features (used as diffusion target) from the input audio waveform."
+    )
+    def get_audio_features(
+        self,
+        input_values: torch.FloatTensor,
+        padding_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_values (`torch.FloatTensor`):
+            Float values of (normalized) audio waveform.
+        padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
+            Padding mask to remove padded parts of audio.
+        """
+
+        with torch.no_grad():
+            acoustic_latents = self.audio_tower.encode(input_values, sample=True).latents
+        acoustic_features = (
+            acoustic_latents + self.latent_bias_factor.to(acoustic_latents.device)
+        ) * self.latent_scaling_factor.to(acoustic_latents.device)
+
+        # adjust padding mask according to tokenizer compression
+        num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.config.audio_config.hop_length).to(torch.int64)
+        padding_mask = torch.arange(max(num_audio_tokens)) < num_audio_tokens[:, None].cpu()
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=acoustic_features[padding_mask],
+            pooler_output=self.multi_modal_projector(acoustic_features)[padding_mask],
+        )
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        input_values: torch.FloatTensor | None = None,
+        padding_mask: torch.BoolTensor | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
+            Padding mask to remove padded parts of audio.
+        """
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        audio_features = None
+        if input_values is not None and input_ids is not None:
+            audio_outputs = self.get_audio_features(input_values, padding_mask)
+            audio_embeds = audio_outputs.pooler_output
+            audio_features = audio_outputs.last_hidden_state
+
+            # Replace text-audio token placeholders with audio embeddings
+            special_audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+
+        outputs = self.language_model(inputs_embeds=inputs_embeds, **kwargs)
+        return VibeVoiceBaseModelOutputWithPast(audio_features=audio_features, **outputs)
+
+
+@auto_docstring(
+    custom_intro="""
+    The VibeVoice model, which consists of a language model, audio tokenizers, connectors, and a diffusion head.
+    """
+)
+class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_rep"}
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = VibeVoiceModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        logits_to_keep: int | slice = 0,
+        input_values: torch.FloatTensor | None = None,
+        padding_mask: torch.BoolTensor | None = None,
+        acoustic_loss_mask: torch.BoolTensor | None = None,
+        noise_scheduler: object | None = None,
+        ddpm_batch_multiplier: int = 4,
+        num_diffusion_steps: int | None = None,
+        **kwargs,
+    ) -> tuple | VibeVoiceCausalLMOutputWithPast:
+        r"""
+        input_values (`torch.FloatTensor`, *optional*):
+            Preprocessed audio waveform for voice cloning.
+        padding_mask (`torch.BoolTensor`, *optional*):
+            Masks indicating valid input frames.
+        acoustic_loss_mask (`torch.BoolTensor`, *optional*):
+            Mask to compute diffusion loss only on specific acoustic tokens.
+        noise_scheduler (*optional*):
+            Needed for training to compute noise targets for the diffusion loss,
+            e.g. `diffusers.DPMSolverMultistepScheduler(beta_schedule='squaredcos_cap_v2', prediction_type='v_prediction')`.
+        ddpm_batch_multiplier (`int`, *optional*, defaults to 4):
+            For training, number of noise samples to generate per audio token for diffusion loss computation, which can
+            help stabilize training.
+        num_diffusion_steps (`int`, *optional*, defaults to config.num_diffusion_steps):
+            For training, the number of diffusion steps to use.
+        """
+
+        outputs = self.model(
+            input_ids=input_ids,
+            inputs_embeds=inputs_embeds,
+            input_values=input_values,
+            padding_mask=padding_mask,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        diffusion_loss = None
+        if acoustic_loss_mask is not None and outputs.audio_features is not None:
+            if noise_scheduler is None:
+                raise ValueError(
+                    "`noise_scheduler` from `diffusers.DPMSolverMultistepScheduler` must be provided for diffusion"
+                    "loss computation."
+                )
+
+            audio_features = outputs.audio_features
+            condition_features = hidden_states[acoustic_loss_mask.cpu()].to(audio_features.device)
+            audio_len, latent_size = audio_features.shape
+            audio_features_repeated = audio_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
+            condition_features_repeated = condition_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
+
+            # Random noise and timesteps for diffusion training
+            noise = torch.randn(
+                (audio_len * ddpm_batch_multiplier, latent_size),
+                device=audio_features.device,
+                dtype=audio_features.dtype,
+            )
+            if num_diffusion_steps is None:
+                num_diffusion_steps = self.config.num_diffusion_steps
+            timesteps = torch.multinomial(
+                torch.ones(num_diffusion_steps),
+                audio_len * ddpm_batch_multiplier,
+                replacement=True,
+            ).to(audio_features.device)
+            noisy_audio_features = noise_scheduler.add_noise(audio_features_repeated, noise, timesteps)
+
+            # Predict noise/velocity using diffusion head
+            model_output = self.model.diffusion_head(
+                noisy_audio_features, timesteps.type_as(audio_features), condition_features_repeated
+            )
+
+            # Compute target (v_prediction parameterization)
+            alpha_t = noise_scheduler.alpha_t.to(device=audio_features.device, dtype=audio_features.dtype)
+            sigma_t = noise_scheduler.sigma_t.to(device=audio_features.device, dtype=audio_features.dtype)
+            alpha_t = alpha_t[timesteps].flatten().unsqueeze(-1)
+            sigma_t = sigma_t[timesteps].flatten().unsqueeze(-1)
+            target = (alpha_t * noise - sigma_t * audio_features_repeated).to(model_output.device)
+
+            diffusion_loss = torch.nn.functional.mse_loss(model_output.float(), target.float(), reduction="sum")
+            if latent_size > 0 and ddpm_batch_multiplier > 0 and audio_len > 0:
+                diffusion_loss = diffusion_loss / (latent_size * ddpm_batch_multiplier * audio_len)
+            else:
+                diffusion_loss = torch.tensor(0.0, device=diffusion_loss.device)
+
+        return VibeVoiceCausalLMOutputWithPast(loss=loss, diffusion_loss=diffusion_loss, logits=logits, **outputs)
+
+
+__all__ = [
+    "VibeVoiceConfig",
+    "VibeVoiceForConditionalGeneration",
+    "VibeVoicePreTrainedModel",
+    "VibeVoiceModel",
+]
