@@ -51,6 +51,9 @@ class GlmOcrVisionMlp(Glm4VisionMlp):
     def __init__(self, config, bias: bool = True):
         super().__init__(config)
         self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
@@ -299,7 +302,13 @@ class GlmOcrTextModel(Glm4vTextModel):
 
 
 class GlmOcrModel(Glm4vModel):
-    pass
+    def __init__(self, config):
+        super(Glm4vModel, self).__init__(config)
+        self.visual = GlmOcrVisionModel._from_config(config.vision_config)
+        self.language_model = GlmOcrTextModel._from_config(config.text_config)
+        self.rope_deltas = None
+        # Initialize weights and apply final processing
+        self.post_init()
 
 
 class GlmOcrForConditionalGeneration(Glm4vForConditionalGeneration):
