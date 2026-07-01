@@ -18,7 +18,16 @@ import unittest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import CaptureStdout, Expectations, cleanup, require_torch, slow, tooslow, torch_device
+from transformers.testing_utils import (
+    CaptureStdout,
+    Expectations,
+    cleanup,
+    require_deterministic_for_xpu,
+    require_torch,
+    slow,
+    tooslow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -247,6 +256,18 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
     @unittest.skip(reason="Hard to specify `self.model_split_percents` due to tied weights. Skip for now.")
     def test_disk_offload_safetensors(self):
         pass
+
+    @unittest.skip(reason="Hard to specify `self.model_split_percents` due to tied weights. Skip for now.")
+    def test_model_parallelism(self):
+        pass
+
+    @unittest.skipIf(torch_device == "xpu", "Static cache generation compilation is not supported on XPU yet.")
+    def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()
+
+    @unittest.skipIf(torch_device == "xpu", "XPU SDPA currently supports only the math backend.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        super().test_sdpa_can_dispatch_on_flash()
 
     # Tests designed specifically for `DiffusionGemma`, excluding generation tests.
     def test_tied_weights(self):
@@ -1418,6 +1439,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_deterministic_for_xpu
     def test_minified_diffusion_gemma_forward_batched(self):
         """[Minified (6 first layers)] bsz>1, no image"""
         # print(model_out.logits[:, :5, :12])
@@ -1446,7 +1468,30 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     16.81029892, -15.66178513, -29.49378586, -27.86572838,  -3.56125450, -24.19219208],
                     [ 25.37790680, -29.47677803,  27.32979774,  29.89710426,  29.67082214,  13.41732597,
                     24.01497269,   4.95421267, -26.96818924, -28.42986679,  19.92110252, -24.44923782]]
-                ]
+                ],
+                ("xpu", 5): [
+                    [[ 21.96432686, -29.94712639,  -9.36425114,  29.12799644,  29.96570969,  28.35157585,
+                    27.41356277,   5.80103111, -26.66704750, -28.74982071,  -0.10253868, -18.44521141],
+                    [ 29.51024628,  11.13002968,  25.37790680,  29.89002228,  29.99975395, -17.72932053,
+                    -29.91572952, -21.05391693, -16.72434616, -29.16993713, -29.73903084, -29.99850464],
+                    [  0.10156213, -29.99745178, -29.99208450,  26.61419296,  17.23404694, -23.92457008,
+                    -6.37032795, -18.05149078, -29.29587173, -29.93543434, -25.23368645, -29.87437248],
+                    [  0.71861255, -29.40289116,  14.82745838,  26.91985321,  29.90688133,  16.11148834,
+                    21.36647987,  -9.92463589, -29.19678307, -27.99878502,   3.88432288, -24.36471176],
+                    [ 28.03077316, -28.84785843,  27.01580811,  29.90992928,  29.92623711,  18.36726379,
+                    27.57362556,   4.03784847, -24.36471176, -28.78997993,  25.30630302, -22.84782410]],
+
+                    [[ 20.73208427, -29.81277466, -13.91261864,  29.42228127,  29.85649490,  27.61213493,
+                    23.05516243,   9.64538002, -28.26949692, -28.12381363,  -1.08546352, -25.16004372],
+                    [ 29.16993713,  20.33346367,  21.05391884,  29.89710236,  29.99983406, -17.48348808,
+                    -29.86572647, -14.49445057, -17.40074158, -28.45514870, -29.71171188, -29.99791336],
+                    [ 11.82355690, -29.97776222, -29.97623253,  28.92082977,  18.67665863, -19.99079132,
+                        4.46655130, -11.39846992, -29.52617455, -29.87437248, -22.84782410, -29.73022270],
+                    [-10.20196629, -28.62135887,  14.82745838,  26.91985321,  29.68155670,  15.66178513,
+                    16.46408844, -15.01560688, -29.47677803, -27.65005684,  -3.63825440, -24.27902985],
+                    [ 25.44850922, -29.52617455,  27.45450211,  29.90047264,  29.64826012,  13.61657143,
+                    24.19219208,   5.31821537, -27.06271935, -28.45514870,  19.49482346, -24.36471176]]
+                ],
             }
         )  # fmt: skip
 
