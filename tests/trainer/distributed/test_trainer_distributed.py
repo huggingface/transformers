@@ -178,3 +178,55 @@ class TrainerDistributedCommon(ABC):
             eval_metrics = json.load(f)
         self.assertIn("eval_loss", eval_metrics)
         self.assertTrue(torch.isfinite(torch.tensor(eval_metrics["eval_loss"])))
+
+    def check_sp_equivalence(self, sp_config_file, no_sp_config_file, launch_args=None, sp_num_processes=2):
+        """Native Ulysses SP (sp_backend="accelerate") must produce the same losses as no SP — it only
+        splits the sequence. Runs the real Trainer with SP enabled vs no SP (1 process) and compares
+        the loss trajectories. Exercises the whole Trainer SP path: the auto-wrapped
+        `SequenceShardingDataLoader`, the attention handler attached after the model is prepared, and
+        the loss / epoch accounting."""
+        common_args = [
+            "--model_name",
+            "hf-internal-testing/tiny-random-LlamaForCausalLM",
+            "--max_steps",
+            "10",
+            "--per_device_train_batch_size",
+            "1",
+            "--seed",
+            "42",
+            "--logging_steps",
+            "1",
+            "--save_strategy",
+            "no",
+            "--model_dtype",
+            "fp32",
+            "--attn_implementation",
+            "sdpa",
+            "--pad_to_multiple_of",
+            "4",
+        ]
+
+        def run(config_file, num_processes):
+            output_dir = self.get_auto_remove_tmp_dir()
+            losses_path = os.path.join(output_dir, "losses.json")
+            cmd = self.get_accelerate_cmd(
+                TRAIN_SCRIPT,
+                config_file=config_file,
+                launch_args=launch_args,
+                script_args=["--output_dir", output_dir, "--loss_output_file", losses_path] + common_args,
+                num_processes=num_processes,
+            )
+            execute_subprocess_async(cmd, env=self.get_env())
+            with open(losses_path) as f:
+                return json.load(f)
+
+        sp_losses = run(sp_config_file, sp_num_processes)
+        no_sp_losses = run(no_sp_config_file, 1)
+        self.assertEqual(len(sp_losses), len(no_sp_losses))
+        torch.testing.assert_close(
+            torch.tensor(sp_losses),
+            torch.tensor(no_sp_losses),
+            rtol=2e-2,
+            atol=2e-2,
+            msg=f"SP losses {sp_losses} do not match non-SP losses {no_sp_losses}",
+        )

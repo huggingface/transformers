@@ -38,6 +38,7 @@ from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR, TrainerDistribut
 
 
 DDP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "ddp.yaml")
+DDP_SP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "ddp_sp.yaml")
 
 dtypes = []
 if is_torch_bf16_available_on_device(torch_device):
@@ -295,3 +296,7 @@ class TestTrainerDistributedDDPCommon(DDPCommandsMixin, TrainerDistributedCommon
 
     def test_eval(self):
         self.check_eval(config_file=DDP_CONFIG_FILE)
+
+    def test_sp_equivalence(self):
+        """Native Ulysses SP under DDP must produce the same losses as no SP. See `check_sp_equivalence`."""
+        self.check_sp_equivalence(DDP_SP_CONFIG_FILE, DDP_CONFIG_FILE)
