@@ -6,7 +6,14 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-SCHEMA_VERSION = "architecture-artifact-v0"
+# Canonical, config-parametric artifact serialized once per ``model_type``.
+TEMPLATE_SCHEMA_VERSION = "architecture-template-v0"
+# Output of resolving an ``ArchitectureTemplate`` against a checkpoint ``config.json``.
+RESOLVED_GRAPH_SCHEMA_VERSION = "resolved-graph-v0"
+
+# Backwards-compatible alias used throughout the generator; the generator only
+# emits ``ArchitectureTemplate`` artifacts.
+SCHEMA_VERSION = TEMPLATE_SCHEMA_VERSION
 
 
 @dataclass

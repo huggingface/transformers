@@ -27,7 +27,12 @@ Output layout:
     t5.json
 ```
 
-Each artifact uses `schema/architecture-artifact-v0.schema.json` and contains:
+The data contract is specified in [`SPEC.md`](./SPEC.md), which defines two levels: the compact, config-parametric
+`ArchitectureTemplate` (one per `model_type`, the canonical artifact produced here) and the `ResolvedGraph` obtained by
+resolving a template against a checkpoint `config.json`.
+
+Each generated artifact is an `ArchitectureTemplate`, validated by `schema/architecture-template-v0.schema.json`, and
+contains:
 
 - config class and config fields from local defaults
 - resolved config/model entrypoints

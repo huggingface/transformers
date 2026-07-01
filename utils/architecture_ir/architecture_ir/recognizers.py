@@ -8,7 +8,20 @@ from typing import Any
 from .semantic_model import Component, Edge, Repeat
 
 
-EDGE_KINDS = ("data", "residual", "mask", "position", "cross_attention")
+# Edge kinds defined by architecture-template-v0 / resolved-graph-v0. The v0
+# generator emits the first five for llama/bert/t5; "route" (MoE dispatch) and
+# "cache_read"/"cache_write" (KV-cache dataflow) are part of the contract and
+# reserved for recognizers that will emit them for MoE and cached-attention models.
+EDGE_KINDS = (
+    "data",
+    "residual",
+    "mask",
+    "position",
+    "cross_attention",
+    "route",
+    "cache_read",
+    "cache_write",
+)
 
 _COUNT_FIELD_PREFERENCES = {
     "decoder": (

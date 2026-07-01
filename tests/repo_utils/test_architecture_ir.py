@@ -25,10 +25,25 @@ from transformers.testing_utils import require_torch
 
 REPO_PATH = Path(__file__).resolve().parents[2]
 ARCHITECTURE_IR_PATH = REPO_PATH / "utils" / "architecture_ir"
+SCHEMA_PATH = ARCHITECTURE_IR_PATH / "schema"
 if str(ARCHITECTURE_IR_PATH) not in sys.path:
     sys.path.append(str(ARCHITECTURE_IR_PATH))
 
 import generate_architecture_ir  # noqa: E402
+from architecture_ir import resolve_template_to_graph  # noqa: E402
+
+
+try:
+    import jsonschema
+
+    HAS_JSONSCHEMA = True
+except ImportError:
+    HAS_JSONSCHEMA = False
+
+
+def _load_schema(name):
+    with (SCHEMA_PATH / name).open(encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 @require_torch
@@ -62,6 +77,7 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
                 manifest = json.load(handle)
 
             self.assertEqual(manifest["schema_version"], "architecture-ir-manifest-v0")
+            self.assertEqual(manifest["artifact_schema_version"], "architecture-template-v0")
             self.assertEqual(manifest["failures"], [])
             self.assertEqual({entry["model_type"] for entry in manifest["architectures"]}, {"llama", "bert", "t5"})
 
@@ -85,6 +101,10 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
                     "provenance",
                 ):
                     self.assertIn(field, artifacts[model_type])
+
+                # The canonical artifact is an ArchitectureTemplate.
+                self.assertEqual(artifacts[model_type]["schema_version"], "architecture-template-v0")
+                self.assertEqual(artifacts[model_type]["metadata"]["level"], "architecture_template")
 
                 artifact_text = json.dumps(artifacts[model_type], indent=2)
                 self.assertLessEqual(artifact_text.count("\n"), 700)
@@ -124,6 +144,80 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
                 "model.decoder.block.0",
             ):
                 self.assertNotIn(concrete_path, canonical_text)
+
+            if HAS_JSONSCHEMA:
+                template_schema = _load_schema("architecture-template-v0.schema.json")
+                for model_type, artifact in artifacts.items():
+                    with self.subTest(model_type=model_type):
+                        jsonschema.validate(instance=artifact, schema=template_schema)
+
+    def test_resolved_graph_evaluates_counts_and_stays_symbolic(self):
+        from transformers.models.auto import configuration_auto, modeling_auto
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with (
+                patch.dict(os.environ, {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}),
+                patch.object(
+                    configuration_auto.AutoConfig,
+                    "from_pretrained",
+                    side_effect=AssertionError("Architecture IR generation must not load checkpoint configs."),
+                ),
+                patch.object(
+                    modeling_auto.AutoModel,
+                    "from_pretrained",
+                    side_effect=AssertionError("Architecture IR generation must not load checkpoint weights."),
+                ),
+            ):
+                generate_architecture_ir.main(["--architectures", "llama", "--output-dir", tmp_dir])
+
+            with (Path(tmp_dir) / "artifacts" / "llama.json").open(encoding="utf-8") as handle:
+                template = json.load(handle)
+
+            # A checkpoint config with a layer count that differs from the model default.
+            checkpoint_config = {"model_type": "llama", "num_hidden_layers": 80}
+            resolved = resolve_template_to_graph(template, checkpoint_config, config_source="fake/llama-checkpoint")
+
+            self.assertEqual(resolved["schema_version"], "resolved-graph-v0")
+            self.assertEqual(resolved["metadata"]["level"], "resolved_graph")
+            self.assertEqual(resolved["template_ref"]["schema_version"], "architecture-template-v0")
+            self.assertEqual(resolved["config"]["referenced_fields"]["num_hidden_layers"], 80)
+
+            resolved_repeats = _repeats_by_id(resolved)
+            self.assertEqual(resolved_repeats["decoder_layers"]["count"], 80)
+            self.assertTrue(resolved_repeats["decoder_layers"]["count_resolved"])
+            # count_expr is preserved for provenance.
+            self.assertEqual(resolved_repeats["decoder_layers"]["count_expr"], "config.num_hidden_layers")
+
+            # The resolved graph stays symbolic: exactly one repeated body, not 80 instances.
+            decoder_bodies = [c for c in resolved["templates"] if c["id"] == "decoder_layer"]
+            self.assertEqual(len(decoder_bodies), 1)
+            resolved_text = json.dumps(resolved)
+            self.assertNotIn("model.layers.0", resolved_text)
+            self.assertNotIn("model.layers.79", resolved_text)
+
+            if HAS_JSONSCHEMA:
+                jsonschema.validate(instance=resolved, schema=_load_schema("resolved-graph-v0.schema.json"))
+
+    def test_missing_config_field_is_a_warning_not_a_failure(self):
+        template = {
+            "schema_version": "architecture-template-v0",
+            "model_type": "llama",
+            "repeats": [
+                {
+                    "id": "decoder_layers",
+                    "kind": "symbolic_repeat",
+                    "body": "decoder_layer",
+                    "count_expr": "config.num_hidden_layers",
+                    "count_source": "config",
+                    "index_symbol": "i",
+                    "item_path_pattern": "model.layers.{i}",
+                }
+            ],
+        }
+        resolved = resolve_template_to_graph(template, {"model_type": "llama"})
+        resolved_repeats = _repeats_by_id(resolved)
+        self.assertFalse(resolved_repeats["decoder_layers"]["count_resolved"])
+        self.assertTrue(resolved["warnings"])
 
 
 def _repeats_by_id(artifact):

@@ -120,8 +120,12 @@ def _build_compact_artifact(
         "schema_version": SCHEMA_VERSION,
         "model_type": model_type,
         "metadata": {
+            "level": "architecture_template",
             "format": "compact_template",
-            "description": "Compact semantic architecture IR with symbolic repeats and reusable templates.",
+            "description": (
+                "Config-parametric ArchitectureTemplate with symbolic repeats and reusable component templates. "
+                "Resolve against a checkpoint config.json to obtain a ResolvedGraph."
+            ),
         },
         "entrypoints": resolved.entrypoints,
         "config": _config_payload(resolved.config),
