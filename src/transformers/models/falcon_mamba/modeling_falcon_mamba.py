@@ -140,6 +140,8 @@ class FalconMambaMixer(nn.Module):
 
         self.warn_slow_implementation()
 
+        self.layer_type = config.layer_types[layer_idx]
+
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
         self.register_buffer(
             "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
