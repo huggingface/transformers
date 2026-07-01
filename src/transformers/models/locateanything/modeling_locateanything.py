@@ -27,6 +27,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -788,21 +789,13 @@ class LocateAnythingPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", None) or self.config.text_config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, LocateAnythingTextRMSNorm)):
-            if getattr(module, "bias", None) is not None:
-                module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, LocateAnythingLearnable2DInterpPosEmb):
-            module.weight.data.normal_(mean=0.0, std=std)
+        # Delegate standard modules (Linear/Conv/Embedding/LayerNorm/RMSNorm/RotaryEmbedding) to the base
+        # implementation, which uses the flag-aware `transformers.initialization` functions. Those respect the
+        # `_is_hf_initialized` marker so that weights already loaded from a checkpoint are never re-initialized.
+        super()._init_weights(module)
+        if isinstance(module, LocateAnythingLearnable2DInterpPosEmb):
+            std = getattr(self.config, "initializer_range", None) or self.config.text_config.initializer_range
+            init.normal_(module.weight, mean=0.0, std=std)
 
 
 @auto_docstring(
