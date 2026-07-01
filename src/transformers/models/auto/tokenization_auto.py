@@ -420,6 +420,7 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
     "salesforce/blip2-opt-*",
+    "salesforce/blip2-itm-*",
     "salesforce/blip2-flan-t5-*",
     "salesforce/instructblip-flan-t5-*",
 ]
