@@ -1113,8 +1113,11 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             layer names or types to not quantize, supports regex prefixed by 're:'
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
-        run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to
-            emulate compressed model execution if True, otherwise use default submodule
+        run_compressed (`bool`, *optional*, defaults to `True`): deprecated, use `dequantize` instead
+            (`dequantize = not run_compressed`).
+        dequantize (`bool`, *optional*, defaults to `False`): when `True`, the quantized weights are dequantized
+            back to the model dtype (e.g. BF16) at load time instead of running in compressed / FP8-kernel mode.
+            Useful when the model needs to be fine-tuned or saved in its original dtype.
     """
 
     def __init__(
@@ -1127,6 +1130,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         ignore: list[str] | None = None,
         quant_method: str = "compressed-tensors",
         run_compressed: bool = True,
+        dequantize: bool = False,
         **kwargs,
     ):
         if is_compressed_tensors_available():
@@ -1137,7 +1141,15 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             )
         self.quantization_config = None
 
-        self.run_compressed = run_compressed
+        if not run_compressed:
+            logger.warning_once(
+                "`run_compressed` is deprecated and will be removed in a future version. "
+                "Use `dequantize=True` instead of `run_compressed=False`."
+            )
+            dequantize = True
+        self.dequantize = dequantize
+        # Kept in sync for backward compatibility; `dequantize` is the source of truth.
+        self.run_compressed = not dequantize
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
@@ -1157,8 +1169,11 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
 
     def post_init(self):
-        if self.run_compressed and not self.is_quantization_compressed:
-            logger.warning("`run_compressed` is only supported for compressed models. Setting `run_compressed=False`")
+        if not self.dequantize and not self.is_quantization_compressed and not self.is_fp8:
+            # Compressed execution only applies to compressed checkpoints; dequantize otherwise.
+            # FP8 checkpoints are excluded: even when not stored in COMPRESSED status (e.g. FROZEN
+            # per-tensor static FP8), the weights are already FP8 and run through the FP8 kernels.
+            self.dequantize = True
             self.run_compressed = False
 
     @classmethod
@@ -1223,7 +1238,27 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         return serializable_config_dict
 
     def get_loading_attributes(self):
-        return {"run_compressed": self.run_compressed}
+        return {"run_compressed": self.run_compressed, "dequantize": self.dequantize}
+
+    @property
+    def is_fp8(self):
+        """Whether this config describes FP8 quantization (float weights with 8 bits)."""
+        ct_qconfig = self.quantization_config
+        if ct_qconfig is None:
+            return False
+        for group in ct_qconfig.config_groups.values():
+            weights = group.weights
+            if weights is not None and weights.type == "float" and weights.num_bits == 8:
+                return True
+        return False
+
+    @property
+    def use_fp8_kernel(self):
+        """Whether to run this FP8 checkpoint through the accelerated FP8 kernels.
+
+        True only for FP8 checkpoints that are kept quantized (i.e. not `dequantize`).
+        """
+        return self.is_fp8 and not self.dequantize
 
     @property
     def is_quantized(self):

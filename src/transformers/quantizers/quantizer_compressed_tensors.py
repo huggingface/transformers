@@ -27,7 +27,11 @@ logger = logging.get_logger(__name__)
 class CompressedTensorsHfQuantizer(HfQuantizer):
     """
     Quantizer for the compressed_tensors package.  Loads and restores models to
-    quantized state with compressed_tensors
+    quantized state with compressed_tensors.
+
+    When FP8 quantization is detected and a GPU/XPU is available, uses row-wise
+    FP8 matmul kernels (torch._scaled_mm) for acceleration.
+    Otherwise falls back to the default compressed-tensors dequantize path.
     """
 
     requires_calibration = True
@@ -43,8 +47,24 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         from compressed_tensors.compressors import ModelCompressor
 
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
-        self.run_compressed = quantization_config.run_compressed
         self.quantization_config = quantization_config
+
+        # Whether to run FP8 checkpoints through the accelerated FP8 kernels.
+        self.use_fp8_kernel = quantization_config.use_fp8_kernel
+        self._activation_scheme = "dynamic"
+        self._modules_to_not_convert_ct = []
+
+        if self.use_fp8_kernel:
+            ct_qconfig = quantization_config.quantization_config
+            if ct_qconfig and ct_qconfig.ignore:
+                self._modules_to_not_convert_ct = list(ct_qconfig.ignore)
+            # Parse activation scheme
+            if ct_qconfig:
+                for group in ct_qconfig.config_groups.values():
+                    act = group.input_activations
+                    if act is not None:
+                        self._activation_scheme = "dynamic" if act.dynamic else "static"
+                    break
 
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
@@ -54,24 +74,51 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             )
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype != torch.float16:
-            logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with compressed_tensors.")
         return dtype
 
+    def param_needs_quantization(self, model, param_name: str, **kwargs) -> bool:
+        # FP8 checkpoints are always pre-quantized; we never quantize on the fly.
+        # Online FP8 quantization is intentionally unsupported (use finegrained-fp8).
+        return False
+
     def _process_model_before_weight_loading(self, model, **kwargs):
+        if self.use_fp8_kernel:
+            self._process_model_before_weight_loading_fp8(model, **kwargs)
+        else:
+            self._process_model_before_weight_loading_default(model, **kwargs)
+
+    def _process_model_before_weight_loading_default(self, model, **kwargs):
         from compressed_tensors.quantization import apply_quantization_config
 
         ct_quantization_config = self.compressor.quantization_config
 
         # Always initialize compressed wrappers to match the checkpoint
-        apply_quantization_config(model, ct_quantization_config, self.run_compressed)
+        apply_quantization_config(
+            model, ct_quantization_config, run_compressed=not self.quantization_config.dequantize
+        )
         if self.quantization_config.is_quantization_compressed:
             self.compressor.compress_model(model=model)
 
+    def _process_model_before_weight_loading_fp8(self, model, **kwargs):
+        from ..integrations.compressed_tensors_fp8 import replace_with_compressed_tensors_fp8_linear
+
+        self.modules_to_not_convert = self.get_modules_to_not_convert(model, None, model._keep_in_fp32_modules)
+        if self._modules_to_not_convert_ct:
+            self.modules_to_not_convert = list(set(self.modules_to_not_convert + self._modules_to_not_convert_ct))
+
+        replace_with_compressed_tensors_fp8_linear(
+            model,
+            modules_to_not_convert=self.modules_to_not_convert,
+            activation_scheme=self._activation_scheme,
+            pre_quantized=self.pre_quantized,
+        )
+
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
+        if self.use_fp8_kernel:
+            return
 
-        if self.quantization_config.is_quantization_compressed and not self.run_compressed:
+        if self.quantization_config.is_quantization_compressed and self.quantization_config.dequantize:
             self.compressor.decompress_model(model=model)
 
     # NOTE: TP plan override for compressed tensors removed - unsupported styles were used.
@@ -91,13 +138,97 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
+        # The FP8 kernel path is inference-only. With `dequantize=True` we don't enter
+        # it (`use_fp8_kernel` is False) and fall back to the regular compressed-tensors route.
+        if self.use_fp8_kernel:
+            return False
+        return True
+
+    @property
+    def is_compileable(self) -> bool:
         return True
 
     def is_qat_trainable(self) -> bool:
         """Loaded Models can carry out quantization aware training"""
+        if self.use_fp8_kernel:
+            return False
         # models need to be decompressed carry out qat
-        return not self.run_compressed or not self.quantization_config.is_quantization_compressed
+        return self.quantization_config.dequantize or not self.quantization_config.is_quantization_compressed
 
     def is_serializable(self) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
         return True
+
+    def get_weight_conversions(self):
+        """Reshape the FP8 ``weight_scale`` for plain ``nn.Linear`` modules.
+
+        The weight stays in FP8; we only reshape ``weight_scale`` (keeping the
+        checkpoint name) so the layer runs through :class:`CompressedTensorsFP8Linear`.
+        """
+        if not self.use_fp8_kernel or not self.pre_quantized:
+            return []
+
+        from ..core_model_loading import WeightConverter
+        from ..integrations.compressed_tensors_fp8 import CompressedTensorsScaleConvert
+
+        return [
+            WeightConverter(
+                source_patterns=["weight_scale"],
+                target_patterns=["weight_scale"],
+                operations=[CompressedTensorsScaleConvert()],
+            ),
+        ]
+
+    def update_weight_conversions(self, weight_conversions):
+        """Walk the model-provided conversion pipeline so FP8 scales are handled
+        alongside their weights.
+
+        Plain ``nn.Linear`` weights are handled by the generic converter from
+        :meth:`get_weight_conversions` (kept in FP8 by default, or dequantized to
+        BF16 when ``dequantize=True``).
+
+        For models whose converters *merge* weights (e.g. MoE experts via a
+        ``MergeModulelist`` / concat op), the merged tensor cannot be an FP8
+        ``nn.Linear`` and is therefore not replaced by
+        :class:`CompressedTensorsFP8Linear`. For each such converter we anchor the
+        weight patterns, attach the sibling ``*.weight_scale`` sources to the same
+        bucket, and prepend a :class:`CompressedTensorsFp8Dequantize` op so the
+        per-expert (weight, scale) pairs are folded into BF16 *before* the merge /
+        concat ops collapse the per-expert structure.
+        """
+        if not self.use_fp8_kernel or not self.pre_quantized:
+            return weight_conversions + self.get_weight_conversions()
+
+        from ..core_model_loading import WeightConverter
+        from ..integrations.compressed_tensors_fp8 import CompressedTensorsFp8Dequantize
+
+        updated: list = []
+        for conv in weight_conversions:
+            # Only WeightConverter has ``.operations`` to extend; WeightRenaming
+            # rules just pass through untouched.
+            if not isinstance(conv, WeightConverter):
+                updated.append(conv)
+                continue
+
+            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
+            if weight_sources:
+                logger.warning_once(
+                    "Some FP8 weights (e.g. merged MoE experts) cannot be kept in FP8 because they are "
+                    "fused into a single parameter; they will be dequantized to the model dtype. Only "
+                    "dense / attention / router layers benefit from the FP8 kernels."
+                )
+                anchored_weight = [p + "$" for p in weight_sources]
+                scale_sources = [p[: -len(".weight")] + ".weight_scale$" for p in weight_sources]
+                other = [p for p in conv.source_patterns if not p.endswith(".weight")]
+                new_sources = anchored_weight + scale_sources + other
+                new_ops = [CompressedTensorsFp8Dequantize()] + list(conv.operations)
+                conv = WeightConverter(
+                    source_patterns=new_sources,
+                    target_patterns=conv._original_target_patterns,
+                    operations=new_ops,
+                )
+            updated.append(conv)
+
+        # Generic fallback for plain nn.Linear FP8 weights (kept in FP8).
+        updated.extend(self.get_weight_conversions())
+        return updated
