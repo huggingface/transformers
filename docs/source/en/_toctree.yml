@@ -1085,6 +1085,8 @@
         title: Audio Spectrogram Transformer
       - local: model_doc/bark
         title: Bark
+      - local: model_doc/canary
+        title: Canary
       - local: model_doc/clap
         title: CLAP
       - local: model_doc/cohere_asr
