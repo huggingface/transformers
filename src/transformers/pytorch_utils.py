@@ -217,7 +217,7 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
     non-overlapping lifetimes may have the same id.
     """
-    if _torch_distributed_available and is_torch_greater_or_equal("2.5"):
+    if _torch_distributed_available:
         from torch.distributed.tensor import DTensor
 
         if isinstance(tensor, DTensor):

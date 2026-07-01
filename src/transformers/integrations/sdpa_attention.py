@@ -7,7 +7,6 @@ from ..utils.import_utils import is_torch_greater_or_equal
 logger = logging.get_logger(__name__)
 
 
-_is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
@@ -34,7 +33,7 @@ def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor) -> b
     #   - torch version >= 2.8
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
-    return _is_torch_greater_or_equal_than_2_5 and attention_mask is None
+    return attention_mask is None
 
 
 def sdpa_attention_forward(

@@ -137,6 +137,7 @@ GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
+TORCH_MIN_VERSION = "2.5.0"
 TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
@@ -668,7 +669,7 @@ def enable_tf32(enable: bool) -> None:
 
 @lru_cache
 def is_torch_flex_attn_available() -> bool:
-    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
+    return is_torch_available() and version.parse(get_torch_version()) >= version.parse(TORCH_MIN_VERSION)
 
 
 @lru_cache

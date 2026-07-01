@@ -442,13 +442,6 @@ def _get_torchao_optimizer(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
             "Install it with `pip install torchao` or follow the instructions here: "
             "https://github.com/pytorch/ao"
         )
-    if version.parse(importlib.metadata.version("torch")) <= version.parse("2.4"):
-        raise ImportError(
-            "You need to have `torch>2.4` in order to use torch 4-bit optimizers. "
-            "Install it with `pip install --upgrade torch` it is available on pipy. "
-            "Otherwise, you need to install torch nightly."
-        )
-
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.11.0"):
         from torchao.optim import AdamW4bit, AdamW8bit
     else:
