@@ -25,9 +25,10 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
-    from torch.distributed.tensor import DTensor
+    from torch.distributed._functional_collectives import wait_tensor
+    from torch.distributed.tensor import DTensor, Replicate
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
-    from torch.distributed.tensor.placement_types import Shard
+    from torch.distributed.tensor.placement_types import Shard, _StridedShard
 
     # torch < 2.10 names as an underscore before `local_shard_size_and_offset`: alias it the non-underscored version
     if not hasattr(Shard, "local_shard_size_and_offset") and hasattr(Shard, "_local_shard_size_and_offset"):
@@ -330,3 +331,128 @@ def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTenso
         shape=ref.shape,
         stride=tuple(ref.stride()),
     )
+
+
+def _replicate_dtensor(tensor: DTensor) -> DTensor:
+    """All-gather a DTensor to fully Replicate, handling _StridedShard."""
+    mesh = tensor.device_mesh
+    placements = tensor.placements
+    replicate_all = tuple(Replicate() for _ in range(mesh.ndim))
+
+    if not any(isinstance(p, _StridedShard) for p in placements):
+        return tensor.redistribute(placements=replicate_all)
+
+    with torch.no_grad():
+        local = tensor._local_tensor
+        for i in reversed(range(mesh.ndim)):
+            p = placements[i]
+            if p.is_replicate():
+                continue
+            logical_shape = list(tensor.shape)
+            for j, pj in enumerate(placements[:i]):
+                if not pj.is_replicate():
+                    size, _ = Shard.local_shard_size_and_offset(
+                        logical_shape[pj.dim], mesh.size(j), mesh.get_local_rank(j)
+                    )
+                    logical_shape[pj.dim] = size
+            local = p._to_replicate_tensor(local, mesh, i, logical_shape)
+            local = wait_tensor(local)
+        return DTensor.from_local(local, mesh, replicate_all, run_check=False)
+
+
+def _find_strided_shard_placement_from_fused_params(placements):
+    for i, p in enumerate(placements):
+        if not isinstance(p, _StridedShard):
+            continue
+        has_partner_on_same_dim = any(
+            j != i and getattr(other, "dim", None) == p.dim for j, other in enumerate(placements)
+        )
+        if not has_partner_on_same_dim:
+            return p
+    return None
+
+
+def _split_fused_dtensor(dt, dim, n_pieces):
+    local_pieces = list(dt._local_tensor.chunk(n_pieces, dim=dim))
+    if len(local_pieces) != n_pieces:
+        raise RuntimeError(
+            f"Cannot split DTensor of shape {tuple(dt.shape)} into {n_pieces} pieces along dim {dim}: "
+            f"got {len(local_pieces)} chunks instead."
+        )
+    new_placements = tuple(
+        Shard(p.dim) if (isinstance(p, _StridedShard) and p.dim == dim) else p for p in dt.placements
+    )
+    return [
+        DTensor.from_local(lp.contiguous(), dt.device_mesh, new_placements, run_check=False) for lp in local_pieces
+    ]
+
+
+def _merge_unfused_dtensors(pieces, dim, target_placements):
+    local_cat = torch.cat([p._local_tensor for p in pieces], dim=dim).contiguous()
+    return DTensor.from_local(local_cat, pieces[0].device_mesh, target_placements, run_check=False)
+
+
+def get_fusion_metadata(optimizer_state_dict):
+    """Inspect the optimizer state dict and return metadata describing every
+    fused param that needs to be split for DCP."""
+    optimizer_state = optimizer_state_dict.get("state", {})
+    fusion_metadata: dict[str, dict] = {}
+
+    for param_name, optimizer_fields in optimizer_state.items():
+        dtensor = next((v for v in optimizer_fields.values() if isinstance(v, DTensor)), None)
+        if dtensor is None:
+            continue
+        strided_shard_placement = _find_strided_shard_placement_from_fused_params(dtensor.placements)
+        if strided_shard_placement is None:
+            continue
+        fusion_metadata[param_name] = {
+            "chunk_dim": strided_shard_placement.dim,
+            "placements": tuple(dtensor.placements),
+            "unfused_keys": [f"{param_name}.{i}" for i in range(strided_shard_placement.split_factor)],
+        }
+
+    return fusion_metadata
+
+
+def unfuse_optimizer_state(optimizer_state_dict, fusion_metadata):
+    """Apply `fusion_metadata` to split each fused param into plain-Shard pieces in place."""
+    optimizer_state = optimizer_state_dict.get("state", {})
+
+    for param_name, metadata in fusion_metadata.items():
+        optimizer_fields = optimizer_state[param_name]
+
+        for unfused_key in metadata["unfused_keys"]:
+            optimizer_state[unfused_key] = {}
+
+        for optim_param_name, value in optimizer_fields.items():
+            if isinstance(value, DTensor):
+                chunks = _split_fused_dtensor(value, metadata["chunk_dim"], len(metadata["unfused_keys"]))
+            else:
+                chunks = [value] * len(metadata["unfused_keys"])
+            for unfused_key, chunk in zip(metadata["unfused_keys"], chunks):
+                optimizer_state[unfused_key][optim_param_name] = chunk
+
+        del optimizer_state[param_name]
+
+
+def fuse_optimizer_state(optimizer_state_dict, fusion_metadata):
+    """Fuse the optimizer state dict back in place using the fusion info."""
+    optimizer_state = optimizer_state_dict.get("state", {})
+
+    for param_name, metadata in fusion_metadata.items():
+        first_piece = optimizer_state[metadata["unfused_keys"][0]]
+
+        merged_fields = {}
+        for optim_param_name, value in first_piece.items():
+            chunks = [optimizer_state[unfused_key][optim_param_name] for unfused_key in metadata["unfused_keys"]]
+            if isinstance(value, DTensor):
+                merged_fields[optim_param_name] = _merge_unfused_dtensors(
+                    chunks, metadata["chunk_dim"], metadata["placements"]
+                )
+            else:
+                merged_fields[optim_param_name] = value
+
+        optimizer_state[param_name] = merged_fields
+
+        for unfused_key in metadata["unfused_keys"]:
+            del optimizer_state[unfused_key]

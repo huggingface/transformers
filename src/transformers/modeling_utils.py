@@ -52,6 +52,15 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
+from .distributed.utils import (
+    _distributed_barrier,
+    gather_full_state_dict,
+    init_device_mesh,
+    save_model_checkpoint_distributed,
+)
+from .distributed.utils import (
+    distribute_model as distribute_model_distributed,
+)
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
@@ -207,6 +216,12 @@ def _get_torch_distributed_world_size() -> int:
     if not _is_torch_distributed_initialized() or not hasattr(torch.distributed, "get_world_size"):
         return 1
     return torch.distributed.get_world_size()
+
+
+def _get_torch_distributed_rank() -> int:
+    if not _is_torch_distributed_initialized() or not hasattr(torch.distributed, "get_rank"):
+        return 0
+    return torch.distributed.get_rank()
 
 
 def is_local_dist_rank_0():
@@ -3357,6 +3372,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         token: str | bool | None = None,
         save_peft_format: bool = True,
         save_original_format: bool = True,
+        distributed_checkpoint: bool = False,
         **kwargs,
     ):
         """
@@ -3432,9 +3448,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         os.makedirs(save_directory, exist_ok=True)
+        save_on_this_rank = is_main_process
+        if _is_torch_distributed_initialized() and getattr(self, "device_mesh", None) is not None:
+            # DTensor gather materializes a full plain state dict only on global rank 0.
+            save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
         save_directory_path = os.fspath(save_directory)
 
-        if push_to_hub:
+        if push_to_hub and save_on_this_rank:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory_path.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
@@ -3459,46 +3479,72 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self._auto_class is not None:
+        if self._auto_class is not None and save_on_this_rank:
             custom_object_save(self, save_directory, config=self.config)
 
+        # Don't persist distributed_config in saved config — it's runtime-only
+        # (otherwise AutoConfig absorbs it on reload, preventing from_pretrained from seeing it as a kwarg).
+        # Keep a runtime copy around because TP/FSDP save helpers still rely on it after config serialization.
+        distributed_config = getattr(model_to_save.config, "distributed_config", None)
+        if distributed_config is not None:
+            del model_to_save.config.distributed_config
+
         # Save the config
-        if is_main_process:
-            if not _hf_peft_config_loaded:
-                model_to_save.config.save_pretrained(save_directory)
-            if self.can_generate():
-                model_to_save.generation_config.save_pretrained(save_directory)
+        try:
+            if save_on_this_rank:
+                if not _hf_peft_config_loaded:
+                    model_to_save.config.save_pretrained(save_directory)
+                if self.can_generate():
+                    model_to_save.generation_config.save_pretrained(save_directory)
 
-            if _hf_peft_config_loaded:
-                logger.info(
-                    "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
-                )
-                state_dict = model_to_save.get_adapter_state_dict(state_dict=state_dict)
-
-                if save_peft_format:
+                if _hf_peft_config_loaded:
                     logger.info(
-                        "To match the expected format of the PEFT library, all keys of the state dict of adapters will be prepended with `base_model.model`."
+                        "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
                     )
-                    peft_state_dict = {}
-                    for key, value in state_dict.items():
-                        peft_state_dict[f"base_model.model.{key}"] = value
-                    state_dict = peft_state_dict
+                    state_dict = model_to_save.get_adapter_state_dict(state_dict=state_dict)
 
-                active_adapter = self.active_adapters()
+                    if save_peft_format:
+                        logger.info(
+                            "To match the expected format of the PEFT library, all keys of the state dict of adapters will be prepended with `base_model.model`."
+                        )
+                        peft_state_dict = {}
+                        for key, value in state_dict.items():
+                            peft_state_dict[f"base_model.model.{key}"] = value
+                        state_dict = peft_state_dict
 
-                if len(active_adapter) > 1:
-                    raise ValueError(
-                        "Multiple active adapters detected, saving multiple active adapters is not supported yet. You can save adapters separately one by one "
-                        "by iteratively calling `model.set_adapter(adapter_name)` then `model.save_pretrained(...)`"
-                    )
-                active_adapter = active_adapter[0]
+                    active_adapter = self.active_adapters()
 
-                current_peft_config = self.peft_config[active_adapter]
-                current_peft_config.save_pretrained(save_directory)
+                    if len(active_adapter) > 1:
+                        raise ValueError(
+                            "Multiple active adapters detected, saving multiple active adapters is not supported yet. You can save adapters separately one by one "
+                            "by iteratively calling `model.set_adapter(adapter_name)` then `model.save_pretrained(...)`"
+                        )
+                    active_adapter = active_adapter[0]
 
-        # Get the model state_dict
+                    current_peft_config = self.peft_config[active_adapter]
+                    current_peft_config.save_pretrained(save_directory)
+        finally:
+            if distributed_config is not None:
+                model_to_save.config.distributed_config = distributed_config
+
+        if distributed_checkpoint:
+            if _is_torch_distributed_initialized() and getattr(self, "device_mesh", None) is None:
+                raise ValueError(
+                    "save_pretrained(distributed_checkpoint=True) requires the model to have been "
+                    "initialized with a distributed_config (device_mesh is None)."
+                )
+            save_model_checkpoint_distributed(self, save_directory)
+            return
+
+        # Get the model state_dict (handles FSDP unshard + TP gather in one call)
+        used_distributed_gather = False
         if state_dict is None:
-            state_dict = model_to_save.state_dict()
+            if getattr(self, "device_mesh", None) is not None:
+                # Pass self (not model_to_save) so device_mesh/tp_size/tp_plan are available
+                state_dict = gather_full_state_dict(self)
+                used_distributed_gather = True
+            else:
+                state_dict = model_to_save.state_dict()
 
         # if any model parameters are offloaded, we need to know it for later
         is_offloaded = False
@@ -3524,8 +3570,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if ignore_key in state_dict:
                     del state_dict[ignore_key]
 
-        # If model was sharded with TP, gather full tensors for saving
-        if self._tp_size is not None:
+        # If model was sharded with legacy TP, gather full tensors for saving
+        if self._tp_size is not None and not used_distributed_gather:
             state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
 
         # Remove tied weights as safetensors do not handle them
@@ -3569,54 +3615,55 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
                 and filename not in state_dict_split.filename_to_tensors
-                and is_main_process
+                and save_on_this_rank
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
 
         # Save the model
-        for shard_file, tensor_names in logging.tqdm(
-            state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
-        ):
-            filename = os.path.join(save_directory, shard_file)
-            shard_state_dict = {}
-            for tensor_name in tensor_names:
-                # Get the tensor, and remove it from state_dict to avoid keeping the ref
-                tensor = state_dict.pop(tensor_name)
+        if save_on_this_rank:
+            for shard_file, tensor_names in logging.tqdm(
+                state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
+            ):
+                filename = os.path.join(save_directory, shard_file)
+                shard_state_dict = {}
+                for tensor_name in tensor_names:
+                    # Get the tensor, and remove it from state_dict to avoid keeping the ref
+                    tensor = state_dict.pop(tensor_name)
 
-                # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
-                # but it would otherwise not be contained in the saved shard if we were to simply move the file
-                # or something
-                if is_offloaded and tensor.device.type == "meta":
-                    tensor = load_offloaded_parameter(model_to_save, tensor_name)
+                    # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
+                    # but it would otherwise not be contained in the saved shard if we were to simply move the file
+                    # or something
+                    if is_offloaded and tensor.device.type == "meta":
+                        tensor = load_offloaded_parameter(model_to_save, tensor_name)
 
-                # only do contiguous after it's permuted correctly in case of TP
-                shard_state_dict[tensor_name] = tensor.contiguous()
+                    # only do contiguous after it's permuted correctly in case of TP
+                    shard_state_dict[tensor_name] = tensor.contiguous()
 
-            # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
-            # so it's not possible for now....
-            # Write the shard to disk
-            safe_save_file(shard_state_dict, filename, metadata=metadata)
-            # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
-            del shard_state_dict
+                # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
+                # so it's not possible for now....
+                # Write the shard to disk
+                safe_save_file(shard_state_dict, filename, metadata=metadata)
+                # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
+                del shard_state_dict
 
-        if index is None:
-            path_to_weights = os.path.join(save_directory, weights_name)
-            logger.info(f"Model weights saved in {path_to_weights}")
-        else:
-            save_index_file = SAFE_WEIGHTS_INDEX_NAME
-            save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
-            # Save the index as well
-            with open(save_index_file, "w", encoding="utf-8") as f:
-                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-                f.write(content)
-            logger.info(
-                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
-                f"index located at {save_index_file}."
-            )
+            if index is None:
+                path_to_weights = os.path.join(save_directory, weights_name)
+                logger.info(f"Model weights saved in {path_to_weights}")
+            else:
+                save_index_file = SAFE_WEIGHTS_INDEX_NAME
+                save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
+                # Save the index as well
+                with open(save_index_file, "w", encoding="utf-8") as f:
+                    content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                    f.write(content)
+                logger.info(
+                    f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                    f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
+                    f"index located at {save_index_file}."
+                )
 
-        if push_to_hub:
+        if push_to_hub and save_on_this_rank:
             # Eventually create an empty model card
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
 
@@ -3631,6 +3678,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 token=token,
                 create_pr=create_pr,
             )
+
+        # `gather_full_state_dict` concentrates the full state on rank 0 only;
+        # other ranks then loop over an empty shard list and would race ahead
+        # of rank 0's safetensors writes. Barrier so any subsequent
+        # `from_pretrained` on this path sees the consolidated files.
+        if used_distributed_gather:
+            _distributed_barrier()
 
     @wraps(PushToHubMixin.push_to_hub)
     def push_to_hub(self, *args, **kwargs):
@@ -4138,8 +4192,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
 
-        if distributed_config is not None and tp_plan is None:
-            tp_plan = "auto"
+        if distributed_config is not None:
+            if device_map is not None:
+                raise ValueError(
+                    "`distributed_config` and `device_map` are mutually exclusive. "
+                    "`distributed_config` handles device placement natively via torch.distributed."
+                )
+            # NOTE(3outeille): support quantization (fp4/fp8) with distributed training later
+            if quantization_config is not None:
+                raise ValueError(
+                    "Quantization is not currently supported with distributed training. Please disable quantization or distributed_config."
+                )
 
         # Not used anymore -- remove them from the kwargs
         for name in ["mirror", "_fast_init", "low_cpu_mem_usage", "from_tf", "from_flax", "offload_state_dict"]:
@@ -4170,17 +4233,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
             )
 
-        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
-            logger.info(
-                "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
-                "If your plan is to load the model on each device, you should set device_map={"
-                ": PartialState().process_index} where PartialState comes from accelerate library"
-            )
+        if distributed_config is not None:
+            device_mesh = init_device_mesh(distributed_config)
+            # When using any distributed setup, we simply set the device_map here to the current rank so that we correctly
+            # load the params on the right device
+            if device_mesh.device_type == "cpu":
+                device_map = {"": torch.device("cpu")}
+            else:
+                device_map = {"": torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))}
+        else:
+            if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
+                logger.info(
+                    "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
+                    "If your plan is to load the model on each device, you should set device_map={"
+                    ": PartialState().process_index} where PartialState comes from accelerate library"
+                )
 
-        if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
-            device_map, device_mesh, tp_size = initialize_tensor_parallelism(
-                tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
-            )
+            if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
+                device_map, device_mesh, tp_size = initialize_tensor_parallelism(
+                    tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
+                )
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
@@ -4193,7 +4265,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             download_kwargs_with_commit,
             **adapter_kwargs,
         )
-        device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
+        if distributed_config is None:
+            device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -4333,11 +4406,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
+        if distributed_config is not None:
+            # Tie weights before sharding so `apply_fully_shard_data_parallel` /
+            # `apply_tensor_parallel` see the shared-parameter graph and can route tied
+            # entries (e.g. `lm_head` -> `embed_tokens`) correctly. `_finalize_model_loading`
+            # re-runs `tie_weights` after the checkpoint is loaded to handle missing-key edge cases.
+            model.tie_weights()
+            model = distribute_model_distributed(model, distributed_config, device_mesh)
+        elif _torch_distributed_available and device_mesh is not None:  # legacy TP hooks: no weights yet
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
-
-        # Prepare the full device map
-        if device_map is not None:
+        elif device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
         # Finalize model weight initialization
