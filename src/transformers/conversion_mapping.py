@@ -95,6 +95,8 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "glmasr": "qwen2_audio",
     "musicflamingo": "qwen2_audio",
     "granite_speech_plus": "granite_speech",
+    "granitemoeshared": "granitemoe",
+    "granitemoehybrid": "granitemoe",
     "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
@@ -120,6 +122,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "MusicFlamingoModel": "Qwen2AudioModel",
     "GraniteSpeechPlusModel": "GraniteSpeechModel",
     "MaskFormerDetrDecoder": "DetrModel",
+    "Qwen2_5_VLModel": "Qwen2VLModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
     "ASTModel": "ViTModel",
@@ -147,6 +150,25 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"embed_vision\.embedding_projection",
                 target_patterns="embed_vision.multimodal_embedder.embedding_projection",
+            ),
+        ],
+        "radio": [
+            WeightRenaming("radio_model.model.patch_generator.video_embedder", "embeddings.video_patch_projection"),
+            WeightRenaming("radio_model.model.patch_generator.embedder", "embeddings.patch_projection"),
+            WeightRenaming("radio_model.model.patch_generator.pos_embed", "embeddings.position_embedding"),
+            WeightRenaming("radio_model.model.patch_generator.cls_token.token", "embeddings.cls_register_token"),
+            WeightRenaming("radio_model.model.blocks", "encoder.layer"),
+            WeightRenaming("attn.proj", "attention.output.dense"),
+            WeightRenaming("radio_model.input_conditioner", "input_conditioner"),
+            WeightRenaming("radio_model.summary_idxs", "summary_idxs"),
+            WeightConverter(
+                source_patterns="attn.qkv",
+                target_patterns=[
+                    "attention.attention.query",
+                    "attention.attention.key",
+                    "attention.attention.value",
+                ],
+                operations=[Chunk(dim=0)],
             ),
         ],
         "hrm_text": [
@@ -579,6 +601,21 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^encoder", target_patterns="model.encoder"),
             WeightRenaming(source_patterns=r"^projector", target_patterns="model.projector"),
         ],
+        # Legacy MoE weight names → standard ``@use_experts_implementation`` interface.
+        "granitemoe": [
+            WeightRenaming(
+                source_patterns=r"block_sparse_moe\.input_linear\.weight",
+                target_patterns="block_sparse_moe.experts.gate_up_proj",
+            ),
+            WeightRenaming(
+                source_patterns=r"block_sparse_moe\.output_linear\.weight",
+                target_patterns="block_sparse_moe.experts.down_proj",
+            ),
+            WeightRenaming(
+                source_patterns=r"block_sparse_moe\.router\.layer\.weight",
+                target_patterns="block_sparse_moe.router.weight",
+            ),
+        ],
         "GraniteSpeechModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
@@ -642,6 +679,9 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^model(?!(\.visual|\.projector|\.language_model))",
                 target_patterns="model.language_model",
             ),
+        ],
+        "Qwen2VLModel": [
+            PrefixChange(prefix_to_add="language_model", model_prefix="model"),
         ],
         "Qwen2VLForConditionalGeneration": [
             WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
