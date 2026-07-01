@@ -21,8 +21,12 @@ from huggingface_hub.dataclasses import strict
 from torch import Tensor, nn
 from torchvision.transforms.v2 import functional as tvF
 
+from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
+from ...backbone_utils import (
+    BackboneConfigMixin,
+    consolidate_backbone_kwargs_to_config,
+)
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
@@ -37,7 +41,7 @@ from ...image_utils import (
     get_max_height_width,
     validate_annotations,
 )
-from ...modeling_outputs import BackboneOutput, BaseModelOutput
+from ...modeling_outputs import BackboneOutput
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -45,7 +49,8 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
+from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
 from ..convnext.modeling_convnext import ConvNextLayer
 from ..detr.image_processing_detr import (
@@ -677,6 +682,8 @@ class RfDetrDinov2Layer(Dinov2Layer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
 
@@ -685,7 +692,7 @@ class RfDetrDinov2Layer(Dinov2Layer):
             hidden_states = self.window_unpartition_before_attention(hidden_states)
 
         hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output = self.attention(hidden_states_norm)
+        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask=attention_mask, **kwargs)
 
         # And reverse the operation after the attention
         if self.global_attention:
@@ -748,6 +755,9 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         hidden_state = hidden_state.transpose(2, 3)
         return hidden_state
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -777,12 +787,12 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        # Like Dinov2, we need to output the hidden states to extract the layers for the stages
-        kwargs["output_hidden_states"] = True
-
         embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
-        hidden_states = output.hidden_states
+        hidden_state = embedding_output
+        hidden_states = (hidden_state,)
+        for layer in self.encoder.layer:
+            hidden_state = layer(hidden_state, **kwargs)
+            hidden_states = hidden_states + (hidden_state,)
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -806,11 +816,7 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
 
                 feature_maps += (hidden_state,)
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states,
-            attentions=output.attentions,
-        )
+        return BackboneOutput(feature_maps=tuple(feature_maps))
 
 
 class RfDetrLayerNorm(LwDetrLayerNorm):
@@ -878,7 +884,7 @@ class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if hasattr(module, "segmentation_bias") and isinstance(module.segmentation_bias, nn.Parameter):
-            nn.init.constant_(module.segmentation_bias, 0.0)
+            init.constant_(module.segmentation_bias, 0.0)
 
 
 @auto_docstring(
