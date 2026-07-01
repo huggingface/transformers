@@ -186,6 +186,10 @@ class Tipsv2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         "Tipsv2VisionModel reverse loading fails because conversion mapping requires different patterns depending on config.use_swiglu_ffn"
     )
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
+        # Depending on config.use_swiglu_ffn, module names are different. They are mlp.fc1/mlp.fc2 in one case and
+        # mlp.weights_in/mlp.weights_out in the other. This results in only one of the two weight conversions matching
+        # for each model type, resulting in the test failure as it expects all weight converters to match. This doesn't
+        # affect the model's ability to load and save weights correctly.
         pass
 
 
