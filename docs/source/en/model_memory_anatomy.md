@@ -42,7 +42,7 @@ Training a 4B parameter model in mixed precision on a batch size of 16 requires 
 │                      └── peak spikes can cause OOM                   │
 │                                                                      │
 │  OTHER OVERHEAD      ▒ beam search caches, large embedding tables    │
-└──────────────────────────────────────────────────────────────────────┘
+└ ─────────────────────────┘
 ```
 
 GPU memory holds two categories of things: stored tensors and the ops that process them.

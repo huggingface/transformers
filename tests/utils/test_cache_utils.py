@@ -1262,7 +1262,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
         Sliding-window size: 2
         Static layer is full-attention.
-        ─────────────────────────────────────────────
+         
         Prefill:
             static   : [1, 2, 3]
             sliding  : [10, 20, 30]   (cache keeps [20, 30])
