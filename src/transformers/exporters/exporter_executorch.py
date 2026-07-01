@@ -61,6 +61,7 @@ if is_torch_available():
     import torch
     from torch.export import ExportedProgram
     from torch.fx.experimental.symbolic_shapes import guard_or_true
+    from torch.nn.attention import SDPBackend, sdpa_kernel
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
 
@@ -165,7 +166,13 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
 
 
 def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
-    """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner."""
+    """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner.
+
+    XNNPACK's partitioner/lowering passes segfault on CUDA-typed EPs — the state and graph
+    metadata both have to be CPU by the time ``to_edge_transform_and_lower`` runs. Moving the
+    model here (before the trace) is the safest place to do that; a post-trace move would
+    need to consistently rewrite every ``meta['val']`` FakeTensor to CPU, which torch doesn't
+    expose cleanly."""
 
     model.requires_grad_(False)
     device = module_device(model)
@@ -324,36 +331,30 @@ def _patch_broadcast_mask_expansion(_original):
 
 @register_patch("executorch", "torch.nn.functional.scaled_dot_product_attention")
 def _patch_scaled_dot_product_attention(original):
-    """Manual matmul+softmax fallback for cases unsupported by the ExecuTorch CUDA backend.
+    """Route SDPA through the MATH backend, plus a manual matmul+softmax fallback for cases
+    unsupported by the ExecuTorch CUDA backend.
 
-    Matches PyTorch's eager SDPA math backend (``_scaled_dot_product_attention_math`` in
-    ``aten/src/ATen/native/transformers/attention.cpp``) — notably, the softmax stays in the input
-    dtype (``half_to_float=false`` there) rather than promoting to fp32.
+    ``sdpa_kernel(MATH)`` forces the decomposable SDPA variant on any device — without it,
+    CUDA traces pick ``_scaled_dot_product_efficient_attention``, which XNNPACK's edge-dialect
+    verifier rejects as non-core-ATen. Same shape of fix as the dynamo-path ``_patch_sdpa``,
+    but unconditional here since the CUDA fused kernel is never lowerable by ExecuTorch's
+    xnnpack backend. No-op on CPU (MATH is already the default), so this is safe everywhere.
 
-    Falls back to eager attention when:
+    The eager-fallback path matches PyTorch's SDPA math kernel exactly
+    (``_scaled_dot_product_attention_math`` in ``aten/src/ATen/native/transformers/attention.cpp``)
+    — notably, the softmax stays in the input dtype rather than promoting to fp32. Falls back to
+    eager (CUDA-backend only) when:
     - enable_gqa=True
     - D_q != D_v (asymmetric head dims, e.g. MLA attention)
     - attn_mask is float (ExecuTorch CUDA SDPA only accepts bool masks)
-    - any input shape contains unbacked SymInts (CPU path) — SDPA's internal
-      dispatch branches on shapes (e.g. ``Eq(query_len, 1)`` for the decode
-      fast-path) and trips ``GuardOnDataDependentSymNode`` on unbacked dims
-      (idefics2, sam3).
     """
 
-    def has_unbacked_shape(t):
-        if t is None:
-            return False
-        return any(isinstance(s, torch.SymInt) and not s.node.expr.is_number for s in t.shape)
-
     def patch(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs):
-        needs_eager_attention = (
-            query.device.type == "cuda"
-            and (
-                kwargs.get("enable_gqa", False)
-                or query.shape[-1] != value.shape[-1]
-                or (attn_mask is not None and attn_mask.is_floating_point())
-            )
-        ) or any(has_unbacked_shape(t) for t in (query, key, value, attn_mask))
+        needs_eager_attention = query.device.type == "cuda" and (
+            kwargs.get("enable_gqa", False)
+            or query.shape[-1] != value.shape[-1]
+            or (attn_mask is not None and attn_mask.is_floating_point())
+        )
         if needs_eager_attention:
             scale_factor = scale if scale is not None else math.sqrt(query.shape[-1]) ** -1
             if key.shape[1] != query.shape[1]:
@@ -369,9 +370,10 @@ def _patch_scaled_dot_product_attention(original):
                 attn_weight = attn_weight + attn_mask
             attn_weight = torch.nn.functional.softmax(attn_weight, dim=-1)
             return torch.matmul(attn_weight, value)
-        return original(
-            query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kwargs
-        )
+        with sdpa_kernel(SDPBackend.MATH):
+            return original(
+                query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kwargs
+            )
 
     return patch
 
