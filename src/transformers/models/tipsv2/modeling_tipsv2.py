@@ -163,7 +163,7 @@ class Tipsv2VisionEmbeddings(nn.Module):
         # Interpolate at float32 precision
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.to(dtype=torch.float32),
-            size=(torch_int(height), torch_int(width)),  # Explicit size instead of scale_factor
+            size=(torch_int(height), torch_int(width)),
             mode="bilinear",  # Different from Dinov2 which uses bicubic interpolation
             align_corners=False,
             antialias=True,
