@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 NVIDIA and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +14,6 @@
 """Processor class for LocateAnything."""
 
 import re
-from typing import Union
-
-import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -84,7 +80,7 @@ class LocateAnythingProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[LocateAnythingProcessorKwargs],

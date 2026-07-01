@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 NVIDIA and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -32,7 +30,14 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_flash_attn_2_available, logging
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_flash_attn_2_available,
+    logging,
+)
 from ...utils.generic import maybe_autocast
 from ..qwen2.modeling_qwen2 import Qwen2MLP, Qwen2RMSNorm, apply_rotary_pos_emb, repeat_kv
 from .configuration_locateanything import LocateAnythingConfig, LocateAnythingVisionConfig
@@ -59,7 +64,9 @@ def _apply_rope_input_validation(x, freqs_cis):
     assert freqs_cis.dtype == torch.complex64, freqs_cis.dtype
 
 
-def apply_rope_vision(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def apply_rope_vision(
+    xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply the 2D rotary position embedding to the query and key tensors of the vision encoder."""
     _apply_rope_input_validation(xq, freqs_cis)
     _apply_rope_input_validation(xk, freqs_cis)
@@ -77,9 +84,7 @@ def vision_flash_attention(q, k, v, q_cu_seqlens=None, k_cu_seqlens=None):
         return vision_sdpa_attention(q, k, v, q_cu_seqlens=q_cu_seqlens, k_cu_seqlens=k_cu_seqlens)
     max_seqlen_q = (q_cu_seqlens[1:] - q_cu_seqlens[:-1]).max().item()
     max_seqlen_k = (k_cu_seqlens[1:] - k_cu_seqlens[:-1]).max().item()
-    attn_out = flash_attn_varlen_func(
-        q, k, v, q_cu_seqlens, k_cu_seqlens, max_seqlen_q, max_seqlen_k, causal=False
-    )
+    attn_out = flash_attn_varlen_func(q, k, v, q_cu_seqlens, k_cu_seqlens, max_seqlen_q, max_seqlen_k, causal=False)
     return attn_out.flatten(start_dim=-2)
 
 
@@ -151,9 +156,7 @@ class LocateAnythingVisionRotaryEmbedding(nn.Module):
         if self.freqs_cis is None:
             self.freqs_cis = self._precompute_freqs_cis(grid_hws.device)
         shapes = grid_hws.tolist()
-        freqs_cis = torch.cat(
-            [self.freqs_cis[:h, :w].reshape(-1, self.dim // 2) for h, w in shapes], dim=0
-        )
+        freqs_cis = torch.cat([self.freqs_cis[:h, :w].reshape(-1, self.dim // 2) for h, w in shapes], dim=0)
         return freqs_cis
 
 
@@ -185,7 +188,9 @@ class LocateAnythingLearnable2DInterpPosEmb(nn.Module):
 
 
 class LocateAnythingVisionPatchEmbed(nn.Module):
-    def __init__(self, out_dim: int, in_dim: int = 3, patch_size: int = 14, pos_emb_height: int = 64, pos_emb_width: int = 64):
+    def __init__(
+        self, out_dim: int, in_dim: int = 3, patch_size: int = 14, pos_emb_height: int = 64, pos_emb_width: int = 64
+    ):
         super().__init__()
         self.patch_size = (patch_size, patch_size)
         self.proj = nn.Conv2d(in_dim, out_dim, kernel_size=self.patch_size, stride=self.patch_size)
@@ -234,7 +239,9 @@ class LocateAnythingVisionLayer(GradientCheckpointingLayer):
         attn_out = attn_func(xq, xk, xv, q_cu_seqlens=cu_seqlens, k_cu_seqlens=cu_seqlens)
         return self.wo(attn_out)
 
-    def forward(self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rope_freqs_cis: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rope_freqs_cis: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = hidden_states + self.attention(self.norm0(hidden_states), cu_seqlens, rope_freqs_cis)
         hidden_states = hidden_states + self.mlp(self.norm1(hidden_states))
         return hidden_states
@@ -367,7 +374,11 @@ def update_causal_mask_for_one_gen_window_2d(
 
 
 def create_block_diff_mask_by_pe_4d(
-    block_size: int, x0_len_list: torch.Tensor, position_ids: torch.Tensor, causal_attn: bool = False, dtype=torch.float32
+    block_size: int,
+    x0_len_list: torch.Tensor,
+    position_ids: torch.Tensor,
+    causal_attn: bool = False,
+    dtype=torch.float32,
 ) -> torch.Tensor:
     """Generate a 4D block-difference attention mask used during training / full-sequence forward passes."""
     batch_size, seq_len = position_ids.shape
@@ -388,7 +399,9 @@ def create_block_diff_mask_by_pe_4d(
     block_mutual = ~x0_flag_q & ~x0_flag_kv & (q_block_idx == kv_block_idx) & mutual_condition
 
     q_blk = torch.div(q_idx - x0_len, block_size, rounding_mode="floor")
-    q_blk_start = (x0_len_list.to(device).view(batch_size, 1) + q_blk[:, :, 0] * block_size).clamp(min=0, max=seq_len - 1)
+    q_blk_start = (x0_len_list.to(device).view(batch_size, 1) + q_blk[:, :, 0] * block_size).clamp(
+        min=0, max=seq_len - 1
+    )
     prefix_len = position_ids.gather(1, q_blk_start).unsqueeze(2)
     block_prefix = (~x0_flag_q & x0_flag_kv) & (kv_idx < prefix_len)
 
@@ -452,7 +465,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
@@ -494,10 +507,10 @@ class LocateAnythingTextAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -545,9 +558,9 @@ class LocateAnythingTextDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        past_key_values: Optional[Cache] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        past_key_values: Cache | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -583,7 +596,10 @@ class LocateAnythingTextModel(nn.Module):
 
         self.embed_tokens = nn.Embedding(text_config.vocab_size, text_config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [LocateAnythingTextDecoderLayer(text_config, layer_idx) for layer_idx in range(text_config.num_hidden_layers)]
+            [
+                LocateAnythingTextDecoderLayer(text_config, layer_idx)
+                for layer_idx in range(text_config.num_hidden_layers)
+            ]
         )
         self.norm = LocateAnythingTextRMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
         self.rotary_emb = LocateAnythingTextRotaryEmbedding(config=text_config)
@@ -621,7 +637,7 @@ class LocateAnythingTextModel(nn.Module):
             mask = mask.masked_fill(allowed, 0.0)
             mask = mask[None, None].expand(batch_size, 1, q_len, kv_len).clone()
             if attention_mask is not None and attention_mask.dim() == 2:
-                padding = (attention_mask[:, None, None, :kv_len] == 0)
+                padding = attention_mask[:, None, None, :kv_len] == 0
                 mask = mask.masked_fill(padding, min_value)
 
             is_ar = q_len == 1 or (input_ids is not None and input_ids[0, -1].item() != self.text_mask_token_id)
@@ -645,14 +661,14 @@ class LocateAnythingTextModel(nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        visual_features: Optional[torch.FloatTensor] = None,
-        image_token_index: Optional[int] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        visual_features: torch.FloatTensor | None = None,
+        image_token_index: int | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPast:
         # `input_ids` may be passed alongside `inputs_embeds`: in that case it is only used to build the
@@ -734,7 +750,7 @@ class LocateAnythingModelOutputWithPast(BaseModelOutputWithPast):
         The image features produced by the vision encoder after projection.
     """
 
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -771,16 +787,16 @@ class LocateAnythingModel(LocateAnythingPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_grid_hws: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_grid_hws: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, LocateAnythingModelOutputWithPast]:
+    ) -> tuple | LocateAnythingModelOutputWithPast:
         r"""
         image_grid_hws (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
             The height and width (in vision patches) of each image, used to unpack and project the variable-length
@@ -835,12 +851,12 @@ class LocateAnythingCausalLMOutputWithPast(ModelOutput):
         The image features produced by the vision encoder after projection.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -877,18 +893,18 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_grid_hws: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_grid_hws: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, LocateAnythingCausalLMOutputWithPast]:
+    ) -> tuple | LocateAnythingCausalLMOutputWithPast:
         r"""
         image_grid_hws (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
             The grid height and width (in patches) of each image.
@@ -925,20 +941,20 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
     @torch.no_grad()
     def generate(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        image_grid_hws: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        image_grid_hws: torch.Tensor | None = None,
         tokenizer=None,
         generation_mode: str = "hybrid",
         max_new_tokens: int = 2048,
         temperature: float = 0.7,
         top_p: float = 0.9,
-        top_k: Optional[int] = None,
+        top_k: int | None = None,
         repetition_penalty: float = 1.0,
         do_sample: bool = True,
         **kwargs,
-    ) -> Union[str, torch.LongTensor]:
+    ) -> str | torch.LongTensor:
         r"""
         Generate structured grounding output using Parallel Box Decoding (PBD).
 
@@ -974,9 +990,7 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
                 image_grid_hws = image_grid_hws.to(device=device, dtype=torch.int32)
             else:
                 image_grid_hws = torch.as_tensor(image_grid_hws, device=device, dtype=torch.int32)
-            visual_features = self.get_image_features(
-                pixel_values.to(self.dtype), image_grid_hws
-            )
+            visual_features = self.get_image_features(pixel_values.to(self.dtype), image_grid_hws)
 
         language_model = self.model.language_model
         generated = input_ids.clone()
@@ -1022,7 +1036,9 @@ class LocateAnythingForConditionalGeneration(LocateAnythingPreTrainedModel, Gene
             if use_mtp:
                 out_type, out_token = self._sample_block_mtp(logits, generated, token_ids, block_size, sampling_kwargs)
             else:
-                out_type, out_token = self._sample_token_ar(logits, generated, token_ids, generation_mode, sampling_kwargs)
+                out_type, out_token = self._sample_token_ar(
+                    logits, generated, token_ids, generation_mode, sampling_kwargs
+                )
 
             generated = torch.cat([generated, out_token.unsqueeze(0)], dim=1)
 
@@ -1136,8 +1152,8 @@ def sample_tokens(logits: torch.Tensor, generated: torch.Tensor, token_ids: dict
     batch_size, seq_len, vocab_size = logits.shape
     repetition_penalty = kwargs.get("repetition_penalty", 1.0)
     temperature = kwargs.get("temperature", 0.0)
-    top_p = kwargs.get("top_p", None)
-    top_k = kwargs.get("top_k", None)
+    top_p = kwargs.get("top_p")
+    top_k = kwargs.get("top_k")
 
     if repetition_penalty != 1.0:
         logits = apply_repetition_penalty(logits, generated, repetition_penalty)
@@ -1165,7 +1181,10 @@ def sample_tokens(logits: torch.Tensor, generated: torch.Tensor, token_ids: dict
     fallback_box = torch.zeros(1, dtype=x0.dtype, device=x0.device)
     for b in range(batch_size):
         decoded_box = decode_bbox_avg(
-            logits[b], probs[b], token_ids, keep_k=kwargs.get("keep_k_avg", 4),
+            logits[b],
+            probs[b],
+            token_ids,
+            keep_k=kwargs.get("keep_k_avg", 4),
             generation_mode=kwargs.get("generation_mode", "hybrid"),
         )
         if decoded_box is not None:
@@ -1210,9 +1229,16 @@ def decode_bbox_avg(logits, probs, token_ids, keep_k=5, start_thresh=0.7, end_th
     box_type = is_valid_box_frame(probs, token_ids, start_thresh=start_thresh, end_thresh=end_thresh)
     if box_type == "empty_box":
         return torch.tensor(
-            [box_start_token_id, none_token_id, box_end_token_id, token_ids["null_token_id"],
-             token_ids["null_token_id"], token_ids["null_token_id"]],
-            dtype=torch.long, device=device,
+            [
+                box_start_token_id,
+                none_token_id,
+                box_end_token_id,
+                token_ids["null_token_id"],
+                token_ids["null_token_id"],
+                token_ids["null_token_id"],
+            ],
+            dtype=torch.long,
+            device=device,
         )
     elif box_type == "illegal_box":
         return None

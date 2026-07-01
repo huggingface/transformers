@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 NVIDIA and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,8 +24,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class LocateAnythingVisionConfig(PreTrainedConfig):
     r"""
-    patch_size (`int`, *optional*, defaults to 14):
-        The size (resolution) of each patch.
     init_pos_emb_height (`int`, *optional*, defaults to 64):
         The height of the learnable 2D positional embedding grid that is interpolated to the input resolution.
     init_pos_emb_width (`int`, *optional*, defaults to 64):
@@ -41,8 +38,6 @@ class LocateAnythingVisionConfig(PreTrainedConfig):
         Dimensionality of the "intermediate" (i.e., feed-forward) layer in the MoonViT encoder.
     merge_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
         The spatial kernel size used by the patch merger to group neighbouring patches before projection.
-    initializer_range (`float`, *optional*, defaults to 0.02):
-        The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 

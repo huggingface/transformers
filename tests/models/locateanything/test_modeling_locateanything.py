@@ -115,7 +115,8 @@ class LocateAnythingModelTest(unittest.TestCase):
 
     def test_attn_implementation_propagates_to_text_config(self):
         config = self.model_tester.get_config()
-        model = LocateAnythingForConditionalGeneration(config)
+        # Instantiation propagates the attn implementation down to the text config.
+        LocateAnythingForConditionalGeneration(config)
         self.assertEqual(
             config.text_config._attn_implementation,
             config._attn_implementation,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 NVIDIA and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Image processor class for LocateAnything (MoonViT native-resolution patchification)."""
 
 import math
-from typing import Optional, Union
 
 import numpy as np
 
@@ -63,7 +61,7 @@ class LocateAnythingImageProcessor(BaseImageProcessor):
         image_mean: tuple[float, float, float] = MEAN,
         image_std: tuple[float, float, float] = STD,
         in_token_limit: int = 4096,
-        merge_kernel_size: list[int] = None,
+        merge_kernel_size: list[int] | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -124,7 +122,7 @@ class LocateAnythingImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         images = make_list_of_images(images)
