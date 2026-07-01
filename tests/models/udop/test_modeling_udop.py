@@ -280,6 +280,8 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_cpu_offload = False
     # The small UDOP model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]
+    # UDOP requires `bbox` for its 2D relative position bias, so it must be forwarded by the generic tests
+    additional_model_inputs = ["bbox"]
 
     def setUp(self):
         self.model_tester = UdopModelTester(self)
@@ -546,6 +548,8 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
+    # UDOP requires `bbox` for its 2D relative position bias, so it must be forwarded by the generic tests
+    additional_model_inputs = ["bbox"]
 
     def setUp(self):
         self.model_tester = UdopEncoderOnlyModelTester(self)
