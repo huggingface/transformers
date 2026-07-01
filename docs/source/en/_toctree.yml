@@ -1011,6 +1011,8 @@
         title: Pyramid Vision Transformer (PVT)
       - local: model_doc/pvt_v2
         title: Pyramid Vision Transformer v2 (PVTv2)
+      - local: model_doc/radio
+        title: RADIO
       - local: model_doc/regnet
         title: RegNet
       - local: model_doc/resnet

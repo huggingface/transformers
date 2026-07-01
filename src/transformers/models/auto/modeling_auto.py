@@ -423,6 +423,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3_vl_moe_vision", "Qwen3VLMoeVisionModel"),
         ("qwen3_vl_text", "Qwen3VLTextModel"),
         ("qwen3_vl_vision", "Qwen3VLVisionModel"),
+        ("radio", "RadioModel"),
         ("recurrent_gemma", "RecurrentGemmaModel"),
         ("reformer", "ReformerModel"),
         ("regnet", "RegNetModel"),
