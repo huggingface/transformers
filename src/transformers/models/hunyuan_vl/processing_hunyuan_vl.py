@@ -37,7 +37,7 @@ class HunYuanVLProcessor(ProcessorMixin):
 
     The processor expands every `<image>` placeholder in the prompts into a span of placeholder tokens whose length is
     inferred from the corresponding `image_grid_thw`. The model uses those expanded placeholders and image grids to
-    build HunYuanVL's multimodal xdrope position ids at runtime.
+    build HunYuanVL's multimodal RoPE position ids at runtime.
     """
 
     valid_processor_kwargs = HunYuanVLProcessorKwargs

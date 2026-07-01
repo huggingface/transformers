@@ -120,9 +120,9 @@ class HunYuanVLTextConfig(PreTrainedConfig):
         Token id representing the end-of-document marker. Inherited from [`HunYuanDenseV1Config`] and re-documented
         here so the auto-generated docstring stays in sync.
     rope_parameters (`dict`, *optional*):
-        RoPE configuration inherited from [`HunYuanDenseV1Config`]. When `xdrope_section` is present, it partitions
-        half of each attention head across HunYuanVL's XdRoPE axes. The expected order is `(width, height,
-        image_index)` for 3-axis XdRoPE and `(position, width, height, image_index)` for 4-axis XdRoPE. The
+        RoPE configuration inherited from [`HunYuanDenseV1Config`]. When `mrope_section` is present, it partitions
+        half of each attention head across HunYuanVL's multimodal RoPE axes. The expected order is `(width, height,
+        image_index)` for 3-axis multimodal RoPE and `(position, width, height, image_index)` for 4-axis multimodal RoPE. The
         `image_index` axis is the ordinal of the image/frame in the input sequence; all visual tokens from one image
         share the same value on that axis.
     sep_token_id (`int`, *optional*, defaults to 4):
@@ -166,7 +166,7 @@ class HunYuanVLTextConfig(PreTrainedConfig):
         "beta_slow",
         "mscale",
         "mscale_all_dim",
-        "xdrope_section",
+        "mrope_section",
     }
 
     # Legacy checkpoint fields that map onto canonical Transformers config names. The base class redirects every read
@@ -188,17 +188,45 @@ class HunYuanVLTextConfig(PreTrainedConfig):
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)
         rope_parameters = getattr(self, "rope_parameters", None)
-        if rope_parameters and rope_parameters.get("xdrope_section") is not None:
-            head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
-            xdrope_section = rope_parameters["xdrope_section"]
-            section_values = [float(section) for section in xdrope_section]
-            section_ints = [int(section) for section in section_values]
-            expected_sum = head_dim // 2
-            if not all(value.is_integer() for value in section_values) or sum(section_ints) != expected_sum:
+        head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
+        self._validate_mrope_section(rope_parameters, head_dim)
+
+    @staticmethod
+    def _normalize_mrope_section_alias(rope_parameters):
+        if not rope_parameters:
+            return
+
+        legacy_section = rope_parameters.pop("xdrope_section", None)
+        if legacy_section is None:
+            return
+
+        mrope_section = rope_parameters.get("mrope_section")
+        if mrope_section is not None:
+            legacy_values = [float(section) for section in legacy_section]
+            mrope_values = [float(section) for section in mrope_section]
+            if legacy_values != mrope_values:
                 raise ValueError(
-                    f"Illegal xdrope partition: expected half-head sections summing to {expected_sum}, got {section_ints}"
+                    "`rope_parameters` contains both `mrope_section` and legacy `xdrope_section`, but they differ: "
+                    f"mrope_section={mrope_section}, xdrope_section={legacy_section}."
                 )
-            rope_parameters["xdrope_section"] = section_ints
+            return
+
+        rope_parameters["mrope_section"] = legacy_section
+
+    @staticmethod
+    def _validate_mrope_section(rope_parameters, head_dim):
+        if not rope_parameters or rope_parameters.get("mrope_section") is None:
+            return
+
+        mrope_section = rope_parameters["mrope_section"]
+        section_values = [float(section) for section in mrope_section]
+        section_ints = [int(section) for section in section_values]
+        expected_sum = head_dim // 2
+        if not all(value.is_integer() for value in section_values) or sum(section_ints) != expected_sum:
+            raise ValueError(
+                f"Illegal mrope partition: expected half-head sections summing to {expected_sum}, got {section_ints}"
+            )
+        rope_parameters["mrope_section"] = section_ints
 
     def convert_rope_params_to_dict(self, **kwargs):
         kwargs = super().convert_rope_params_to_dict(**kwargs)
@@ -207,6 +235,7 @@ class HunYuanVLTextConfig(PreTrainedConfig):
         if not rope_parameters:
             return kwargs
 
+        self._normalize_mrope_section_alias(rope_parameters)
         rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
         if rope_type == "xdrope":
             rope_type = "dynamic"

@@ -60,7 +60,9 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("eos_token_id", 2)
         kwargs.setdefault("head_dim", 16)
         kwargs.setdefault("rope_theta", 10000.0)
-        kwargs.setdefault("rope_parameters", {"rope_type": "default", "rope_theta": 10000.0})
+        kwargs.setdefault(
+            "rope_parameters", {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [2, 2, 2, 2]}
+        )
         kwargs.setdefault("tie_word_embeddings", False)
         kwargs.setdefault("num_channels", 3)
         kwargs.setdefault("patch_size", 16)
@@ -112,8 +114,8 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
 
     def prepare_config_and_inputs(self):
         config, inputs_dict = self.prepare_config_and_inputs_for_common()
-        config.text_config.rope_parameters["xdrope_section"] = [2, 2, 2, 2]
-        # HunYuanVL uses 4 XdRoPE axes in multimodal mode: position, width, height, and temporal.
+        config.text_config.rope_parameters["mrope_section"] = [2, 2, 2, 2]
+        # HunYuanVL uses 4 multimodal RoPE axes: position, width, height, and temporal.
         inputs_dict["position_ids"] = (
             torch.arange(self.seq_length, device=torch_device).view(1, 1, -1).expand(4, self.batch_size, -1)
         )
@@ -171,28 +173,28 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         for layer in model.model.language_model.layers:
             self.assertFalse(hasattr(layer.self_attn, "rotary_emb"))
 
-    def test_xdrope_cache_is_built_once_per_forward(self):
+    def test_mrope_embeddings_are_built_once_per_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         inputs_dict.pop("position_ids")
-        config.text_config.rope_parameters["xdrope_section"] = [2, 2, 2, 2]
+        config.text_config.rope_parameters["mrope_section"] = [2, 2, 2, 2]
         model = HunYuanVLForConditionalGeneration(config).to(self.model_tester.device)
         model.eval()
 
-        cache_call_count = 0
-        build_rotary_cache = model.model.language_model.rotary_emb._build_rotary_cache
+        embedding_call_count = 0
+        rotary_forward = model.model.language_model.rotary_emb.forward
 
-        def wrapped_build_rotary_cache(*args, **kwargs):
-            nonlocal cache_call_count
-            cache_call_count += 1
-            return build_rotary_cache(*args, **kwargs)
+        def wrapped_rotary_forward(*args, **kwargs):
+            nonlocal embedding_call_count
+            embedding_call_count += 1
+            return rotary_forward(*args, **kwargs)
 
-        model.model.language_model.rotary_emb._build_rotary_cache = wrapped_build_rotary_cache
+        model.model.language_model.rotary_emb.forward = wrapped_rotary_forward
         with torch.no_grad():
             model(**inputs_dict)
 
-        self.assertEqual(cache_call_count, 1)
+        self.assertEqual(embedding_call_count, 1)
 
-    def test_model_builds_xdrope_position_ids(self):
+    def test_model_builds_mrope_position_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = HunYuanVLForConditionalGeneration(config).to(self.model_tester.device)
 
@@ -221,6 +223,17 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
                 ),
             )
         )
+
+    def test_legacy_xdrope_section_normalizes_to_mrope_section(self):
+        text_config = HunYuanVLTextConfig(
+            hidden_size=64,
+            num_attention_heads=4,
+            head_dim=16,
+            rope_parameters={"rope_type": "default", "rope_theta": 10000.0, "xdrope_section": [2.0, 2, 2, 2]},
+        )
+
+        self.assertEqual(text_config.rope_parameters["mrope_section"], [2, 2, 2, 2])
+        self.assertNotIn("xdrope_section", text_config.rope_parameters)
 
     def test_text_backbone_records_outputs_from_pretrained_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()

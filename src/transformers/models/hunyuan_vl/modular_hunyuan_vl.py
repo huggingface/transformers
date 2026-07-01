@@ -24,8 +24,8 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -162,9 +162,9 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
         Token id representing the end-of-document marker. Inherited from [`HunYuanDenseV1Config`] and re-documented
         here so the auto-generated docstring stays in sync.
     rope_parameters (`dict`, *optional*):
-        RoPE configuration inherited from [`HunYuanDenseV1Config`]. When `xdrope_section` is present, it partitions
-        half of each attention head across HunYuanVL's XdRoPE axes. The expected order is `(width, height,
-        image_index)` for 3-axis XdRoPE and `(position, width, height, image_index)` for 4-axis XdRoPE. The
+        RoPE configuration inherited from [`HunYuanDenseV1Config`]. When `mrope_section` is present, it partitions
+        half of each attention head across HunYuanVL's multimodal RoPE axes. The expected order is `(width, height,
+        image_index)` for 3-axis multimodal RoPE and `(position, width, height, image_index)` for 4-axis multimodal RoPE. The
         `image_index` axis is the ordinal of the image/frame in the input sequence; all visual tokens from one image
         share the same value on that axis.
     sep_token_id (`int`, *optional*, defaults to 4):
@@ -186,7 +186,7 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
         "beta_slow",
         "mscale",
         "mscale_all_dim",
-        "xdrope_section",
+        "mrope_section",
     }
 
     # Legacy checkpoint fields that map onto canonical Transformers config names. The base class redirects every read
@@ -204,22 +204,50 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
     use_cla: bool = False
     enable_lm_head_fp32: bool = False
 
+    @staticmethod
+    def _normalize_mrope_section_alias(rope_parameters):
+        if not rope_parameters:
+            return
+
+        legacy_section = rope_parameters.pop("xdrope_section", None)
+        if legacy_section is None:
+            return
+
+        mrope_section = rope_parameters.get("mrope_section")
+        if mrope_section is not None:
+            legacy_values = [float(section) for section in legacy_section]
+            mrope_values = [float(section) for section in mrope_section]
+            if legacy_values != mrope_values:
+                raise ValueError(
+                    "`rope_parameters` contains both `mrope_section` and legacy `xdrope_section`, but they differ: "
+                    f"mrope_section={mrope_section}, xdrope_section={legacy_section}."
+                )
+            return
+
+        rope_parameters["mrope_section"] = legacy_section
+
+    @staticmethod
+    def _validate_mrope_section(rope_parameters, head_dim):
+        if not rope_parameters or rope_parameters.get("mrope_section") is None:
+            return
+
+        mrope_section = rope_parameters["mrope_section"]
+        section_values = [float(section) for section in mrope_section]
+        section_ints = [int(section) for section in section_values]
+        expected_sum = head_dim // 2
+        if not all(value.is_integer() for value in section_values) or sum(section_ints) != expected_sum:
+            raise ValueError(
+                f"Illegal mrope partition: expected half-head sections summing to {expected_sum}, got {section_ints}"
+            )
+        rope_parameters["mrope_section"] = section_ints
+
     def __post_init__(self, **kwargs):
         # Legacy aliases (`pad_id`, `attention_head_dim`, `org_vocab_size`) are normalized onto canonical fields by the
         # base `__setattr__` via `attribute_map`, so no manual translation is needed here.
         super().__post_init__(**kwargs)
         rope_parameters = getattr(self, "rope_parameters", None)
-        if rope_parameters and rope_parameters.get("xdrope_section") is not None:
-            head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
-            xdrope_section = rope_parameters["xdrope_section"]
-            section_values = [float(section) for section in xdrope_section]
-            section_ints = [int(section) for section in section_values]
-            expected_sum = head_dim // 2
-            if not all(value.is_integer() for value in section_values) or sum(section_ints) != expected_sum:
-                raise ValueError(
-                    f"Illegal xdrope partition: expected half-head sections summing to {expected_sum}, got {section_ints}"
-                )
-            rope_parameters["xdrope_section"] = section_ints
+        head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
+        self._validate_mrope_section(rope_parameters, head_dim)
 
     def convert_rope_params_to_dict(self, **kwargs):
         kwargs = PreTrainedConfig.convert_rope_params_to_dict(self, **kwargs)
@@ -228,6 +256,7 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
         if not rope_parameters:
             return kwargs
 
+        self._normalize_mrope_section_alias(rope_parameters)
         rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
         if rope_type == "xdrope":
             rope_type = "dynamic"
@@ -392,25 +421,25 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
         return resized_height // patch_size, resized_width // patch_size
 
 
-def apply_rotary_pos_emb_xdrope(q, k, cos, sin, xdrope_section):
+def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
     """
-    Apply HunYuan's XdRoPE rotary embedding to ``q`` and ``k``.
+    Apply HunYuan's multimodal rotary embedding to ``q`` and ``k``.
 
-    `xdrope_section` partitions half of the attention head dimension across the XdRoPE axes produced by
+    `mrope_section` partitions half of the attention head dimension across the multimodal axes produced by
     `HunYuanVLModel.get_rope_index`. The section order matches the position-id channel order: `(width, height,
-    image_index)` for 3-axis XdRoPE and `(position, width, height, image_index)` for 4-axis XdRoPE.
+    image_index)` for 3-axis multimodal RoPE and `(position, width, height, image_index)` for 4-axis multimodal RoPE.
     """
-    x_dim = len(xdrope_section)
-    xdrope_section = [int(section) * 2 for section in xdrope_section]
-    if sum(xdrope_section) != cos.shape[-1]:
+    x_dim = len(mrope_section)
+    mrope_section = [int(section) * 2 for section in mrope_section]
+    if sum(mrope_section) != cos.shape[-1]:
         raise ValueError(
-            f"Illegal partition for xd rope: expected {cos.shape[-1]} rotary dims, got {sum(xdrope_section)}"
+            f"Illegal partition for multimodal RoPE: expected {cos.shape[-1]} rotary dims, got {sum(mrope_section)}"
         )
 
-    cos = torch.cat([m[i % x_dim] for i, m in enumerate(cos.split(xdrope_section, dim=-1))], dim=-1)
-    sin = torch.cat([m[i % x_dim] for i, m in enumerate(sin.split(xdrope_section, dim=-1))], dim=-1)
-    cos = cos.unsqueeze(1)
-    sin = sin.unsqueeze(1)
+    cos = torch.cat([m[i % x_dim] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1)
+    sin = torch.cat([m[i % x_dim] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1)
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
 
     origin_dtype = q.dtype
     q, k = q.float(), k.float()
@@ -428,7 +457,7 @@ class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
     def __init__(self, config: HunYuanVLTextConfig, device=None):
         super().__init__(config, device=device)
         rope_parameters = getattr(config, "rope_parameters", None) or {}
-        self.xdrope_section = rope_parameters.get("xdrope_section")
+        self.mrope_section = rope_parameters.get("mrope_section")
 
     @torch.no_grad()
     @dynamic_rope_update
@@ -631,16 +660,16 @@ class HunYuanVLVisionBlock(SiglipEncoderLayer):
 
 class HunYuanVLDenseV1Attention(HunYuanDenseV1Attention):
     """
-    HunYuan dense attention with optional xdrope rotary embeddings.
+    HunYuan dense attention with optional multimodal rotary embeddings.
 
-    When ``rope_parameters['xdrope_section']`` is set, queries and keys are rotated with HunYuan's XdRoPE axes.
+    When ``rope_parameters['mrope_section']`` is set, queries and keys are rotated with HunYuan's multimodal axes.
     During decoding all axes carry the same text-only positions, reducing the operation to standard 1D RoPE.
     """
 
     def __init__(self, config: HunYuanVLTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         rope_parameters = getattr(config, "rope_parameters", None) or {}
-        self.xdrope_section = rope_parameters.get("xdrope_section")
+        self.mrope_section = rope_parameters.get("mrope_section")
 
     def forward(
         self,
@@ -660,10 +689,10 @@ class HunYuanVLDenseV1Attention(HunYuanDenseV1Attention):
         if position_embeddings is None:
             raise ValueError("HunYuanVLDenseV1Attention requires precomputed rotary embeddings.")
 
-        if self.xdrope_section is not None:
+        if self.mrope_section is not None:
             cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb_xdrope(
-                query_states, key_states, cos, sin, self.xdrope_section
+            query_states, key_states = apply_multimodal_rotary_pos_emb(
+                query_states, key_states, cos, sin, self.mrope_section
             )
         else:
             cos, sin = position_embeddings
@@ -806,27 +835,27 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel, HunYuanDenseV1Model):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        num_xdrope_axes = len(self.rotary_emb.xdrope_section or [])
+        num_mrope_axes = len(self.rotary_emb.mrope_section or [])
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
         if position_ids is None:
             position_ids = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             ).unsqueeze(0)
 
-        if num_xdrope_axes and position_ids.dim() == 2:
-            position_ids = position_ids[None, ...].expand(num_xdrope_axes, -1, -1)
+        if num_mrope_axes and position_ids.dim() == 2:
+            position_ids = position_ids[None, ...].expand(num_mrope_axes, -1, -1)
 
         text_position_ids = None
         rotary_position_ids = position_ids
-        if num_xdrope_axes and position_ids.dim() == 3:
-            if position_ids.shape[0] == num_xdrope_axes + 1:
+        if num_mrope_axes and position_ids.dim() == 3:
+            if position_ids.shape[0] == num_mrope_axes + 1:
                 text_position_ids = position_ids[0]
                 rotary_position_ids = position_ids[1:]
-            elif position_ids.shape[0] == num_xdrope_axes:
+            elif position_ids.shape[0] == num_mrope_axes:
                 text_position_ids = position_ids[0]
             else:
                 raise ValueError(
-                    f"Expected {num_xdrope_axes} XdRoPE channels, optionally preceded by a text-only channel, got "
+                    f"Expected {num_mrope_axes} multimodal RoPE channels, optionally preceded by a text-only channel, got "
                     f"position_ids with shape {tuple(position_ids.shape)}."
                 )
         elif position_ids.dim() == 2:
@@ -881,7 +910,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         device: str | torch.device | None = None,
     ):
         """
-        Compute HunYuanVL xdrope spatial indices for the pooled image-token grid of a single image.
+        Compute HunYuanVL multimodal RoPE spatial indices for the pooled image-token grid of a single image.
 
         The vision merger appends one newline-style token per image row, so the width channel spans
         `patch_w + 1` positions while the height channel repeats each row id over that extra column.
@@ -942,13 +971,13 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.LongTensor, torch.LongTensor]:
         """
-        Build HunYuanVL XdRoPE position ids.
+        Build HunYuanVL multimodal RoPE position ids.
 
-        `rope_parameters["xdrope_section"]` controls both the number and order of XdRoPE axes. Each section value is
-        the number of half-rotary dimensions assigned to the corresponding axis, and the sections must sum to
+        `rope_parameters["mrope_section"]` controls both the number and order of multimodal RoPE axes. Each section
+        value is the number of half-rotary dimensions assigned to the corresponding axis, and the sections must sum to
         `head_dim // 2`.
 
-        This method returns only the XdRoPE rotary axes consumed by the text backbone:
+        This method returns only the multimodal rotary axes consumed by the text backbone:
 
         - 3-axis configs use `(width, height, image_index)`.
         - 4-axis configs use `(position, width, height, image_index)`.
@@ -956,14 +985,14 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         `width` and `height` index the pooled visual grid inside one image. `image_index` is the ordinal of the
         image/frame in the input sequence, so all visual tokens from the first image get `0`, the second image get
         `1`, and so on. The optional leading text-only channel that may be concatenated by generation helpers is not
-        part of `xdrope_section`.
+        part of `mrope_section`.
         """
         rope_parameters = self.config.text_config.rope_parameters or {}
-        num_xdrope_axes = len(rope_parameters.get("xdrope_section", []))
-        if num_xdrope_axes not in {3, 4}:
-            raise ValueError(f"HunYuanVL expects 3 or 4 XdRoPE axes, got {num_xdrope_axes}.")
+        num_mrope_axes = len(rope_parameters.get("mrope_section", []))
+        if num_mrope_axes not in {3, 4}:
+            raise ValueError(f"HunYuanVL expects 3 or 4 multimodal RoPE axes, got {num_mrope_axes}.")
         position_ids = torch.zeros(
-            num_xdrope_axes,
+            num_mrope_axes,
             input_ids.shape[0],
             input_ids.shape[1],
             dtype=input_ids.dtype,
@@ -982,7 +1011,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             current_position_ids = torch.arange(
                 current_input_ids.shape[-1], dtype=input_ids.dtype, device=input_ids.device
             )
-            current_position_ids = current_position_ids.view(1, -1).expand(num_xdrope_axes, -1).clone()
+            current_position_ids = current_position_ids.view(1, -1).expand(num_mrope_axes, -1).clone()
 
             if grid_iter is not None:
                 for span_start, span_end in self.get_image_placeholder_spans(current_input_ids):
@@ -1011,7 +1040,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
                         )
 
                     grid_end = grid_start + grid_tokens
-                    offset = 1 if num_xdrope_axes == 4 else 0
+                    offset = 1 if num_mrope_axes == 4 else 0
                     current_position_ids[offset : offset + 2, grid_start:grid_end] = vision_position_ids.to(
                         dtype=input_ids.dtype
                     )
@@ -1032,7 +1061,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         rope_deltas = torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, rope_deltas
 
-    def compute_xdrope_position_ids(
+    def compute_mrope_position_ids(
         self,
         input_ids: torch.LongTensor | None,
         image_grid_thw: torch.LongTensor | None = None,
@@ -1146,7 +1175,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if position_ids is None:
-            position_ids = self.compute_xdrope_position_ids(
+            position_ids = self.compute_mrope_position_ids(
                 input_ids=input_ids,
                 image_grid_thw=image_grid_thw,
                 attention_mask=attention_mask,
@@ -1322,7 +1351,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
         rope_parameters = self.config.text_config.rope_parameters or {}
-        num_xdrope_axes = len(rope_parameters.get("xdrope_section", []))
+        num_mrope_axes = len(rope_parameters.get("mrope_section", []))
 
         past_length = 0
         if (cache := model_kwargs.get("past_key_values")) is not None:
@@ -1342,7 +1371,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             )
             self.model.rope_deltas = rope_deltas
         else:
-            rope_positions = text_positions.unsqueeze(0).expand(num_xdrope_axes, -1, -1)
+            rope_positions = text_positions.unsqueeze(0).expand(num_mrope_axes, -1, -1)
             self.model.rope_deltas = torch.zeros(
                 inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
             )

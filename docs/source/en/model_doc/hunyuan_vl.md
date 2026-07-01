@@ -15,7 +15,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-HunYuanVL is a vision-language model for image-text understanding and generation
+[HunYuanVL](https://huggingface.co/tencent/HunyuanOCR) is a vision-language model for image-text understanding and generation
 ([paper](https://huggingface.co/papers/2511.19575)). The open-source `hunyuan_vl` integration in Transformers is a
 dense-only image-text variant tailored for OCR and document understanding style workloads such as `tencent/HunyuanOCR`.
 
@@ -44,7 +44,7 @@ solid foundation for industrial applications.*
 
 ## Recommended checkpoints
 
-- `tencent/HunyuanOCR` for OCR and document extraction workloads.
+- [tencent/HunyuanOCR](https://huggingface.co/tencent/HunyuanOCR) for OCR and document extraction workloads.
 
 ## Usage tips
 
@@ -64,12 +64,12 @@ checkpoints.
 ```python
 import torch
 
-from transformers import AutoProcessor, HunYuanVLForConditionalGeneration
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
 
 model_name_or_path = "tencent/HunyuanOCR"
 processor = AutoProcessor.from_pretrained(model_name_or_path, backend="pil")
-model = HunYuanVLForConditionalGeneration.from_pretrained(
+model = AutoModelForImageTextToText.from_pretrained(
     model_name_or_path,
     device_map="auto",
 )
@@ -78,10 +78,10 @@ messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "image": "path/to/image.jpg"},
-            {"type": "text", "text": "Extract the text from the image."},
-        ],
-    }
+            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/p-blog/candy.JPG"},
+            {"type": "text", "text": "What animal is on the candy?"}
+        ]
+    },
 ]
 inputs = processor.apply_chat_template(
     messages,
@@ -104,8 +104,6 @@ print(output)
 
 - The current open-source variant is not a drop-in replacement for internal full-capability HunYuanVL stacks.
 - Public checkpoints may still carry legacy configuration keys for compatibility.
-- If you are extending the model family upstream, make changes in `modular_hunyuan_vl.py` and regenerate the derived
-  files instead of editing generated modeling/configuration files directly.
 
 ## HunYuanVLConfig
 
