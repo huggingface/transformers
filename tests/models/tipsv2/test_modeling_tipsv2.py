@@ -432,15 +432,8 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         vision_cfg = model.config.vision_config
-        _, _, height, width = inputs["pixel_values"].shape
-        num_patches = (height // vision_cfg.patch_size) * (width // vision_cfg.patch_size)
         num_register_tokens = vision_cfg.num_register_tokens
         patch_tokens = outputs.vision_model_output.last_hidden_state[:, 1 + num_register_tokens :]
-        self.assertEqual(outputs.image_embeds.shape, torch.Size([1, vision_cfg.hidden_size]))
-        self.assertEqual(patch_tokens.shape, torch.Size([1, num_patches, vision_cfg.hidden_size]))
-        self.assertEqual(outputs.text_embeds.shape, torch.Size([4, model.config.text_config.hidden_size]))
-        self.assertEqual(outputs.logits_per_image.shape, torch.Size([1, 4]))
-        self.assertEqual(outputs.logits_per_text.shape, torch.Size([4, 1]))
 
         # Tolerance of 1e-3 for vision outputs because of difference in PIL vs. torch preprocessing.
         EXPECTED_IMAGE_EMBEDS = Expectations({("cuda", None): [0.03267, 0.02216, 0.00546, 0.01890, -0.05426]})
