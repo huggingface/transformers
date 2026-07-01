@@ -867,11 +867,19 @@ class DeepseekV4HyperHead(nn.Module):
 class DeepseekV4MLP(LlamaMLP):
     def __init__(self, config: DeepseekV4Config):
         super().__init__(config)
-        self.limit = config.swiglu_limit
+        self.swiglu_limit = config.swiglu_limit
+
+    @property
+    def limit(self):
+        logger.warning_once(
+            f"`{self.__class__.__name__}.limit` is deprecated and will be removed in v5.15. "
+            "Use `swiglu_limit` instead."
+        )
+        return self.swiglu_limit
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        gate = self.gate_proj(x).clamp(max=self.limit)
-        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        gate = self.gate_proj(x).clamp(max=self.swiglu_limit)
+        up = self.up_proj(x).clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.down_proj(self.act_fn(gate) * up)
 
 
@@ -881,15 +889,23 @@ class DeepseekV4Experts(MixtralExperts):
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__(config)
-        self.limit = config.swiglu_limit
+        self.swiglu_limit = config.swiglu_limit
+
+    @property
+    def limit(self):
+        logger.warning_once(
+            f"`{self.__class__.__name__}.limit` is deprecated and will be removed in v5.15. "
+            "Use `swiglu_limit` instead."
+        )
+        return self.swiglu_limit
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
         # backends swapped in by `@use_experts_implementation` apply the same clamp +
         # SiLU on top of their packed gate_up output instead of bypassing it.
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.clamp(max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
+        gate = gate.clamp(max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.act_fn(gate) * up
 
     def forward(

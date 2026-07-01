@@ -71,6 +71,13 @@ OPENAI_PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
 @auto_docstring(checkpoint="openai/privacy-filter")
 @strict
 class OpenAIPrivacyFilterConfig(GptOssConfig):
+    r"""
+    swiglu_alpha (`float`, *optional*, defaults to 1.702):
+        Sigmoid gain of the clamped/scaled SwiGLU activation.
+    swiglu_limit (`float`, *optional*, defaults to 7.0):
+        Clamp bound applied to the gate and up projections of the clamped/scaled SwiGLU activation.
+    """
+
     model_type = "openai_privacy_filter"
     vocab_size: int = 200064
     hidden_size: int = 640
@@ -219,9 +226,9 @@ class OpenAIPrivacyFilterExperts(GptOssExperts):
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # Concatenated layout instead of interleaving
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.clamp(min=None, max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
-        glu = gate * torch.sigmoid(gate * self.alpha)
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
         gated_output = (up + 1) * glu
         return gated_output
 

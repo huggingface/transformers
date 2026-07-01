@@ -154,6 +154,12 @@ def sonicmoe_experts_forward(
         raise ValueError("sonicmoe requires gated experts (has_gate=True)")
     if hidden_states.device.type != "cuda":
         raise ValueError("sonicmoe requires CUDA device")
+    if getattr(self, "swiglu_alpha", None) is not None or getattr(self, "swiglu_limit", None) is not None:
+        raise NotImplementedError(
+            "sonicmoe experts dispatch does not support clamped/scaled SwiGLU (swiglu_alpha / "
+            "swiglu_limit); use the grouped_mm or deepgemm experts implementation, or open a PR to add "
+            "it in the sonic-moe repo."
+        )
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)

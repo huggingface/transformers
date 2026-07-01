@@ -22,6 +22,13 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="openai/gpt-oss-20b")
 @strict
 class GptOssConfig(PreTrainedConfig):
+    r"""
+    swiglu_alpha (`float`, *optional*, defaults to 1.702):
+        Sigmoid gain of the clamped/scaled SwiGLU activation.
+    swiglu_limit (`float`, *optional*, defaults to 7.0):
+        Clamp bound applied to the gate and up projections of the clamped/scaled SwiGLU activation.
+    """
+
     model_type = "gpt_oss"
     attribute_map = {
         "num_experts": "num_local_experts",
@@ -52,6 +59,8 @@ class GptOssConfig(PreTrainedConfig):
     sliding_window: int | None = 128
     tie_word_embeddings: bool = False
     hidden_act: str = "silu"
+    swiglu_alpha: float = 1.702
+    swiglu_limit: float = 7.0
     initializer_range: float = 0.02
     max_position_embeddings: int = 131072
     rms_norm_eps: float = 1e-5

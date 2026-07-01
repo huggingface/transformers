@@ -598,11 +598,6 @@ def _fp8_fused_mm_experts_forward(
         raise NotImplementedError(
             f"{op_name} experts dispatch requires gated experts (a combined gate_up projection)."
         )
-    if self.swiglu_alpha is not None or self.swiglu_limit is not None or self.limit is not None:
-        raise NotImplementedError(
-            f"{op_name} experts dispatch does not implement clamped SwiGLU (swiglu_alpha/"
-            "swiglu_limit); use grouped_mm or batched_mm for those models."
-        )
 
     act_name = _first_attr(self.config, "hidden_activation", "hidden_act")
     act_fn = _FUSED_ACT_FNS.get(act_name)
@@ -612,7 +607,13 @@ def _fp8_fused_mm_experts_forward(
         )
 
     finegrained_fp8 = load_finegrained_fp8_kernel()
-    fused_op = getattr(finegrained_fp8, op_name)
+    fused_op = getattr(finegrained_fp8, op_name, None)
+    if fused_op is None:
+        raise NotImplementedError(
+            f"the loaded finegrained_fp8 kernel has no {op_name!r}; update the "
+            "kernels-community/finegrained-fp8 kernel."
+        )
+
     out = fused_op(
         hidden_states,
         top_k_index,
@@ -623,9 +624,11 @@ def _fp8_fused_mm_experts_forward(
         to_local(self.down_proj_scale_inv),
         self.block_size,
         act_fn=act_fn,
+        swiglu_alpha=self.swiglu_alpha,
+        swiglu_limit=self.swiglu_limit,
         simulate_unfused=True,
     )
-    return out.to(hidden_states.dtype)
+    return out
 
 
 def fp8_fused_grouped_mm_experts_forward(
@@ -684,10 +687,9 @@ class FP8Experts(nn.Module):
         self.activation_scheme = activation_scheme
         self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
+        self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
-        self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
-        self.limit = getattr(config, "swiglu_limit", None)
 
         # Expert weight precision is FP8 by default; DeepSeek V4-style models declare
         # `config.expert_dtype = "fp4"` for FP4-packed expert weights. FP4 storage:
@@ -734,14 +736,14 @@ class FP8Experts(nn.Module):
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
         if self.swiglu_alpha is not None:
-            # Clamped SwiGLU-OAI gate (same math as the model's non-quantized experts).
+            # Clamped/scaled SwiGLU gate (same math as the model's non-quantized experts).
             gate = gate.clamp(max=self.swiglu_limit)
             up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
             glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
             return (up + 1.0) * glu
-        elif self.limit is not None:
-            gate = gate.clamp(max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
+        elif self.swiglu_limit is not None:
+            gate = gate.clamp(max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.act_fn(gate) * up
 
     def forward(

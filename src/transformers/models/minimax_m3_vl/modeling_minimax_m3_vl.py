@@ -43,11 +43,14 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_minimax_m3_vl import MiniMaxM3VLConfig, MiniMaxM3VLTextConfig, MiniMaxM3VLVisionConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
@@ -185,9 +188,8 @@ class MiniMaxM3VLExperts(nn.Module):
         self.intermediate_dim = config.intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.limit = config.swiglu_limit
-        self.swiglu_alpha = config.swiglu_alpha
         self.swiglu_limit = config.swiglu_limit
+        self.swiglu_alpha = config.swiglu_alpha
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -205,6 +207,14 @@ class MiniMaxM3VLExperts(nn.Module):
             current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
             final.index_add_(0, token_idx, current.to(final.dtype))
         return final
+
+    @property
+    def limit(self):
+        logger.warning_once(
+            f"`{self.__class__.__name__}.limit` is deprecated and will be removed in v5.15. "
+            "Use `swiglu_limit` instead."
+        )
+        return self.swiglu_limit
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # same as GPT OSS, but the weights are not interleaved
