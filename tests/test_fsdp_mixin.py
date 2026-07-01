@@ -68,8 +68,8 @@ SEED = 42
 DDP_FSDP_RTOL = 1e-5
 DDP_FSDP_ATOL = 1e-5
 
-FSDP_TOP_MODEL_NAMES = {
-    # Models with `base_model_fsdp_plan` + head-class `_fsdp_plan` on this branch.
+# Set to None to run distributed FSDP tests for every model with a plan.
+FSDP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "llama",
     "qwen3_moe",
 }
@@ -309,48 +309,6 @@ def _checkpoint_and_resume(pre_model, pre_optimizer, dtype, distributed_config, 
             tmpdir_obj.cleanup()
 
 
-def _assert_state_dicts_equal(before, after, *, rtol, atol, msg_prefix=""):
-    for key in before:
-        assert key in after, f"{msg_prefix}Key {key} missing after load"
-        torch.testing.assert_close(
-            before[key],
-            after[key],
-            rtol=rtol,
-            atol=atol,
-            msg=f"{msg_prefix}Weight mismatch for {key}",
-        )
-
-
-def _assert_ddp_fsdp_match(
-    ddp_losses, fsdp_losses, ddp_grad_norms, fsdp_grad_norms, ddp_state, fsdp_state, test_label
-):
-    for step in range(len(ddp_losses)):
-        torch.testing.assert_close(
-            torch.tensor(ddp_losses[step]),
-            torch.tensor(fsdp_losses[step]),
-            rtol=DDP_FSDP_RTOL,
-            atol=DDP_FSDP_ATOL,
-            msg=f"Loss mismatch at step {step}: DDP={ddp_losses[step]}, {test_label}={fsdp_losses[step]}",
-        )
-        torch.testing.assert_close(
-            torch.tensor(ddp_grad_norms[step]),
-            torch.tensor(fsdp_grad_norms[step]),
-            rtol=DDP_FSDP_RTOL,
-            atol=DDP_FSDP_ATOL,
-            msg=f"Grad norm mismatch at step {step}: DDP={ddp_grad_norms[step]}, {test_label}={fsdp_grad_norms[step]}",
-        )
-
-    for key in ddp_state:
-        assert key in fsdp_state, f"Key {key} missing from {test_label} state dict"
-        torch.testing.assert_close(
-            ddp_state[key],
-            fsdp_state[key],
-            rtol=DDP_FSDP_RTOL,
-            atol=DDP_FSDP_ATOL,
-            msg=f"Weight mismatch for {key}: DDP vs {test_label}",
-        )
-
-
 def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
     _set_determinism(SEED)
     model = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype).to(device)
@@ -447,13 +405,16 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
         if rank == 0:
             tmpdir_obj.cleanup()
 
-    _assert_state_dicts_equal(
-        state_dict_before,
-        gather_full_state_dict(new_model),
-        rtol=0,
-        atol=0,
-        msg_prefix="After save/load: ",
-    )
+    state_dict_after = gather_full_state_dict(new_model)
+    for key in state_dict_before:
+        assert key in state_dict_after, f"After save/load: Key {key} missing after load"
+        torch.testing.assert_close(
+            state_dict_before[key],
+            state_dict_after[key],
+            rtol=0,
+            atol=0,
+            msg=f"After save/load: Weight mismatch for {key}",
+        )
 
     if rank == 0:
         logger.debug(f"FSDP2 save/load test passed: all {len(state_dict_before)} parameters match exactly.")
@@ -533,15 +494,31 @@ def _test_fsdp2_plan_vs_ddp_impl(
         if rank == 0 and init_tmpdir_obj is not None:
             init_tmpdir_obj.cleanup()
 
-    _assert_ddp_fsdp_match(
-        ddp_losses,
-        fsdp_losses,
-        ddp_grad_norms,
-        fsdp_grad_norms,
-        ddp_state_dict,
-        fsdp_state_dict,
-        test_label,
-    )
+    for step in range(len(ddp_losses)):
+        torch.testing.assert_close(
+            torch.tensor(ddp_losses[step]),
+            torch.tensor(fsdp_losses[step]),
+            rtol=DDP_FSDP_RTOL,
+            atol=DDP_FSDP_ATOL,
+            msg=f"Loss mismatch at step {step}: DDP={ddp_losses[step]}, {test_label}={fsdp_losses[step]}",
+        )
+        torch.testing.assert_close(
+            torch.tensor(ddp_grad_norms[step]),
+            torch.tensor(fsdp_grad_norms[step]),
+            rtol=DDP_FSDP_RTOL,
+            atol=DDP_FSDP_ATOL,
+            msg=f"Grad norm mismatch at step {step}: DDP={ddp_grad_norms[step]}, {test_label}={fsdp_grad_norms[step]}",
+        )
+
+    for key in ddp_state_dict:
+        assert key in fsdp_state_dict, f"Key {key} missing from {test_label} state dict"
+        torch.testing.assert_close(
+            ddp_state_dict[key],
+            fsdp_state_dict[key],
+            rtol=DDP_FSDP_RTOL,
+            atol=DDP_FSDP_ATOL,
+            msg=f"Weight mismatch for {key}: DDP vs {test_label}",
+        )
 
     if rank == 0:
         logger.debug(f"DDP and {test_label} comparison checks passed.")
@@ -550,25 +527,6 @@ def _test_fsdp2_plan_vs_ddp_impl(
 # =============================================================================
 # Mixin class
 # =============================================================================
-
-
-def _shrink_config_for_fsdp(config):
-    config.vocab_size = 256
-    config.hidden_size = 64
-    config.intermediate_size = 128
-    if hasattr(config, "ffn_config"):
-        if hasattr(config.ffn_config, "ffn_hidden_size"):
-            config.ffn_config.ffn_hidden_size = config.hidden_size
-        if hasattr(config.ffn_config, "hidden_size"):
-            config.ffn_config.hidden_size = config.intermediate_size
-    if hasattr(config, "num_attention_heads"):
-        config.num_attention_heads = 4
-    if hasattr(config, "num_key_value_heads"):
-        config.num_key_value_heads = 4
-    if hasattr(config, "moe_intermediate_size"):
-        config.moe_intermediate_size = 32
-    if hasattr(config, "vocab_size_per_layer_input"):
-        config.vocab_size_per_layer_input = config.vocab_size
 
 
 class FSDPTesterMixin(ABC):
@@ -591,24 +549,22 @@ class FSDPTesterMixin(ABC):
         if available_workers < self.fsdp_nproc_per_node:
             self.skipTest(f"Need at least {self.fsdp_nproc_per_node} FSDP workers, have {available_workers}")
 
-    def _get_fsdp_model_name(self):
-        module_parts = self.__class__.__module__.split(".")
-        if len(module_parts) >= 3 and module_parts[0] == "tests" and module_parts[1] == "models":
-            return module_parts[2]
-        return None
-
-    def _skip_if_fsdp_model_not_selected(self):
-        model_name = self._get_fsdp_model_name()
-        if model_name not in FSDP_TOP_MODEL_NAMES:
-            model_label = model_name or self.__class__.__module__
+    def _skip_if_fsdp_distributed_not_enabled(self):
+        # Trigger tests only if the model has an FSDP plan (base_model_fsdp_plan)
+        config = self.model_tester.get_config()
+        if not (hasattr(config, "base_model_fsdp_plan") and config.base_model_fsdp_plan is not None):
+            self.skipTest("Model does not have an FSDP plan (base_model_fsdp_plan)")
+        
+        # Only top-N models are tested, set FSDP_DISTRIBUTED_TEST_MODEL_TYPES = None to run all tests.
+        if FSDP_DISTRIBUTED_TEST_MODEL_TYPES is not None and config.model_type not in FSDP_DISTRIBUTED_TEST_MODEL_TYPES:
             self.skipTest(
-                "FSDP mixin coverage is currently limited to models with declared FSDP plans "
-                f"(skipping {model_label})."
+                f"FSDP distributed tests are not enabled for model_type={config.model_type!r} "
+                f"(enabled: {sorted(FSDP_DISTRIBUTED_TEST_MODEL_TYPES)}). Set FSDP_DISTRIBUTED_TEST_MODEL_TYPES = None to run all tests."
             )
 
     def _create_model_on_meta(self, config):
         """Instantiate a model on the meta device (no memory allocated)."""
-        auto_classes = [AutoModelForCausalLM, AutoModelForSeq2SeqLM]
+        auto_classes = [AutoModelForCausalLM, AutoModelForSeq2SeqLM] #TODO(3outeille): why AutoModelForSeq2SeqLM ?
         for auto_cls in auto_classes:
             try:
                 with torch.device("meta"):
@@ -620,12 +576,27 @@ class FSDPTesterMixin(ABC):
     def _get_tiny_config(self):
         """Get config class and serialized dict for passing to spawned processes."""
         config = self.model_tester.get_config()
-        _shrink_config_for_fsdp(config)
+        config.vocab_size = 256
+        config.hidden_size = 64
+        config.intermediate_size = 128
+        if hasattr(config, "ffn_config"):
+            if hasattr(config.ffn_config, "ffn_hidden_size"):
+                config.ffn_config.ffn_hidden_size = config.hidden_size
+            if hasattr(config.ffn_config, "hidden_size"):
+                config.ffn_config.hidden_size = config.intermediate_size
+        if hasattr(config, "num_attention_heads"):
+            config.num_attention_heads = 4
+        if hasattr(config, "num_key_value_heads"):
+            config.num_key_value_heads = 4
+        if hasattr(config, "moe_intermediate_size"):
+            config.moe_intermediate_size = 32
+        if hasattr(config, "vocab_size_per_layer_input"):
+            config.vocab_size_per_layer_input = config.vocab_size
         return type(config), config.to_diff_dict()
 
     def _run_fsdp2_distributed_test(self, test_name, test_impl, *test_args, **test_kwargs):
-        self._skip_if_fsdp_model_not_selected()
         self._skip_if_insufficient_devices()
+        self._skip_if_fsdp_distributed_not_enabled()
 
         config_class, config_dict = self._get_tiny_config()
         func_args = (config_class, config_dict, *test_args)
@@ -652,12 +623,13 @@ class FSDPTesterMixin(ABC):
     def test_fsdp_plan_declared(self):
         """The model exposes a non-empty `_fsdp_plan` derived from config + class-level overrides."""
         self._skip_if_fsdp_disabled()
-        self._skip_if_fsdp_model_not_selected()
         start_time = time.perf_counter()
         logger.info("[FSDP] Starting test: test_fsdp_plan_declared")
         status = "FAIL"
         try:
             config = self.model_tester.get_config()
+            if not (hasattr(config, "base_model_fsdp_plan") and config.base_model_fsdp_plan is not None):
+                self.skipTest("Model does not have an FSDP plan (base_model_fsdp_plan)")
             model = self._create_model_on_meta(config)
 
             plan = getattr(model, "_fsdp_plan", None)
