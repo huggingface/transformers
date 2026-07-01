@@ -240,7 +240,9 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         Returns:
             torch.Tensor: Logits output from the model.
         """
-        return self.model.forward(input_ids=input_ids, inputs_embeds=inputs_embeds)
+        return self.model.forward(
+            input_ids=input_ids, inputs_embeds=inputs_embeds, cache_position=cache_position
+        )
 
     def export(
         self,
