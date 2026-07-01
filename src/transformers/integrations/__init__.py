@@ -153,6 +153,12 @@ _import_structure = {
     "quanto": ["replace_with_quanto_layers"],
     "sinq": ["SinqDeserialize", "SinqQuantize"],
     "spqr": ["replace_with_spqr_linear"],
+    "static_quantized_mlp": [
+        "StaticFP8DenseGELUMLP",
+        "StaticFP8GatedMLP",
+        "get_static_quantized_mlp_fusion_spec",
+        "replace_with_static_quantized_mlp",
+    ],
     "vptq": ["replace_with_vptq_linear"],
 }
 
@@ -309,6 +315,12 @@ if TYPE_CHECKING:
     from .quanto import replace_with_quanto_layers
     from .sinq import SinqDeserialize, SinqQuantize
     from .spqr import replace_with_spqr_linear
+    from .static_quantized_mlp import (
+        StaticFP8DenseGELUMLP,
+        StaticFP8GatedMLP,
+        get_static_quantized_mlp_fusion_spec,
+        replace_with_static_quantized_mlp,
+    )
     from .vptq import replace_with_vptq_linear
 
     try:

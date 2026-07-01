@@ -58,9 +58,11 @@ This lets a fusion use a different runtime module structure while still loading 
 
 Note: With the current monkey-patching mechanism, fusion registration is class-level: one compatible module class maps to one fused replacement class.
 
+Some fusions require loaded quantized weights and scales. Those fusions still use `fusion_config` for validation, but are applied after checkpoint loading by the relevant quantizer instead of using pre-initialization monkey patching.
+
 ## Current fusion families
 
-Currently, `fusion_config` supports one fusion family:
+Currently, `fusion_config` supports these fusion families:
 
 - `patch_embeddings`
   Enable with:
@@ -71,6 +73,33 @@ Currently, `fusion_config` supports one fusion family:
 
   Effect:
   Replaces compatible `nn.Conv3d` patch embedding projections with equivalent flattened `nn.Linear` projections at runtime.
+- `static_quantized_mlp`
+  Configure the Hub kernels per MLP pattern:
+
+  ```python
+  fusion_config = {
+      "static_quantized_mlp": {
+          "input_quant": {
+              "repo_id": "owner/static-fp8-input-quant",
+              "version": 1,
+          },
+          "gated_mlp": {
+              "repo_id": "owner/static-fp8-gated-mlp",
+              "version": 1,
+          },
+          "dense_gelu_mlp": {
+              "repo_id": "owner/static-fp8-dense-gelu-mlp",
+              "version": 1,
+          },
+      }
+  }
+  ```
+
+  Effect:
+  After static FP8 weights and activation scales are loaded, replaces eligible static per-tensor FineGrainedFP8
+  `gate_proj/up_proj/down_proj` MLPs and `fc1/GELU/fc2` MLPs with fused Hub kernels. Unsupported quantization
+  layouts or activations keep the existing module path. The configured repositories must expose the functions required
+  by the selected pattern. Set `trust_remote_code=True` only for kernel repositories you trust.
 
 ## Extending fusion mapping
 
