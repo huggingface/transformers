@@ -25,17 +25,13 @@ from torch.utils.checkpoint import checkpoint
 
 from ... import initialization as init
 from ...integrations import use_kernel_forward_from_hub
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, is_flash_attn_2_available
+from ...utils import TransformersKwargs
 from ..auto import AutoModel
 from .configuration_esmfold2 import ESMFold2Config
-
-
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input
 
 
 # ===========================================================================
@@ -290,17 +286,30 @@ def _resolve_atom_config(config: ESMFold2Config, structure_prediction: bool):
 # ===========================================================================
 
 
+def _swa_window_mask_function(rank: Tensor, valid: Tensor, half_window: int) -> Callable:
+    """Sliding-window ``and`` mask over the valid-token rank, with self-attention always allowed.
+
+    ``rank[b, i]`` is the cumulative index of position ``i`` among valid (non-padding) tokens, so
+    padding does not count toward the window distance: a token attends to another iff both are
+    valid and their ranks differ by at most ``half_window`` (or it is the diagonal).
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        within = (rank[batch_idx, q_idx] - rank[batch_idx, kv_idx]).abs() <= half_window
+        in_window = within & valid[batch_idx, q_idx] & valid[batch_idx, kv_idx]
+        return in_window | (q_idx == kv_idx)
+
+    return inner_mask
+
+
 class ESMFold2SWA3DRoPEAttention(nn.Module):
     """Sliding window self-attention with 3D RoPE. Has Wqkv, gate_proj, out_proj.
 
     The plain ``softmax(QKᵀ)V`` core is dispatched through the v5 attention
-    interface (``config._attn_implementation``: ``eager`` / ``sdpa`` / ...),
-    with the sliding window expressed as an additive attention mask. The custom
-    flash-attention path (native bidirectional ``window_size``, plus varlen for
-    packed inputs) is kept as an opt-in backend, selected when
-    ``_attn_implementation == "flash_attention_2"``. The shared ``config`` is
-    passed in at construction, so ``set_attn_implementation()`` stays live (it
-    mutates the same object); dims/window are derived from
+    interface (``config._attn_implementation``: ``eager`` / ``sdpa`` / ...), with
+    the sliding window expressed as an additive attention mask. The shared
+    ``config`` is passed in at construction, so ``set_attn_implementation()`` stays
+    live (it mutates the same object); dims/window are derived from
     ``(config, structure_prediction)`` via :func:`_resolve_atom_config`.
     """
 
@@ -340,65 +349,36 @@ class ESMFold2SWA3DRoPEAttention(nn.Module):
             q, k, v = q.bfloat16(), k.bfloat16(), v.bfloat16()
 
         attn_impl = self.config._attn_implementation
-        use_flash = attn_impl == "flash_attention_2" and is_flash_attn_2_available()
 
-        if use_flash and len(attention_params) > 2:
-            indices, cu_seqlens, max_seqlen = (
-                attention_params[2],
-                attention_params[3],
-                attention_params[4],
-            )
-            q_unpad = index_first_axis(q.reshape(-1, self.n_heads, self.head_dim), indices)
-            k_unpad = index_first_axis(k.reshape(-1, self.n_heads, self.head_dim), indices)
-            v_unpad = index_first_axis(v.reshape(-1, self.n_heads, self.head_dim), indices)
-            out_unpad = flash_attn_varlen_func(
-                q_unpad,
-                k_unpad,
-                v_unpad,
-                cu_seqlens,
-                cu_seqlens,
-                max_seqlen,
-                max_seqlen,
-                softmax_scale=self.scale,
-                window_size=(self.half_window, self.half_window),
-            )
-            out = pad_input(out_unpad, indices, B, N)
-        elif use_flash:
-            out = flash_attn_func(
-                q,
-                k,
-                v,
-                softmax_scale=self.scale,
-                window_size=(self.half_window, self.half_window),
-            )
+        if len(attention_params) > 2:
+            valid = torch.zeros(B * N, dtype=torch.bool, device=q.device)
+            valid[attention_params[2]] = True
+            valid = valid.view(B, N)
         else:
-            if len(attention_params) > 2:
-                valid = torch.zeros(B * N, dtype=torch.bool, device=q.device)
-                valid[attention_params[2]] = True
-                valid = valid.view(B, N)
-            else:
-                valid = torch.ones(B, N, dtype=torch.bool, device=q.device)
-            rank = torch.cumsum(valid, dim=1) - 1
-            within = (rank.unsqueeze(2) - rank.unsqueeze(1)).abs() <= self.half_window
-            allowed = within & valid.unsqueeze(1) & valid.unsqueeze(2)
-            allowed |= torch.eye(N, dtype=torch.bool, device=q.device)
-            # Sliding window as an additive bias: 0 where allowed, -inf elsewhere.
-            attn_mask = torch.zeros(B, 1, N, N, dtype=q.dtype, device=q.device)
-            attn_mask = attn_mask.masked_fill(~allowed.unsqueeze(1), torch.finfo(q.dtype).min)
+            valid = torch.ones(B, N, dtype=torch.bool, device=q.device)
+        # Sliding window over the valid-token rank, built through the masking framework as a
+        # backend-appropriate mask (bit-identical to a hand-built additive bias).
+        rank = torch.cumsum(valid, dim=1) - 1
+        attn_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=q.reshape(B, N, -1),
+            attention_mask=None,
+            and_mask_function=_swa_window_mask_function(rank, valid, self.half_window),
+        )
 
-            attention_interface: Callable = eager_attention_forward
-            if attn_impl != "eager":
-                attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_impl, eager_attention_forward)
-            out, _ = attention_interface(
-                self,
-                q.transpose(1, 2),
-                k.transpose(1, 2),
-                v.transpose(1, 2),
-                attn_mask,
-                dropout=0.0,
-                scaling=self.scale,
-            )
-            out = out * valid.unsqueeze(-1).unsqueeze(-1)
+        attention_interface: Callable = eager_attention_forward
+        if attn_impl != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_impl, eager_attention_forward)
+        out, _ = attention_interface(
+            self,
+            q.transpose(1, 2),
+            k.transpose(1, 2),
+            v.transpose(1, 2),
+            attn_mask,
+            dropout=0.0,
+            scaling=self.scale,
+        )
+        out = out * valid.unsqueeze(-1).unsqueeze(-1)
 
         out = out.to(input_dtype).reshape(B, N, -1)
         out = out * torch.sigmoid(self.gate_proj(x_input))
@@ -412,10 +392,6 @@ class ESMFold2SWA3DRoPEAttention(nn.Module):
 
 def _rms_adaln(x: Tensor, scale: Tensor, shift: Tensor) -> Tensor:
     return F.rms_norm(x, (x.shape[-1],)) * (1 + scale) + shift
-
-
-def _gated_residual(x: Tensor, gate: Tensor, y: Tensor) -> Tensor:
-    return x + gate * y
 
 
 class ESMFold2SWAAtomBlock(nn.Module):
@@ -441,11 +417,11 @@ class ESMFold2SWAAtomBlock(nn.Module):
 
         attn_input = _rms_adaln(x, scale_a, shift_a)
         attn_out = self.attn(attn_input, attention_params)
-        x = _gated_residual(x, gate_a, attn_out)
+        x = x + gate_a * attn_out
 
         ffn_input = _rms_adaln(x, scale_f, shift_f)
         ffn_out = self.ffn(ffn_input)
-        x = _gated_residual(x, gate_f, ffn_out)
+        x = x + gate_f * ffn_out
         return x
 
 
@@ -529,18 +505,6 @@ class ESMFold2SWAAtomTransformer(nn.Module):
         return q_l
 
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-CHAR_VOCAB_SIZE = 64
-MAX_CHARS = 4
-XYZ_DIMS = 3
-MAX_ATOMIC_NUMBER = 128
-
-# Input feature dim = 3 + 1 + 1 + 128 + 64*4 = 389
-ATOM_FEATURE_DIM = XYZ_DIMS + 1 + 1 + MAX_ATOMIC_NUMBER + CHAR_VOCAB_SIZE * MAX_CHARS
-
-
 def scatter_atom_to_token(
     atom_features: Tensor,
     atom_to_token_idx: Tensor,
@@ -591,7 +555,10 @@ class ESMFold2AtomEncoder(nn.Module):
         self.d_token = d_token
         self.structure_prediction = structure_prediction
 
-        self.atom_linear = nn.Linear(ATOM_FEATURE_DIM, d_atom, bias=False)
+        # Atom feature width = 3 (xyz) + 1 (charge) + 1 (mask) + element + atom-name-char one-hots.
+        self.char_feature_dim = config.char_vocab_size * config.max_chars
+        atom_feature_dim = 3 + 1 + 1 + config.max_atomic_number + self.char_feature_dim
+        self.atom_linear = nn.Linear(atom_feature_dim, d_atom, bias=False)
         self.atom_norm = ESMFold2LayerNorm(d_atom)
 
         if structure_prediction:
@@ -635,7 +602,7 @@ class ESMFold2AtomEncoder(nn.Module):
                     ref_charge.unsqueeze(-1),
                     atom_attention_mask.unsqueeze(-1),
                     ref_element,
-                    ref_atom_name_chars.reshape(B, N, MAX_CHARS * CHAR_VOCAB_SIZE),
+                    ref_atom_name_chars.reshape(B, N, self.char_feature_dim),
                 ],
                 dim=-1,
             )
@@ -646,11 +613,8 @@ class ESMFold2AtomEncoder(nn.Module):
             cos = cos.repeat_interleave(num_diffusion_samples, 0)
             sin = sin.repeat_interleave(num_diffusion_samples, 0)
             mask_exp = atom_attention_mask.repeat_interleave(num_diffusion_samples, 0)
-            seqlens = mask_exp.sum(dim=-1, dtype=torch.int32)
             indices = torch.nonzero(mask_exp.flatten(), as_tuple=False).flatten()
-            max_seqlen = int(seqlens.max().item())
-            cu_seqlens = F.pad(torch.cumsum(seqlens, dim=0, dtype=torch.int32), (1, 0))
-            attention_params = (cos, sin, indices, cu_seqlens, max_seqlen)
+            attention_params = (cos, sin, indices)
             n_tokens = int(atom_to_token.max().item()) + 1
             if layer_cache is not None:
                 layer_cache["c_base"] = c_base
@@ -699,6 +663,12 @@ class ESMFold2AtomEncoder(nn.Module):
 # ===========================================================================
 
 
+def _gather_along_dim1(source: Tensor, index: Tensor) -> Tensor:
+    """Gather ``source`` (``[B, N, d]``) along dim 1 with a ``[B, M]`` index, returning ``[B, M, d]``."""
+    idx = index.unsqueeze(-1).expand(-1, -1, source.size(-1))
+    return torch.gather(source, 1, idx)
+
+
 def gather_token_to_atom(token_features: Tensor, atom_to_token_idx: Tensor) -> Tensor:
     """Broadcast per-token features to per-atom features using gather.
 
@@ -709,8 +679,7 @@ def gather_token_to_atom(token_features: Tensor, atom_to_token_idx: Tensor) -> T
     Returns:
         [B, A, d]
     """
-    idx = atom_to_token_idx.unsqueeze(-1).expand(-1, -1, token_features.size(-1))
-    return torch.gather(token_features, 1, idx)
+    return _gather_along_dim1(token_features, atom_to_token_idx)
 
 
 # ===========================================================================
@@ -733,7 +702,7 @@ class ESMFold2AtomDecoder(nn.Module):
         self.atom_transformer = ESMFold2SWAAtomTransformer(config, structure_prediction=True)
 
         self.norm = ESMFold2LayerNorm(d_atom)
-        self.output_linear = nn.Linear(d_atom, XYZ_DIMS, bias=False)
+        self.output_linear = nn.Linear(d_atom, 3, bias=False)  # (x, y, z) coordinates
 
     def forward(
         self,
@@ -1418,7 +1387,7 @@ class ESMFold2RowAttentionPooling(nn.Module):
         mask_bias = torch.where(
             mask[:, None, :].bool(),
             torch.zeros_like(scores),
-            torch.full_like(scores, -1e9),
+            torch.full_like(scores, torch.finfo(scores.dtype).min),
         )
         scores = scores + mask_bias
         weights = F.softmax(scores, dim=-1, dtype=torch.float32).to(scores.dtype)
@@ -1711,9 +1680,9 @@ class ESMFold2TriangleMultiplicativeBlock(nn.Module):
 class ESMFold2TriangleMultiplicativeUpdate(nn.Module):
     """Thin wrapper exposing the triangular mixer with explicit orientation (v3)."""
 
-    def __init__(self, dim: int = 128, _outgoing: bool = True) -> None:
+    def __init__(self, dim: int = 128, outgoing: bool = True) -> None:
         super().__init__()
-        flow = "outgoing" if _outgoing else "incoming"
+        flow = "outgoing" if outgoing else "incoming"
         self._engine = ESMFold2TriangleMultiplicativeBlock(input_channels=dim, latent_channels=dim, flow=flow)
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
@@ -1757,8 +1726,8 @@ class ESMFold2PairUpdateBlock(nn.Module):
 
     def __init__(self, d_pair: int = 256, expansion_ratio: int = 4) -> None:
         super().__init__()
-        self.tri_mul_out = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=True)
-        self.tri_mul_in = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=False)
+        self.tri_mul_out = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=True)
+        self.tri_mul_in = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=False)
         self.pair_transition = ESMFold2Transition(d_pair, expansion_ratio=expansion_ratio)
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
@@ -1965,8 +1934,7 @@ def gather_rep_atom_coords(coords: Tensor, rep_atom_idx: Tensor) -> Tensor:
     Returns:
         [B, L, 3]
     """
-    idx = rep_atom_idx.unsqueeze(-1).expand(-1, -1, coords.size(-1))
-    return torch.gather(coords, 1, idx)
+    return _gather_along_dim1(coords, rep_atom_idx)
 
 
 def _compute_intra_token_idx(atom_to_token: Tensor) -> Tensor:
@@ -2009,7 +1977,6 @@ def _categorical_mean(logits: Tensor, start: float, end: float) -> Tensor:
 
 
 _CONFIDENCE_EPS = 1e-6
-_NONPOLYMER_ID = 4
 
 
 class ESMFold2ConfidenceHead(nn.Module):
@@ -2147,7 +2114,7 @@ class ESMFold2ConfidenceHead(nn.Module):
 
         expanded_type = self._repeat_batch(mol_type, num_diffusion_samples)
         expanded_asym = self._repeat_batch(asym_id, num_diffusion_samples)
-        is_ligand = (expanded_type == _NONPOLYMER_ID).float()
+        is_ligand = (expanded_type == 4).float()  # 4 = non-polymer (ligand) molecule type
         inter_chain = (expanded_asym.unsqueeze(-1) != expanded_asym.unsqueeze(-2)).float()
         near_contact = (rep_distances < 8).float()
         interface_per_token = (near_contact * inter_chain * (1.0 - is_ligand).unsqueeze(-1)).amax(dim=-1)
@@ -2247,7 +2214,6 @@ class ESMFold2PreTrainedModel(PreTrainedModel):
     # precision drives the diffusion conditioning; keep them fp32 even under dtype=bf16.
     _keep_in_fp32_modules_strict = ["fourier"]
     _supports_sdpa = True
-    _supports_flash_attn = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -2280,9 +2246,6 @@ class ESMFold2PreTrainedModel(PreTrainedModel):
             init.zeros_(module.s_to_token.weight)
         elif isinstance(module, ESMFold2LanguageModelShim):
             init.zeros_(module.base_z_combine)
-
-
-NUM_RES_TYPES = 33
 
 
 # ===========================================================================
@@ -2609,13 +2572,13 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         total_steps = max(1, n_loops + 1)
 
         if res_type.dim() == 2:
-            res_type_oh = F.one_hot(res_type.long(), num_classes=NUM_RES_TYPES).float()
+            res_type_oh = F.one_hot(res_type.long(), num_classes=self.config.num_res_types).float()
             res_type_oh = res_type_oh * tok_mask.unsqueeze(-1).float()
         else:
             res_type_oh = res_type.float()
 
         if msa is not None:
-            msa_oh_profile = F.one_hot(msa.long(), num_classes=NUM_RES_TYPES).float()
+            msa_oh_profile = F.one_hot(msa.long(), num_classes=self.config.num_res_types).float()
             if msa_attention_mask is not None:
                 mask_f = msa_attention_mask.float().unsqueeze(-1)
                 msa_oh_profile = msa_oh_profile * mask_f
@@ -2629,8 +2592,8 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         if deletion_mean is None:
             deletion_mean = torch.zeros(res_type.shape[0], res_type.shape[1], device=res_type.device)
 
-        ref_element_oh = F.one_hot(ref_element.long(), num_classes=MAX_ATOMIC_NUMBER).float()
-        ref_atom_name_chars_oh = F.one_hot(ref_atom_name_chars.long(), num_classes=CHAR_VOCAB_SIZE).float()
+        ref_element_oh = F.one_hot(ref_element.long(), num_classes=self.config.max_atomic_number).float()
+        ref_atom_name_chars_oh = F.one_hot(ref_atom_name_chars.long(), num_classes=self.config.char_vocab_size).float()
         # Bias-free downstream Linears require zeroed padding.
         atm_mask_f = atm_mask.float()
         ref_element_oh = ref_element_oh * atm_mask_f.unsqueeze(-1)
@@ -2680,7 +2643,7 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         _msa_kwargs: dict | None = None
         if self.msa_encoder is not None and msa is not None:
             B_msa, M, L_msa = msa.shape
-            msa_oh = F.one_hot(msa.permute(0, 2, 1).long(), num_classes=NUM_RES_TYPES).float()
+            msa_oh = F.one_hot(msa.permute(0, 2, 1).long(), num_classes=self.config.num_res_types).float()
             msa_attn = (
                 msa_attention_mask.permute(0, 2, 1).float()
                 if msa_attention_mask is not None
@@ -2813,8 +2776,8 @@ class ESMFold2MSAEncoderBlock(nn.Module):
                 d_msa, d_pair, n_heads_msa, msa_head_width
             )
             self.msa_transition = ESMFold2Transition(d_msa, expansion_ratio=4)
-        self.tri_mul_out = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=True)
-        self.tri_mul_in = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, _outgoing=False)
+        self.tri_mul_out = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=True)
+        self.tri_mul_in = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=False)
         self.pair_transition = ESMFold2Transition(d_pair, expansion_ratio=4)
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
@@ -2851,8 +2814,8 @@ class ESMFold2MSAEncoder(nn.Module):
         d_msa = me.d_msa
         d_inputs = config.inputs.d_inputs
         n_layers = me.n_layers
-        # 35 = NUM_RES_TYPES (33) one-hot + has_deletion + deletion_value.
-        self.embed = nn.Linear(35, d_msa, bias=False)
+        # num_res_types one-hot + has_deletion + deletion_value.
+        self.embed = nn.Linear(config.num_res_types + 2, d_msa, bias=False)
         self.project_inputs = nn.Linear(d_inputs, d_msa, bias=False)
         self.blocks = nn.ModuleList(
             [ESMFold2MSAEncoderBlock(config, is_final_block=(i == n_layers - 1)) for i in range(n_layers)]
