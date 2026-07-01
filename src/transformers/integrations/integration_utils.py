@@ -1855,7 +1855,7 @@ class ClearMLCallback(TrainerCallback):
     _hparams_section = "Transformers"
     _model_config_section = "Model Configuration"
     _ignore_hparams_overrides = "_ignore_hparams_ui_overrides_"
-    _ignoge_model_config_overrides = "_ignore_model_config_ui_overrides_"
+    _ignore_model_config_overrides = "_ignore_model_config_ui_overrides_"
     _model_config_description = "The configuration of model number {}."
     _model_config_description_note = (
         "Note that, when cloning this task and running it remotely,"
@@ -1946,7 +1946,7 @@ class ClearMLCallback(TrainerCallback):
 
             if getattr(model, "config", None) is not None:
                 ignore_model_config_section = (
-                    suffixed_hparams_section + "/" + ClearMLCallback._ignoge_model_config_overrides
+                    suffixed_hparams_section + "/" + ClearMLCallback._ignore_model_config_overrides
                 )
                 configuration_object_description = ClearMLCallback._model_config_description.format(
                     ClearMLCallback._model_connect_counter
