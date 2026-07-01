@@ -60,7 +60,7 @@ if is_torch_available():
         @torch.no_grad()
         @staticmethod
         def generate(model: PhimoeForCausalLM, prompt_tokens: torch.LongTensor, max_seq_len: int) -> list[int]:
-            model = PhimoeMiniWithStaticCache(model, 1, max_seq_len + prompt_tokens.shape[-1])
+            model = PhimoeMiniWithStaticCache(model, 1, max_seq_len)
 
             response_tokens = []
 
