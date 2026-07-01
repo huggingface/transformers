@@ -30,6 +30,7 @@ from typing_extensions import dataclass_transform
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
+from .integrations.heterogeneity import HeterogeneousConfigMixin
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
@@ -135,7 +136,7 @@ def wrap_init_to_accept_kwargs(cls: dataclass):
 @dataclass_transform(kw_only_default=True)
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
+class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, HeterogeneousConfigMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
@@ -203,6 +204,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
             sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
             Forward Chunking work?](../glossary.html#feed-forward-chunking).
+        per_layer_config (`dict[int | str, dict[str, Any]]`, *optional*):
+            A sparse mapping from layer indices to configuration attribute overrides. Each key is a layer index, and each value contains the attributes that differ from the global config for that layer.
 
         > Parameters for fine-tuning tasks
 
@@ -316,6 +319,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
         self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
 
+        # HeterogeneousConfigMixin: Heterogeneity kwargs have dedicated handling,
+        # so exclude them from regular additional attributes.
+        heterogeneous_kwargs = self._pop_heterogeneous_kwargs(kwargs)
+
         # Additional attributes without default values
         for key, value in kwargs.items():
             # Check this to avoid deserializing problematic fields from hub configs - they should use the public field
@@ -325,6 +332,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 except AttributeError as err:
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
+
+        # HeterogeneousConfigMixin: apply heterogeneity after all of the config attributes are initialized.
+        self._apply_heterogeneous_kwargs(heterogeneous_kwargs)
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
@@ -450,6 +460,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     def __getattribute__(self, key):
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
+
+        # HeterogeneousConfigMixin participates in attribute access through the MRO.
         return super().__getattribute__(key)
 
     def validate_output_attentions(self):
@@ -858,6 +870,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 elif value != "auto":
                     config_dict[key] = value
 
+        # HeterogeneousConfigMixin: move heterogeneity-specific kwargs into the constructor config dict.
+        cls._update_config_dict_with_heterogeneous_kwargs(config_dict, kwargs)
+
         config = cls(**config_dict)
 
         for key, value in kwargs.items():
@@ -961,7 +976,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def __iter__(self):
-        yield from self.__dict__
+        # HeterogeneousConfigMixin: keys of `self.__dict__` that are per-layer attributes
+        # may require hiding when using a heterogeneous config.
+        yield from self._iter_config_keys_with_heterogeneous_adjustment(self.__dict__)
 
     def to_diff_dict(self) -> dict[str, Any]:
         """
@@ -985,13 +1002,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Only serialize values that differ from the default config,
         # except always keep the 'config' attribute.
         for key, value in config_dict.items():
+            # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
+            attr = self._getattr_without_heterogeneous_validation(key, None)
+
             if (
-                isinstance(getattr(self, key, None), PreTrainedConfig)
+                isinstance(attr, PreTrainedConfig)
                 and key in class_config_dict
                 and isinstance(class_config_dict[key], dict)
             ):
                 # For nested configs we need to clean the diff recursively
-                diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
+                diff = recursive_diff_dict(value, default_config_dict, config_obj=attr)
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
@@ -1019,6 +1039,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 else self.quantization_config
             )
         self.dict_dtype_to_str(serializable_config_dict)
+
+        # HeterogeneousConfigMixin: update the serialized output.
+        self._update_heterogeneous_to_dict_output(serializable_config_dict)
 
         return serializable_config_dict
 
@@ -1069,6 +1092,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 else self.quantization_config
             )
         self.dict_dtype_to_str(output)
+
+        # HeterogeneousConfigMixin: update the serialized output.
+        self._update_heterogeneous_to_dict_output(output)
 
         return output
 
@@ -1354,7 +1380,10 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
     for key, value in dict_a.items():
-        obj_value = getattr(config_obj, str(key), None)
+        # HeterogeneousConfigMixin: disable the heterogeneous attribute access validation
+        obj_value = (
+            config_obj._getattr_without_heterogeneous_validation(str(key), None) if config_obj is not None else None
+        )
         if isinstance(obj_value, PreTrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
             diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
             diff[key] = diff_value
