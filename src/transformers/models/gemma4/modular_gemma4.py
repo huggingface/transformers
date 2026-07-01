@@ -1288,6 +1288,7 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
         "Gemma4AudioLayer",
     ]
     input_modalities = ("image", "text", "video", "audio")
+    _supports_flash_attn = False  # released checkpoints use head_dim=512, which is not supported yet by FA kernels
     _can_record_outputs = None  # override
 
     @torch.no_grad()
