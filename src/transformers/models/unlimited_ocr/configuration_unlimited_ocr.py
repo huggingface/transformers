@@ -90,7 +90,6 @@ class UnlimitedOcrVisionEncoderConfig(PreTrainedConfig):
     base_config_key = "encoder_config"
     hidden_size: int = 1024
     intermediate_size: int = 4096
-    projection_dim: int = 512
     num_hidden_layers: int = 24
     num_attention_heads: int = 16
     num_channels: int = 3

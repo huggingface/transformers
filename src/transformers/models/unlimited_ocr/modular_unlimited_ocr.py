@@ -355,6 +355,8 @@ class UnlimitedOcrVisionEncoderConfig(CLIPVisionConfig):
     num_hidden_layers: int = 24
     num_attention_heads: int = 16
     patch_size: int | list[int] | tuple[int, int] | None = 14
+    projection_dim = AttributeError()
+    sliding_window = AttributeError()
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
