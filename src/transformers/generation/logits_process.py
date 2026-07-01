@@ -1376,6 +1376,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         def all_token_bias_pairs_are_valid(sequence):
             return (
                 isinstance(sequence[0], list)
+                and len(sequence[0]) > 0
                 and all(isinstance(token_id, (int, np.integer)) and token_id > 0 for token_id in sequence[0])
                 and isinstance(sequence[1], float)
             )
@@ -1477,6 +1478,8 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
             raise ValueError(f"`bad_words_ids` has to be a non-empty list, but is {bad_words_ids}.")
         if any(not isinstance(bad_word_ids, list) for bad_word_ids in bad_words_ids):
             raise ValueError(f"`bad_words_ids` has to be a list of lists, but is {bad_words_ids}.")
+        if any(len(bad_word_ids) == 0 for bad_word_ids in bad_words_ids):
+            raise ValueError(f"`bad_words_ids` has to be a list of non-empty lists, but is {bad_words_ids}.")
         if any(
             any((not isinstance(token_id, (int, np.integer)) or token_id < 0) for token_id in bad_word_ids)
             for bad_word_ids in bad_words_ids
