@@ -1116,7 +1116,7 @@ def set_param_for_module(
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
-        # Determine expected shape: for TP, use sharded shape; for DTensor, use local shard shape
+        # Determine expected shape: for TP/Dtensor, use sharded shape; otherwise, use full shape
         if distributed_operation is not None:
             expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
         elif isinstance(ref, DTensor):
@@ -1422,7 +1422,7 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
-            # 4. Materialize tensor — shard-on-read for DTensor params, legacy TP, or plain copy
+            # 4. Handle TP/Dtensor sharding or device_map placement
             future_or_tensor = None
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             if isinstance(empty_param, DTensor):

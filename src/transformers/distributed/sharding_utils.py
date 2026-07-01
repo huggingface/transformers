@@ -279,9 +279,7 @@ class DtensorShardOperation:
         if len(multi_interval_dims) > 1:
             # NOTE(3outeille): not sure yet which scenario will have StridedShard
             # placements on both row and column. Thus, delay implementing this for now.
-            raise ValueError(
-                "Current shard-on-read only supports disjoint ranges on a single checkpoint dimension."
-            )
+            raise ValueError("Current shard-on-read only supports disjoint ranges on a single checkpoint dimension.")
         concat_dim = multi_interval_dims[0] if multi_interval_dims else None
 
         base_slices = []
