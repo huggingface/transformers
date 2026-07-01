@@ -93,7 +93,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ct_quantization_config = self.compressor.quantization_config
 
         # Always initialize compressed wrappers to match the checkpoint
-        apply_quantization_config(model, ct_quantization_config, run_compressed=not self.quantization_config.dequantize)
+        apply_quantization_config(
+            model, ct_quantization_config, run_compressed=not self.quantization_config.dequantize
+        )
         if self.quantization_config.is_quantization_compressed:
             self.compressor.compress_model(model=model)
 
