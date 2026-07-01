@@ -1420,6 +1420,67 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(r"decode_head\.conv_matting\.", r"decode_head.predictor."),
         ],
+        "unlimited_ocr": [
+            WeightRenaming(r"(^|model\.)sam_model", r"\1vision_tower.sam_encoder"),
+            WeightRenaming(r"(^|model\.)vision_model", r"\1vision_tower.vision_encoder"),
+            WeightRenaming(r"(^|model\.)view_seperator", r"\1view_separator"),
+            WeightRenaming(r"(^|model\.)image_newline", r"\1image_newline"),
+            WeightRenaming(r"(^|model\.)projector\.layers\.weight", r"\1multi_modal_projector.weight"),
+            WeightRenaming(r"(^|model\.)projector\.layers\.bias", r"\1multi_modal_projector.bias"),
+            WeightRenaming(r"(^|model\.)embed_tokens\.", r"\1language_model.embed_tokens."),
+            WeightRenaming(r"(^|model\.)layers\.", r"\1language_model.layers."),
+            WeightRenaming(r"(^|model\.)norm\.", r"\1language_model.norm."),
+        ],
+        "UnlimitedOcrSamVisionEncoder": [
+            WeightRenaming(r"blocks\.(\d+)\.norm1\.", r"layers.\1.layer_norm1."),
+            WeightRenaming(r"blocks\.(\d+)\.norm2\.", r"layers.\1.layer_norm2."),
+            WeightRenaming(r"blocks\.(\d+)\.attn\.", r"layers.\1.attn."),
+            WeightRenaming(r"blocks\.(\d+)\.mlp\.", r"layers.\1.mlp."),
+            WeightRenaming(r"patch_embed\.proj\.", "patch_embed.projection."),
+            WeightRenaming(r"pos_embed", "pos_embed"),
+            WeightRenaming(r"neck\.0\.", "neck.conv1."),
+            WeightRenaming(r"neck\.1\.", "neck.layer_norm1."),
+            WeightRenaming(r"neck\.2\.", "neck.conv2."),
+            WeightRenaming(r"neck\.3\.", "neck.layer_norm2."),
+            WeightRenaming(r"net_2\.", "proj.conv1."),
+            WeightRenaming(r"net_3\.", "proj.conv2."),
+        ],
+        "UnlimitedOcrVisionEncoder": [
+            WeightRenaming(r"transformer", "encoder"),
+            WeightConverter(
+                source_patterns="qkv_proj.weight",
+                target_patterns=[
+                    "q_proj.weight",
+                    "k_proj.weight",
+                    "v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="qkv_proj.bias",
+                target_patterns=[
+                    "q_proj.bias",
+                    "k_proj.bias",
+                    "v_proj.bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "UnlimitedOcrTextModel": [
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
     }
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()

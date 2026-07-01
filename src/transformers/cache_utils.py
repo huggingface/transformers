@@ -1679,14 +1679,21 @@ class StaticCache(Cache):
                 layer = StaticSlidingWindowLayer(
                     max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size
                 )
+            # Custom layer types (e.g. M3's sparse-attention indexer cache, R-SWA's reference sliding window)
+            # that registered a static variant. Checked before the generic sliding branch below so a custom
+            # static layer whose dynamic counterpart subclasses `DynamicSlidingWindowLayer` (and thus appears in
+            # `sliding_layer_types`) is not silently downgraded to a plain `StaticSlidingWindowLayer`.
+            elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:
+                static_layer_cls = LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type]
+                if issubclass(static_layer_cls, StaticSlidingWindowLayer):
+                    layer = static_layer_cls(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
+                else:
+                    layer = static_layer_cls(max_cache_len=max_cache_len)
             elif layer_type in sliding_layer_types:
                 layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
             # Recurrent-state-only layers — linear-attention, conv, MoE — share the same static cache class.
             elif layer_type in ("linear_attention", "conv", "moe"):
                 layer = LinearAttentionLayer()
-            # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
-            elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:
-                layer = LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type](max_cache_len=max_cache_len)
             elif layer_type == "deepseek_sparse_attention":
                 # Static / compile-friendly indexed layer (preallocated indexer key cache).
                 layer = StaticIndexedLayer(max_cache_len=max_cache_len)
