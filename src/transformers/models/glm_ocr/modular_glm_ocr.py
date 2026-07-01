@@ -299,7 +299,13 @@ class GlmOcrTextModel(Glm4vTextModel):
 
 
 class GlmOcrModel(Glm4vModel):
-    pass
+    def __init__(self, config):
+        super(Glm4vModel, self).__init__(config)
+        self.visual = GlmOcrVisionModel._from_config(config.vision_config)
+        self.language_model = GlmOcrTextModel._from_config(config.text_config)
+        self.rope_deltas = None
+        # Initialize weights and apply final processing
+        self.post_init()
 
 
 class GlmOcrForConditionalGeneration(Glm4vForConditionalGeneration):
