@@ -24,15 +24,13 @@ limitations under the License.
 
 ## Overview
 
-Kimi K2.5 is an open-source, native multimodal agentic model that advances practical capabilities in long-horizon coding, coding-driven design, proactive autonomous execution, and swarm-based task orchestration. The model was proposed in [Kimi K2.5: Advancing Open-Source Coding
-](https://www.kimi.com/en/blog/kimi-k2-6) and improved in [Improved Baselines with Visual Instruction Tuning](https://huggingface.co/papers/2310.03744).
+Kimi K2.5 is an open-source, native multimodal agentic model that advances practical capabilities in long-horizon coding, coding-driven design, proactive autonomous execution, and swarm-based task orchestration. The model was proposed in [Kimi K2.5: Visual Agentic Intelligence](https://www.kimi.com/en/blog/kimi-k2-5) and further improved in [Kimi K2.6: Advancing Open-Source Coding](Kimi K2.5: Visual Agentic Intelligence).
 
 Kimi K2.5 achieves significant improvements on complex, end-to-end coding tasks, generalizing robustly across programming languages (Rust, Go, Python) and domains spanning front-end, DevOps, and performance optimization. The model is capable of transforming simple prompts and visual inputs into production-ready interfaces and lightweight full-stack workflows, generating structured layouts, interactive elements, and rich animations with deliberate aesthetic precision.
 
-## Usage Tips
-
 This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
-The offical checkpoints can be found [here](https://huggingface.co/moonshotai/Kimi-K2.6).
+The offical checkpoints are [moonshotai/Kimi-K2.5](https://huggingface.co/moonshotai/Kimi-K2.5) and [moonshotai/Kimi-K2.6](https://huggingface.co/moonshotai/Kimi-K2.6).
+
 
 ## Usage examples
 
@@ -43,15 +41,10 @@ from transformers import AutoProcessor, AutoTokenizer, AutoModelForImageTextToTe
 from transformers.distributed.configuration_utils import DistributedConfig
 
 distributed_config = DistributedConfig(enable_expert_parallel=True)
-local_rank = int(os.environ["LOCAL_RANK"])
-device = torch.device(f"cuda:{local_rank}")
-torch.cuda.set_device(device)
-torch.distributed.init_process_group("nccl", device_id=device)
 
-processor = AutoProcessor.from_pretrained('moonshotai/Kimi-K2.6', trust_remote_code=False)
+processor = AutoProcessor.from_pretrained('moonshotai/Kimi-K2.6')
 model = AutoModelForImageTextToText.from_pretrained(
     'moonshotai/Kimi-K2.6',
-    trust_remote_code=False,
     distributed_config=distributed_config,
 )
 

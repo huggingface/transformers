@@ -106,7 +106,7 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         self.num_frames = config.pos_emb_time
 
         self.position_embeddings = nn.Parameter(
-            torch.randn(config.pos_emb_height, config.pos_emb_width, config.hidden_size)
+            torch.zeros(config.pos_emb_height, config.pos_emb_width, config.hidden_size)
         )
 
         # Time-axis pos_emb are an additive sinusoidal table, i.e. add pos to hiddens rather than rotating
@@ -500,7 +500,7 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             # Reshape along self.merge_kernel_size and concat to the last dimension
             new_height, new_width = h // kernel_height, w // kernel_width
             reshaped_seq = seq.view(t, new_height, kernel_height, new_width, kernel_width, hidden_dim)
-            reshaped_seq = reshaped_seq.permute(0, 1, 3, 2, 4, 5).contiguous().mean(dim=0)  # temporal pooling
+            reshaped_seq = reshaped_seq.transpose(2, 3).contiguous().mean(dim=0)  # temporal pooling
             padded_seq = reshaped_seq.view(new_height * new_width, kernel_height * kernel_width, -1)
             outputs.append(padded_seq)
             running_length += t * h * w

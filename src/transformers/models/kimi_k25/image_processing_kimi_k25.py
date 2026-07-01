@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PIL Image processor class for KimiK2.5."""
+"""Torchvision Image processor class for KimiK2.5."""
 
 import math
 
@@ -88,7 +88,6 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     size = {"max_height": 512, "max_width": 512}
     max_patches = 16384
-    default_to_square = False
     do_rescale = True
     do_normalize = True
     image_mean = IMAGENET_STANDARD_MEAN

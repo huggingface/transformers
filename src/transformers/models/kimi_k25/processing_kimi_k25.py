@@ -87,7 +87,7 @@ class Kimi_K25Processor(ProcessorMixin):
                 "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
                 "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
             )
-        metadata.fps = 24 if metadata.fps is None else metadata.fps
+            metadata.fps = 24
 
         for chunk_id in range(num_chunks):
             current_chunk = metadata.timestamps[

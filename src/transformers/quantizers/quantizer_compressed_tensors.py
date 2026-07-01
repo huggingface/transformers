@@ -239,21 +239,6 @@ class DecompressExperts(ConversionOps):
 
         return processed_out
 
-    def group_input_dict(self, input_dict: dict) -> dict:
-        weight_grouped = {}
-        for key in input_dict:
-            if "weight_packed" in key:
-                layername = key.replace(".weight_packed", "")
-                weight_grouped.setdefault(layername, {})["weight_packed"] = input_dict[key]
-            elif "weight_scale" in key:
-                layername = key.replace(".weight_scale", "")
-                weight_grouped.setdefault(layername, {})["weight_scale"] = input_dict[key]
-            elif "weight_shape" in key:
-                layername = key.replace(".weight_shape", "")
-                weight_grouped.setdefault(layername, {})["weight_shape"] = input_dict[key]
-
-        return weight_grouped
-
     @property
     def reverse_op(self) -> "ConversionOps":
         return None  # FIXME
