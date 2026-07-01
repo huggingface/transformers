@@ -921,6 +921,35 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"lm_head\.2\.", "lm_head.layer_norm."),
             WeightRenaming(r"lm_head\.3\.", "lm_head.decoder."),
         ],
+        "esmfold2": [
+            # TODO(temporary): the published ESMFold2 checkpoint predates the SwiGLU consolidation
+            # and still stores those blocks under their old per-module names. Drop this whole entry
+            # once the merged ESMFold2+ESMC checkpoint is regenerated with the canonical `w12`/`w3`.
+            WeightRenaming(r"\.w_up\.", ".w12."),  # SwiGLU-FFN (atom transformer)
+            WeightRenaming(r"\.w_down\.", ".w3."),
+            WeightRenaming(r"\.lin_swish\.", ".ffn.w12."),  # ConditionedTransitionBlock
+            WeightRenaming(r"\.lin_out\.", ".ffn.w3."),
+            # TODO(temporary): checkpoint predates the SWA attention q/k/v projection split (M19);
+            # it packed q/k/v into a single ``Wqkv``. Drop once the merged checkpoint is regenerated
+            # with split projections. (The pair-bias attention keeps its packed ``kv_proj`` for now:
+            # splitting it too would clash with these q/k/v names under the bidirectional converter.)
+            WeightConverter(
+                source_patterns=["attn.Wqkv.weight"],
+                target_patterns=["attn.q_proj.weight", "attn.k_proj.weight", "attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            # TODO(temporary): checkpoint predates de-Sequentializing the nn.Sequential blocks (M26)
+            # into named submodules. Drop this whole group after the merged checkpoint is regenerated.
+            WeightRenaming(r"output_mlp\.0\.", "output_fc1."),  # SingleToPair (Linear, GELU, Linear)
+            WeightRenaming(r"output_mlp\.2\.", "output_fc2."),
+            WeightRenaming(r"adaln_modulation\.1\.", "adaln_linear."),  # SWAAtomBlock (SiLU, Linear)
+            WeightRenaming(r"base_z_linear\.0\.", "base_z_input_norm."),  # LM shim (Norm, Linear)
+            WeightRenaming(r"base_z_linear\.1\.", "base_z_proj."),
+            WeightRenaming(r"base_z_mlp\.0\.", "base_z_to_pair."),  # LM shim (SingleToPair, Norm)
+            WeightRenaming(r"base_z_mlp\.1\.", "base_z_output_norm."),
+            WeightRenaming(r"compute_bias\.0\.", "bias_norm."),  # MSAPairWeightedAveraging (Norm, Linear)
+            WeightRenaming(r"compute_bias\.1\.", "bias_proj."),
+        ],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "timesfm2_5": [
