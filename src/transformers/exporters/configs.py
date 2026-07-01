@@ -163,8 +163,28 @@ class ExecutorchConfig(DynamoConfig):
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
+            - `"qnn"` — Qualcomm HTP (NPU) inference via the ExecuTorch QNN backend.
+        soc_model (`str`, *optional*, defaults to `"SM8750"`):
+            QNN only. Target Qualcomm SoC (e.g. `"SM8750"` = 8 Elite/S25, `"SM8550"` = 8 Gen 2/S23).
+            The QNN context binary is SoC-locked.
+        quantize (`str`, *optional*):
+            QNN only. PT2E quantization scheme run after export (`"8a8w"`, `"16a4w"`, `"16a8w"`,
+            `"16a4w_block"`). `None` (default) exports FP16.
+        static_cache (`bool`, *optional*, defaults to `True`):
+            QNN only. Wrap decoder-only LMs in a static-KV-cache module so the exported graph is
+            decode-capable (KV cache as I/O) rather than prefill-only.
+        max_cache_len (`int`, *optional*, defaults to `128`):
+            QNN only. Static cache length when `static_cache=True`.
+        calibration_inputs (`list`, *optional*):
+            QNN only. Batches of forward-kwargs dicts used to calibrate PT2E quantization. If `None`,
+            falls back to the single `sample_inputs` batch (functional but low-accuracy — a warning is logged).
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
+    soc_model: str = "SM8750"
+    quantize: str | None = None
+    static_cache: bool = True
+    max_cache_len: int = 128
+    calibration_inputs: list[Any] | None = None

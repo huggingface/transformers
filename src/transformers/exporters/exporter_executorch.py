@@ -55,6 +55,7 @@ from .utils import (
     register_fx_program_fix,
     register_patch,
 )
+from .qnn_utils import _lower_for_qnn, prepare_for_qnn, quantize_for_qnn
 
 
 if is_torch_available():
@@ -113,14 +114,23 @@ class ExecutorchExporter(DynamoExporter):
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs, config)
 
         with apply_patches("executorch"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
+            # Post-export transform (e.g. QNN PT2E quantization), runs on the ExportedProgram
+            # between torch.export and lowering. No-op for backends not in the table.
+            post_transform = _POST_EXPORT_TRANSFORM.get(config.backend)
+            if post_transform is not None:
+                exported_program = post_transform(exported_program, sample_inputs, config)
+            # Backend-specific lowering. Most backends use the generic to_edge_transform_and_lower
+            # (a partitioner is enough); QNN needs its own pre-export + edge pass pipeline, so it
+            # supplies an entry in _BACKEND_LOWER.
+            lower_for_backend = _BACKEND_LOWER.get(config.backend, _lower_default)
+            edge_program_manager: EdgeProgramManager = lower_for_backend(
+                exported_program, partitioner, _get_edge_compile_config()
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch()
 
@@ -164,7 +174,7 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
 # To add a new backend: implement _prepare_for_new_backend and add it to the _BACKEND_PREPARE table.
 
 
-def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], config: Any = None):
     """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner."""
 
     model.requires_grad_(False)
@@ -178,7 +188,7 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, sample_inputs, partitioner
 
 
-def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], config: Any = None):
     """GPU inference via the ExecuTorch CUDA backend.
 
     Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.
@@ -198,6 +208,39 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 _BACKEND_PREPARE = {
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
+    "qnn": prepare_for_qnn,
+}
+
+
+# ── Post-export transforms ────────────────────────────────────────────────────
+# Run on the ExportedProgram between torch.export.export() and lowering. XNNPACK quantizes
+# TorchAO-eager *before* export (nothing here); QNN quantizes with PT2E *after* export
+# (QnnQuantizer annotates the exported graph for HTP), so it registers a hook below.
+# Signature: transform(exported_program, sample_inputs, config) -> ExportedProgram.
+
+
+_POST_EXPORT_TRANSFORM = {
+    "qnn": quantize_for_qnn,
+}
+
+
+# ── Stage 1b: Backend lowering ────────────────────────────────────────────────
+# Most backends lower with the generic to_edge_transform_and_lower (a partitioner is enough).
+# QNN is the exception: the partitioner alone fails (KeyError aten.alias_copy.default, rank-3
+# FullyConnected, "No QnnManager active") because QNN's pre-export + edge passes never run. The
+# _BACKEND_LOWER table lets a backend supply its own lowering; QNN replicates
+# to_edge_transform_and_lower_to_qnn on the already-exported program (no re-export).
+
+
+def _lower_default(exported_program, partitioner, compile_config) -> EdgeProgramManager:
+    """Generic lowering used by xnnpack/cuda: partitioner does all the work."""
+    return to_edge_transform_and_lower(
+        exported_program, partitioner=partitioner, compile_config=compile_config
+    )
+
+
+_BACKEND_LOWER = {
+    "qnn": _lower_for_qnn,
 }
 
 
