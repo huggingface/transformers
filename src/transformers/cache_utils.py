@@ -849,8 +849,7 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         self.values[:, :, window_start : window_start + self.sliding_window, :].copy_(
             full_value_states[:, :, -self.sliding_window :, :]
         )
-        # TODO: Add multi-token decode support. This requires a custom create_causal_mask implementation.
-        return self.keys, self.values
+        return full_key_states, full_value_states
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
@@ -874,16 +873,21 @@ class StaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
+        is_full = self.prefill_length is not None and self.cumulative_length_int >= self.prefill_length + self.sliding_window
+
         kv_offset = 0
-        if not self.is_initialized:
-            # First forward: `lazy_initialization` will allocate from this query length.
-            prefill_seen = query_length if query_length > 1 else 0
-            kv_length = min(self.max_cache_len, prefill_seen + self.sliding_window)
-        elif self.prefill_length is None and query_length > 1:
-            # Additional prefill chunk: `update` will grow the buffer to fit all prefill so far plus the window.
+        # Prefill
+        if self.prefill_length is None and query_length > 1:
             kv_length = min(self.max_cache_len, self.cumulative_length_int + query_length + self.sliding_window)
+        # Decode: cache is already full
+        elif is_full:
+            kv_offset = max(self.cumulative_length_int - self.prefill_length - self.sliding_window + 1, 0)
+            kv_length = self.prefill_length + self.sliding_window - 1 + query_length
+        # Decode: cache not yet full, but becoming full on this update
+        elif self.prefill_length is not None and self.cumulative_length_int + query_length > self.prefill_length + self.sliding_window:
+            kv_length = self.cumulative_length_int + query_length
+        # Decode: cache not yet full but we return the local size as it's static
         else:
-            # Decode (including the first decode step): the buffer is already at its final size.
             kv_length = self.keys.shape[-2]
 
         return kv_length, kv_offset
