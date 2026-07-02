@@ -3608,13 +3608,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 shard_state_dict[tensor_name] = tensor.contiguous()
 
             # As explained above, for offloaded scenarios, weight format could not be reverted before due to meta weights,
-            # so do it now after they were loaded onto cpu. For many-to-one operations, it may be an issue, but usually the shards
-            # contain all the necessary params
+            # so do it now after they were loaded onto cpu. For one-weight-to-many operations, it may be an issue, but usually the shards
+            # contain all the necessary params, except if we are quite unlucky on the sharding. The failure surface is (very few models
+            # with one-weight-to-many + offloading to disk + unlucky sharding), so it will almost never happen
             if is_offloaded and save_original_format and not _hf_peft_config_loaded:
                 try:
                     shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
                     # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
-                    weight_map.update({k: shard_file} for k in shard_state_dict.keys())
+                    weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())
                 except Exception:
                     raise RuntimeError(
                         "We could not revert some weight conversions because of offlading, and several weights needed for a single "
