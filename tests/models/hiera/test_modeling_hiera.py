@@ -245,7 +245,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # massive symbolic expression from multi-stage pooling
 
     def setUp(self):
         self.model_tester = HieraModelTester(self)

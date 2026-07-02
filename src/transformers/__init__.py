@@ -106,6 +106,7 @@ _import_structure = {
     "dependency_versions_table": [],
     "distributed": [],
     "dynamic_module_utils": [],
+    "exporters": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],

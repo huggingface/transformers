@@ -1,0 +1,940 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""ONNX exporter.
+
+Extends `DynamoExporter` with five extra stages that convert an `ExportedProgram`
+into an ONNX model via `torch.onnx.export`:
+
+1. **Torch patches** (`_PATCHES["onnx"]` via `apply_patches("onnx")`): reversibly
+   monkey-patch `torch` ops at tracing time so `torch.export` and `torch.onnx.export`
+   emit ONNX-lowerable patterns. Reverted on exit.
+2. **ONNX patches** (`_PATCHES["onnx"]` via `apply_patches("onnx")`): reversibly
+   hook `torch.onnx` internals — specifically `_prepare_exported_program_for_export`,
+   so the FX node fixes (stage 3) run again right after `run_decompositions`.
+   Same registry as stage 1, installed by the same `apply_patches` call.
+3. **FX node fixes** (`_FX_NODE_FIXES["onnx"]` via `apply_fx_node_fixes("onnx", gm)`):
+   per-node in-place rewrites on the `GraphModule` to drop or replace nodes ONNX
+   can't lower (alias, in-place ops, dead comparisons, `_assert_*`, …). Triggered
+   both directly after `torch.export` and indirectly via the stage 2 hook.
+4. **ONNX translations** (`_ONNX_TRANSLATION_TABLE`): custom onnxscript functions
+   passed as `custom_translation_table` that override the default torchlib
+   lowering for specific aten ops where it's buggy or missing.
+5. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export in-place
+   fixes on the `ONNXProgram` IR for ORT compatibility.
+"""
+
+from __future__ import annotations
+
+import copy
+import functools
+import operator
+from collections.abc import MutableMapping, Sequence
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
+
+from ..utils import logging
+from ..utils.import_utils import is_onnxscript_available, is_torch_available
+from .configs import OnnxConfig
+from .exporter_dynamo import DynamoExporter
+from .utils import (
+    apply_fx_node_fixes,
+    apply_patches,
+    duplicate_leaf_tensors,
+    get_leaf_tensors,
+    register_fx_node_fix,
+    register_patch,
+)
+
+
+if is_torch_available():
+    import torch
+    from torch.export import ExportedProgram
+    from torch.onnx import ONNXProgram
+
+    from .. import masking_utils
+
+
+if is_onnxscript_available():
+    import onnx_ir
+    from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
+    from onnxscript.onnx_opset import opset18 as op
+
+if TYPE_CHECKING:
+    from ..modeling_utils import PreTrainedModel
+
+    if is_onnxscript_available():
+        from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal
+
+
+logger = logging.get_logger(__file__)
+
+
+class OnnxExporter(DynamoExporter):
+    """Exporter that converts a [`PreTrainedModel`] to an ONNX `ONNXProgram`.
+
+    Example:
+
+    ```python
+    >>> from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+
+    >>> exporter = OnnxExporter()
+    >>> onnx_program = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
+    >>> outputs = onnx_program(**inputs)  # run in-memory
+    >>> exporter.export(model, inputs, config=OnnxConfig(output_path="model.onnx"))  # save to disk
+    ```
+    """
+
+    required_packages = ["torch", "onnx", "onnxscript"]
+    tested_versions = {"torch": "2.12.0", "onnx": "1.21.0", "onnxscript": "0.7.0"}
+
+    def export(
+        self,
+        model: PreTrainedModel,
+        sample_inputs: MutableMapping[str, Any],
+        config: OnnxConfig | dict[str, Any],
+    ) -> ONNXProgram:
+        if isinstance(config, dict):
+            config = OnnxConfig(**config)
+        elif type(config) is not OnnxConfig:
+            raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
+
+        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
+            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+            inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
+            apply_fx_node_fixes("onnx", exported_program.graph_module)
+            onnx_program: ONNXProgram = torch.onnx.export(
+                exported_program,
+                args=(),
+                f=config.output_path,
+                input_names=inputs_names,
+                output_names=outputs_names,
+                kwargs=copy.deepcopy(dict(sample_inputs)),
+                custom_translation_table=_ONNX_TRANSLATION_TABLE,
+                opset_version=config.opset_version,
+                external_data=config.external_data,
+                export_params=config.export_params,
+                optimize=config.optimize,
+            )
+
+        apply_onnx_ir_fixes(onnx_program)
+        return onnx_program
+
+
+# ── ONNX helpers ────────────────────────────────────────────────────────────
+# Model forward wrapper and I/O naming used by OnnxExporter.export.
+
+
+@contextmanager
+def patch_model_outputs(model):
+    """Wrap `model.forward` to return a flat `dict[str, Tensor]` with duplicated outputs,
+    and capture the input/output tensor names from the traced forward in the yielded
+    `(inputs_names, outputs_names)` lists.
+    """
+
+    inputs_names: list[str] = []
+    outputs_names: list[str] = []
+    original_forward = model.forward
+
+    @functools.wraps(original_forward)
+    def patched_forward(*args, **kwargs):
+        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_forward(*args, **kwargs)))
+        inputs_names.extend(get_leaf_tensors(kwargs).keys())
+        outputs_names.extend(outputs.keys())
+        return outputs
+
+    try:
+        model.forward = patched_forward
+        yield inputs_names, outputs_names
+    finally:
+        model.forward = original_forward
+
+
+def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> tuple[list[str], list[str]]:
+    """Prefix any name that appears in both lists with `input.` / `output.`."""
+    for name in set(inputs_names).intersection(set(outputs_names)):
+        inputs_names[inputs_names.index(name)] = f"input.{name}"
+        outputs_names[outputs_names.index(name)] = f"output.{name}"
+    return inputs_names, outputs_names
+
+
+# ── Stage 1: Torch patches ─────────────────────────────────────────────────────
+# Each `_patch_*(original)` factory is registered via `@register_patch("onnx", path)`,
+# where `path` is the dotted Python path of the attribute to swap (e.g. `"torch.where"`,
+# `"torch.Tensor.unsqueeze"`). Installation and restoration go through `apply_patches`.
+#
+# To add a new patch: define a `_patch_*` factory and decorate it.
+
+
+@register_patch("onnx", "torch.where")
+def _patch_where(original):
+    """Normalize dtypes and scalars in torch.where."""
+
+    def patch(condition, x=None, y=None):
+        if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor) and x.dtype != y.dtype:
+            y = y.to(x.dtype)
+        elif isinstance(x, torch.Tensor) and isinstance(y, (int, float, bool)):
+            y = torch.tensor(y, dtype=x.dtype, device=x.device)
+        elif isinstance(y, torch.Tensor) and isinstance(x, (int, float, bool)):
+            x = torch.tensor(x, dtype=y.dtype, device=y.device)
+        if x is None and y is None:
+            return original(condition)
+        elif y is None:
+            return original(condition, x)
+        else:
+            return original(condition, x, y)
+
+    return patch
+
+
+@register_patch("onnx", "torch.unsqueeze", "torch.Tensor.unsqueeze")
+def _patch_unsqueeze(original):
+    """Support complex tensors in torch.unsqueeze."""
+
+    def patch(self_or_input, dim):
+        if torch.is_complex(self_or_input):
+            real = original(self_or_input.real, dim)
+            imag = original(self_or_input.imag, dim)
+            return torch.complex(real, imag)
+        return original(self_or_input, dim)
+
+    return patch
+
+
+@register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
+def _patch_broadcast_mask_expansion(_original):
+    """Replace vmap-based mask expansion with broadcast expansion."""
+
+    def patch(mask_function):
+        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
+            brodcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
+            result = mask_function(*brodcasted).expand(
+                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
+            )
+            return result
+
+        return _expanded
+
+    return patch
+
+
+@register_patch("onnx", "torch.nn.RMSNorm.forward")
+def _patch_rms_norm_forward(original):
+    """Use non-fused RMS normalization when elementwise_affine is False."""
+
+    def patch(self, x):
+        if not self.elementwise_affine:
+            variance = x.to(torch.float32).pow(2).mean(-1, keepdim=True)
+            return (x * torch.rsqrt(variance + self.eps)).to(x.dtype)
+        return original(self, x)
+
+    return patch
+
+
+@register_patch("onnx", "torch.randperm")
+def _patch_randperm(original):
+    """Implement randperm via argsort(rand(n)) — no ONNX decomposition for aten.randperm."""
+
+    def patch(n, *, dtype=torch.int64, layout=torch.strided, device=None, pin_memory=False, generator=None):
+        return torch.argsort(torch.rand(n, device=device)).to(dtype)
+
+    return patch
+
+
+@register_patch("onnx", "torch.histc")
+def _patch_histc(original):
+    """Replace `torch.histc` with a statically-shaped, deterministic equivalent.
+
+    The default torchlib `aten_histc` translation rejects integer input (`torch.histc only
+    works on float`), and the obvious workaround — casting to float — calls `_histc_cuda`
+    which has no deterministic implementation on CUDA. `bincount`'s output is an unbacked
+    SymInt under torch.export and trips downstream meta-shape guards (e.g. grouped_mm's
+    `offs` size check). Pre-allocating `torch.zeros(bins)` + `scatter_add_` keeps the output
+    shape pinned to `bins` (a Python int), and `scatter_add_` is deterministic on integer
+    indices.
+    """
+
+    def patch(input, bins=100, min=0, max=0, *, out=None):
+        flat = input.reshape(-1)
+        if max == min == 0:
+            min_val = flat.min().float()
+            max_val = flat.max().float()
+        else:
+            min_val = torch.tensor(float(min), device=flat.device)
+            max_val = torch.tensor(float(max), device=flat.device)
+        bin_width = (max_val - min_val) / bins
+        idx = ((flat.float() - min_val) / bin_width).long().clamp_(0, bins - 1)
+        out_dtype = input.dtype if input.is_floating_point() else torch.float
+        counts = torch.zeros(bins, dtype=out_dtype, device=input.device)
+        return counts.scatter_add_(0, idx, torch.ones_like(idx, dtype=out_dtype))
+
+    return patch
+
+
+@register_patch("onnx", "onnxscript.onnx_opset._impl.opset13.Opset13.Constant")
+def _patch_opset13_constant(original):
+    """Substitute `op.Constant(value_ints=[])` with an explicit empty INT64 tensor.
+
+    Upstream onnxscript's `aten_index_put` does `op.Constant(value_ints=none_indices)`
+    where `none_indices` can be empty (when every input dim has an advanced index).
+    `onnx_ir` then logs an ambiguous-type warning because an empty Python list has no
+    derivable element type. Swap the empty-`value_ints` call for `value=ir.tensor([], INT64)`
+    — semantically identical, no ambiguity. Drop once onnxscript fixes the call site.
+    """
+
+    def patch(self, *args, **kwargs):
+        if kwargs.get("value_ints") == []:
+            kwargs.pop("value_ints")
+            kwargs["value"] = onnx_ir.tensor(np.array([], dtype=np.int64))
+        return original(self, *args, **kwargs)
+
+    return patch
+
+
+def _patch_cummax_or_cummin(original, *, mode: str):
+    """Decompose cummax/cummin via triangular-mask reduction (O(N^2) memory)."""
+
+    def patch(input, dim):
+        n = input.shape[dim]
+        x = input.movedim(dim, -1)  # (..., n)
+        x_grid = x.unsqueeze(-2).expand(*x.shape[:-1], n, n)  # (..., n, n)
+        include = torch.ones(n, n, dtype=torch.bool, device=input.device).tril()
+        if input.dtype == torch.bool:
+            fill_val = mode != "max"
+        elif input.is_floating_point():
+            fill_val = torch.finfo(input.dtype).min if mode == "max" else torch.finfo(input.dtype).max
+        else:
+            fill_val = torch.iinfo(input.dtype).min if mode == "max" else torch.iinfo(input.dtype).max
+        fill = torch.full((), fill_val, dtype=input.dtype, device=input.device)
+        masked = torch.where(include, x_grid, fill)
+        out = masked.max(dim=-1) if mode == "max" else masked.min(dim=-1)
+        return out.values.movedim(-1, dim), out.indices.movedim(-1, dim)
+
+    return patch
+
+
+@register_patch("onnx", "torch.cummax", "torch.Tensor.cummax")
+def _patch_cummax(original):
+    return _patch_cummax_or_cummin(original, mode="max")
+
+
+@register_patch("onnx", "torch.cummin", "torch.Tensor.cummin")
+def _patch_cummin(original):
+    return _patch_cummax_or_cummin(original, mode="min")
+
+
+@register_patch("onnx", "torch.exp", "torch.Tensor.exp")
+def _patch_exp(original):
+    """Lower `exp` on complex tensors via Euler — onnxscript has no dispatch for `aten.exp` on
+    complex inputs. Real inputs hit the original path."""
+
+    def patch(input):
+        if torch.is_complex(input):
+            magnitude = original(input.real)
+            return torch.complex(magnitude * input.imag.cos(), magnitude * input.imag.sin())
+        return original(input)
+
+    return patch
+
+
+@register_patch("onnx", "torch.fft.irfft")
+def _patch_irfft(original):
+    """Replace `irfft` with `ifft` over the conjugate-mirrored input — ORT's `DFT` op rejects the
+    `is_onesided=1`/`inverse=1` combination that torch's `irfft` lowers to. Mirroring restores the
+    full spectrum so the inverse path uses two-sided DFT, which ORT accepts. Assumes even `n`
+    (which is the common case for STFT-based audio codecs)."""
+
+    def patch(input, n=None, dim=-1, norm=None):
+        if n is None:
+            n = 2 * (input.shape[dim] - 1)
+        slc = [slice(None)] * input.ndim
+        slc[dim] = slice(1, -1)
+        full = torch.cat([input, input[tuple(slc)].flip(dims=[dim]).conj()], dim=dim)
+        return torch.fft.ifft(full, n=n, dim=dim, norm=norm).real
+
+    return patch
+
+
+@register_patch("onnx", "torch.bucketize")
+def _patch_bucketize(original):
+    """Vectorized bucketize avoiding scalar-constant tensors that cause alias/detach issues."""
+
+    def patch(input, boundaries, *, out_int32=False, right=False):
+        if boundaries.numel() == 0:
+            result = torch.zeros_like(input, dtype=torch.int64)
+            return result.to(torch.int32) if out_int32 else result
+        if right:
+            mask = boundaries <= input.unsqueeze(-1)
+        else:
+            mask = boundaries < input.unsqueeze(-1)
+        result = mask.sum(-1)
+        return result.to(torch.int32) if out_int32 else result
+
+    return patch
+
+
+@register_patch("onnx", "torch.searchsorted")
+def _patch_searchsorted(original):
+    """Decompose searchsorted via broadcast comparison + sum — no ONNX op for searchsorted.
+
+    For sorted inputs the insertion index equals the count of elements satisfying
+    the comparison (< for left, <= for right). This is O(N*M) instead of the
+    real binary-search O(M log N) but only uses ops with ONNX translations.
+    """
+
+    def patch(sorted_sequence, values, *, out_int32=False, right=False, side=None, out=None, sorter=None):
+        if side is not None:
+            right = side == "right"
+        if right:
+            mask = sorted_sequence.unsqueeze(-1) <= values.unsqueeze(-2)
+        else:
+            mask = sorted_sequence.unsqueeze(-1) < values.unsqueeze(-2)
+        result = mask.sum(-2)
+        return result.to(torch.int32) if out_int32 else result
+
+    return patch
+
+
+@register_patch("onnx", "torch.full")
+def _patch_full(original):
+    """Force dtype=torch.long when fill_value is int and no dtype specified (ONNX defaults to float32)."""
+
+    def patch(*args, dtype=None, **kwargs):
+        if dtype is None:
+            # find fill_value: positional arg or kwarg
+            fill_value = kwargs.get("fill_value", args[1] if len(args) > 1 else None)
+            if isinstance(fill_value, int):
+                dtype = torch.long
+        return original(*args, dtype=dtype, **kwargs)
+
+    return patch
+
+
+@register_patch("onnx", "torch.masked.mean")
+def _patch_masked_mean(original):
+    """Manual masked mean: avoids sum/int_count Div type mismatch in ONNX."""
+
+    def patch(input, *, mask, dim=None, keepdim=False, dtype=None):
+        mask_float = mask.float()
+        n = mask_float.sum(dim=dim, keepdim=True).clamp(min=1.0)
+        result = (input * mask_float).sum(dim=dim, keepdim=keepdim) / (n if keepdim else n.squeeze())
+        return result.to(dtype) if dtype is not None else result
+
+    return patch
+
+
+@register_patch("onnx", "torch.masked.var")
+def _patch_masked_var(original):
+    """Manual masked var: avoids sum/int_count Div type mismatch in ONNX."""
+
+    def patch(input, *, mask, dim=None, keepdim=False, unbiased=True):
+        mask_float = mask.float()
+        n = mask_float.sum(dim=dim, keepdim=True).clamp(min=1.0)
+        mean = (input * mask_float).sum(dim=dim, keepdim=True) / n
+        var = ((input - mean).pow(2) * mask_float).sum(dim=dim, keepdim=keepdim)
+        denom = (n - 1.0) if unbiased else n
+        if not keepdim:
+            denom = denom.squeeze()
+        return var / denom.clamp(min=1.0)
+
+    return patch
+
+
+@register_patch("onnx", "torch.Tensor.masked_scatter")
+def _patch_masked_scatter(original):
+    """Cumsum-gather-where strategy for masked_scatter (avoids ScatterND ORT failures)."""
+
+    def patch(self, mask, source):
+        mask = mask.expand_as(self)
+        flat_mask = mask.reshape(-1)
+        positions = (flat_mask.to(torch.int64).cumsum(0) - 1).clamp(min=0)
+        gathered = source.reshape(-1)[positions]
+        return torch.where(flat_mask, gathered, self.reshape(-1)).reshape(self.shape)
+
+    return patch
+
+
+@register_patch("onnx", "torch.roll")
+def _patch_roll(original):
+    """Replace `torch.roll(input, shifts, dims)` with explicit `narrow + cat` shifts.
+
+    `torch.roll`'s torch.export lowering emits a `Shape(start, end)` op that can resolve to an
+    empty INT64 result; the downstream `Slice` then has mismatched `axes` and `ends` lengths
+    and ORT rejects the graph with `ShapeInferenceError` (seen in Gemma4-Unified Vision2Text,
+    where roll is composed with an in-place scatter `[..., 0] = value`). The explicit form is
+    bit-exact and traces to plain Slice + Concat nodes.
+    """
+
+    def patch(input, shifts, dims=None):
+        if isinstance(shifts, int) and isinstance(dims, int):
+            shifts = (shifts,)
+            dims = (dims,)
+        elif not (isinstance(shifts, (tuple, list)) and isinstance(dims, (tuple, list)) and len(shifts) == len(dims)):
+            return original(input, shifts, dims)
+
+        out = input
+        for shift, dim in zip(shifts, dims):
+            length = out.size(dim)
+            shift = shift % length if length > 0 else 0
+            if shift == 0:
+                continue
+            front = out.narrow(dim, length - shift, shift)
+            back = out.narrow(dim, 0, length - shift)
+            out = torch.cat([front, back], dim=dim)
+        return out
+
+    return patch
+
+
+# ── Stage 2: ONNX patches ──────────────────────────────────────────────────────
+# Reversible swaps of `torch.onnx` internals via `@register_patch("onnx", path)`.
+# Currently a single hook that intercepts the private `_prepare_exported_program_for_export`
+# step so the FX node fixes (stage 3) run immediately after `run_decompositions` —
+# any new symbolic-guard nodes the ONNX decomposition introduces get repaired before
+# the FX → ONNX lowering picks them up.
+
+
+@register_patch("onnx", "torch.onnx._internal.exporter._core._prepare_exported_program_for_export")
+def _patch_prepare_for_export(original):
+    """Run the FX node fixes immediately after the ONNX internal decomposition step.
+
+    `torch.onnx.export` internally calls `run_decompositions` with the ONNX
+    decomposition table, which can introduce new symbolic-guard nodes (e.g.
+    `operator.le(sym_size, int_oo)`). These overflow during ONNX translation.
+    Wrapping the prepare step lets us apply our FX fixes immediately after.
+
+    <Tip warning={true}>
+
+    This hooks `torch.onnx._internal.exporter._core._prepare_exported_program_for_export`,
+    a private PyTorch API. It may break on PyTorch version upgrades. If it does,
+    find the new entry point in `torch/onnx/_internal/exporter/_core.py`
+    where `ExportedProgram.run_decompositions` is called and hook there instead.
+
+    </Tip>
+    """
+
+    def patch(ep, *, registry):
+        result = original(ep, registry=registry)
+        apply_fx_node_fixes("onnx", result.graph_module)
+        return result
+
+    return patch
+
+
+# ── Stage 3: FX node fixes ───────────────────────────────────────────────────
+# `@register_fx_node_fix("onnx")` on `(gm, node) -> bool` per-node fixers, applied
+# in place by `apply_fx_node_fixes("onnx", gm)`. Return `True` to consume the node;
+# DCE runs at the end of the walk. Triggered twice in the pipeline: once explicitly
+# after `torch.export`, once via the stage 2 patch after `run_decompositions`.
+
+
+_COMPARISON_OPS = frozenset({operator.le, operator.lt, operator.ge, operator.gt, operator.eq, operator.ne})
+
+
+@register_fx_node_fix("onnx")
+def _fix_dead_comparison(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Erase or constant-fold comparison nodes involving symbolic infinities.
+
+    torch.export emits guards like ``%le_3 = operator.le(sym_size, int_oo)`` where
+    ``int_oo`` is a sympy ``IntInfinity`` object.  The ONNX translator tries to lower it
+    to a C long and overflows.  Two cases handled:
+
+    * No users → erase the node outright (PyTorch DCE skips Python callables).
+    * Any arg is a non-FX-Node constant (e.g. ``int_oo``) → evaluate the comparison at
+      graph-construction time, replace all uses with the Python bool result, and erase.
+    """
+    if node.target not in _COMPARISON_OPS:
+        return False
+    if len(node.users) == 0:
+        gm.graph.erase_node(node)
+        return True
+    # Check if any arg is a compile-time constant (not a graph Node).
+    if any(not isinstance(a, torch.fx.Node) for a in node.args):
+        try:
+            result = node.target(*node.args)
+        except Exception:
+            return False
+        node.replace_all_uses_with(result)
+        gm.graph.erase_node(node)
+        return True
+    return False
+
+
+@register_fx_node_fix("onnx")
+def _fix_alias(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Replace alias(x) -> x to break the alias -> detach_ -> index_put_ chain."""
+    if node.target is not torch.ops.aten.alias.default:
+        return False
+    node.replace_all_uses_with(node.args[0])
+    gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("onnx")
+def _fix_detach_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Replace in-place detach_ with out-of-place detach."""
+    if node.target is not torch.ops.aten.detach_.default:
+        return False
+    with gm.graph.inserting_before(node):
+        new = gm.graph.call_function(torch.ops.aten.detach.default, args=node.args, kwargs=node.kwargs)
+    node.replace_all_uses_with(new)
+    gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("onnx")
+def _fix_index_put_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Replace in-place index_put_ with out-of-place index_put."""
+    if node.target is not torch.ops.aten.index_put_.default:
+        return False
+    with gm.graph.inserting_before(node):
+        new = gm.graph.call_function(torch.ops.aten.index_put.default, args=node.args, kwargs=node.kwargs)
+    node.replace_all_uses_with(new)
+    gm.graph.erase_node(node)
+    return True
+
+
+_ASSERTION_OPS = set()
+if is_torch_available():
+    _ASSERTION_OPS.update(
+        {
+            torch.ops.aten._assert_async.default,
+            torch.ops.aten._assert_async.msg,
+            torch.ops.aten._assert_scalar.default,
+            torch.ops.aten._assert_tensor_metadata.default,
+            torch.ops.aten.sym_constrain_range_for_size.default,
+        }
+    )
+
+
+@register_fx_node_fix("onnx")
+def _fix_assertion(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Erase assertion / shape-constraint nodes that have no ONNX equivalent."""
+    if node.target not in _ASSERTION_OPS:
+        return False
+    gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("onnx")
+def _fix_fill_diagonal_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Replace in-place fill_diagonal_ with out-of-place equivalent."""
+    if node.target is not torch.ops.aten.fill_diagonal_.default:
+        return False
+    with gm.graph.inserting_before(node):
+        tensor_arg = node.args[0]
+        fill_value = node.args[1]
+        # Build diagonal mask and use where
+        rows = gm.graph.call_function(torch.ops.aten.sym_size.int, args=(tensor_arg, 0))
+        cols = gm.graph.call_function(torch.ops.aten.sym_size.int, args=(tensor_arg, 1))
+        eye = gm.graph.call_function(torch.ops.aten.eye.default, args=(rows, cols))
+        eye_bool = gm.graph.call_function(torch.ops.aten.to.dtype, args=(eye, torch.bool))
+        fill_tensor = gm.graph.call_function(torch.ops.aten.full_like.default, args=(tensor_arg, fill_value))
+        new = gm.graph.call_function(torch.ops.aten.where.self, args=(eye_bool, fill_tensor, tensor_arg))
+    node.replace_all_uses_with(new)
+    gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("onnx")
+def _fix_triu_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Replace in-place triu_ with out-of-place triu."""
+    if node.target is not torch.ops.aten.triu_.default:
+        return False
+    with gm.graph.inserting_before(node):
+        new = gm.graph.call_function(torch.ops.aten.triu.default, args=node.args, kwargs=node.kwargs)
+    node.replace_all_uses_with(new)
+    gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("onnx")
+def _fix_sort_stable(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Replace aten.sort.stable with aten.sort.default (which has ONNX translation)."""
+    if node.target is not torch.ops.aten.sort.stable:
+        return False
+    self_arg = node.args[0]
+    dim = node.args[2] if len(node.args) > 2 else -1
+    descending = node.args[3] if len(node.args) > 3 else False
+    with gm.graph.inserting_before(node):
+        new = gm.graph.call_function(torch.ops.aten.sort.default, args=(self_arg, dim, descending))
+    node.replace_all_uses_with(new)
+    gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("onnx")
+def _fix_remainder_scalar(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Rewrite remainder.Scalar to remainder.Tensor when the 'scalar' arg is actually a tensor.
+
+    After decomposition the second operand of ``aten.remainder.Scalar`` can be a graph
+    node (SymbolicTensor) rather than a Python scalar.  The ONNX torchlib translation for
+    ``remainder.Scalar`` calls ``int()`` on it and crashes.  Rewriting to
+    ``remainder.Tensor`` uses the two-tensor ONNX translation which handles this correctly.
+    """
+    if node.target is not torch.ops.aten.remainder.Scalar:
+        return False
+    if len(node.args) < 2 or not isinstance(node.args[1], torch.fx.Node):
+        return False
+    with gm.graph.inserting_before(node):
+        new = gm.graph.call_function(torch.ops.aten.remainder.Tensor, args=node.args)
+    node.replace_all_uses_with(new)
+    gm.graph.erase_node(node)
+    return True
+
+
+# ── Stage 4: ONNX translations ────────────────────────────────────────────────
+# Custom onnxscript `_aten_*` functions registered in `_ONNX_TRANSLATION_TABLE`
+# that override `torchlib`'s default lowering for specific aten ops where the
+# default is buggy or missing. Passed to `torch.onnx.export` as `custom_translation_table`.
+
+
+def _values_broadcast_to_self(values: TReal, self: TReal) -> bool:
+    """Static-shape check: does ``values.shape`` broadcast against ``self.shape``?
+
+    Returns ``True`` only when every dim of ``values`` is statically known and either
+    equals the corresponding (right-aligned) dim of ``self`` or is ``1``. Used to dispatch
+    `_aten_index_put` between the broadcast and flat-gather paths — bailing on dynamic /
+    unknown dims keeps us on the safe flat-gather fallback.
+    """
+    if values.shape is None or self.shape is None or len(values.shape) > len(self.shape):
+        return False
+    offset = len(self.shape) - len(values.shape)
+    for v_dim, s_dim in zip(values.shape, self.shape[offset:]):
+        try:
+            v_dim, s_dim = int(v_dim), int(s_dim)
+        except (TypeError, ValueError):
+            return False
+        if v_dim != 1 and v_dim != s_dim:
+            return False
+    return True
+
+
+def _aten_index_put(
+    self: TReal,
+    indices: Sequence[INT64 | BOOL | None],
+    values: TReal,
+    accumulate: bool = False,
+) -> TReal:
+    """Bool-mask index_put with two paths; delegates non-bool-mask cases to torchlib.
+
+    For `self[bool_mask] = values`, PyTorch supports two distinct shapes for ``values``:
+    1. Broadcasts against ``self.shape`` (e.g. scalar `tensor[~mask] = 0`) — handled by
+       `Expand(values, Shape(self)) + Where(mask, expanded, self)`.
+    2. Equals ``bool_mask.sum()`` along its first dim, with remaining dims matching
+       ``self`` (e.g. `inputs_embeds[image_mask] = image_features_flat`) — handled by
+       the flat cumulative-count-Gather + Where trick.
+
+    Path 1 is correct only when broadcast-compatibility can be statically verified — for
+    dynamic shapes we fall through to path 2, which is also torchlib's default behaviour.
+    """
+    bool_mask = indices[0]
+    is_bool = (
+        bool_mask is not None and getattr(getattr(bool_mask, "type", None), "dtype", None) == onnx_ir.DataType.BOOL
+    )
+    if not is_bool:
+        return aten_index_put(self, indices, values, accumulate)
+    for _ in range(len(self.shape) - len(bool_mask.shape)):
+        bool_mask = op.Unsqueeze(bool_mask, op.Constant(value_ints=[-1]))
+    expanded_mask = op.Expand(bool_mask, op.Shape(self))
+    if _values_broadcast_to_self(values, self):
+        expanded_values = op.Expand(values, op.Shape(self))
+        return op.Where(expanded_mask, expanded_values, self)
+    flat_mask = op.Reshape(expanded_mask, op.Constant(value_ints=[-1]))
+    flat_mask_int = op.Cast(flat_mask, to=7)  # INT64
+    cs = op.CumSum(flat_mask_int, op.Constant(value_ints=[0]))
+    positions = op.Clip(op.Sub(cs, op.Constant(value_ints=[1])), op.Constant(value_ints=[0]))
+    flat_values = op.Reshape(values, op.Constant(value_ints=[-1]))
+    gathered = op.Gather(flat_values, positions)
+    flat_self = op.Reshape(self, op.Constant(value_ints=[-1]))
+    result = op.Where(flat_mask, gathered, flat_self)
+    return op.Reshape(result, op.Shape(self))
+
+
+def _aten_bincount(self: INT64, weights=None, minlength: int = 0) -> INT64:
+    """ONNX implementation of `torch.bincount`: count occurrences of non-negative ints.
+
+    No native ONNX op. We use `OneHot(self, depth=max+1, values=[0,1])` then `ReduceSum`
+    along the input axis. Weights are unused (splinter's only caller passes none).
+    """
+    one = op.Constant(value_ints=[1])
+    max_val = op.Unsqueeze(op.ReduceMax(self, keepdims=0), op.Constant(value_ints=[0]))
+    depth = op.Add(max_val, one)
+    if minlength > 0:
+        depth = op.Max(depth, op.Constant(value_ints=[minlength]))
+    one_hot = op.OneHot(self, depth, op.Constant(value_ints=[0, 1]), axis=-1)
+    return op.ReduceSum(one_hot, op.Constant(value_ints=[0]), keepdims=0)
+
+
+def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dtype=None) -> TReal:
+    """ONNX implementation of `aten._grouped_mm.default`.
+
+    `_grouped_mm(mat_a: (M, K), mat_b: (G, K, N), offs: (G,))` computes `out[r] =
+    mat_a[r] @ mat_b[group(r)]` where rows are sorted by group and `offs` holds the
+    cumulative end index per group.
+
+    Per-group `Slice + MatMul + Concat`. `G` (number of experts) is static for any
+    concrete model, so unroll at translation time: emit one `Slice + MatMul` triple
+    per group and a final `Concat`. Avoids the `(M, K, N)` materialisation a naive
+    `weight[group_idx]` gather would emit — peak memory is `O(M·N + max(n_g)·K + K·N)`.
+    """
+    G = mat_b.shape[0]
+    if not isinstance(G, int):
+        raise ValueError("_aten_grouped_mm: number of experts (mat_b.shape[0]) must be static at translation time")
+
+    offs_i64 = op.Cast(offs, to=7)
+    axes_0 = op.Constant(value_ints=[0])
+    zero_1d = op.Constant(value_ints=[0])
+
+    outputs = []
+    prev_end = zero_1d
+    for g in range(G):
+        g_lo = op.Constant(value_ints=[g])
+        g_hi = op.Constant(value_ints=[g + 1])
+        end = op.Slice(offs_i64, g_lo, g_hi, axes_0)  # (1,) — offs[g]
+        a_g = op.Slice(mat_a, prev_end, end, axes_0)  # (n_g, K)
+        w_g = op.Squeeze(op.Slice(mat_b, g_lo, g_hi, axes_0), axes_0)  # (K, N)
+        outputs.append(op.MatMul(a_g, w_g))  # (n_g, N)
+        prev_end = end
+
+    return op.Concat(*outputs, axis=0)  # (M, N)
+
+
+def _aten_repeat_interleave_self_int(self, repeats, dim=None, output_size=None):
+    """ONNX implementation of `aten.repeat_interleave.self_int`.
+
+    Torchlib's translation raises on `dim is None` and broadcasts incorrectly for the
+    1-D + symbolic-repeats case (its tile shape is `[r, 1]` instead of `[1, r]`). We
+    always rewrite: flatten when `dim is None`, then `Unsqueeze + Tile + Reshape` along
+    the chosen axis. Handles both Python-int and 0-D-tensor `repeats`.
+    """
+    if dim is None:
+        flat = op.Reshape(self, op.Constant(value_ints=[-1]))
+        unsq = op.Unsqueeze(flat, op.Constant(value_ints=[1]))
+        if isinstance(repeats, int):
+            tile_shape = op.Constant(value_ints=[1, repeats])
+        else:
+            r = op.Reshape(op.Cast(repeats, to=7), op.Constant(value_ints=[-1]))
+            tile_shape = op.Concat(op.Constant(value_ints=[1]), r, axis=0)
+        return op.Reshape(op.Tile(unsq, tile_shape), op.Constant(value_ints=[-1]))
+
+    self_rank = len(self.shape)
+    pos_dim = (dim + self_rank) % self_rank
+    unsq = op.Unsqueeze(self, op.Constant(value_ints=[pos_dim + 1]))
+    if isinstance(repeats, int):
+        tiles = [1] * (self_rank + 1)
+        tiles[pos_dim + 1] = repeats
+        tile_shape = op.Constant(value_ints=tiles)
+    else:
+        r = op.Reshape(op.Cast(repeats, to=7), op.Constant(value_ints=[-1]))
+        tile_shape = op.Concat(
+            op.Constant(value_ints=[1] * (pos_dim + 1)),
+            r,
+            op.Constant(value_ints=[1] * (self_rank - pos_dim - 1)),
+            axis=0,
+        )
+    tiled = op.Tile(unsq, tile_shape)
+    final_shape = op.Concat(
+        op.Shape(self, start=0, end=pos_dim),
+        op.Constant(value_ints=[-1]),
+        op.Shape(self, start=pos_dim + 1),
+        axis=0,
+    )
+    return op.Reshape(tiled, final_shape)
+
+
+def _operator_floordiv(self, other):
+    """Correct floor division (toward -inf) for signed integer SymInts.
+
+    Torchlib's `operator_floordiv` translation only handles positive operands (plain `Div`,
+    which truncates). For signed ints — including SymInt shape arithmetic — apply the
+    offset correction `floor(a/b) = trunc(a/b) - (sign(a) != sign(b) AND a mod b != 0)`,
+    matching `aten_floor_divide`. Without this, the Python ceil-div idiom `-(-x // y)`
+    produces `1 + trunc((y - 1 - x) / y)` instead of `ceil(x / y)`, which silently breaks
+    any shape arithmetic that crosses zero.
+    """
+    offset = op.And(
+        op.Not(op.Equal(op.Sign(self), op.Sign(other))),
+        op.Cast(op.Mod(self, other), to=onnx_ir.DataType.BOOL.value),
+    )
+    dtype = self.dtype.value if hasattr(self, "dtype") else other.dtype.value
+    return op.Sub(op.Div(self, other), op.Cast(offset, to=dtype))
+
+
+def _aten_masked_fill(self, mask, value):
+    """ONNX implementation of `aten.masked_fill.{Scalar,Tensor}`.
+
+    Upstream torchlib lowers this to `Where(mask, value, self)`. ORT's CPU EP has no
+    `Where(16)` kernel for BOOL inputs, so when `self` is BOOL we rewrite the op using
+    boolean primitives: `masked_fill(self, mask, True)` → `self | mask`,
+    `masked_fill(self, mask, False)` → `self & ~mask`. Non-bool `self` keeps the default.
+    """
+    if self.dtype == onnx_ir.DataType.BOOL:
+        fill_true = bool(value) if isinstance(value, (bool, int, float)) else bool(value.const_value.numpy())
+        if fill_true:
+            return op.Or(self, mask)
+        return op.And(self, op.Not(mask))
+    value_cast = op.CastLike(value, self)
+    return op.Where(mask, value_cast, self)
+
+
+_ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
+if is_onnxscript_available():
+    _ONNX_TRANSLATION_TABLE.update(
+        {
+            torch.ops.aten.bincount.default: _aten_bincount,
+            torch.ops.aten.index_put.default: _aten_index_put,
+            torch.ops.aten._grouped_mm.default: _aten_grouped_mm,
+            torch.ops.transformers.grouped_mm_fallback.default: _aten_grouped_mm,
+            torch.ops.aten.repeat_interleave.self_int: _aten_repeat_interleave_self_int,
+            torch.ops.aten.masked_fill.Scalar: _aten_masked_fill,
+            torch.ops.aten.masked_fill.Tensor: _aten_masked_fill,
+            operator.floordiv: _operator_floordiv,
+        }
+    )
+
+
+# ── Stage 5: ONNX IR fixes ────────────────────────────────────────────────────
+# Post-export in-place fixes to the `ONNXProgram` IR for ORT compatibility. Each
+# fix has signature `(graph_like) -> None` and is applied to both the top-level
+# graph and every function via `apply_onnx_ir_fixes`.
+#
+# Unlike the other stages, this one is a plain `_IR_FIXES` list rather than a
+# decorator-driven registry — there's currently only one entry and we expect ORT
+# to fix the underlying bug upstream soon, so the registry boilerplate isn't worth it.
+#
+# To add a new fix: implement `_fix_ir_*` and append to `_IR_FIXES`.
+
+
+def _fix_ir_topk_sorted(graph_like: onnx_ir.Graph) -> None:
+    """Set sorted=1 on TopK nodes (ORT CUDA EP rejects TopK without it)."""
+    for ir_node in list(graph_like.all_nodes()):
+        if ir_node.op_type == "TopK":
+            ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
+
+
+_IR_FIXES = [
+    _fix_ir_topk_sorted,
+]
+
+
+def apply_onnx_ir_fixes(onnx_program: ONNXProgram) -> None:
+    """Apply each `(graph_like) -> None` IR fix to the main graph and every function."""
+    graphs = [onnx_program.model.graph, *onnx_program.model.functions.values()]
+    for fix in _IR_FIXES:
+        for graph in graphs:
+            fix(graph)

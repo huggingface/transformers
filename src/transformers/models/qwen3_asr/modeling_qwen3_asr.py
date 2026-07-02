@@ -392,7 +392,9 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         chunk_lengths = (
             input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1).reshape(-1).to(torch.long)
         )
-        cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
+        cu_seqlens = get_audio_cu_seqlens(
+            chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
+        )
 
         # Chunk and process through CNN
         chunked = (

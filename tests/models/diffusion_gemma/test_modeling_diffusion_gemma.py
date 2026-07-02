@@ -181,8 +181,6 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
     all_generative_model_classes = ()  # No class inherits `GenerationMixin`
     additional_model_inputs = ["mm_token_type_ids", "decoder_input_ids", "image_position_ids"]
 
-    test_torch_exportable = False  # This model always returns cache -> export test fails in `_get_leaf_tensors`
-
     def setUp(self):
         self.model_tester = DiffusionGemmaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DiffusionGemmaConfig, has_text_modality=False)

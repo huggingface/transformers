@@ -51,21 +51,31 @@ def get_vision_cu_seqlens(grid_thw: torch.Tensor, kwargs: dict | None = None) ->
 
 
 def get_vision_position_ids(
-    grid_thw: torch.Tensor, spatial_merge_size: int | torch.Tensor, kwargs: dict | None = None
+    grid_thw: torch.Tensor,
+    spatial_merge_size: int | torch.Tensor,
+    include_temporal: bool = False,
+    kwargs: dict | None = None,
 ) -> torch.Tensor:
-    """Get (row, col) position IDs for vision rotary embeddings, or pop from `kwargs` if precomputed.
+    """Get position IDs for vision rotary embeddings, or pop from `kwargs` if precomputed.
 
     Args:
         grid_thw: `(num_images_or_videos, 3)`
         spatial_merge_size: merge block size — either a single `int` (same for all images)
             or a `(num_images_or_videos,)` tensor (per-image).
         kwargs: optional caller kwargs — if it contains `"position_ids"` it is popped and returned.
+        include_temporal: when ``True``, prepend a temporal-index column and return
+            `(total_tokens, 3)` — for encoders whose rotary embedding rotates T/H/W axes
+            (minimax_m3_vl). When ``False`` (default), return `(total_tokens, 2)` for the
+            2-axis (h, w) case (qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl); the h/w
+            indices are still repeated ``t`` times for video inputs.
 
     Returns:
-        `position_ids`: `(total_tokens, 2)` long — (row, col) position per token.
+        `position_ids`: `(total_tokens, 3)` long if ``include_temporal`` else `(total_tokens, 2)`,
+        with the spatial indices laid out block-major over ``m×m`` spatial-merge blocks.
     """
     if kwargs is not None and (position_ids := kwargs.pop("position_ids", None)) is not None:
         return position_ids
+
     device = grid_thw.device
     if isinstance(spatial_merge_size, int):
         spatial_merge_size = torch.tensor([spatial_merge_size], device=device).expand(len(grid_thw))
@@ -77,10 +87,14 @@ def get_vision_position_ids(
             torch.arange(w, device=device),
             indexing="ij",
         )
-
-        hpos_ids = hpos_ids.reshape(h // merge_size, merge_size, w // merge_size, merge_size).transpose(1, 2).flatten()
-        wpos_ids = wpos_ids.reshape(h // merge_size, merge_size, w // merge_size, merge_size).transpose(1, 2).flatten()
-        position_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
+        block_shape = (h // merge_size, merge_size, w // merge_size, merge_size)
+        hpos_ids = hpos_ids.reshape(block_shape).transpose(1, 2).flatten()
+        wpos_ids = wpos_ids.reshape(block_shape).transpose(1, 2).flatten()
+        if include_temporal:
+            tpos_ids = torch.arange(t, device=device).repeat_interleave(h * w)
+            position_ids.append(torch.stack([tpos_ids, hpos_ids.repeat(t), wpos_ids.repeat(t)], dim=-1))
+        else:
+            position_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
 
     return torch.cat(position_ids, dim=0)
 

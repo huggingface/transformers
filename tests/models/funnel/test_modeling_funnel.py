@@ -375,7 +375,7 @@ class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_torch_exportable = False
+    test_torch_exportable = False  # pending unbacked symbols from chunked pooling
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -434,7 +434,7 @@ class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
         (FunnelBaseModel, FunnelForMultipleChoice, FunnelForSequenceClassification) if is_torch_available() else ()
     )
 
-    test_torch_exportable = False
+    test_torch_exportable = False  # pending unbacked symbols from chunked pooling
 
     def setUp(self):
         self.model_tester = FunnelModelTester(self, base=True)
