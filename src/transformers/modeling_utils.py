@@ -52,6 +52,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
+from .distributed.utils import distribute_model, initialize_fully_sharded_data_parallelism
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
@@ -134,7 +135,7 @@ from .utils.import_utils import (
 from .utils.loading_report import LoadStateDictInfo, log_state_dict_report
 from .utils.output_capturing import _CAN_RECORD_REGISTRY, OutputRecorder
 from .utils.quantization_config import QuantizationMethod
-from .distributed.utils import distribute_model, initialize_fully_sharded_data_parallelism
+
 
 if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
@@ -4136,9 +4137,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         gguf_file = kwargs.pop("gguf_file", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
-        tp_size = None
-        use_fsdp_distributed = False
-        use_tp_distributed = False
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
         use_kernels = kwargs.pop("use_kernels", False)
@@ -4199,8 +4197,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             distributed_config.validate()
             config.distributed_config = distributed_config
-            # use_fsdp_distributed = distributed_config is not None and distributed_config.fsdp_size > 1
-            # use_tp_distributed = distributed_config is not None and distributed_config.tp_size > 1
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")

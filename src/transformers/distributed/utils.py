@@ -16,9 +16,9 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+from ..integrations.tensor_parallel import apply_tensor_parallelism
 from ..utils import is_torch_available, is_torch_greater_or_equal
 from .fsdp import apply_fully_sharded_data_parallelism
-from ..integrations.tensor_parallel import apply_tensor_parallelism
 
 
 if TYPE_CHECKING:
@@ -28,7 +28,8 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
-    #TODO(3outeille): guarding?
+
+    # TODO(3outeille): guarding?
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.state_dict import (
         StateDictOptions,
@@ -112,9 +113,7 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
 
     fsdp_size = distributed_config.fsdp_size
 
-    assert world_size == fsdp_size, (
-        f"world_size ({world_size}) must be equal to fsdp_size ({fsdp_size})"
-    )
+    assert world_size == fsdp_size, f"world_size ({world_size}) must be equal to fsdp_size ({fsdp_size})"
 
     dims, names = [], []
     if fsdp_size > 1:
