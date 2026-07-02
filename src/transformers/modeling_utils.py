@@ -78,7 +78,6 @@ from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     _get_parameter_tp_plan,
-    distribute_model,
     gather_state_dict_for_save,
     initialize_tensor_parallelism,
     shard_and_distribute_module,
@@ -135,7 +134,7 @@ from .utils.import_utils import (
 from .utils.loading_report import LoadStateDictInfo, log_state_dict_report
 from .utils.output_capturing import _CAN_RECORD_REGISTRY, OutputRecorder
 from .utils.quantization_config import QuantizationMethod
-
+from .distributed.utils import distribute_model, initialize_fully_sharded_data_parallelism
 
 if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
@@ -4135,18 +4134,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         adapter_name = kwargs.pop("adapter_name", "default")
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
-        tp_plan = kwargs.pop("tp_plan", None)
-        tp_size = kwargs.pop("tp_size", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
+        tp_size = None
+        use_fsdp_distributed = False
+        use_tp_distributed = False
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
         use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
-
-        if distributed_config is not None and tp_plan is None:
-            tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
         for name in ["mirror", "_fast_init", "low_cpu_mem_usage", "from_tf", "from_flax", "offload_state_dict"]:
@@ -4184,10 +4181,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ": PartialState().process_index} where PartialState comes from accelerate library"
             )
 
-        if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
-            device_map, device_mesh, tp_size = initialize_tensor_parallelism(
-                tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
-            )
+        if distributed_config is not None:
+            if isinstance(distributed_config, dict):
+                distributed_config = DistributedConfig.from_dict(distributed_config)
+
+            if distributed_config.tp_size > 1:
+                if distributed_config.tp_plan is None:
+                    distributed_config.tp_plan = "auto"
+                device_map, device_mesh, tp_size = initialize_tensor_parallelism(
+                    distributed_config.tp_plan,
+                    tp_size=distributed_config.tp_size,
+                    device_mesh=device_mesh,
+                    device_map=device_map,
+                )
+            elif distributed_config.fsdp_size > 1:
+                device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
+
+            distributed_config.validate()
+            config.distributed_config = distributed_config
+            # use_fsdp_distributed = distributed_config is not None and distributed_config.fsdp_size > 1
+            # use_tp_distributed = distributed_config is not None and distributed_config.tp_size > 1
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
@@ -4341,7 +4354,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
-            model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
+            model = distribute_model(model, distributed_config, device_mesh)
 
         # Prepare the full device map
         if device_map is not None:

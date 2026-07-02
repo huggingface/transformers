@@ -1608,9 +1608,9 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
-    """Distribute a model according to the TP plan."""
-    model._tp_size = tp_size
+def apply_tensor_parallelism(model, tp_plan, distributed_config, device_mesh):
+    """Apply tensor parallelism to a model according to the TP plan."""
+    model._tp_size = distributed_config.tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
         if isinstance(distributed_config, dict):

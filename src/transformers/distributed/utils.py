@@ -17,7 +17,8 @@ import os
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available, is_torch_greater_or_equal
-from .fsdp import apply_fully_sharded_data_parallel
+from .fsdp import apply_fully_sharded_data_parallelism
+from ..integrations.tensor_parallel import apply_tensor_parallelism
 
 
 if TYPE_CHECKING:
@@ -91,7 +92,7 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
-def init_device_mesh(distributed_config: DistributedConfig) -> torch.distributed.device_mesh.DeviceMesh:
+def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
     if not is_torch_greater_or_equal("2.5"):
         raise OSError("Distributed training with DistributedConfig requires `torch>=2.5`.")
 
@@ -103,22 +104,22 @@ def init_device_mesh(distributed_config: DistributedConfig) -> torch.distributed
 
     world_size = torch.distributed.get_world_size()
     if device_type != "cpu":
-        getattr(torch, device_type).set_device(int(os.environ.get("LOCAL_RANK", 0)))
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        getattr(torch, device_type).set_device(local_rank)
+        device_map = torch.device(device_type, local_rank)
+    else:
+        device_map = torch.device(device_type)
 
-    tp_size = distributed_config.tp_size
     fsdp_size = distributed_config.fsdp_size
 
-    assert world_size == tp_size * fsdp_size, (
-        f"world_size ({world_size}) must be equal to tp_size ({tp_size}) * fsdp_size ({fsdp_size})"
+    assert world_size == fsdp_size, (
+        f"world_size ({world_size}) must be equal to fsdp_size ({fsdp_size})"
     )
 
     dims, names = [], []
     if fsdp_size > 1:
         dims.append(fsdp_size)
         names.append("fsdp")
-    if tp_size > 1:
-        dims.append(tp_size)
-        names.append("tp")
 
     # Build the N-dimensional device mesh
     mesh = torch.distributed.init_device_mesh(device_type, tuple(dims), mesh_dim_names=tuple(names))
@@ -126,22 +127,29 @@ def init_device_mesh(distributed_config: DistributedConfig) -> torch.distributed
     if len(dims) > 1:
         mesh._flatten("_".join(names))
 
-    return mesh
+    return device_map, mesh
 
 
-def distribute_model(model, distributed_config: DistributedConfig, device_mesh) -> nn.Module:
-    """Apply TP and/or FSDP2 to `model` based on the mesh dims in `device_mesh`."""
+def distribute_model(
+    model,
+    distributed_config: DistributedConfig,
+    device_mesh,
+) -> nn.Module:
+    """Apply TP or FSDP2 to `model` based on ``distributed_config`` (mutually exclusive for now)."""
     model.config.distributed_config = distributed_config
     model.device_mesh = device_mesh
-    mesh_dim_names = device_mesh.mesh_dim_names or ()
-    if "tp" in mesh_dim_names:
-        from .tensor_parallel import apply_tensor_parallel
 
-        tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-        model = apply_tensor_parallel(model, tp_mesh, distributed_config.tp_plan)
-    if "fsdp" in mesh_dim_names:
+    if distributed_config.tp_size > 1:
+        model = apply_tensor_parallelism(
+            model,
+            distributed_config.tp_plan,
+            distributed_config,
+            device_mesh,
+        )
+    elif distributed_config.fsdp_size > 1:
         fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
-        model = apply_fully_sharded_data_parallel(model, fsdp_mesh)
+        model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+
     return model
 
 
