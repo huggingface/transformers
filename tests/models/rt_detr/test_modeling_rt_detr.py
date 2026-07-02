@@ -759,6 +759,7 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-4, atol=2e-4)
 
+
 @require_torch
 @require_scipy
 @require_vision
