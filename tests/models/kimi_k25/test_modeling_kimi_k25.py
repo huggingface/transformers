@@ -13,14 +13,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch Kimi2.6 model."""
 
-import gc
 import unittest
 
-import requests
 from parameterized import parameterized
 
 from transformers import (
-    AutoProcessor,
     DeepseekV3Config,
     Kimi_K25Config,
     Kimi_K25VisionConfig,
@@ -29,9 +26,7 @@ from transformers import (
 )
 from transformers.cache_utils import Cache
 from transformers.testing_utils import (
-    backend_empty_cache,
     require_torch,
-    slow,
     torch_device,
 )
 
@@ -48,7 +43,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Kimi_K25VisionText2TextModelTester(VLMModelTester):
@@ -216,122 +211,3 @@ class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
     @unittest.skip(reason="Needs to update values in `grid_thw` otherwise it just gets broadcasted")
     def test_mismatching_num_image_tokens(self):
         pass
-
-
-@require_torch
-class Kimi26IntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("todo")
-        self.messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "What kind of dog is this?"},
-                ],
-            }
-        ]
-        url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
-
-    def tearDown(self):
-        gc.collect()
-        backend_empty_cache(torch_device)
-
-    @slow
-    def test_small_model_integration_test(self):
-        model = Kimi_K25ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
-
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
-
-        expected_input_ids = [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 151652, 151655, 151655]  # fmt: skip
-        assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
-
-        expected_pixel_slice = torch.tensor(
-            [
-                [0.8792, 0.8792, 0.9084],
-                [1.1858, 1.1858, 1.2296],
-                [1.2004, 1.2004, 1.2150],
-                [1.4340, 1.4340, 1.4194],
-                [1.3902, 1.4048, 1.4194],
-                [1.5216, 1.5362, 1.5362],
-            ],
-            dtype=torch.float32,
-            device="cpu",
-        )
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3)
-
-        # verify generation
-        inputs = inputs.to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices"
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    def test_small_model_integration_test_batch(self):
-        model = Kimi_K25ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
-            torch_device
-        )
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    def test_small_model_integration_test_expand(self):
-        model = Kimi_K25ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, num_return_sequences=3)
-
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    def test_small_model_integration_test_batch_wo_image(self):
-        model = Kimi_K25ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        messages2 = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Who are you?"},
-        ]
-        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text2], images=[self.image], padding=True, return_tensors="pt").to(
-            torch_device
-        )
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-            'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am a large language model created by Alibaba Cloud. I am called Qwen.'
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
