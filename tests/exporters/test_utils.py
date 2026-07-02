@@ -46,18 +46,8 @@ from transformers.exporters.auto import (
     register_exporter,
 )
 from transformers.exporters.base import HfExporter
-from transformers.exporters.configs import (
-    DynamoConfig,
-    ExecutorchConfig,
-    ExportFormat,
-    OnnxConfig,
-)
-from transformers.testing_utils import (
-    require_executorch,
-    require_onnx,
-    require_onnxscript,
-    require_torch,
-)
+from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
+from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
 from transformers.utils.import_utils import is_torch_available
 
 
@@ -75,8 +65,8 @@ if is_torch_available():
 
 
 CONCRETE_CONFIGS = [
-    (DynamoConfig, ExportFormat.DYNAMO),
     (OnnxConfig, ExportFormat.ONNX),
+    (DynamoConfig, ExportFormat.DYNAMO),
     (ExecutorchConfig, ExportFormat.EXECUTORCH),
 ]
 
