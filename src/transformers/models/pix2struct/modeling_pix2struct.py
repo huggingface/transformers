@@ -39,7 +39,6 @@ from ...utils import (
     DUMMY_MASK,
     TransformersKwargs,
     auto_docstring,
-    is_torchdynamo_compiling,
     logging,
 )
 from .configuration_pix2struct import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
@@ -115,11 +114,15 @@ class Pix2StructVisionEmbeddings(nn.Module):
 class Pix2StructVisionAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.key_value_proj_dim = config.d_kv
         self.n_heads = config.num_attention_heads
         self.dropout = config.attention_dropout
         self.inner_dim = self.n_heads * self.key_value_proj_dim
+        # Pix2Struct does not scale the q/k dot product (T5-style), so the interface scaling is a no-op.
+        self.scaling = 1.0
+        self.is_causal = False
 
         self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.key = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
@@ -132,74 +135,47 @@ class Pix2StructVisionAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        position_bias=None,
-        output_attentions=False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Self-attention block
         """
         # Input is (batch_size, seq_length, dim)
-        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
         batch_size, seq_length = hidden_states.shape[:2]
+        hidden_shape = (batch_size, seq_length, -1, self.key_value_proj_dim)
 
-        def to_projection_shape(states):
-            """projection"""
-            return states.contiguous().view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-
-        # get query states
         # (batch_size, n_heads, seq_length, dim_per_head)
-        query_states = to_projection_shape(self.query(hidden_states))
+        query_states = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # get key/value states
-        key_states = to_projection_shape(self.key(hidden_states))
-        value_states = to_projection_shape(self.value(hidden_states))
-
-        # compute scores
-        # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
-        scores = torch.matmul(query_states, key_states.transpose(3, 2))
-
-        if position_bias is None:
-            position_bias = torch.zeros(
-                (1, self.n_heads, seq_length, seq_length), device=scores.device, dtype=scores.dtype
-            )
-            if self.gradient_checkpointing and self.training:
-                position_bias.requires_grad = True
-
-            if attention_mask.dim() == 2:
-                position_bias = position_bias + attention_mask[:, None, None, :].to(position_bias.device)
-            elif attention_mask is not None:
-                # (batch_size, n_heads, seq_length, key_length)
-                position_bias = position_bias + attention_mask.to(position_bias.device)
-            elif not is_torchdynamo_compiling():
-                attention_mask = torch.ones(
-                    (batch_size, seq_length), device=position_bias.device, dtype=position_bias.dtype
+        # Pix2Struct's vision attention is bidirectional and only relies on the padding mask. As the mask is always
+        # passed as an additive `attention_mask`, `is_causal` is never inferred.
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation != "sdpa":
+                raise ValueError(
+                    "Pix2Struct only supports the `eager` and `sdpa` attention implementations, but got "
+                    f"`{self.config._attn_implementation}`."
                 )
-                position_bias = position_bias + attention_mask.to(position_bias.device)
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-            position_bias = 1 - position_bias
-
-        position_bias_masked = position_bias.masked_fill(position_bias == 1, torch.finfo(scores.dtype).min)
-        scores += position_bias_masked
-        scores = torch.max(scores, torch.tensor(torch.finfo(scores.dtype).min))
-
-        # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(scores, dim=-1, dtype=torch.float32).type_as(scores)
-
-        # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.matmul(attn_weights, value_states)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
         # (batch_size, seq_length, dim)
-        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
-
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.output(attn_output)
 
-        outputs = (attn_output,) + (position_bias,)
-
-        if output_attentions:
-            outputs = outputs + (attn_weights,)
-        return outputs
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5DenseGatedActDense->Pix2StructVisionMlp,T5Config->Pix2StructVisionConfig,config.d_model->config.hidden_size,dropout_rate->dropout_rate
@@ -246,20 +222,18 @@ class Pix2StructVisionLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         residual = hidden_states
 
         # in Pix2StructVision, layernorm is applied before self-attention
         hidden_states = self.pre_attention_layer_norm(hidden_states)
 
-        self_attention_outputs = self.attention(
+        attention_output, attn_weights = self.attention(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
         hidden_states = attention_output + residual
@@ -268,9 +242,7 @@ class Pix2StructVisionLayer(GradientCheckpointingLayer):
         layer_output = self.pre_mlp_layer_norm(hidden_states)
         layer_output = self.mlp(layer_output) + hidden_states  # second residual connection
 
-        outputs = (layer_output,) + outputs
-
-        return outputs
+        return layer_output, attn_weights
 
 
 class Pix2StructVisionEncoder(nn.Module):
@@ -286,27 +258,23 @@ class Pix2StructVisionEncoder(nn.Module):
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ) -> tuple | BaseModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        for i, layer_module in enumerate(self.layer):
+        for layer_module in self.layer:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
-
-            hidden_states = layer_outputs[0]
+            hidden_states, attn_weights = layer_module(hidden_states, attention_mask, **kwargs)
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                all_self_attentions = all_self_attentions + (attn_weights,)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -320,6 +288,8 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
 
     _can_compile_fullgraph = False
+    _supports_attention_backend = True
+    _supports_sdpa = True
 
     @property
     def dummy_inputs(self):
@@ -509,12 +479,17 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
 
         embedding_output = self.embeddings(flattened_patches)
 
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
