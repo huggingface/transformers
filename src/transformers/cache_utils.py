@@ -1653,18 +1653,26 @@ class QuantizedCache(Cache):
             raise ValueError(f"Unknown quantization backend `{backend}`")
 
         config = config.get_text_config(decoder=True)
-        # Like DynamicCache, build the cache from config.layer_types: quantize the attention (key/value) layers
-        # and use the proper linear-attention/hybrid layer for the rest, which are not key/value caches.
         layer_types = getattr(config, "layer_types", None)
-        if layer_types is None:
-            layer_types = ["full_attention"] * config.num_hidden_layers
-        layers = []
-        for layer_type in layer_types:
-            cache_cls = LAYER_TYPE_CACHE_MAPPING.get(layer_type, DynamicLayer)
-            if cache_cls in (DynamicLayer, DynamicSlidingWindowLayer):
-                layers.append(layer_class(nbits, axis_key, axis_value, q_group_size, residual_length))
-            else:
-                layers.append(cache_cls(config))
+        if layer_types is not None:
+            unsupported_layer_types = [
+                layer_type
+                for layer_type in layer_types
+                if LAYER_TYPE_CACHE_MAPPING.get(layer_type, DynamicLayer)
+                not in (DynamicLayer, DynamicSlidingWindowLayer)
+            ]
+            if unsupported_layer_types:
+                unsupported = ", ".join(sorted(set(unsupported_layer_types)))
+                raise ValueError(
+                    "`QuantizedCache` only supports attention key/value cache layers. "
+                    f"Found cache layer types that cannot be quantized: {unsupported}. "
+                    "Please use the default cache implementation instead."
+                )
+
+        layers = [
+            layer_class(nbits, axis_key, axis_value, q_group_size, residual_length)
+            for _ in range(config.num_hidden_layers)
+        ]
         super().__init__(layers=layers)
 
 
