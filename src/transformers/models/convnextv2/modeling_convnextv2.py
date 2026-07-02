@@ -371,7 +371,7 @@ class ConvNextV2Backbone(BackboneMixin, ConvNextV2PreTrainedModel):
 
         self.embeddings = ConvNextV2Embeddings(config)
         self.encoder = ConvNextV2Encoder(config)
-        self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
+        self.num_features = [config.hidden_sizes[0]] + list(config.hidden_sizes)
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}

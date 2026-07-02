@@ -31,6 +31,7 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import maybe_autocast
+from .configuration_esm import EsmFoldConfig, get_default_vocab_list
 from .modeling_esm import EsmModel, EsmPreTrainedModel
 from .openfold_utils import (
     OFProtein,
@@ -1981,6 +1982,12 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         super().__init__(config)
 
         self.config = config
+        # `EsmForProteinFolding` is always a folding model: make sure the folding sub-config and
+        # vocabulary are populated even when built from a plain (non-folding) `EsmConfig` default.
+        if self.config.esmfold_config is None:
+            self.config.esmfold_config = EsmFoldConfig()
+        if self.config.vocab_list is None:
+            self.config.vocab_list = get_default_vocab_list()
 
         self.distogram_bins = 64
 
