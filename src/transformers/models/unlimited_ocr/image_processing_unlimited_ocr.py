@@ -33,17 +33,21 @@ from ...utils import TensorType, auto_docstring
 
 class UnlimitedOcrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    crop_to_patches (`bool`, *optional*, defaults to `self.crop_to_patches`):
+    crop_to_patches (`bool`, *optional*, defaults to `True`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
         `preprocess` method.
-    min_patches (`int`, *optional*, defaults to `self.min_patches`):
+    min_patches (`int`, *optional*, defaults to `2`):
         The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
         set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
-    max_patches (`int`, *optional*, defaults to `self.max_patches`):
+    max_patches (`int`, *optional*, defaults to `32`):
         The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
         set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
-    tile_size (`int`, *optional*, defaults to `768`):
+    tile_size (`int`, *optional*, defaults to `640`):
         The size of each local tile. Must match the model's query embedding size.
+    pad_if_larger_than (`int`, *optional*, defaults to `640`):
+        If `crop_to_patches` is `False` and `size.height/width` is larger than this value,
+        the image will be resized directly to `size.height/width` without padding. Otherwise,
+        images are resized and padded to `size.height/width` while preserving the aspect ratio.
     background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
         The background color for padding.
     """
@@ -54,6 +58,8 @@ class UnlimitedOcrImageProcessorKwargs(ImagesKwargs, total=False):
 
     tile_size: int
     background_color: list[int]
+
+    pad_if_larger_than: int
 
 
 @lru_cache(maxsize=10)
@@ -147,6 +153,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
     tile_size = 640
     background_color = [127, 127, 127]
     model_input_names = ["pixel_values", "num_local_patches", "patches_grid"]
+    pad_if_larger_than = 640
 
     def __init__(self, **kwargs: Unpack[UnlimitedOcrImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -213,6 +220,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         min_patches: int,
         max_patches: int,
         tile_size: int,
+        pad_if_larger_than: int,
         resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
@@ -232,7 +240,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
             for shape, stacked_images in grouped_images.items():
                 h, w = shape[-2:]
                 if max(h, w) > tile_size:
-                    stacked_patches, n_patches = self.crop_image_to_patches(
+                    stacked_patches, _ = self.crop_image_to_patches(
                         stacked_images,
                         min_patches=min_patches,
                         max_patches=max_patches,
@@ -254,17 +262,22 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         flat_local_list = [patch for item in ordered_local if item is not None for patch in item]
 
         # --- Global view (batched by shape group) ---
-        global_target_size = size.height
+        global_target_size = max(size.height, size.width)
 
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_global_grouped = {}
         for shape, stacked in grouped_images.items():
-            h, w = shape[-2:]
-            scale = global_target_size / max(h, w)
-            new_h = round(h * scale)
-            new_w = round(w * scale)
-            stacked = self.resize(stacked, SizeDict(height=new_h, width=new_w), resample=resample)
-            stacked = self.pad_to_square(stacked, background_color=self.background_color)
+            if not crop_to_patches and global_target_size <= pad_if_larger_than:
+                stacked = self.resize(
+                    stacked, SizeDict(height=global_target_size, width=global_target_size), resample=resample
+                )
+            else:
+                h, w = shape[-2:]
+                scale = global_target_size / max(h, w)
+                new_h = round(h * scale)
+                new_w = round(w * scale)
+                stacked = self.resize(stacked, SizeDict(height=new_h, width=new_w), resample=resample)
+                stacked = self.pad_to_square(stacked, background_color=self.background_color)
             stacked = self.rescale_and_normalize(
                 stacked, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
