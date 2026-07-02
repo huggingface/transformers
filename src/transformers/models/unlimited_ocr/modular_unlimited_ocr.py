@@ -356,7 +356,6 @@ class UnlimitedOcrVisionEncoderConfig(CLIPVisionConfig):
     num_attention_heads: int = 16
     patch_size: int | list[int] | tuple[int, int] | None = 14
     projection_dim = AttributeError()
-    sliding_window = AttributeError()
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
@@ -419,12 +418,14 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
     topk_group: int | None = 1
     num_experts_per_tok: int | None = 6
     layer_types: list[str] | None = None
+    use_sliding_window: bool = True
     sliding_window: int | None = 128
 
     def __post_init__(self, **kwargs):
+        self.sliding_window = self.sliding_window if self.use_sliding_window else None
         if self.layer_types is None:
             self.layer_types = [
-                "full_attention" if self.sliding_window is None else "reference_sliding_attention"
+                "reference_sliding_attention" if self.use_sliding_window else "full_attention"
             ] * self.num_hidden_layers
         elif len(set(self.layer_types)) > 1:
             # This requires a custom create_causal_mask implementation for reference_sliding_attention
@@ -654,16 +655,16 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         if self.prefill_length is None:
             self.prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
 
-        generated_length = full_key_states.shape[-2] - self.prefill_length
-        if generated_length < self.sliding_window:
-            # Window still growing: keep every prefill and decode token.
+        # Cache growing
+        if self.cumulative_length <= self.prefill_length + self.sliding_window - 1:
             self.keys = full_key_states
             self.values = full_value_states
+        # Cache full
+        elif self.keys.shape[-2] == self.prefill_length + self.sliding_window - 1:
+            self.keys[:, :, -self.sliding_window + 1 :].copy_(full_key_states[:, :, -self.sliding_window + 1 :, :])
+            self.values[:, :, -self.sliding_window + 1 :].copy_(full_value_states[:, :, -self.sliding_window + 1 :, :])
+        # Cache full after this update and full_key_states > cache size
         else:
-            # TODO: copy when already full
-            # Window full: keep all prefill tokens plus the most recent `sliding_window - 1` decode tokens.
-            # The `- 1` mirrors `DynamicSlidingWindowLayer`: the incoming query token supplies the last slot,
-            # so the current query still attends over a full `sliding_window` of decode tokens.
             self.keys = torch.cat(
                 [
                     full_key_states[:, :, : self.prefill_length, :],
@@ -679,7 +680,7 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
                 dim=-2,
             )
 
-        # Return full states to avoid losing context in case we added more than sliding_window tokens at once
+        # Return full states to avoid losing context in case we added multiple tokens at once
         return full_key_states, full_value_states
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:

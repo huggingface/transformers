@@ -1308,16 +1308,16 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         if self.prefill_length is None:
             self.prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
 
-        generated_length = full_key_states.shape[-2] - self.prefill_length
-        if generated_length < self.sliding_window:
-            # Window still growing: keep every prefill and decode token.
+        # Cache growing
+        if self.cumulative_length <= self.prefill_length + self.sliding_window - 1:
             self.keys = full_key_states
             self.values = full_value_states
+        # Cache full
+        elif self.keys.shape[-2] == self.prefill_length + self.sliding_window - 1:
+            self.keys[:, :, -self.sliding_window + 1 :].copy_(full_key_states[:, :, -self.sliding_window + 1 :, :])
+            self.values[:, :, -self.sliding_window + 1 :].copy_(full_value_states[:, :, -self.sliding_window + 1 :, :])
+        # Cache full after this update and full_key_states > cache size
         else:
-            # TODO: copy when already full
-            # Window full: keep all prefill tokens plus the most recent `sliding_window - 1` decode tokens.
-            # The `- 1` mirrors `DynamicSlidingWindowLayer`: the incoming query token supplies the last slot,
-            # so the current query still attends over a full `sliding_window` of decode tokens.
             self.keys = torch.cat(
                 [
                     full_key_states[:, :, : self.prefill_length, :],
@@ -1333,7 +1333,7 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
                 dim=-2,
             )
 
-        # Return full states to avoid losing context in case we added more than sliding_window tokens at once
+        # Return full states to avoid losing context in case we added multiple tokens at once
         return full_key_states, full_value_states
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:

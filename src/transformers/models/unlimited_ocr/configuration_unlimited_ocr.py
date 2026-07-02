@@ -229,12 +229,14 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
     base_config_key = "text_config"
     mlp_layer_types: list[str] | None = None
     layer_types: list[str] | None = None
+    use_sliding_window: bool = True
     sliding_window: int | None = 128
 
     def __post_init__(self, **kwargs):
+        self.sliding_window = self.sliding_window if self.use_sliding_window else None
         if self.layer_types is None:
             self.layer_types = [
-                "full_attention" if self.sliding_window is None else "reference_sliding_attention"
+                "reference_sliding_attention" if self.use_sliding_window else "full_attention"
             ] * self.num_hidden_layers
         elif len(set(self.layer_types)) > 1:
             # This requires a custom create_causal_mask implementation for reference_sliding_attention
