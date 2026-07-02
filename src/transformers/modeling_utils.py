@@ -62,7 +62,7 @@ from .integrations.accelerate import (
     check_and_set_device_map,
     expand_device_map,
     get_device,
-    load_offloaded_parameter,
+    load_offloaded_checkpoint_parameters,
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
@@ -475,7 +475,7 @@ def remove_tied_weights_from_state_dict(
             # In offloaded cases, there may be meta tensors in the state_dict.
             # For these cases, key by the pointer of the original tensor object
             # (state_dict tensors are detached and therefore no longer shared)
-            tensor = model.get_parameter(name)
+            tensor = model.get_parameter_or_buffer(name)
             ptrs[id(tensor)].append(name)
 
         else:
@@ -3509,15 +3509,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # if any model parameters are offloaded, we need to know it for later
         is_offloaded = False
-        if (
-            hasattr(self, "hf_device_map")
-            and len(set(self.hf_device_map.values())) > 1
-            and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
+        if hasattr(self, "hf_device_map") and (
+            len(set(self.hf_device_map.values())) > 1 or "disk" in self.hf_device_map.values()
         ):
             is_offloaded = True
             warnings.warn(
                 "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory "
-                "exceeds the `shard_size` (50GB default)"
+                "exceeds the `shard_size` (50GB default) and/or the largest model weight size (this can "
+                "be very large for MoE models with fused experts)."
             )
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
@@ -3582,20 +3581,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 os.remove(full_filename)
 
         # Save the model
+        meta_state_dict = model_to_save.state_dict()
         for shard_file, tensor_names in logging.tqdm(
             state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
         ):
             filename = os.path.join(save_directory, shard_file)
             shard_state_dict = {}
-            for tensor_name in tensor_names:
+            for tensor_name in sorted(tensor_names):
                 # Get the tensor, and remove it from state_dict to avoid keeping the ref
                 tensor = state_dict.pop(tensor_name)
 
-                # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
-                # but it would otherwise not be contained in the saved shard if we were to simply move the file
-                # or something
+                # If the param was offloaded, we need to load it back onto cpu from disk to resave it.
+                # It's a strange pattern, but is necessary to ensure saving into the proper file shard
                 if is_offloaded and tensor.device.type == "meta":
-                    tensor = load_offloaded_parameter(model_to_save, tensor_name)
+                    # Note that `load_offloaded_parameter` may load multiple weights for a single tensor.
+                    # While it is possible to overload CPU memory by loading parameters in a bad order,
+                    # in practice `split_torch_state_dict_into_shards` preserves weight locality
+                    state_dict.update(
+                        load_offloaded_checkpoint_parameters(model_to_save, tensor_name, meta_state_dict)
+                    )
+                    tensor = state_dict.pop(tensor_name)
 
                 # only do contiguous after it's permuted correctly in case of TP
                 shard_state_dict[tensor_name] = tensor.contiguous()
