@@ -283,36 +283,38 @@ def compute_modularity(model_dir: str, model_type: str) -> Modularity:
 
 
 def modularity_payload(modularity: Modularity) -> dict:
-    """Project a ``Modularity`` into the artifact's ``modularity`` summary + ``patches`` list.
+    """Project a ``Modularity`` into the artifact's ``extends`` + ``patches`` fields.
 
-    Returns ``{"extends", "modularity", "patches"}``. ``patches`` are the per-class change sets
-    projected onto semantic component kinds (``component_kind``), so a consumer can read
-    "this model overrides its attention" without knowing Python class names.
+    Returns ``{"extends", "patches"}``. ``patches`` are the per-class change sets projected onto
+    semantic component kinds (``component_kind``), so a consumer can read "this model overrides its
+    attention" without knowing Python class names. Trivial changes (a class that inherits everything
+    unchanged) are omitted, and only non-empty member buckets are emitted, to keep the artifact lean;
+    the ``diff_size`` modularity metric lives in ``modular_graph.json``, not in every artifact.
     """
-    summary = {
-        "is_modular": modularity.is_modular,
-        "parent_model": modularity.parent_model,
-        "parent_models": modularity.parent_models,
-        "diff_size": modularity.diff_size,
-        "totals": modularity.totals,
-    }
-    if modularity.note:
-        summary["note"] = modularity.note
-
     patches = []
     for c in modularity.changes:
-        patches.append(
-            {
-                "relation": c.relation,
-                "target_class": c.name,
-                "component_kind": classify_class_name(c.name),
-                "parent_class": c.parent,
-                "parent_model": c.parent_model,
-                "overridden": {"methods": c.overridden_methods, "attrs": c.overridden_attrs},
-                "added": {"methods": c.added_methods, "attrs": c.added_attrs},
-                "deleted": {"methods": c.deleted_methods, "attrs": c.deleted_attrs},
-                "n_changes": c.n_changes,
-            }
-        )
+        if c.is_trivial:
+            continue  # inherits everything, changes nothing — no diff signal
+        patch = {
+            "relation": c.relation,
+            "target_class": c.name,
+            "component_kind": classify_class_name(c.name),
+            "parent_class": c.parent,
+        }
+        if c.parent_model and c.parent_model != modularity.parent_model:
+            patch["parent_model"] = c.parent_model  # only when not the dominant parent
+        for bucket, methods, attrs in (
+            ("overridden", c.overridden_methods, c.overridden_attrs),
+            ("added", c.added_methods, c.added_attrs),
+            ("deleted", c.deleted_methods, c.deleted_attrs),
+        ):
+            members = {}
+            if methods:
+                members["methods"] = methods
+            if attrs:
+                members["attrs"] = attrs
+            if members:
+                patch[bucket] = members
+        patches.append(patch)
 
-    return {"extends": modularity.parent_model, "modularity": summary, "patches": patches}
+    return {"extends": modularity.parent_model, "patches": patches}

@@ -55,6 +55,64 @@ def attention_spec(config: Any) -> dict[str, Any]:
     return {key: value for key, value in spec.items() if value is not None}
 
 
+def embedding_spec(config: Any, raw_attributes: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Config-derived token-embedding facts (vocab size, embedding dim).
+
+    Prefers the concrete ``num_embeddings``/``embedding_dim`` observed on the module (covers
+    padded/extended vocabularies), falling back to the config's vocab/hidden sizes.
+    """
+    raw_attributes = raw_attributes or {}
+    vocab = raw_attributes.get("num_embeddings") or _cfg(config, "vocab_size")
+    dim = raw_attributes.get("embedding_dim") or _cfg(config, "hidden_size", "d_model", "n_embd")
+    spec = {"num_embeddings": vocab, "embedding_dim": dim}
+    return {key: value for key, value in spec.items() if value is not None}
+
+
+def position_spec(config: Any) -> dict[str, Any]:
+    """Config-derived positional-encoding facts (scheme + its salient parameter)."""
+    scheme = positional_scheme(config)
+    spec: dict[str, Any] = {"scheme": scheme}
+    if scheme == "rope":
+        rope = _cfg(config, "rope_parameters")
+        theta = rope.get("rope_theta") if isinstance(rope, dict) else None
+        spec["rope_theta"] = theta if theta is not None else _cfg(config, "rope_theta")
+        spec["head_dim"] = _cfg(config, "head_dim", "d_kv")
+    elif scheme == "relative":
+        spec["num_buckets"] = _cfg(config, "relative_attention_num_buckets")
+    elif scheme in {"learned", "sinusoidal"}:
+        spec["max_position_embeddings"] = _cfg(config, "max_position_embeddings", "max_target_positions")
+    return {key: value for key, value in spec.items() if value is not None}
+
+
+# Leaf names of the *output* projection of an attention / MLP block (writes back to the residual
+# stream). Everything else under the block is treated as an input-side projection (reads it).
+_OUTPUT_PROJECTION_NAMES = (
+    "o_proj",
+    "out_proj",
+    "down_proj",
+    "wo",
+    "fc2",
+    "c_proj",
+    "proj_out",
+    "w2",
+    "dense_4h_to_h",
+    "o",
+)
+
+
+def projection_role(name: str) -> str:
+    """Classify a projection leaf name as ``"input"`` (fans out from the block) or ``"output"``.
+
+    Role-based (not execution-order-based): q/k/v and gate/up read the block input in parallel,
+    then o_proj / down_proj write the result back — a fan-out then fan-in, which is the true
+    topology a linear call-order trace would misrepresent.
+    """
+    lower = name.lower()
+    if lower in _OUTPUT_PROJECTION_NAMES or lower.endswith(("out_proj", "down_proj")):
+        return "output"
+    return "input"
+
+
 def mlp_spec(config: Any) -> dict[str, Any]:
     """Config-derived feed-forward facts (dims + activation) attached to MLP components."""
     spec = {
@@ -114,6 +172,111 @@ def moe_spec(config: Any) -> dict[str, Any] | None:
     return {key: value for key, value in spec.items() if value is not None}
 
 
+def backbone_config(config: Any) -> Any:
+    """The primary text backbone config for a multimodal model, else the config itself.
+
+    Multimodal models nest the LLM under ``text_config`` (and vision/audio towers under their own
+    sub-configs), so the model-level attention/positional facts live there, not on the composite.
+    """
+    return getattr(config, "text_config", None) or config
+
+
+# ---------------------------------------------------------------------- capability recognizers
+
+
+def attention_backends(model_class: type) -> list[str]:
+    """Attention implementations this model *supports* (implementation-agnostic capability).
+
+    Read from the model class's support flags — ``eager`` is always available as the reference
+    implementation; the others require the model to opt in (and, at runtime, the backend to be
+    installed). This says "can run with", not "is installed here"."""
+    backends = ["eager"]
+    if getattr(model_class, "_supports_sdpa", False):
+        backends.append("sdpa")
+    if getattr(model_class, "_supports_flash_attn", getattr(model_class, "_supports_flash_attn_2", False)):
+        backends.append("flash_attention")
+    if getattr(model_class, "_supports_flex_attn", False):
+        backends.append("flex_attention")
+    return backends
+
+
+def task_heads(model_type: str) -> list[str]:
+    """Task families available for this model_type across the Auto* model mappings."""
+    try:
+        from transformers.models.auto import modeling_auto
+    except Exception:
+        return []
+    heads: set[str] = set()
+    for name in dir(modeling_auto):
+        if name.startswith("MODEL_FOR_") and name.endswith("_MAPPING_NAMES"):
+            mapping = getattr(modeling_auto, name)
+            if isinstance(mapping, dict) and model_type in mapping:
+                heads.add(name[len("MODEL_FOR_") : -len("_MAPPING_NAMES")].lower())
+    return sorted(heads)
+
+
+def _normalize_attention_pattern(layer_type: str | None, view: str | None, sliding_window: Any) -> str:
+    n = (layer_type or "").lower()
+    if "sliding" in n:
+        return "sliding"
+    if "chunk" in n:
+        return "chunked"
+    if "compress" in n:
+        return "compressed"
+    if "bidirectional" in n:
+        return "bidirectional"
+    return "bidirectional" if view == "encoder" else "causal"
+
+
+def attention_schedule(config: Any, view: str | None) -> dict[str, Any]:
+    """Per-layer attention pattern schedule (drives the mask visualisation).
+
+    Returns ``{schedule, patterns}``: ``schedule`` is the raw ``config.layer_types`` list (or None
+    for a uniform model), ``patterns`` the distinct normalized kinds (causal / bidirectional /
+    sliding / chunked / compressed)."""
+    layer_types = getattr(config, "layer_types", None)
+    sliding = _cfg(config, "sliding_window")
+    if layer_types:
+        patterns = list(dict.fromkeys(_normalize_attention_pattern(t, view, sliding) for t in layer_types))
+        # Only carry the raw per-layer list when it actually varies; a uniform schedule is redundant.
+        schedule = list(layer_types) if len(set(layer_types)) > 1 else None
+        return {"schedule": schedule, "patterns": patterns}
+    if view == "enc_dec":
+        return {"schedule": None, "patterns": ["bidirectional", "causal"]}
+    base = "sliding" if sliding else ("bidirectional" if view == "encoder" else "causal")
+    return {"schedule": None, "patterns": [base]}
+
+
+def tensor_parallel_plan(config: Any, backbone: Any = None) -> dict[str, str] | None:
+    """The base-model tensor-parallel plan (module glob -> colwise/rowwise), if the model has one."""
+    plan = getattr(config, "base_model_tp_plan", None)
+    if not plan and backbone is not None:
+        plan = getattr(backbone, "base_model_tp_plan", None)
+    return dict(plan) if isinstance(plan, dict) and plan else None
+
+
+def tp_style_for(path_pattern: str, plan: dict[str, str] | None) -> str | None:
+    """Look up a component's TP style by matching its symbolic path against the plan's globs."""
+    if not plan:
+        return None
+    key = path_pattern.removeprefix("model.").replace(".{i}.", ".*.")
+    return plan.get(key)
+
+
+def capabilities(model_type: str, config: Any, model_class: type, view: str | None) -> dict[str, Any]:
+    """Implementation-agnostic capability facts: what the architecture *can* do / run with."""
+    backbone = backbone_config(config)
+    schedule = attention_schedule(backbone, view)
+    caps = {
+        "attention_backends": attention_backends(model_class),
+        "attention_patterns": schedule["patterns"],
+        "attention_schedule": schedule["schedule"],
+        "task_heads": task_heads(model_type),
+        "tensor_parallel": tensor_parallel_plan(config, backbone) is not None,
+    }
+    return caps
+
+
 # Auto-mapping module attribute -> task family. Ordered by priority so the model's *canonical*
 # family wins when a model_type appears in several mappings. masked_lm is checked before causal_lm
 # to disambiguate encoder MLM models (e.g. BERT, which is registered in both) toward "encoder";
@@ -160,16 +323,21 @@ def detect_view(config: Any, family: str | None) -> str:
 
 
 def architecture_facts(model_type: str, config: Any) -> dict[str, Any]:
-    """Model-level normalized facts block."""
+    """Model-level normalized facts block.
+
+    ``view``/``family`` come from the composite config (they depend on vision/audio sub-configs and
+    encoder-decoder-ness); the attention/positional/MoE facts come from the text **backbone**, so a
+    multimodal model reports its LLM's attention variant rather than ``None``."""
     family = detect_family(model_type)
-    moe = moe_spec(config)
+    backbone = backbone_config(config)
+    moe = moe_spec(backbone)
     facts = {
         "view": detect_view(config, family),
         "family": family,
-        "attention_variant": attention_variant(config),
-        "positional": positional_scheme(config),
+        "attention_variant": attention_variant(backbone),
+        "positional": positional_scheme(backbone),
         "is_moe": moe is not None,
-        "sliding_window": _cfg(config, "sliding_window"),
+        "sliding_window": _cfg(backbone, "sliding_window"),
         "tie_word_embeddings": _cfg(config, "tie_word_embeddings"),
     }
     if moe is not None:

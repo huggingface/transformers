@@ -29,26 +29,30 @@ Output layout:
 
 The data contract is specified in [`SPEC.md`](./SPEC.md), which defines two levels: the compact, config-parametric
 `ArchitectureTemplate` (one per `model_type`, the canonical artifact produced here) and the `ResolvedGraph` obtained by
-resolving a template against a checkpoint `config.json`.
+resolving a template against a checkpoint `config.json`. [`SPEC.md` §12](./SPEC.md#12-field-reference) is a key-by-key
+field reference, and [`EXAMPLE.jsonc`](./EXAMPLE.jsonc) is a filled-in, annotated sample artifact (a trimmed
+`mistral.json`) that tours every field.
 
 Each generated artifact is an `ArchitectureTemplate`, validated by `schema/architecture-template-v0.schema.json`, and
 contains:
 
 - config class plus a compact `referenced_fields` (config knobs referenced by config expressions) and `salient_fields`
   (curated architecture-defining scalar defaults) — the full config is intentionally not serialized
-- resolved config/model entrypoints
 - compact semantic components and reusable templates
 - repeated `ModuleList` blocks collapsed into symbolic repeats when detectable
 - coarse semantic edges (`data`, `residual`, `mask`, `position`, `cross_attention`, `route`, `cache_read`,
   `cache_write`)
 - an `architecture` block of normalized semantic facts (view, task family, attention variant, positional scheme, MoE
   params) plus per-component `attributes` (attention heads/dims, MLP dims + activation, norm type)
+- a `capabilities` block: supported attention backends (eager/sdpa/flash_attention/flex_attention), per-layer attention
+  patterns + schedule (drives the mask views), available task heads, and tensor-parallel plan (per-projection
+  `colwise`/`rowwise`)
 - projection-level depth: `q/k/v/o_proj` and `gate/up/down_proj` as `projection` children of their host, with
   config-parametric `in_features`/`out_features` (e.g. `config.hidden_size → config.intermediate_size`)
-- a `modularity` block + `extends`/`patches`: the modular-diff of the model's `modular_<name>.py` vs its parent,
-  including a `diff_size` modularity metric
-- an observed `dataflow` block: top-level flow from a real meta forward, with config-parametric (symbolized) tensor
-  shapes like `["B", "S", "config.hidden_size"]`
+- `extends` + `patches`: the modular-diff of the model's `modular_<name>.py` vs its parent (the `diff_size` modularity
+  metric lives in `modular_graph.json`, not in every artifact)
+- an observed `dataflow` block: a `shapes` map (semantic id → `{in, out}`) from a real meta forward, with
+  config-parametric (symbolized) tensor shapes like `["B", "S", "config.hidden_size"]`
 - path-pattern provenance such as `model.layers.{i}.self_attn`
 
 The canonical `artifacts/<model_type>.json` files do not serialize every module instance. For example, repeated Llama
@@ -98,8 +102,8 @@ generator. Architecture-specific behavior should be added as reusable semantic r
 
 Known limitations:
 
-- dataflow is semantic and coarse, not an executable graph; the observed `dataflow` block is top-level only (a
-  forward that can't run on meta simply omits it)
+- dataflow is semantic and coarse, not an executable graph; the observed `dataflow` shapes are best-effort (a forward
+  that can't run on meta simply omits the block)
 - full forward methods are not traced, and `torch.fx` / `torch.export` are not primary sources
 - `patches` are keyed to Python classes projected onto semantic kinds, not yet to individual semantic component IDs;
   there is no grammar for *applying* a patch to reconstruct a child from its parent

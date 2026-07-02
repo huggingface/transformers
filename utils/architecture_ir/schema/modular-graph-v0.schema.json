@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "modular-graph-v0.schema.json",
+  "title": "Transformers Architecture IR — ModularGraph v0",
+  "description": "Library-wide modular inheritance forest: which architectures are linked (parent/child) via their modular_<name>.py, for a quick reference of which models share a lineage and align cleanly for comparison. See SPEC.md.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "roots", "nodes"],
+  "properties": {
+    "schema_version": { "const": "modular-graph-v0" },
+    "roots": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Base 'spine' models (no modular parent) that have at least one descendant, most-descendants first."
+    },
+    "nodes": {
+      "type": "object",
+      "description": "Map of model name -> its place in the modular forest. Isolated standalones (no parent, no children) are omitted.",
+      "additionalProperties": { "$ref": "#/$defs/node" }
+    },
+    "provenance": { "type": "object" }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["extends", "parents", "children", "root", "depth", "is_modular"],
+      "properties": {
+        "extends": {
+          "type": ["string", "null"],
+          "description": "Dominant parent model this one inherits from via its modular file, or null for a spine root."
+        },
+        "parents": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "All parent models referenced (a modular file may inherit classes from several)."
+        },
+        "children": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Models whose dominant parent is this node."
+        },
+        "root": {
+          "type": ["string", "null"],
+          "description": "Transitive top ancestor. Models sharing a root are in the same lineage (align cleanly for comparison)."
+        },
+        "depth": { "type": "integer", "description": "Number of hops from this node to its root." },
+        "is_modular": { "type": "boolean" },
+        "diff_size": {
+          "type": ["integer", "null"],
+          "description": "Modularity metric vs the dominant parent; null for spine roots / standalone parents."
+        }
+      }
+    }
+  }
+}

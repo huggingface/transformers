@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "architecture-template-v0.schema.json",
+  "title": "Transformers Architecture IR — ArchitectureTemplate v0",
+  "description": "Compact, architecture-specific, config-parametric artifact serialized once per model_type. See SPEC.md for the full contract.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "model_type",
+    "config",
+    "components",
+    "templates",
+    "repeats",
+    "edges",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "architecture-template-v0"
+    },
+    "model_type": {
+      "type": "string",
+      "description": "Transformers model_type this template describes; one template per model_type."
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Normalized model-level semantic facts derived from config + module tree (generic, no per-model special-casing). Fields that don't apply are omitted.",
+      "properties": {
+        "view": {
+          "type": "string",
+          "description": "High-level layout: decoder | encoder | enc_dec | multimodal."
+        },
+        "family": {
+          "type": ["string", "null"],
+          "description": "Task family via Auto* mappings: causal_lm | masked_lm | seq2seq | image_classification | ..."
+        },
+        "attention_variant": { "type": ["string", "null"], "description": "MHA | GQA | MQA | MLA." },
+        "positional": { "type": ["string", "null"], "description": "rope | relative | alibi | learned | ..." },
+        "is_moe": { "type": "boolean" },
+        "moe": { "type": "object" },
+        "sliding_window": { "type": ["integer", "null"] },
+        "tie_word_embeddings": { "type": ["boolean", "null"] }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Implementation-agnostic facts about what the architecture can do / run with (distinct from `architecture`, which is what it is).",
+      "properties": {
+        "attention_backends": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Attention implementations the model supports (eager | sdpa | flash_attention | flex_attention). 'Can run with', not 'installed here'."
+        },
+        "attention_patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Distinct per-layer attention pattern kinds (causal | bidirectional | sliding | chunked | compressed)."
+        },
+        "attention_schedule": {
+          "type": ["array", "null"],
+          "items": { "type": "string" },
+          "description": "Raw per-layer config.layer_types schedule, or null for a uniform model."
+        },
+        "task_heads": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Task families available for this model_type across the Auto* mappings (causal_lm, sequence_classification, …)."
+        },
+        "tensor_parallel": {
+          "type": "boolean",
+          "description": "Whether the model ships a base tensor-parallel plan (per-projection colwise/rowwise on the projection nodes)."
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["class_name", "module", "model_type", "referenced_fields"],
+      "properties": {
+        "class_name": { "type": "string" },
+        "module": { "type": "string" },
+        "model_type": { "type": ["string", "null"] },
+        "referenced_fields": {
+          "type": "object",
+          "description": "Config knobs the artifact is parameterized by — the fields referenced by config expressions (e.g. repeat count_expr) — with their default values observed at generation time. The full config is intentionally NOT serialized."
+        },
+        "salient_fields": {
+          "type": "object",
+          "description": "Curated whitelist of architecture-defining scalar config defaults (dims, heads, activation, …). Provenance/convenience, not the full config."
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "description": "Semantic components reachable outside of any symbolic repeat body.",
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "templates": {
+      "type": "array",
+      "description": "Reusable component templates, i.e. the bodies referenced by symbolic repeats. Serialized once, never per instance.",
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "repeats": {
+      "type": "array",
+      "description": "Symbolic repeats collapsing homogeneous repeated blocks. A repeat is NOT expanded into one entry per instance.",
+      "items": { "$ref": "#/$defs/repeat" }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Coarse semantic dataflow edges between semantic IDs.",
+      "items": { "$ref": "#/$defs/edge" }
+    },
+    "dataflow": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional: tensor shapes observed from a real forward on the meta model, config-parametric (symbolized). Absent when the forward cannot run on meta. Node ORDER is not repeated here — it lives in `edges`.",
+      "required": ["source", "shapes"],
+      "properties": {
+        "source": { "type": "string", "description": "How the flow was obtained, e.g. 'observed_forward_meta'." },
+        "input": {
+          "type": "object",
+          "properties": { "name": { "type": "string" }, "shape": { "$ref": "#/$defs/sym_shape" } }
+        },
+        "output": {
+          "type": "object",
+          "properties": { "shape": { "$ref": "#/$defs/sym_shape" } }
+        },
+        "shapes": {
+          "type": "object",
+          "description": "Map of semantic component id -> {in, out} observed tensor shapes (symbolized). Join to nodes by id.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "in": { "$ref": "#/$defs/sym_shape" },
+              "out": { "$ref": "#/$defs/sym_shape" }
+            }
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "description": "Which config/model classes this IR was introspected from: {config_class, config_module, model_class, model_module}. Provenance, not semantic identity.",
+      "additionalProperties": true
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional non-fatal generation warnings; omitted when empty."
+    },
+    "extends": {
+      "type": ["string", "null"],
+      "description": "The dominant parent model_type this architecture inherits from via its modular_<name>.py, or null for standalone models. (The diff_size modularity metric lives in modular_graph.json, not here.)"
+    },
+    "patches": {
+      "type": "array",
+      "description": "Per-class modular change sets projected onto semantic component kinds. Omitted for standalone models and excludes trivial (inherit-everything) classes.",
+      "items": { "$ref": "#/$defs/patch" }
+    }
+  },
+  "$defs": {
+    "sym_shape": {
+      "type": ["array", "null"],
+      "description": "A symbolized tensor shape: each dim is either an integer or a token string ('B', 'S', or a config expression like 'config.hidden_size').",
+      "items": { "type": ["string", "integer"] }
+    },
+    "patch": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["relation", "target_class"],
+      "properties": {
+        "relation": { "type": "string", "enum": ["inherits", "new"] },
+        "target_class": { "type": "string", "description": "Provenance: the modular Python class this change belongs to." },
+        "component_kind": {
+          "type": ["string", "null"],
+          "description": "Semantic component kind this class maps to (e.g. attention, feed_forward), or null if unknown."
+        },
+        "parent_class": { "type": ["string", "null"] },
+        "parent_model": { "type": ["string", "null"], "description": "Only present when not the dominant `extends` parent (multi-parent case)." },
+        "overridden": { "$ref": "#/$defs/member_set" },
+        "added": { "$ref": "#/$defs/member_set" },
+        "deleted": { "$ref": "#/$defs/member_set" }
+      }
+    },
+    "member_set": {
+      "type": "object",
+      "properties": {
+        "methods": { "type": "array", "items": { "type": "string" } },
+        "attrs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "kind", "path_pattern"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable semantic ID (e.g. 'decoder_layer', 'decoder_layer.self_attn'). Primary identity."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Semantic role (e.g. embedding, attention, feed_forward, normalization, transformer_block, position)."
+        },
+        "class_name": {
+          "type": "string",
+          "description": "Provenance: originating Python class name."
+        },
+        "path_pattern": {
+          "type": "string",
+          "description": "Provenance: symbolic module path with {i} placeholders (e.g. 'model.layers.{i}.self_attn')."
+        },
+        "children": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Semantic IDs of child components. Omitted for leaf nodes (treat absence as no children)."
+        },
+        "attributes": {
+          "type": "object",
+          "description": "Optional normalized semantic facts for this component (e.g. attention variant/heads, norm_type, MoE experts)."
+        }
+      }
+    },
+    "repeat": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "kind",
+        "body",
+        "count_expr",
+        "count_source",
+        "index_symbol",
+        "item_path_pattern"
+      ],
+      "properties": {
+        "id": { "type": "string", "description": "Stable semantic ID for the repeat (e.g. 'decoder_layers')." },
+        "kind": { "const": "symbolic_repeat" },
+        "body": {
+          "type": "string",
+          "description": "Semantic ID of the template body that is repeated."
+        },
+        "count_expr": {
+          "type": "string",
+          "description": "Config expression string giving the repeat count (e.g. 'config.num_hidden_layers'). NOT Python code to exec; a restricted arithmetic DSL over config.<field> references."
+        },
+        "count_source": {
+          "type": "string",
+          "enum": ["config", "module_tree"],
+          "description": "Whether count_expr resolves against config or was a literal observed in the module tree."
+        },
+        "count": {
+          "type": ["integer", "null"],
+          "description": "Optional: count observed under the default config at generation time (provenance/default). The evaluated count lives in the ResolvedGraph."
+        },
+        "index_symbol": {
+          "type": "string",
+          "description": "Symbol used for the repeat index in path_pattern (e.g. 'i')."
+        },
+        "container_path_pattern": {
+          "type": "string",
+          "description": "Provenance: symbolic path of the repeat container."
+        },
+        "item_path_pattern": {
+          "type": "string",
+          "description": "Provenance: symbolic path of a single item (e.g. 'model.layers.{i}')."
+        },
+        "repeated_class_name": {
+          "type": "string",
+          "description": "Provenance: originating Python class of the repeated block."
+        },
+        "provenance": { "type": "object" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["source", "target", "kind"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Semantic ID of the edge source, or an 'input:<name>' pseudo-node."
+        },
+        "target": {
+          "type": "string",
+          "description": "Semantic ID of the edge target, or an 'input:<name>' pseudo-node."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "data",
+            "residual",
+            "mask",
+            "position",
+            "cross_attention",
+            "route",
+            "cache_read",
+            "cache_write"
+          ]
+        }
+      }
+    }
+  }
+}

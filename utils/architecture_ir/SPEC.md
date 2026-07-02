@@ -8,6 +8,12 @@ The prose here is normative for v0; the machine-checkable rules live in:
 
 - `schema/architecture-template-v0.schema.json`
 - `schema/resolved-graph-v0.schema.json`
+- `schema/modular-graph-v0.schema.json`
+
+**Looking for the key-by-key contract?** Jump to [§12 Field reference](#12-field-reference) — a complete table of every
+key, its type/allowed values, and a one-line description for each artifact. The sections before it explain the *why*.
+For a filled-in, annotated sample of a real artifact, see [`EXAMPLE.jsonc`](./EXAMPLE.jsonc) (a trimmed, commented
+`mistral.json`).
 
 See [`IR.md`](../../IR.md) at the repository root for the broader motivation and long-term vision. This file is the
 concrete v0 data contract.
@@ -95,15 +101,19 @@ Each component has:
 | -------------- | -------- | ------------------------------------------------------------------------------ |
 | `id`           | yes      | **Stable semantic ID** — the component's primary identity (see §6).            |
 | `kind`         | yes      | Semantic role (`embedding`, `attention`, `feed_forward`, `normalization`, …).  |
-| `children`     | yes      | Semantic IDs of child components.                                              |
+| `path_pattern` | yes      | **Provenance**: symbolic module path with `{i}` placeholders.                  |
 | `class_name`   | no       | **Provenance**: originating Python class name.                                 |
-| `module`       | no       | **Provenance**: originating Python module path.                                |
-| `path_pattern` | no       | **Provenance**: symbolic module path with `{i}` placeholders.                  |
+| `children`     | no       | Semantic IDs of child components; **omitted for leaf nodes**.                  |
 
 Components are split across two arrays:
 
 - `components`: semantic units reachable **outside** of any symbolic repeat body.
 - `templates`: reusable **repeat bodies** and their descendants — serialized once, referenced by repeats.
+
+The component tree is always **connected from the root**: a structural container is retained even if its own `kind`
+isn't independently interesting, whenever it is an ancestor of a component that is. This matters for models that nest
+whole sub-models as attributes (a VLM's `vision_tower` / `language_model` / `multi_modal_projector`) — those wrappers
+are emitted as nodes and listed in the root's `children`, so a consumer can always walk from the root to every leaf.
 
 `kind` is an open vocabulary (validated as a string). v0 recognizers commonly emit: `model`, `embedding`, `position`,
 `attention`, `cross_attention`, `feed_forward`, `moe`, `normalization`, `pooler`, `transformer_block`, `encoder`,
@@ -119,9 +129,12 @@ per-model special-casing):
   (`MHA`/`GQA`/`MQA`/`MLA`), `positional` (`rope`/`relative`/`alibi`/`learned`), `is_moe` (+ `moe` params),
   `sliding_window`, `tie_word_embeddings`. Fields that don't apply are omitted; a value being absent means
   "not present / undeterminable".
-- Per-component **`attributes`**: attention components carry `{variant, n_heads, n_kv_heads, head_dim, rope,
-  sliding_window}`; feed-forward components carry `{hidden_size, intermediate_size, activation}`; normalization
-  components carry `{norm_type}` (`rms`/`layer`/…); MoE components carry `{num_experts, experts_per_token, …}`.
+- Per-component **`attributes`**: attention → `{variant, n_heads, n_kv_heads, head_dim, rope, sliding_window}`;
+  feed-forward → `{hidden_size, intermediate_size, activation}`; normalization → `{norm_type}` (`rms`/`layer`/…);
+  MoE → `{num_experts, experts_per_token, …}`; embedding → `{num_embeddings, embedding_dim}`; position →
+  `{scheme, …}` (`rope` + `rope_theta`/`head_dim`, `relative` + `num_buckets`, `learned` + `max_position_embeddings`).
+  Only pure structural containers (the model root, a transformer-block wrapper) carry no `attributes` — their meaning
+  is their composition.
 
 The IR also **descends into the projections** inside attention / MLP / MoE bodies — the `q/k/v/o_proj` and
 `gate/up/down_proj` (kind `projection`) appear as children of their host with `{in_features, out_features}`, each
@@ -129,8 +142,38 @@ The IR also **descends into the projections** inside attention / MLP / MoE bodie
 `config.intermediate_size`; dims like `num_kv_heads · head_dim` that match no single field stay integers). This stays
 compact — projections are serialized once in the template body, never per repeated layer.
 
+The **intra-module dataflow** among those projections is emitted as `data` edges (tagged `"provenance":
+"intra_module"`): the block fans out to its input projections (`self_attn → q/k/v`, `mlp → gate/up`) and they fan in to
+the output projection (`q/k/v → o_proj`, `gate/up → down_proj`). Roles are assigned semantically (by projection name),
+not from execution order — q/k/v run in parallel, so a call-order trace would wrongly chain them. When no output
+projection is recognized, only the fan-out is emitted, leaving the projections as unordered siblings.
+
 These facts also drive the reserved edge kinds: decoder-side self-attention emits `cache_read`/`cache_write` edges to a
 `state:kv_cache` pseudo-node, and a MoE block emits a `route` edge to its experts container.
+
+For multimodal models the `architecture` facts (attention variant, positional, MoE) are read from the **text
+backbone** (`config.text_config`) rather than the composite config, so a VLM reports its LLM's attention variant
+instead of `None`; `view`/`family` still come from the composite (they depend on the vision/audio sub-configs).
+
+### Capabilities (`capabilities`)
+
+Distinct from `architecture` (what the model *is*), the `capabilities` block records — implementation-agnostically —
+what the architecture *can do / run with*:
+
+- **`attention_backends`**: implementations the model supports, read from its class support flags — `eager` (always,
+  the reference impl) plus `sdpa` / `flash_attention` / `flex_attention` when opted in. This is "can run with", not
+  "installed here" (the actual backend is gated at runtime by the installed library).
+- **`attention_patterns`** / **`attention_schedule`**: the distinct per-layer attention pattern kinds
+  (`causal`/`bidirectional`/`sliding`/`chunked`/`compressed`) and, for a *non-uniform* schedule (e.g. gpt-oss's
+  sliding/full alternation), the raw `config.layer_types` list. This is what a viewer needs to draw per-layer
+  attention-mask patterns; a uniform schedule collapses to `null`.
+- **`task_heads`**: every task family available for the `model_type` across the Auto\* mappings (e.g. llama →
+  `causal_lm, question_answering, sequence_classification, token_classification`) — what the architecture can be used
+  for, beyond the single base-model `family`.
+- **`tensor_parallel`**: whether the model ships a base tensor-parallel plan; when it does, each projection component
+  also carries a `tp` attribute (`colwise`/`rowwise`) resolved from `base_model_tp_plan`.
+
+A single unambiguous attention pattern is also stamped on each attention component as `attributes.pattern`.
 
 ---
 
@@ -188,27 +231,23 @@ cached-attention recognizers. Consumers MUST accept all eight kinds and SHOULD t
 
 ### Observed dataflow (`dataflow`)
 
-Structural edges are inferred from the module tree. To **ground** the top-level flow in what actually executes, the
-generator additionally runs one forward pass on the meta-device model (meta tensors carry shapes but allocate ~no
-memory) and records the top-level stages in real call order, with their tensor shapes. This is emitted as an optional
-top-level `dataflow` object: `input`, `output`, and an ordered `stages` list, each stage carrying its semantic `id`
-(mapped from the executing module), `module_name`/`class_name` (provenance), and `in_shape`/`out_shape`.
+Structural edges are inferred from the module tree. To **ground** the flow in what actually executes, the generator
+runs one forward pass on the meta-device model (meta tensors carry shapes but allocate ~no memory), hooking the
+top-level stages *and* the direct children inside the representative element of each repeated block. Two things come
+out of it:
 
-Because the template is config-parametric, observed **integer** shapes are **symbolized**: a dim is either an integer
-or a token — `"B"` (batch), `"S"` (sequence), or a config expression such as `"config.hidden_size"` when the dim
-matches a salient config value. So `[1, 8, 4096]` is serialized as `["B", "S", "config.hidden_size"]`, and a
-`ResolvedGraph` consumer can evaluate it per checkpoint.
+1. **Grounded edges.** The observed call order rewrites the `data` edges so they reflect real forward order rather than
+   module-registration order — e.g. a Llama layer becomes `input_layernorm → self_attn → post_attention_layernorm → mlp`
+   (registration order would dangle the norms at the end). Only `data` edges are rewritten; `residual`/`mask`/`position`/
+   `cache` edges are left intact. Edges the structural pass missed are added tagged `"provenance": "observed_forward"`;
+   `position`/`mask` nodes are excluded from the main-path chain.
+2. **Observed shapes.** The `dataflow` object carries only the non-redundant part — a `shapes` map from semantic id to
+   `{in, out}` (the *ordering* is already in `edges`). Because the template is config-parametric, observed **integer**
+   shapes are **symbolized**: a dim is an integer or a token — `"B"` (batch), `"S"` (sequence), or a config expression
+   like `"config.hidden_size"` when it matches a salient value. So `[1, 8, 4096]` becomes `["B", "S", "config.hidden_size"]`,
+   which a `ResolvedGraph` consumer evaluates per checkpoint.
 
-The forward is also hooked **inside** the representative element of each repeated block, so the `dataflow` object
-carries a `blocks` map (repeat id → the body's direct children in observed call order, with shapes). This **re-grounds
-the intra-block `data` edges**: module registration order is not forward order (it would leave a pre-norm block's
-norms dangling at the end), so the block's data edges are rewritten to the observed order — e.g. for a Llama layer,
-`input_layernorm → self_attn → post_attention_layernorm → mlp`. Only `data` edges internal to the block are rewritten;
-`residual`/`mask`/`position`/`cache` edges are left intact.
-
-Observed consecutive-stage `data` edges that the structural pass missed are added to `edges` (tagged with a
-`"provenance": "observed_forward"` field); `position`/`mask` stages are excluded from that chain since they are not
-main-path carriers. The `dataflow` block is **best-effort and optional**: models whose forward can't run on meta
+The `dataflow` block is **best-effort and optional**: models whose forward can't run on meta
 (data-dependent control flow, unusual inputs) simply omit it and keep their structural edges. Blocks whose body wraps a
 further nested `ModuleList` of heterogeneous sub-layers (e.g. T5) are not re-grounded and keep their structural edges.
 
@@ -228,9 +267,9 @@ decoder_layer.input_layernorm
 
 rather than instance paths such as `layers.0.self_attn`, `layers.1.self_attn`, …
 
-**Python class names and module paths are provenance, not identity.** They are carried in `class_name`, `module`, and
-`path_pattern` (and in `provenance` blocks) so that tooling can trace an ID back to source, but two artifacts that
-differ only in class/module naming should ideally share the same semantic IDs.
+**Python class names and module paths are provenance, not identity.** They are carried in `class_name` and
+`path_pattern` per node (and the source module in the artifact-level `provenance`) so that tooling can trace an ID back
+to source, but two artifacts that differ only in class/module naming should ideally share the same semantic IDs.
 
 Stable IDs are the anchor for diffs, modular inheritance, documentation, and cross-version comparison.
 
@@ -255,12 +294,13 @@ leaves the repeat's `count` unresolved (`count_resolved: false`) rather than fai
 
 ## 8. Source provenance
 
-Provenance answers "where did this come from?" without being part of the semantic identity. It appears at three levels:
+Provenance answers "where did this come from?" without being part of the semantic identity. It is kept deliberately
+minimal:
 
-- **Artifact `provenance`**: generator name, resolution/instantiation strategy, config/model class + module,
-  schema version, model type.
-- **`entrypoints`**: the config/model classes and auto-class entrypoints used to introspect the architecture.
-- **Per-component / per-repeat**: `class_name`, `module`, `path_pattern`, and optional `provenance` blocks.
+- **Artifact `provenance`**: just the source classes — `{config_class, config_module, model_class, model_module}`. The
+  resolution strategy (meta device, config-only, no weights) is invariant and documented here, not repeated per artifact.
+- **Per-component**: `class_name` and `path_pattern`. (Per-node `module` was dropped — it repeated the same
+  modeling-file string on every node; the source module is in the artifact-level `provenance`.)
 
 The v0 generator instantiates models from configuration only, on the meta device, with weight init disabled; it does
 **not** load checkpoint weights or call `from_pretrained`.
@@ -286,17 +326,18 @@ The v0 generator instantiates models from configuration only, on the meta device
 
 Many Transformers models are defined as a `modular_<name>.py` whose classes inherit from another model
 (`class GemmaModel(LlamaModel)`). The IR captures this inheritance — mirroring the philosophy of Modular Transformers
-while staying independent from Python implementation details — via three top-level fields on `ArchitectureTemplate`:
+while staying independent from Python implementation details — via two top-level fields on `ArchitectureTemplate`:
 
 - **`extends`**: the dominant parent `model_type` this architecture inherits from, or `null` for standalone models.
-- **`modularity`**: a diff summary — `is_modular`, `parent_model(s)`, per-bucket `totals`
-  (`overridden`/`added`/`deleted`/`new_classes`/`trivial`), and a single-number **`diff_size`**
-  (`overridden + added + deleted + 3·new_classes`). `diff_size` is an automatic, per-model measure of how modular a
-  model is: a clean modular model (e.g. `qwen2` extending `llama`) has a tiny diff; a model that declares a parent but
-  overrides nothing while adding many classes has a large one. It doubles as a **modularity linter**.
 - **`patches`**: the per-class change sets, each projected onto a semantic `component_kind` (e.g. `GemmaAttention` →
-  `attention`) alongside the provenance `target_class`/`parent_class`/`parent_model` and the `overridden`/`added`/
-  `deleted` method & attr lists. Empty for standalone models.
+  `attention`) alongside the provenance `target_class`/`parent_class` and the non-empty `overridden`/`added`/`deleted`
+  method & attr lists. **Trivial** classes (inherit everything, change nothing) are omitted, and `patches` itself is
+  omitted for standalone models.
+
+There is deliberately **no per-artifact `modularity` summary block**: `is_modular` is just `extends != null`, and the
+per-model **`diff_size`** metric (`overridden + added + deleted + 3·new_classes`; a clean model like `qwen2` extending
+`llama` scores tiny, a declare-a-parent-but-rebuild-everything model scores large — a modularity linter) is a
+*cross-model* number, so it lives once in `modular_graph.json` (§ below) rather than in every artifact.
 
 ### How it is computed
 
@@ -308,8 +349,7 @@ of the model) and mirrors the semantics of `utils/modular_model_converter.py`:
 - a deletion sentinel (`attr = AttributeError(...)` / `def f(): raise AttributeError`) → **deleted**.
 
 The parent model of each class is read from the modular file's `from ..<model>.modeling_<model> import <Class>` imports.
-Computation is best-effort: on any failure the artifact still carries a `modularity` summary marking the model
-non-modular with a `note`, keeping the artifact shape stable.
+Computation is best-effort: on any failure the artifact simply carries `extends: null` and no `patches`.
 
 ### Library-wide modular graph
 
@@ -349,3 +389,182 @@ part of the two-level IR contract and has its own `schema_version` (`architectur
 The `modular_graph.json` (written when `--modular-graph` is passed) is the library-wide modular inheritance forest
 described in §10; it is independent of the two-level IR contract and covers the whole library, not just the generated
 architectures.
+
+---
+
+## 12. Field reference
+
+The complete key-by-key contract. **Req** legend: **●** required by schema · **▲** always emitted by the generator
+(not schema-required, so consumers should still tolerate absence) · **○** optional / conditional. Objects set
+`additionalProperties: true`, so producers may add keys within v0 and **consumers must ignore unknown keys**.
+
+### 12.1 `ArchitectureTemplate` — top level (`artifacts/<model_type>.json`)
+
+| Key | Req | Type / values | Description |
+|-----|-----|---------------|-------------|
+| `schema_version` | ● | `"architecture-template-v0"` | Contract version. |
+| `model_type` | ● | string | The `model_type` this template describes (one per). |
+| `config` | ● | object | Config identity + parametric knobs — §12.6. |
+| `components` | ● | `component[]` | Semantic nodes outside any repeat body — §12.2. |
+| `templates` | ● | `component[]` | Repeat-body nodes, serialized once — §12.2. |
+| `repeats` | ● | `repeat[]` | Symbolic repeats — §12.3. |
+| `edges` | ● | `edge[]` | Coarse dataflow edges — §12.4. |
+| `provenance` | ● | object | `{config_class, config_module, model_class, model_module}` — the source classes only. |
+| `architecture` | ▲ | object | Model-level semantic facts — §12.5. |
+| `capabilities` | ▲ | object | What the model can do / run with — §12.7. |
+| `extends` | ▲ | string \| null | Dominant parent `model_type` (modular), else null. |
+| `patches` | ○ | `patch[]` | Per-class modular changes — §12.9. Omitted for standalone models. |
+| `dataflow` | ○ | object | Observed tensor shapes — §12.10. Absent when the meta forward can't run. |
+| `warnings` | ○ | string[] | Non-fatal generation warnings; omitted when empty. |
+
+> **Removed in the lean revision** (all derivable / boilerplate — don't reintroduce): `metadata` (level implied by
+> `schema_version`), `entrypoints` (folded into `provenance`), and the `modularity` summary block (`is_modular` =
+> `extends != null`; `diff_size`/`totals` derive from `patches`; the metric lives in `modular_graph.json`).
+
+### 12.2 `component` — entries of `components` and `templates`
+
+| Key | Req | Type / values | Description |
+|-----|-----|---------------|-------------|
+| `id` | ● | string | Stable semantic ID; **primary identity** (e.g. `decoder_layer.self_attn`). |
+| `kind` | ● | string (§12.11) | Semantic role. |
+| `path_pattern` | ● | string | Provenance: symbolic module path with `{i}` (e.g. `model.layers.{i}.self_attn`). |
+| `class_name` | ▲ | string | Provenance: Python class name. |
+| `children` | ○ | string[] | Semantic IDs of child components / repeats. **Omitted for leaf nodes** (absence ⇒ none). |
+| `attributes` | ○ | object (§12.12) | Normalized per-node facts; keys depend on `kind`. |
+
+(Per-node `module` was removed — it was the same modeling-file string on every node; the source module is in top-level `provenance`.)
+
+### 12.3 `repeat` — entries of `repeats`
+
+| Key | Req | Type / values | Description |
+|-----|-----|---------------|-------------|
+| `id` | ● | string | Semantic ID (e.g. `decoder_layers`). |
+| `kind` | ● | `"symbolic_repeat"` | Constant. |
+| `body` | ● | string | Semantic ID of the repeated template body. |
+| `count_expr` | ● | string | Config expression for the count (e.g. `config.num_hidden_layers`). Not `exec`'d — §7. |
+| `count_source` | ● | `config` \| `module_tree` | Whether `count_expr` resolves against config or was a literal. |
+| `index_symbol` | ● | string | Index symbol used in path patterns (`i`). |
+| `item_path_pattern` | ● | string | Provenance: symbolic path of one item (`model.layers.{i}`). |
+| `count` | ○ | int \| null | Count under the **default** config (provenance; evaluated count lives in the ResolvedGraph). |
+| `container_path_pattern` | ○ | string | Provenance: symbolic path of the container. |
+| `repeated_class_name` | ○ | string | Provenance: Python class of the repeated block. |
+| `provenance` | ○ | object | Extra provenance. |
+
+### 12.4 `edge` — entries of `edges`
+
+| Key | Req | Type / values | Description |
+|-----|-----|---------------|-------------|
+| `source` | ● | string | Semantic ID, or a pseudo-node `input:<name>` / `state:<name>` (e.g. `input:attention_mask`, `state:kv_cache`). |
+| `target` | ● | string | Same as `source`. |
+| `kind` | ● | `data` \| `residual` \| `mask` \| `position` \| `cross_attention` \| `route` \| `cache_read` \| `cache_write` | Edge semantics (§5). |
+| `provenance` | ○ | string | Origin tag when present, e.g. `observed_forward`, `intra_module`. |
+
+### 12.5 `architecture` — model-level facts (multimodal reads the text backbone)
+
+| Key | Req | Type / values | Description |
+|-----|-----|---------------|-------------|
+| `view` | ▲ | `decoder` \| `encoder` \| `enc_dec` \| `multimodal` | High-level layout. |
+| `family` | ▲ | string \| null | Task family: `causal_lm`, `masked_lm`, `seq2seq`, `image_text_to_text`, `image_classification`, … |
+| `attention_variant` | ○ | `MHA` \| `GQA` \| `MQA` \| `MLA` \| null | |
+| `positional` | ○ | `rope` \| `relative` \| `alibi` \| `learned` \| `sinusoidal` \| null | |
+| `is_moe` | ▲ | bool | |
+| `moe` | ○ | object | `{num_experts, experts_per_token, num_shared_experts?}` when MoE. |
+| `sliding_window` | ○ | int \| null | |
+| `tie_word_embeddings` | ○ | bool \| null | |
+
+Fields that don't apply are omitted (absent ⇒ "not present / undeterminable").
+
+### 12.6 `config`
+
+| Key | Req | Type / values | Description |
+|-----|-----|---------------|-------------|
+| `class_name` | ● | string | Config class. |
+| `module` | ● | string | Config module path. |
+| `model_type` | ● | string \| null | |
+| `referenced_fields` | ● | object `{field: value}` | Config knobs referenced by config expressions, with default values — the parametric surface. |
+| `salient_fields` | ○ | object `{field: value}` | Curated scalar architecture defaults (`hidden_size`, heads, `hidden_act`, …). The full config is **not** serialized. |
+
+### 12.7 `capabilities`
+
+| Key | Req | Type / values | Description |
+|-----|-----|---------------|-------------|
+| `attention_backends` | ▲ | string[] ⊆ {`eager`, `sdpa`, `flash_attention`, `flex_attention`} | Impls the model supports. "Can run with", not "installed here". |
+| `attention_patterns` | ▲ | string[] ⊆ {`causal`, `bidirectional`, `sliding`, `chunked`, `compressed`} | Distinct per-layer mask kinds. |
+| `attention_schedule` | ▲ | string[] \| null | Raw `config.layer_types` when non-uniform, else null. |
+| `task_heads` | ▲ | string[] | Task families available for the `model_type` across Auto\* mappings. |
+| `tensor_parallel` | ▲ | bool | Ships a base TP plan (adds `tp` to projection nodes — §12.12). |
+
+### 12.8 Modular fields — `extends` + `patches`
+
+`extends` is at the top level (§12.1). The `modularity` summary block was **removed**: `is_modular` = `extends != null`,
+and `diff_size`/`totals` are a one-line sum over `patches`. The cross-model `diff_size` metric lives in
+`modular_graph.json` (§12.14).
+
+**`patch`** — entries of `patches` (trivial inherit-everything classes are omitted; empty member buckets are omitted):
+
+| Key | Req | Type / values | Description |
+|-----|-----|---------------|-------------|
+| `relation` | ● | `inherits` \| `new` | Overrides an inherited class vs a brand-new class. |
+| `target_class` | ● | string | Provenance: the modular Python class. |
+| `component_kind` | ○ | string \| null | Semantic kind the class maps to (`attention`, `feed_forward`, …). |
+| `parent_class` | ○ | string \| null | Provenance. |
+| `parent_model` | ○ | string \| null | Only when not the dominant `extends` parent (multi-parent case). |
+| `overridden` / `added` / `deleted` | ○ | `{methods?: string[], attrs?: string[]}` | Non-empty member change sets only. |
+
+### 12.9 `dataflow`
+
+Node **order** is not repeated here — it lives in `edges`. `dataflow` carries only the non-redundant part: observed
+tensor shapes keyed by semantic id.
+
+| Key | Req | Type / values | Description |
+|-----|-----|---------------|-------------|
+| `source` | ● | string | How the flow was obtained (`observed_forward_meta`). |
+| `input` | ○ | `{name: string, shape: sym_shape}` | Model input tensor. |
+| `output` | ○ | `{shape: sym_shape}` | Model output tensor. |
+| `shapes` | ● | object `{semantic_id: {in: sym_shape, out: sym_shape}}` | Per-node observed shapes; join to nodes by id. |
+
+**`sym_shape`**: `array | null`; each dim is an integer or a token string — `"B"` (batch), `"S"` (sequence), or a
+config expression like `"config.hidden_size"`.
+
+### 12.10 Component `kind` vocabulary
+
+`model`, `embedding`, `position`, `attention`, `cross_attention`, `feed_forward`, `moe`, `normalization`,
+`projection`, `pooler`, `transformer_block`, `encoder`, `decoder`, `stack`, `repeated_container`, `module` (a retained
+structural connector, e.g. a VLM sub-model wrapper). **Open set** — consumers must tolerate unknown kinds.
+
+### 12.11 `attributes` by component `kind`
+
+| kind | attribute keys | notes |
+|------|----------------|-------|
+| `attention`, `cross_attention` | `variant, n_heads, n_kv_heads, head_dim, rope, sliding_window, pattern` | `rope` bool; `pattern` only when the model has a single attention pattern. |
+| `feed_forward` | `hidden_size, intermediate_size, activation` | |
+| `moe` | `num_experts, experts_per_token, num_shared_experts` | |
+| `normalization` | `norm_type` | `rms` \| `layer` \| `group` \| `batch`. |
+| `embedding` | `num_embeddings, embedding_dim` | values are a config expression (`config.vocab_size`) or an int. |
+| `position` | `scheme` + one of `rope_theta`/`head_dim` \| `num_buckets` \| `max_position_embeddings` | keyed by scheme. |
+| `projection` | `in_features, out_features, tp` | features are a config expression or int; `tp` = `colwise` \| `rowwise` (from the TP plan). |
+
+### 12.12 `ResolvedGraph` (`resolve_template_to_graph` output) — delta vs the template
+
+Same component/edge/repeat vocabulary as the template. Differences:
+
+| Key | Req | Type / values | Description |
+|-----|-----|---------------|-------------|
+| `schema_version` | ● | `"resolved-graph-v0"` | |
+| `template_ref` | ● | `{schema_version, model_type}` | Back-pointer to the template it was resolved from. |
+| `config` | ● | `{source, model_type, referenced_fields}` | Checkpoint config values actually used. |
+
+Each `repeats[]` entry additionally carries `count` (evaluated int), `count_resolved` (bool); `count_expr` is retained.
+Repeats stay **symbolic** (one body per repeat, not expanded per instance). No `entrypoints` / modular fields.
+
+### 12.13 `ModularGraph` (`modular_graph.json`)
+
+| Key | Req | Type / values | Description |
+|-----|-----|---------------|-------------|
+| `schema_version` | ● | `"modular-graph-v0"` | |
+| `roots` | ● | string[] | Spine base models (no parent, ≥1 descendant), most-descendants-first. |
+| `nodes` | ● | object `{model: node}` | The forest. |
+
+**`node`**: `{extends: string|null, parents: string[], children: string[], root: string|null, depth: int,
+is_modular: bool, diff_size: int|null}`. Two models sharing a `root` are in the same lineage (align cleanly for
+comparison).

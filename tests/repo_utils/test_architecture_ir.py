@@ -91,8 +91,6 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
                 for field in (
                     "schema_version",
                     "model_type",
-                    "metadata",
-                    "entrypoints",
                     "config",
                     "components",
                     "templates",
@@ -104,7 +102,12 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
 
                 # The canonical artifact is an ArchitectureTemplate.
                 self.assertEqual(artifacts[model_type]["schema_version"], "architecture-template-v0")
-                self.assertEqual(artifacts[model_type]["metadata"]["level"], "architecture_template")
+                # Boilerplate blocks were removed for leanness — must NOT reappear.
+                for gone in ("metadata", "entrypoints", "modularity"):
+                    self.assertNotIn(gone, artifacts[model_type])
+                # Provenance is slimmed to the source classes; no per-node `module`.
+                self.assertIn("config_class", artifacts[model_type]["provenance"])
+                self.assertNotIn("module", artifacts[model_type]["templates"][0])
 
                 # The full config must NOT be serialized: only referenced + salient scalar fields.
                 config = artifacts[model_type]["config"]
@@ -148,17 +151,54 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
             self.assertIn("decoder_layer.self_attn.q_proj", templates_by_id)
             self.assertEqual(templates_by_id["decoder_layer.self_attn.q_proj"]["kind"], "projection")
             gate = templates_by_id["decoder_layer.mlp.gate_proj"]
-            self.assertEqual(
-                gate["attributes"], {"in_features": "config.hidden_size", "out_features": "config.intermediate_size"}
-            )
+            self.assertEqual(gate["attributes"]["in_features"], "config.hidden_size")
+            self.assertEqual(gate["attributes"]["out_features"], "config.intermediate_size")
             down = templates_by_id["decoder_layer.mlp.down_proj"]
             self.assertEqual(down["attributes"]["in_features"], "config.intermediate_size")
+            # Tensor-parallel style is annotated per projection from the model's base_model_tp_plan.
+            self.assertEqual(gate["attributes"]["tp"], "colwise")
+            self.assertEqual(down["attributes"]["tp"], "rowwise")
+
+            # Capabilities block: attention backends, patterns, and available task heads.
+            caps = artifacts["llama"]["capabilities"]
+            self.assertIn("sdpa", caps["attention_backends"])
+            self.assertIn("eager", caps["attention_backends"])
+            self.assertEqual(caps["attention_patterns"], ["causal"])
+            self.assertIn("causal_lm", caps["task_heads"])
+            self.assertTrue(caps["tensor_parallel"])
+            self.assertEqual(artifacts["bert"]["capabilities"]["attention_patterns"], ["bidirectional"])
+            self.assertIn("masked_lm", artifacts["bert"]["capabilities"]["task_heads"])
             # The MLP container carries dims + activation for its caption.
             mlp = templates_by_id["decoder_layer.mlp"]
             self.assertEqual(mlp["attributes"]["activation"], "silu")
             self.assertEqual(mlp["attributes"]["intermediate_size"], 11008)
             # Projections are attached as children of their host so the tree is navigable.
             self.assertIn("decoder_layer.mlp.gate_proj", mlp["children"])
+
+            # Embedding and position nodes carry config-parametric detail (no bare structural nodes
+            # left except pure containers).
+            embed = next(c for c in artifacts["llama"]["components"] if c["kind"] == "embedding")
+            self.assertEqual(embed["attributes"]["num_embeddings"], "config.vocab_size")
+            self.assertEqual(embed["attributes"]["embedding_dim"], "config.hidden_size")
+            rotary = next(c for c in artifacts["llama"]["components"] if c["kind"] == "position")
+            self.assertEqual(rotary["attributes"]["scheme"], "rope")
+            self.assertEqual(rotary["attributes"]["head_dim"], "config.head_dim")
+            # t5's relative position bias is recognized as its own scheme.
+            t5_pos = next(c for c in artifacts["t5"]["templates"] if c["kind"] == "position")
+            self.assertEqual(t5_pos["attributes"]["scheme"], "relative")
+
+            # Intra-module dataflow: q/k/v fan out from attention and fan into o_proj (parallel,
+            # not a spurious chain); gate/up fan into down_proj. Drives the poster-style layout.
+            data = {(e["source"], e["target"]) for e in artifacts["llama"]["edges"] if e["kind"] == "data"}
+            for proj in ("q_proj", "k_proj", "v_proj"):
+                self.assertIn(("decoder_layer.self_attn", f"decoder_layer.self_attn.{proj}"), data)
+                self.assertIn((f"decoder_layer.self_attn.{proj}", "decoder_layer.self_attn.o_proj"), data)
+            self.assertIn(("decoder_layer.mlp", "decoder_layer.mlp.gate_proj"), data)
+            self.assertIn(("decoder_layer.mlp.gate_proj", "decoder_layer.mlp.down_proj"), data)
+            # q/k/v are siblings, not chained to each other.
+            self.assertNotIn(("decoder_layer.self_attn.q_proj", "decoder_layer.self_attn.k_proj"), data)
+            # The re-grounded block-level chain is still intact alongside the finer edges.
+            self.assertIn(("decoder_layer.input_layernorm", "decoder_layer.self_attn"), data)
 
             # Reserved edge kinds are now emitted: decoder self-attention has a KV cache;
             # an encoder (bert) has none.
@@ -291,6 +331,39 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
             if HAS_JSONSCHEMA:
                 jsonschema.validate(instance=artifact, schema=_load_schema("architecture-template-v0.schema.json"))
 
+    def test_nested_submodels_stay_connected(self):
+        # Multimodal models nest full sub-models (vision_tower, language_model, ...) as attributes.
+        # Those wrappers must survive as component nodes so the tree stays reachable from the root.
+        from transformers.models.auto import configuration_auto, modeling_auto
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with (
+                patch.dict(os.environ, {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}),
+                patch.object(configuration_auto.AutoConfig, "from_pretrained", side_effect=AssertionError("no")),
+                patch.object(modeling_auto.AutoModel, "from_pretrained", side_effect=AssertionError("no")),
+            ):
+                generate_architecture_ir.main(["--architectures", "gemma3", "--output-dir", tmp_dir])
+
+            with (Path(tmp_dir) / "artifacts" / "gemma3.json").open(encoding="utf-8") as handle:
+                artifact = json.load(handle)
+
+            root = next(c for c in artifact["components"] if c["id"] == "model")
+            self.assertTrue(root["children"], "root model must list its sub-model children")
+            for wrapper in ("vision_tower", "language_model", "multi_modal_projector"):
+                self.assertIn(wrapper, root["children"])
+                self.assertTrue(any(c["id"] == wrapper for c in artifact["components"]))
+
+            # No component (other than the root) may be orphaned from the children tree.
+            reachable = set()
+            for c in artifact["components"]:
+                reachable.update(c.get("children", []))
+            orphans = [c["id"] for c in artifact["components"] if c["id"] != "model" and c["id"] not in reachable]
+            self.assertEqual(orphans, [])
+
+            # Multimodal facts come from the text backbone, not None.
+            self.assertEqual(artifact["architecture"]["view"], "multimodal")
+            self.assertIsNotNone(artifact["architecture"].get("attention_variant"))
+
     def test_observed_dataflow_has_symbolic_shapes(self):
         from transformers.models.auto import configuration_auto, modeling_auto
 
@@ -321,9 +394,12 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
             self.assertEqual(dataflow["input"]["shape"], ["B", "S"])
             self.assertEqual(dataflow["output"]["shape"], ["B", "S", "config.hidden_size"])
 
-            stages = {stage["id"]: stage for stage in dataflow["stages"] if stage["id"]}
-            self.assertEqual(stages["embed_tokens"]["out_shape"], ["B", "S", "config.hidden_size"])
-            self.assertEqual(stages["decoder_layers"]["out_shape"], ["B", "S", "config.hidden_size"])
+            # dataflow is a flat shape lookup keyed by semantic id (ordering lives in edges).
+            shapes = dataflow["shapes"]
+            self.assertEqual(shapes["embed_tokens"]["out"], ["B", "S", "config.hidden_size"])
+            self.assertEqual(shapes["decoder_layers"]["out"], ["B", "S", "config.hidden_size"])
+            self.assertNotIn("stages", dataflow)
+            self.assertNotIn("blocks", dataflow)
             # The concrete default hidden size must not leak into the observed shapes.
             self.assertNotIn("4096", json.dumps(dataflow))
 
@@ -335,11 +411,9 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
 
             # Intra-block order is re-grounded from the observed forward (pre-norm), not module
             # registration order — the input norm precedes attention rather than dangling at the end.
-            block = dataflow["blocks"]["decoder_layers"]
-            order = [c["id"].split(".", 1)[-1] for c in block]
-            self.assertEqual(order, ["input_layernorm", "self_attn", "post_attention_layernorm", "mlp"])
             data_edges = {(e["source"], e["target"]) for e in artifact["edges"] if e["kind"] == "data"}
             self.assertIn(("decoder_layer.input_layernorm", "decoder_layer.self_attn"), data_edges)
+            self.assertIn(("decoder_layer.self_attn", "decoder_layer.post_attention_layernorm"), data_edges)
             # The old registration-order edge (attention straight to mlp) is gone.
             self.assertNotIn(("decoder_layer.self_attn", "decoder_layer.mlp"), data_edges)
 
@@ -367,19 +441,27 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
                 with (Path(tmp_dir) / "artifacts" / f"{model_type}.json").open(encoding="utf-8") as handle:
                     artifacts[model_type] = json.load(handle)
 
-            # bert is standalone: no modular file.
+            # A rough per-model diff metric derived from the (lean) patches — the modularity summary
+            # block was removed from the artifact; the diff_size metric now lives in modular_graph.json.
+            def diff_metric(art):
+                size = 0
+                for p in art.get("patches", []):
+                    for bucket in ("overridden", "added", "deleted"):
+                        m = p.get(bucket, {})
+                        size += len(m.get("methods", [])) + len(m.get("attrs", []))
+                    size += 3 if p["relation"] == "new" else 0
+                return size
+
+            # bert is standalone: no modular file → extends null, no patches.
             bert = artifacts["bert"]
             self.assertIsNone(bert["extends"])
-            self.assertFalse(bert["modularity"]["is_modular"])
-            self.assertEqual(bert["patches"], [])
+            self.assertNotIn("patches", bert)
 
             # gemma and qwen2 are modular and inherit from llama.
             for model_type in ("gemma", "qwen2"):
                 art = artifacts[model_type]
                 self.assertEqual(art["extends"], "llama")
-                self.assertTrue(art["modularity"]["is_modular"])
                 self.assertGreater(len(art["patches"]), 0)
-                self.assertGreater(art["modularity"]["diff_size"], 0)
 
             # qwen2 is a canonical clean-modular exemplar: its attention is overridden, not rebuilt.
             qwen2 = artifacts["qwen2"]
@@ -387,7 +469,7 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
             self.assertTrue(attn_patches)
             self.assertTrue(all(p["relation"] == "inherits" for p in attn_patches))
             # A clean modular model is much smaller than a heavier one.
-            self.assertLess(qwen2["modularity"]["diff_size"], artifacts["gemma"]["modularity"]["diff_size"])
+            self.assertLess(diff_metric(qwen2), diff_metric(artifacts["gemma"]))
 
             if HAS_JSONSCHEMA:
                 template_schema = _load_schema("architecture-template-v0.schema.json")

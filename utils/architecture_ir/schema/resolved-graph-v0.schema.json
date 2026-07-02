@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "resolved-graph-v0.schema.json",
+  "title": "Transformers Architecture IR — ResolvedGraph v0",
+  "description": "Output of resolving an ArchitectureTemplate against a checkpoint config.json. Config-parametric values are evaluated to concrete numbers; repeats remain symbolic. See SPEC.md for the full contract.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "model_type",
+    "metadata",
+    "template_ref",
+    "config",
+    "components",
+    "templates",
+    "repeats",
+    "edges",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "resolved-graph-v0"
+    },
+    "model_type": {
+      "type": ["string", "null"]
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "level": {
+          "const": "resolved_graph"
+        },
+        "format": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "template_ref": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["schema_version", "model_type"],
+      "description": "Reference back to the ArchitectureTemplate this graph was resolved from.",
+      "properties": {
+        "schema_version": { "type": ["string", "null"] },
+        "model_type": { "type": ["string", "null"] }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["referenced_fields"],
+      "properties": {
+        "source": {
+          "type": ["string", "null"],
+          "description": "Where the checkpoint config came from (e.g. a Hub id or path)."
+        },
+        "model_type": { "type": ["string", "null"] },
+        "referenced_fields": {
+          "type": "object",
+          "description": "The subset of checkpoint config values actually referenced during resolution."
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "description": "Semantic components, carried through from the template unchanged.",
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "templates": {
+      "type": "array",
+      "description": "Reusable component templates (repeat bodies), carried through from the template. Not expanded per instance.",
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "repeats": {
+      "type": "array",
+      "description": "Symbolic repeats with evaluated counts. Still symbolic: one body per repeat, not one entry per instance.",
+      "items": { "$ref": "#/$defs/resolved_repeat" }
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/edge" }
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "component": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "type": "string" },
+        "children": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "resolved_repeat": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "kind", "body", "count_expr"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "const": "symbolic_repeat" },
+        "body": { "type": "string" },
+        "count_expr": {
+          "type": "string",
+          "description": "The originating config expression, preserved for provenance."
+        },
+        "count": {
+          "type": ["integer", "number", "null"],
+          "description": "Evaluated repeat count from the checkpoint config."
+        },
+        "count_resolved": {
+          "type": "boolean",
+          "description": "True when count_expr evaluated successfully against the config."
+        },
+        "count_source": {
+          "type": "string",
+          "enum": ["config", "module_tree"]
+        },
+        "index_symbol": { "type": "string" },
+        "item_path_pattern": { "type": "string" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["source", "target", "kind"],
+      "properties": {
+        "source": { "type": "string" },
+        "target": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "data",
+            "residual",
+            "mask",
+            "position",
+            "cross_attention",
+            "route",
+            "cache_read",
+            "cache_write"
+          ]
+        }
+      }
+    }
+  }
+}

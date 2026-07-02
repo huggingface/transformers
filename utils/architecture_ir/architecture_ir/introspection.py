@@ -10,7 +10,19 @@ from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from .dataflow import capture_dataflow, symbolize_dim, symbolize_shape
-from .enrich import architecture_facts, attention_spec, mlp_spec, moe_spec, norm_type
+from .enrich import (
+    architecture_facts,
+    attention_spec,
+    capabilities,
+    embedding_spec,
+    mlp_spec,
+    moe_spec,
+    norm_type,
+    position_spec,
+    projection_role,
+    tensor_parallel_plan,
+    tp_style_for,
+)
 from .modular import compute_modularity, modularity_payload
 from .recognizers import build_edges, classify_component, detect_repeats, summarize_semantic_components
 from .semantic_model import SCHEMA_VERSION, ArchitectureArtifact, Component, Edge, Repeat
@@ -21,40 +33,105 @@ def build_architecture_artifact(model_type: str, resolved: Any) -> dict[str, Any
     repeats = detect_repeats(components, resolved.config)
     edges = build_edges(components)
     artifact = _build_compact_artifact(model_type, resolved, components, repeats, edges)
-    _enrich_artifact(artifact, model_type, resolved.config)
+    _enrich_artifact(artifact, model_type, resolved)
     artifact.update(_modular_payload(model_type, resolved))
     _attach_dataflow(artifact, resolved)
+    _strip_empty_children(artifact)
     return artifact
 
 
-def _enrich_artifact(artifact: dict[str, Any], model_type: str, config: Any) -> None:
-    """Add semantic-depth facts: model-level ``architecture`` block, per-component attributes,
-    and the cache/route edges that decoder attention and MoE routing imply."""
+def _strip_empty_children(artifact: dict[str, Any]) -> None:
+    """Drop empty ``children: []`` (leaf nodes) — a consumer treats a missing list as no children."""
+    for component in [*artifact["components"], *artifact["templates"]]:
+        if not component.get("children"):
+            component.pop("children", None)
+
+
+def _enrich_artifact(artifact: dict[str, Any], model_type: str, resolved: Any) -> None:
+    """Add semantic-depth facts: model-level ``architecture`` + ``capabilities`` blocks, per-component
+    attributes, and the cache/route edges that decoder attention and MoE routing imply."""
+    config = resolved.config
     facts = architecture_facts(model_type, config)
     artifact["architecture"] = facts
+    artifact["capabilities"] = capabilities(model_type, config, resolved.model.__class__, facts.get("view"))
     view = facts.get("view")
+    tp_plan = tensor_parallel_plan(config, getattr(config, "text_config", None))
 
     attn = attention_spec(config)
     moe = moe_spec(config)
     mlp = mlp_spec(config)
+    # A single unambiguous attention pattern (uniform model) is stamped on each attention node;
+    # mixed schedules (e.g. sliding+full) are left to capabilities.attention_schedule.
+    patterns = artifact["capabilities"]["attention_patterns"]
+    single_pattern = patterns[0] if len(patterns) == 1 else None
     for component in [*artifact["components"], *artifact["templates"]]:
         kind = component["kind"]
-        if kind in {"attention", "cross_attention"} and attn:
-            component["attributes"] = dict(attn)
+        if kind in {"attention", "cross_attention"}:
+            attributes = dict(attn)
+            if single_pattern:
+                attributes["pattern"] = single_pattern
+            if attributes:
+                component["attributes"] = attributes
         elif kind == "feed_forward" and mlp:
             component["attributes"] = dict(mlp)
         elif kind == "normalization":
             component["attributes"] = {"norm_type": norm_type(component["class_name"])}
         elif kind == "moe" and moe:
             component["attributes"] = dict(moe)
-        elif kind == "projection" and component.get("attributes"):
-            # Symbolize the raw in/out features into config expressions where they match.
-            component["attributes"] = {
-                key: symbolize_dim(value, config) for key, value in component["attributes"].items()
+        elif kind == "embedding":
+            spec = embedding_spec(config, component.get("attributes"))
+            component["attributes"] = {key: symbolize_dim(value, config) for key, value in spec.items()}
+        elif kind == "position":
+            spec = position_spec(config)
+            component["attributes"] = {key: symbolize_dim(value, config) for key, value in spec.items()}
+        elif kind == "projection":
+            attributes = {
+                key: symbolize_dim(value, config) for key, value in (component.get("attributes") or {}).items()
             }
+            style = tp_style_for(component["path_pattern"], tp_plan)
+            if style:
+                attributes["tp"] = style
+            if attributes:
+                component["attributes"] = attributes
 
+    _attach_projection_edges(artifact)
     _attach_cache_edges(artifact, view)
     _attach_route_edges(artifact)
+
+
+def _attach_projection_edges(artifact: dict[str, Any]) -> None:
+    """Emit the intra-module dataflow among an attention/MLP/MoE block's projections.
+
+    Fan-out from the block to its input projections (q/k/v, gate/up) and fan-in from those to the
+    output projection (o_proj, down_proj) — the true parallel-then-combine topology. Additive
+    ``data`` edges only; when no output projection is recognized we emit just the fan-out, so the
+    projections remain unordered siblings rather than a spurious chain.
+    """
+    components = [*artifact["components"], *artifact["templates"]]
+    by_id = {component["id"]: component for component in components}
+    existing = {(edge["source"], edge["target"], edge["kind"]) for edge in artifact["edges"]}
+
+    def add(source: str, target: str) -> None:
+        if source != target and (source, target, "data") not in existing:
+            existing.add((source, target, "data"))
+            artifact["edges"].append(
+                {"source": source, "target": target, "kind": "data", "provenance": "intra_module"}
+            )
+
+    for container in components:
+        if container["kind"] not in {"attention", "cross_attention", "feed_forward", "moe"}:
+            continue
+        projections = [cid for cid in container.get("children", []) if by_id.get(cid, {}).get("kind") == "projection"]
+        if not projections:
+            continue
+        inputs = [pid for pid in projections if projection_role(pid.rsplit(".", 1)[-1]) == "input"]
+        outputs = [pid for pid in projections if projection_role(pid.rsplit(".", 1)[-1]) == "output"]
+
+        for pid in inputs or projections:
+            add(container["id"], pid)
+        for out in outputs:
+            for src in inputs or [pid for pid in projections if pid != out]:
+                add(src, out)
 
 
 def _attach_cache_edges(artifact: dict[str, Any], view: str | None) -> None:
@@ -146,15 +223,23 @@ def _attach_dataflow(artifact: dict[str, Any], resolved: Any) -> None:
             blocks[repeat["id"]] = ordered
             _reground_block_edges(artifact, repeat_body, [item["id"] for item in ordered])
 
+    # A flat shape lookup keyed by semantic id — the *ordering* those stages/blocks imply already
+    # lives in `edges` (that is what we ground above), so we serialize only the non-redundant part:
+    # each node's observed in/out tensor shape (symbolized). The viewer joins these by id.
+    shapes: dict[str, dict[str, Any]] = {}
+    for stage in stages:
+        if stage["id"] and (stage["in_shape"] or stage["out_shape"]):
+            shapes[stage["id"]] = {"in": stage["in_shape"], "out": stage["out_shape"]}
+    for ordered in blocks.values():
+        for child in ordered:
+            if child["in_shape"] or child["out_shape"]:
+                shapes[child["id"]] = {"in": child["in_shape"], "out": child["out_shape"]}
+
     artifact["dataflow"] = {
         "source": "observed_forward_meta",
-        "input": {
-            "name": observed["input"]["name"],
-            "shape": symbolize_shape(observed["input"]["shape"], config),
-        },
+        "input": {"name": observed["input"]["name"], "shape": symbolize_shape(observed["input"]["shape"], config)},
         "output": {"shape": symbolize_shape(observed["output"]["shape"], config)},
-        "stages": stages,
-        "blocks": blocks,
+        "shapes": shapes,
     }
 
     # Add any observed consecutive-stage data edges missing from the structural set. Position
@@ -177,16 +262,15 @@ def _attach_dataflow(artifact: dict[str, Any], resolved: Any) -> None:
 
 
 def _reground_block_edges(artifact: dict[str, Any], body_id: str, ordered_ids: list[str]) -> None:
-    """Replace a repeat body's intra-block data edges with the observed forward order.
+    """Replace the data edges *among a block's direct children* with the observed forward order.
 
-    Only ``data`` edges whose both endpoints are inside the block body are touched; residual,
-    position, mask, and cache edges are left intact.
+    Scoped to exactly the reordered direct children, so finer intra-module edges (e.g. the
+    attention/MLP projection fan-out/fan-in) and residual/position/mask/cache edges are left intact.
     """
-    body_prefix = f"{body_id}."
-    body_ids = {edge_id for edge_id in _kind_by_id(artifact) if edge_id.startswith(body_prefix)}
+    block_ids = set(ordered_ids)
 
     def is_intra_block_data(edge: dict[str, Any]) -> bool:
-        return edge["kind"] == "data" and edge["source"] in body_ids and edge["target"] in body_ids
+        return edge["kind"] == "data" and edge["source"] in block_ids and edge["target"] in block_ids
 
     artifact["edges"] = [edge for edge in artifact["edges"] if not is_intra_block_data(edge)]
     existing = {(edge["source"], edge["target"], edge["kind"]) for edge in artifact["edges"]}
@@ -216,27 +300,19 @@ def _kind_by_id(artifact: dict[str, Any]) -> dict[str, str]:
 
 
 def _modular_payload(model_type: str, resolved: Any) -> dict[str, Any]:
-    """Compute the modular-diff payload (extends / modularity / patches) from source.
+    """Compute the modular-diff payload (``extends`` + ``patches``) from source.
 
-    Best-effort and never fatal: on any failure we still emit a ``modularity`` summary marking
-    the model non-modular with a note, so the artifact shape stays stable.
+    Best-effort and never fatal: on any failure we emit just ``extends: null`` so the shape stays
+    stable. Empty ``patches`` (standalone models) are omitted — absence means "no modular changes".
     """
     try:
         model_dir = os.path.dirname(inspect.getfile(resolved.config.__class__))
-        return modularity_payload(compute_modularity(model_dir, model_type))
-    except Exception as error:
-        return {
-            "extends": None,
-            "modularity": {
-                "is_modular": False,
-                "parent_model": None,
-                "parent_models": [],
-                "diff_size": 0,
-                "totals": {"overridden": 0, "added": 0, "deleted": 0, "new_classes": 0, "trivial": 0},
-                "note": f"modularity unavailable: {error.__class__.__name__}",
-            },
-            "patches": [],
-        }
+        payload = modularity_payload(compute_modularity(model_dir, model_type))
+    except Exception:
+        return {"extends": None}
+    if not payload.get("patches"):
+        payload.pop("patches", None)
+    return payload
 
 
 def build_expanded_architecture_artifact(model_type: str, resolved: Any) -> ArchitectureArtifact:
@@ -326,7 +402,8 @@ def _build_compact_artifact(
     repeat_templates = _repeat_templates(repeats)
     component_id_map = _canonical_component_id_map(components, repeat_templates)
     raw_kind_by_id = {component.id: component.kind for component in components}
-    compact_components = _compact_components(components, repeat_templates, component_id_map, raw_kind_by_id)
+    keep_ids = _connector_keep_ids(components, repeat_templates, raw_kind_by_id)
+    compact_components = _compact_components(components, repeat_templates, component_id_map, keep_ids)
     compact_templates = _compact_templates(components, repeat_templates, component_id_map, raw_kind_by_id)
     compact_repeats = _compact_repeats(repeats, repeat_templates)
     known_ids = {component["id"] for component in compact_components}
@@ -340,38 +417,26 @@ def _build_compact_artifact(
 
     referenced_fields = _referenced_config_field_names([repeat.get("count_expr") for repeat in compact_repeats])
 
-    return {
+    artifact = {
         "schema_version": SCHEMA_VERSION,
         "model_type": model_type,
-        "metadata": {
-            "level": "architecture_template",
-            "format": "compact_template",
-            "description": (
-                "Config-parametric ArchitectureTemplate with symbolic repeats and reusable component templates. "
-                "Resolve against a checkpoint config.json to obtain a ResolvedGraph."
-            ),
-        },
-        "entrypoints": resolved.entrypoints,
         "config": _config_payload(resolved.config, referenced_fields),
         "components": compact_components,
         "templates": compact_templates,
         "repeats": compact_repeats,
         "edges": _compact_edges(edges, component_id_map, known_ids, kind_by_id),
+        # Provenance: which config/model classes this IR was introspected from (the rest of the
+        # resolution strategy is invariant and documented in SPEC.md, not repeated per artifact).
         "provenance": {
-            "generator": "utils/architecture_ir",
-            "source": "local_transformers_checkout",
-            "resolution": "AutoConfig.for_model + AutoModel.from_config",
-            "instantiation": "config_only_meta_device_no_init_weights",
-            "schema_version": SCHEMA_VERSION,
-            "model_type": model_type,
             "config_class": resolved.config.__class__.__name__,
-            "config_class_module": resolved.config.__class__.__module__,
+            "config_module": resolved.config.__class__.__module__,
             "model_class": resolved.model.__class__.__name__,
-            "model_class_module": resolved.model.__class__.__module__,
-            "path_style": "symbolic_patterns",
+            "model_module": resolved.model.__class__.__module__,
         },
-        "warnings": list(resolved.warnings),
     }
+    if resolved.warnings:
+        artifact["warnings"] = list(resolved.warnings)
+    return artifact
 
 
 def _repeat_templates(repeats: list[Repeat]) -> dict[str, dict[str, Any]]:
@@ -395,11 +460,45 @@ def _repeat_templates(repeats: list[Repeat]) -> dict[str, dict[str, Any]]:
     return templates
 
 
+def _connector_keep_ids(
+    components: list[Component],
+    repeat_templates: dict[str, dict[str, Any]],
+    raw_kind_by_id: dict[str, str],
+) -> set[str]:
+    """Top-level component ids to keep: those included on their own merit, plus every ancestor of
+    an included component. Retaining connectors keeps the tree reachable from the root — otherwise a
+    sub-model wrapper (e.g. a VLM's ``vision_tower``/``language_model``, kind ``module``) would be
+    dropped and orphan everything beneath it."""
+    by_id = {component.id: component for component in components}
+
+    def in_repeat(component: Component) -> bool:
+        return (
+            _repeat_for_descendant_path(component.path, repeat_templates) is not None
+            or _repeat_for_container_path(component.path, repeat_templates) is not None
+        )
+
+    base = {
+        component.id
+        for component in components
+        if not in_repeat(component) and _include_canonical_component(component, raw_kind_by_id.get(component.parent))
+    }
+    keep = set(base)
+    for component_id in base:
+        parent = by_id[component_id].parent
+        while parent is not None and parent in by_id and parent not in keep:
+            parent_component = by_id[parent]
+            if in_repeat(parent_component):
+                break
+            keep.add(parent)
+            parent = parent_component.parent
+    return keep
+
+
 def _compact_components(
     components: list[Component],
     repeat_templates: dict[str, dict[str, Any]],
     component_id_map: dict[str, str],
-    raw_kind_by_id: dict[str, str],
+    keep_ids: set[str],
 ) -> list[dict[str, Any]]:
     by_path = {component.path: component for component in components}
     compact: list[dict[str, Any]] = []
@@ -409,7 +508,7 @@ def _compact_components(
             continue
         if _repeat_for_container_path(component.path, repeat_templates) is not None:
             continue
-        if not _include_canonical_component(component, raw_kind_by_id.get(component.parent)):
+        if component.id not in keep_ids:
             continue
 
         compact.append(
@@ -550,13 +649,21 @@ def _component_payload(
         "id": component_id,
         "kind": component.kind,
         "class_name": component.class_name,
-        "module": component.module,
         "path_pattern": path_pattern,
         "children": children,
     }
     if component.kind == "projection":
         dims = {
             key: component.attributes[key] for key in ("in_features", "out_features") if key in component.attributes
+        }
+        if dims:
+            payload["attributes"] = dims
+    elif component.kind == "embedding":
+        # Carried so enrichment can prefer the concrete (possibly padded) vocab/dim over config.
+        dims = {
+            key: component.attributes[key]
+            for key in ("num_embeddings", "embedding_dim")
+            if key in component.attributes
         }
         if dims:
             payload["attributes"] = dims
