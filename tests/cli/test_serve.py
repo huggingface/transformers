@@ -1826,6 +1826,17 @@ class TestToolCallUnit(unittest.TestCase):
         calls = parse_tool_calls(processor, text, schema)
         self.assertEqual(len(calls), 2)
 
+    def test_parse_tool_calls_with_legacy_schema_does_not_pass_prefix(self):
+        def parse_legacy(response, schema):
+            return [{"name": "get_weather", "arguments": {"city": "Paris"}}]
+
+        processor = MagicMock()
+        processor.parse_response.side_effect = parse_legacy
+        schema = next(v["schema"] for k, v in _TOOL_CALL_FALLBACKS.items() if "qwen3_5" in k)
+        calls = parse_tool_calls(processor, "unused", schema)
+
+        self.assertEqual(calls, [{"name": "get_weather", "arguments": '{"city": "Paris"}'}])
+
 
 class TestCBWorkerDeadServerIntegration(unittest.TestCase):
     """End-to-end FastAPI behavior when the CB worker has died.

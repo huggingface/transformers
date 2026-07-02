@@ -216,7 +216,8 @@ def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | Non
 
     Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
     """
-    parsed = processor.parse_response(generated_ids, schema, prefix="")
+    parse_kwargs = {"prefix": ""} if isinstance(schema, dict) and ("version" in schema or "fields" in schema) else {}
+    parsed = processor.parse_response(generated_ids, schema, **parse_kwargs)
     # The new response_template path returns a dict like {"tool_calls": [...]}; unwrap.
     if isinstance(parsed, dict) and "tool_calls" in parsed:
         parsed = parsed["tool_calls"]
@@ -225,7 +226,7 @@ def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | Non
     if not isinstance(parsed, list):
         parsed = [parsed]
     tool_calls = [_normalize_tool_call(tool_call) for tool_call in parsed]
-    return tool_calls if tool_calls else None
+    return tool_calls or None
 
 
 # Default start/end tokens + schema. The opening token is optional so prefilled
