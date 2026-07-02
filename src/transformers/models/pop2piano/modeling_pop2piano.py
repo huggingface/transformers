@@ -33,6 +33,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCross
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_pop2piano import Pop2PianoConfig
 
 
@@ -543,6 +544,12 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_sdpa = True
 
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(Pop2PianoBlock, index=0),
+        "attentions": OutputRecorder(Pop2PianoLayerSelfAttention, index=-1),
+        "cross_attentions": OutputRecorder(Pop2PianoLayerCrossAttention, index=-1),
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -629,6 +636,7 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
+    @capture_outputs
     def forward(
         self,
         input_ids=None,
@@ -644,11 +652,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         **kwargs,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
@@ -734,11 +737,8 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
 
         hidden_states = self.dropout(inputs_embeds)
 
-        for i, layer_module in enumerate(self.block):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
+        for layer_module in self.block:
+            hidden_states, self_attention_position_bias, cross_attention_position_bias = layer_module(
                 hidden_states,
                 causal_mask,
                 position_bias,
@@ -746,49 +746,20 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
                 encoder_attention_mask,
                 encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
                 past_key_values=past_key_values,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            # We share the position biases between the layers - the first layer store them
-            # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
-            # (cross-attention position bias), (cross-attention weights)
-            position_bias = layer_outputs[1]
+            # We share the position biases between the layers - the first layer stores them
+            position_bias = self_attention_position_bias
             if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)
-                if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[4],)
+                encoder_decoder_position_bias = cross_attention_position_bias
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        # Add last layer
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    past_key_values,
-                    all_hidden_states,
-                    all_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -940,6 +911,10 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
             labels in `[0, ..., config.vocab_size]`
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if inputs_embeds is not None and input_features is not None:

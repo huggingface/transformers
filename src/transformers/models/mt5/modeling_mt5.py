@@ -858,6 +858,7 @@ class MT5Model(MT5PreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.t5.modeling_t5.T5Model.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
@@ -1026,6 +1027,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1100,6 +1102,10 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
         >>> # studies have shown that owning a dog is good for you.
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Encode if needed (training, first prediction pass)
@@ -1216,6 +1222,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
@@ -1276,6 +1283,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.t5.modeling_t5.T5ForSequenceClassification.forward with T5->MT5, t5->mt5
     def forward(
@@ -1420,6 +1428,7 @@ class MT5ForTokenClassification(MT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.forward with T5->MT5
     def forward(
@@ -1509,6 +1518,7 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.forward
     def forward(
