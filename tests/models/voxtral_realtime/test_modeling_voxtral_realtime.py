@@ -413,8 +413,8 @@ class VoxtralRealtimeForConditionalGenerationIntegrationTest(unittest.TestCase):
         thread.join()
 
         # Reference from the vLLM streaming path
-        # floating point preicision differences
         EXPECTED_TRANSCRIPTION = " This week, I traveled to Chicago to deliver my final farewell address to the nation. Following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, My conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the"
+        # floating point preicision differences
         EXPECTED_TRANSCRIPTION = (
             EXPECTED_TRANSCRIPTION.replace("the nation. Following", "the nation, following")
             .replace("at all, My conversations", "at all, my conversations")
