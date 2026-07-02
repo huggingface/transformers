@@ -18,11 +18,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import torch
-from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
+from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
@@ -80,9 +81,14 @@ class Step3p7ImageProcessor(TorchvisionBackend):
     num_image_features: int = 169
     num_patch_features: int = 81
 
+    @staticmethod
+    def _is_extreme_aspect(width: int, height: int) -> bool:
+        """`True` for near-degenerate images (min side < 32px, aspect ratio > 4:1)."""
+        return min(width, height) < 32 and max(width / height, height / width) > 4
+
     def _plan_patches(
         self, width: int, height: int, image_size: int, patch_crop_size: int
-    ) -> tuple[tuple[int, int], tuple[int, int], int, int, int]:
+    ) -> tuple[tuple[int, int], tuple[int, int], int, int, int, bool]:
         """Compute the sliding-window patch layout for one image.
 
         Unlike models with a fixed tile size (Idefics3, LLaVA-NeXT), Step3p7
@@ -108,11 +114,13 @@ class Step3p7ImageProcessor(TorchvisionBackend):
             window_size: tile side length (``0`` → no local patches)
             num_patches_x: number of patches along the width
             num_patches_y: number of patches along the height
+            needs_square_pad: whether the raw image must be zero-padded to a square before resizing
         """
         w, h = width, height
 
         # Step 1 — normalise
-        if min(h, w) < 32 and max(w / h, h / w) > 4:
+        needs_square_pad = self._is_extreme_aspect(w, h)
+        if needs_square_pad:
             w = h = max(w, h)
         if max(h, w) > self.MAX_IMAGE_SIZE:
             scale = self.MAX_IMAGE_SIZE / max(h, w)
@@ -129,7 +137,7 @@ class Step3p7ImageProcessor(TorchvisionBackend):
             window_size = patch_crop_size
 
         if window_size == 0:
-            return (w, h), (w, h), 0, 0, 0
+            return (w, h), (w, h), 0, 0, 0, needs_square_pad
 
         # Step 3 — snap to window-size multiples
         def _snap(dim: int) -> int:
@@ -142,17 +150,55 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         crop_w, crop_h = _snap(w), _snap(h)
         num_patches_x = max(1, crop_w // window_size)
         num_patches_y = max(1, crop_h // window_size)
-        return (w, h), (crop_w, crop_h), window_size, num_patches_x, num_patches_y
+        return (w, h), (crop_w, crop_h), window_size, num_patches_x, num_patches_y, needs_square_pad
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> tuple[int, int]:
         """Return ``(num_patches, num_newline_tokens)`` for an image of the given size."""
         images_kwargs = images_kwargs or {}
         image_size = images_kwargs.get("image_size", self.image_size)
         patch_crop_size = images_kwargs.get("patch_crop_size", self.patch_crop_size)
-        _, _, _, num_patches_x, num_patches_y = self._plan_patches(width, height, image_size, patch_crop_size)
+        *_, num_patches_x, num_patches_y, _ = self._plan_patches(width, height, image_size, patch_crop_size)
         num_patches = num_patches_x * num_patches_y
         num_newlines = num_patches_y - 1 if num_patches > 0 else 0
         return num_patches, num_newlines
+
+    def _get_image_patches(
+        self,
+        img: torch.Tensor,
+        image_size: int,
+        patch_crop_size: int,
+        resample: "PILImageResampling",
+    ) -> tuple[torch.Tensor, list[torch.Tensor], int, int]:
+        """Step3p7-specific cropping: square-pad extreme aspect ratios, resize the global view,
+        and slice out raw (pre-final-resize) local-patch tiles per `_plan_patches`'s layout.
+
+        Returns the resized global view, the list of raw local-patch tensors (still at
+        `window_size`, not yet resized to `patch_crop_size`), and the patch grid dimensions.
+        """
+        _, height, width = img.shape
+        (global_w, global_h), (crop_w, crop_h), window_size, num_patches_x, num_patches_y, needs_square_pad = (
+            self._plan_patches(width, height, image_size, patch_crop_size)
+        )
+
+        # Pad extreme-aspect-ratio images to square (original at top-left, zeros elsewhere)
+        if needs_square_pad:
+            side = max(width, height)
+            img = self.pad([img], pad_size=SizeDict(height=side, width=side))[0]
+
+        img_batch = img.unsqueeze(0)
+
+        # Global view: resize to (global_w, global_h) then square to image_size × image_size
+        global_img = self.resize(img_batch, SizeDict(height=global_h, width=global_w), resample=resample)
+        global_img = self.resize(global_img, SizeDict(height=image_size, width=image_size), resample=resample).squeeze(
+            0
+        )
+
+        if window_size == 0:
+            return global_img, [], num_patches_x, num_patches_y
+
+        img_for_crop = self.resize(img_batch, SizeDict(height=crop_h, width=crop_w), resample=resample).squeeze(0)
+        patches = divide_to_patches(img_for_crop, patch_size=window_size)
+        return global_img, patches, num_patches_x, num_patches_y
 
     def _preprocess(
         self,
@@ -169,64 +215,46 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         return_tensors: "str | TensorType | None",
         **kwargs,
     ) -> BatchFeature:
-        pixel_values_list, pixel_values_local_list, num_local_patches, patch_newline_masks = [], [], [], []
+        global_images, raw_patches, num_local_patches, patch_newline_masks = [], [], [], []
 
         for img in images:
-            _, height, width = img.shape
-            (global_w, global_h), (crop_w, crop_h), window_size, num_patches_x, num_patches_y = self._plan_patches(
-                width, height, image_size, patch_crop_size
+            global_img, patches, num_patches_x, num_patches_y = self._get_image_patches(
+                img, image_size, patch_crop_size, resample
             )
-
-            # Pad extreme-aspect-ratio images to square (original at top-left, zeros elsewhere)
-            if min(height, width) < 32 and max(width / height, height / width) > 4:
-                side = max(width, height)
-                img = tvF.pad(img, [0, 0, side - width, side - height], fill=0)
-
-            img_batch = img.unsqueeze(0)
-
-            # Global view: resize to (global_w, global_h) then square to image_size × image_size
-            global_img = self.resize(img_batch, SizeDict(height=global_h, width=global_w), resample=resample)
-            global_img = self.resize(global_img, SizeDict(height=image_size, width=image_size), resample=resample)
-            pixel_values_list.append(
-                self.rescale_and_normalize(
-                    global_img, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-                ).squeeze(0)
-            )
-
-            if window_size == 0:
-                num_local_patches.append(0)
-                patch_newline_masks.append(None)
-                continue
-
-            # Local patches: extract window_size × window_size tiles from the crop-resized image
-            img_for_crop = self.resize(img_batch, SizeDict(height=crop_h, width=crop_w), resample=resample).squeeze(0)
-            patches = []
-            for row in range(num_patches_y):
-                for col in range(num_patches_x):
-                    patch = img_for_crop[
-                        :, row * window_size : (row + 1) * window_size, col * window_size : (col + 1) * window_size
-                    ]
-                    patch = self.resize(
-                        patch.unsqueeze(0), SizeDict(height=patch_crop_size, width=patch_crop_size), resample=resample
-                    )
-                    patches.append(
-                        self.rescale_and_normalize(
-                            patch, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-                        ).squeeze(0)
-                    )
-
+            global_images.append(global_img)
             num_local_patches.append(len(patches))
             # Newline after the last patch in each row except the final row
-            newlines = [
-                col == num_patches_x - 1 and row < num_patches_y - 1
-                for row in range(num_patches_y)
-                for col in range(num_patches_x)
-            ]
-            patch_newline_masks.append(newlines)
-            pixel_values_local_list.extend(patches)
+            patch_newline_masks.append(
+                [
+                    col == num_patches_x - 1 and row < num_patches_y - 1
+                    for row in range(num_patches_y)
+                    for col in range(num_patches_x)
+                ]
+                if patches
+                else None
+            )
+            raw_patches.extend(patches)
+
+        # Global views already share a uniform (image_size × image_size) shape, so batch directly.
+        global_stack = self.rescale_and_normalize(
+            torch.stack(global_images), do_rescale, rescale_factor, do_normalize, image_mean, image_std
+        )
+
+        # Local patches: resize + rescale/normalize in shape-grouped batches.
+        pixel_values_local_list = []
+        if raw_patches:
+            grouped_patches, grouped_index = group_images_by_shape(raw_patches, disable_grouping=disable_grouping)
+            for shape, stacked_patches in grouped_patches.items():
+                resized = self.resize(
+                    stacked_patches, SizeDict(height=patch_crop_size, width=patch_crop_size), resample=resample
+                )
+                grouped_patches[shape] = self.rescale_and_normalize(
+                    resized, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                )
+            pixel_values_local_list = reorder_images(grouped_patches, grouped_index)
 
         data = {
-            "pixel_values": torch.stack(pixel_values_list),
+            "pixel_values": global_stack,
             "num_local_patches": num_local_patches,
         }
         if pixel_values_local_list:

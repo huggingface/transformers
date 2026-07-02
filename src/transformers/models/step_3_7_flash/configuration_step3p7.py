@@ -153,6 +153,7 @@ class Step3p7TextConfig(PreTrainedConfig):
     swiglu_limits_shared: list[float | None] | None = None
     use_rope_layers: list[bool] | None = None
     yarn_only_types: list[str] | None = None
+    use_bidirectional_attention: bool | None = False
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
@@ -176,10 +177,21 @@ class Step3p7TextConfig(PreTrainedConfig):
             else:
                 self.num_sliding_attention_heads = self.num_attention_heads
 
-        if self.rope_parameters is None:
-            self.rope_parameters = self.rope_scaling or {"rope_type": "default", "rope_theta": self.rope_theta}
-
         super().__post_init__(**kwargs)
+
+    def convert_rope_params_to_dict(self, **kwargs):
+        # Overridden because the generic `PreTrainedConfig` version unconditionally does
+        # `self.rope_parameters.setdefault("rope_theta", ...)` on the outer dict, which corrupts a
+        # layer-type-keyed dict. Seed an empty per-layer-type dict (one entry per type actually present
+        # in `layer_types`, gemma3 convention) and let `standardize_rope_params` fill in the defaults;
+        # `rope_scaling` (e.g. YaRN/NTK) only applies to full-attention layers.
+        rope_scaling = kwargs.pop("rope_scaling", None) or self.rope_scaling
+        if self.rope_parameters is None:
+            self.rope_parameters = {layer_type: {} for layer_type in set(self.layer_types)}
+            if rope_scaling and "full_attention" in self.rope_parameters:
+                self.rope_parameters["full_attention"].update(rope_scaling)
+        self.standardize_rope_params()
+        return kwargs
 
 
 @auto_docstring
