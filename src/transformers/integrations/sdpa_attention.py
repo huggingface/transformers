@@ -55,7 +55,7 @@ def sdpa_attention_forward(
             " Please set your attention to `eager` if you want any of these features."
         )
     sdpa_kwargs = {}
-    if hasattr(module, "num_key_value_groups"):
+    if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
         if not use_gqa_in_sdpa(attention_mask, key, value):
             key = repeat_kv(key, module.num_key_value_groups)
             value = repeat_kv(value, module.num_key_value_groups)
