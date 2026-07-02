@@ -980,9 +980,13 @@ def create_reference_sliding_window_causal_mask(**kwargs):
     past_key_values = kwargs["past_key_values"]
     inputs_embeds = kwargs["inputs_embeds"]
 
-    layer = next(layer for layer in past_key_values.layers if layer.layer_type == "reference_sliding_attention")
-    prefill_length = float("inf") if layer.prefill_length is None else layer.prefill_length
-    _, kv_offset = layer.get_mask_sizes(query_length=inputs_embeds.shape[1])
+    if past_key_values is None:
+        prefill_length = float("inf")
+        kv_offset = 0
+    else:
+        layer = next(layer for layer in past_key_values.layers if layer.layer_type == "reference_sliding_attention")
+        prefill_length = float("inf") if layer.prefill_length is None else layer.prefill_length
+        _, kv_offset = layer.get_mask_sizes(query_length=inputs_embeds.shape[1])
 
     def prefill_overlay(batch_idx, head_idx, q_idx, kv_idx):
         # Remove kv_offset to retrieve the kv_index with respect to prefill
