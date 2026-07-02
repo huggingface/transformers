@@ -75,6 +75,7 @@ NUM_MODELS_TO_TRIGGER_FULL_CI = 15
 # in the library)
 CORE_FILES = (
     "setup.py",
+    "setup.py",
     ".circleci/create_circleci_config.py",
     "src/transformers/modeling_utils.py",
     "src/transformers/core_model_loading.py",
