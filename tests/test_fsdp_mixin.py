@@ -365,6 +365,43 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
             logger.debug(f"FSDP2 save/load test passed: all {len(state_dict_before)} parameters match exactly.")
 
 
+def _test_fsdp2_save_load_dcp_impl(rank, config_class, config_dict):
+    """Save FSDP2 model via save_pretrained(distributed_checkpoint=True), reload, compare state dicts."""
+    init_test_logger()
+
+    config = config_class.from_dict(config_dict)
+    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size())
+
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        _set_determinism(SEED)
+        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
+        dist.barrier()
+
+        state_dict_before = gather_full_state_dict(model)
+
+        with _distributed_tmpdir(rank) as tmpdir:
+            model.save_pretrained(tmpdir, is_main_process=(rank == 0), distributed_checkpoint=True)
+            dist.barrier()
+            new_model = AutoModelForCausalLM.from_pretrained(tmpdir, distributed_config=distributed_config)
+            dist.barrier()
+
+        state_dict_after = gather_full_state_dict(new_model)
+        for key in state_dict_before:
+            assert key in state_dict_after, f"After DCP save/load: Key {key} missing after load"
+            torch.testing.assert_close(
+                state_dict_before[key],
+                state_dict_after[key],
+                rtol=0,
+                atol=0,
+                msg=f"After DCP save/load: Weight mismatch for {key}",
+            )
+
+        if rank == 0:
+            logger.debug(
+                f"FSDP2 DCP save/load test passed: all {len(state_dict_before)} parameters match exactly."
+            )
+
+
 def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_word_embeddings):
     """Verify that apply_fully_sharded_data_parallel wraps exactly the right modules."""
     init_test_logger()
@@ -565,7 +602,7 @@ class FSDPTesterMixin(ABC):
         self.assertTrue(model._fsdp_plan, f"No _fsdp_plan declared for {type(model).__name__}")
 
     @parameterized.expand(["untied", "tied"])
-    @require_torch_greater_or_equal("2.6")
+    @require_torch_greater_or_equal("2.7")
     @is_fsdp_test
     def test_fsdp2_sharding_structure(self, label):
         self._run_fsdp2_distributed_test(
@@ -574,13 +611,18 @@ class FSDPTesterMixin(ABC):
             label == "tied",
         )
 
-    @require_torch_greater_or_equal("2.6")
+    @require_torch_greater_or_equal("2.7")
     @is_fsdp_test
     def test_fsdp2_save_load(self):
         self._run_fsdp2_distributed_test("test_fsdp2_save_load", _test_fsdp2_save_load_impl)
 
+    @require_torch_greater_or_equal("2.7")
+    @is_fsdp_test
+    def test_fsdp2_save_load_dcp(self):
+        self._run_fsdp2_distributed_test("test_fsdp2_save_load_dcp", _test_fsdp2_save_load_dcp_impl)
+
     @parameterized.expand(["untied", "tied"])
-    @require_torch_greater_or_equal("2.6")
+    @require_torch_greater_or_equal("2.7")
     @is_fsdp_test
     def test_fsdp2_plan_vs_ddp(self, label):
         self._run_fsdp2_distributed_test(

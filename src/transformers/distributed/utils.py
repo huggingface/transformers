@@ -97,8 +97,8 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
     if not is_torch_greater_or_equal("2.5"):
         raise OSError("Distributed training with DistributedConfig requires `torch>=2.5`.")
 
-    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.6"):
-        raise OSError("FSDP2 requires `torch>=2.6`.")
+    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
+        raise OSError("FSDP2 requires `torch>=2.7`.")
 
     device_type = torch._C._get_accelerator().type
     _ensure_torch_distributed(device_type)
@@ -155,10 +155,13 @@ def distribute_model(
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     """Gather FSDP-sharded params to full plain CPU tensors.
 
-    Only rank 0 receives the state dict; other ranks return ``{}``.
+    Only rank 0 accumulates the result; other ranks return ``{}``.
     """
     options = StateDictOptions(full_state_dict=True, cpu_offload=True)
-    return get_model_state_dict(model, options=options)
+    full_state_dict = get_model_state_dict(model, options=options)
+    if torch.distributed.get_rank() == 0:
+        return full_state_dict
+    return {}
 
 
 def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:

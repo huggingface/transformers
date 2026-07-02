@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 
-if is_torch_available() and is_torch_greater_or_equal("2.6"):
+if is_torch_available() and is_torch_greater_or_equal("2.7"):
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy
 
@@ -210,8 +210,8 @@ def apply_fully_sharded_data_parallelism(
     if not is_torch_available():
         raise ImportError("PyTorch is required for FSDP support")
 
-    if not is_torch_greater_or_equal("2.6"):
-        raise OSError("FSDP2 requires torch>=2.6")
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("FSDP2 requires torch>=2.7")
 
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:
