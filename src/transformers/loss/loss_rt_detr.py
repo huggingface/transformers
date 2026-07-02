@@ -112,6 +112,9 @@ class RTDetrHungarianMatcher(nn.Module):
         giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
         # Compute the final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        # eliminate infinite values in cost_matrix to avoid the error ``ValueError: cost matrix is infeasible``
+        cost_matrix = torch.minimum(cost_matrix, torch.tensor(1e10))
+        cost_matrix = torch.maximum(cost_matrix, torch.tensor(-1e10))
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
