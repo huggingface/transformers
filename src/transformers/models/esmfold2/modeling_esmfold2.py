@@ -34,6 +34,20 @@ from ..auto import AutoModel
 from .configuration_esmfold2 import ESMFold2Config
 
 
+@dataclass
+class ESMFold2AtomInputs:
+    """Reference-conformer atom features, threaded together through the inputs embedder,
+    atom encoder/decoder, and diffusion module."""
+
+    ref_pos: Tensor
+    ref_charge: Tensor
+    atom_attention_mask: Tensor
+    ref_element: Tensor
+    ref_atom_name_chars: Tensor
+    ref_space_uid: Tensor
+    atom_to_token: Tensor
+
+
 class ESMFold2LayerNorm(nn.LayerNorm):
     """LayerNorm that always computes in fp32, with its weight stored at the model dtype.
 
@@ -502,49 +516,38 @@ class ESMFold2AtomEncoder(nn.Module):
 
     def _compute_step_invariants(
         self,
-        ref_pos: Tensor,
-        atom_attention_mask: Tensor,
-        ref_space_uid: Tensor,
-        ref_charge: Tensor,
-        ref_element: Tensor,
-        ref_atom_name_chars: Tensor,
-        atom_to_token: Tensor,
+        atom_inputs: ESMFold2AtomInputs,
         num_diffusion_samples: int,
     ) -> tuple[Tensor, tuple[Tensor, Tensor, Tensor], Tensor, int]:
         """Tensors that don't change across diffusion steps (cached per fold): the atom base
         embedding ``c_base``, 3D-RoPE ``(cos, sin, indices)``, the expanded atom mask, and n_tokens."""
+        ref_pos = atom_inputs.ref_pos
         B, N = ref_pos.shape[:2]
         atom_feats = torch.cat(
             [
                 ref_pos,
-                ref_charge.unsqueeze(-1),
-                atom_attention_mask.unsqueeze(-1),
-                ref_element,
-                ref_atom_name_chars.reshape(B, N, self.char_feature_dim),
+                atom_inputs.ref_charge.unsqueeze(-1),
+                atom_inputs.atom_attention_mask.unsqueeze(-1),
+                atom_inputs.ref_element,
+                atom_inputs.ref_atom_name_chars.reshape(B, N, self.char_feature_dim),
             ],
             dim=-1,
         )
         c_base = self.atom_norm(self.atom_linear(atom_feats.to(self.atom_linear.weight.dtype)).float()).to(
             self.atom_linear.weight.dtype
         )
-        cos, sin = self.atom_transformer.rotary_emb(ref_pos, ref_space_uid)
+        cos, sin = self.atom_transformer.rotary_emb(ref_pos, atom_inputs.ref_space_uid)
         cos = cos.repeat_interleave(num_diffusion_samples, 0)
         sin = sin.repeat_interleave(num_diffusion_samples, 0)
-        mask_exp = atom_attention_mask.repeat_interleave(num_diffusion_samples, 0)
+        mask_exp = atom_inputs.atom_attention_mask.repeat_interleave(num_diffusion_samples, 0)
         indices = torch.nonzero(mask_exp.flatten(), as_tuple=False).flatten()
         attention_params = (cos, sin, indices)
-        n_tokens = int(atom_to_token.max().item()) + 1
+        n_tokens = int(atom_inputs.atom_to_token.max().item()) + 1
         return c_base, attention_params, mask_exp, n_tokens
 
     def forward(
         self,
-        ref_pos: Tensor,
-        atom_attention_mask: Tensor,
-        ref_space_uid: Tensor,
-        ref_charge: Tensor,
-        ref_element: Tensor,
-        ref_atom_name_chars: Tensor,
-        atom_to_token: Tensor,
+        atom_inputs: ESMFold2AtomInputs,
         atom_coords: Tensor | None = None,
         pred_coords: Tensor | None = None,
         num_diffusion_samples: int = 1,
@@ -561,21 +564,16 @@ class ESMFold2AtomEncoder(nn.Module):
 
         if layer_cache is None or len(layer_cache) == 0:
             c_base, attention_params, mask_exp, n_tokens = self._compute_step_invariants(
-                ref_pos=ref_pos,
-                atom_attention_mask=atom_attention_mask,
-                ref_space_uid=ref_space_uid,
-                ref_charge=ref_charge,
-                ref_element=ref_element,
-                ref_atom_name_chars=ref_atom_name_chars,
-                atom_to_token=atom_to_token,
-                num_diffusion_samples=num_diffusion_samples,
+                atom_inputs, num_diffusion_samples
             )
             if layer_cache is not None:
                 layer_cache["c_base"] = c_base
                 layer_cache["attention_params"] = attention_params
                 layer_cache["mask_exp"] = mask_exp
                 layer_cache["n_tokens"] = n_tokens
-                layer_cache["atom_to_token_exp"] = atom_to_token.repeat_interleave(num_diffusion_samples, 0)
+                layer_cache["atom_to_token_exp"] = atom_inputs.atom_to_token.repeat_interleave(
+                    num_diffusion_samples, 0
+                )
         else:
             c_base = layer_cache["c_base"]
             attention_params = layer_cache["attention_params"]
@@ -606,7 +604,7 @@ class ESMFold2AtomEncoder(nn.Module):
         if layer_cache is not None and "atom_to_token_exp" in layer_cache:
             atom_to_token_exp = layer_cache["atom_to_token_exp"]
         else:
-            atom_to_token_exp = atom_to_token.repeat_interleave(num_diffusion_samples, 0)
+            atom_to_token_exp = atom_inputs.atom_to_token.repeat_interleave(num_diffusion_samples, 0)
         token_acts = scatter_atom_to_token(queries_to_acts, atom_to_token_exp, n_tokens, atom_mask=mask_exp.bool())
 
         return token_acts, atom_queries, atom_cond, attention_params
@@ -654,12 +652,11 @@ class ESMFold2AtomDecoder(nn.Module):
         atom_queries: Tensor,
         atom_cond: Tensor,
         atom_pair: tuple,
-        atom_to_token: Tensor,
-        atom_attention_mask: Tensor,
+        atom_inputs: ESMFold2AtomInputs,
         num_diffusion_samples: int = 1,
     ) -> Tensor:
         """Returns coord_update."""
-        atom_to_token_exp = atom_to_token.repeat_interleave(num_diffusion_samples, 0)
+        atom_to_token_exp = atom_inputs.atom_to_token.repeat_interleave(num_diffusion_samples, 0)
         a_to_q = self.token_to_atom_linear(token_acts)
         a_to_q = gather_token_to_atom(a_to_q, atom_to_token_exp)
         atom_queries = atom_queries + a_to_q
@@ -974,21 +971,10 @@ class ESMFold2DiffusionModule(nn.Module):
         self,
         x_noisy: Tensor,
         t_hat: Tensor,
-        ref_pos: Tensor,
-        ref_charge: Tensor,
-        ref_mask: Tensor,
-        ref_element: Tensor,
-        ref_atom_name_chars: Tensor,
-        ref_space_uid: Tensor,
-        tok_idx: Tensor,
+        atom_inputs: ESMFold2AtomInputs,
         single_inputs: Tensor,
         pair_trunk: Tensor,
         relative_position_encoding: Tensor,
-        asym_id: Tensor,
-        residue_index: Tensor,
-        entity_id: Tensor,
-        token_index: Tensor,
-        sym_id: Tensor,
         sigma_data: float | None = None,
         token_attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
@@ -1017,13 +1003,7 @@ class ESMFold2DiffusionModule(nn.Module):
 
         # Step 3: atom encoder
         token_acts, atom_queries_skip, atom_cond_skip, atom_pair_skip = self.atom_encoder(
-            ref_pos=ref_pos,
-            atom_attention_mask=ref_mask,
-            ref_space_uid=ref_space_uid,
-            ref_charge=ref_charge,
-            ref_element=ref_element,
-            ref_atom_name_chars=ref_atom_name_chars,
-            atom_to_token=tok_idx,
+            atom_inputs,
             atom_coords=normalized_coords,
             num_diffusion_samples=num_diffusion_samples,
             inference_cache=inference_cache,
@@ -1051,8 +1031,7 @@ class ESMFold2DiffusionModule(nn.Module):
             atom_queries=atom_queries_skip,
             atom_cond=atom_cond_skip,
             atom_pair=atom_pair_skip,
-            atom_to_token=tok_idx,
-            atom_attention_mask=ref_mask,
+            atom_inputs=atom_inputs,
             num_diffusion_samples=num_diffusion_samples,
         )
 
@@ -1200,18 +1179,7 @@ class ESMFold2DiffusionStructureHead(nn.Module):
         pair_trunk: Tensor,
         single_inputs: Tensor,
         relative_position_encoding: Tensor,
-        ref_pos: Tensor,
-        ref_charge: Tensor,
-        ref_mask: Tensor,
-        ref_element: Tensor,
-        ref_atom_name_chars: Tensor,
-        ref_space_uid: Tensor,
-        tok_idx: Tensor,
-        asym_id: Tensor,
-        residue_index: Tensor,
-        entity_id: Tensor,
-        token_index: Tensor,
-        sym_id: Tensor,
+        atom_inputs: ESMFold2AtomInputs,
         token_attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
         num_sampling_steps: int | None = None,
@@ -1228,7 +1196,7 @@ class ESMFold2DiffusionStructureHead(nn.Module):
         so we inflate the underlying schedule length here to land back at the
         requested step count post-truncation.
         """
-        n_atoms = tok_idx.shape[1]
+        n_atoms = atom_inputs.atom_to_token.shape[1]
         device = single_inputs.device
         target_batch = single_inputs.shape[0] * num_diffusion_samples
 
@@ -1240,7 +1208,7 @@ class ESMFold2DiffusionStructureHead(nn.Module):
         eta = self.step_scale if step_scale is None else float(step_scale)
 
         x = schedule[0] * torch.randn(target_batch, n_atoms, 3, device=device, dtype=torch.float32)
-        atom_mask = ref_mask.repeat_interleave(num_diffusion_samples, 0).float()
+        atom_mask = atom_inputs.atom_attention_mask.repeat_interleave(num_diffusion_samples, 0).float()
 
         x_denoised_prev: Tensor | None = None
 
@@ -1257,21 +1225,10 @@ class ESMFold2DiffusionStructureHead(nn.Module):
             x_denoised = self.diffusion_module(
                 x_noisy=x_noisy,
                 t_hat=torch.full((target_batch,), t_hat_val, device=device, dtype=torch.float32),
-                ref_pos=ref_pos,
-                ref_charge=ref_charge,
-                ref_mask=ref_mask,
-                ref_element=ref_element,
-                ref_atom_name_chars=ref_atom_name_chars,
-                ref_space_uid=ref_space_uid,
-                tok_idx=tok_idx,
+                atom_inputs=atom_inputs,
                 single_inputs=single_inputs,
                 pair_trunk=pair_trunk,
                 relative_position_encoding=relative_position_encoding,
-                asym_id=asym_id,
-                residue_index=residue_index,
-                entity_id=entity_id,
-                token_index=token_index,
-                sym_id=sym_id,
                 token_attention_mask=token_attention_mask,
                 num_diffusion_samples=num_diffusion_samples,
                 inference_cache=inference_cache,
@@ -1325,13 +1282,7 @@ class ESMFold2InputsEmbedder(nn.Module):
         aatype: Tensor,
         profile: Tensor,
         deletion_mean: Tensor,
-        ref_pos: Tensor,
-        atom_attention_mask: Tensor,
-        ref_space_uid: Tensor,
-        ref_charge: Tensor,
-        ref_element: Tensor,
-        ref_atom_name_chars: Tensor,
-        atom_to_token: Tensor,
+        atom_inputs: ESMFold2AtomInputs,
     ) -> Tensor:
         """Embed inputs into per-token features.
 
@@ -1339,15 +1290,7 @@ class ESMFold2InputsEmbedder(nn.Module):
             [B, L, d_inputs] concatenation of atom encoding, aatype, profile,
             and deletion_mean.
         """
-        a, _q, _c, _attn_params = self.atom_attention_encoder(
-            ref_pos=ref_pos,
-            atom_attention_mask=atom_attention_mask,
-            ref_space_uid=ref_space_uid,
-            ref_charge=ref_charge,
-            ref_element=ref_element,
-            ref_atom_name_chars=ref_atom_name_chars,
-            atom_to_token=atom_to_token,
-        )
+        a, _q, _c, _attn_params = self.atom_attention_encoder(atom_inputs)
         # The continuous input features are fp32; fold them into the atom
         # encoding's (compute) dtype so the single representation is one dtype.
         dtype = a.dtype
@@ -2604,17 +2547,21 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
             )
         )
 
+        atom_inputs = ESMFold2AtomInputs(
+            ref_pos=ref_pos,
+            ref_charge=ref_charge,
+            atom_attention_mask=atm_mask,
+            ref_element=ref_element_oh,
+            ref_atom_name_chars=ref_atom_name_chars_oh,
+            ref_space_uid=ref_space_uid,
+            atom_to_token=atom_to_token,
+        )
+
         single_inputs = self.inputs_embedder(
             aatype=res_type_oh,
             profile=profile.float(),
             deletion_mean=deletion_mean.float(),
-            ref_pos=ref_pos,
-            atom_attention_mask=atm_mask,
-            ref_space_uid=ref_space_uid,
-            ref_charge=ref_charge,
-            ref_element=ref_element_oh,
-            ref_atom_name_chars=ref_atom_name_chars_oh,
-            atom_to_token=atom_to_token,
+            atom_inputs=atom_inputs,
         )
 
         z_init = self.z_init_1(single_inputs).unsqueeze(2) + self.z_init_2(single_inputs).unsqueeze(1)
@@ -2675,18 +2622,7 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
             pair_trunk=z,
             single_inputs=single_inputs,
             relative_position_encoding=relative_position_encoding,
-            ref_pos=ref_pos,
-            ref_charge=ref_charge,
-            ref_mask=atm_mask,
-            ref_element=ref_element_oh,
-            ref_atom_name_chars=ref_atom_name_chars_oh,
-            ref_space_uid=ref_space_uid,
-            tok_idx=atom_to_token,
-            asym_id=asym_id,
-            residue_index=residue_index,
-            entity_id=entity_id,
-            token_index=token_index,
-            sym_id=sym_id,
+            atom_inputs=atom_inputs,
             token_attention_mask=tok_mask,
             num_diffusion_samples=n_samples,
             num_sampling_steps=num_sampling_steps,
