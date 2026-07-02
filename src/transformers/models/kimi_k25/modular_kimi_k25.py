@@ -624,6 +624,8 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
 
 class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
