@@ -297,13 +297,18 @@ class GlmMoeDsaModel(DeepseekV32Model):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # `generate` may pass an already prepared mask keyed by layer type (see `create_masks_for_generate`).
+        # As all layers share the same attention type, we simply unwrap the single mask it contains.
+        if isinstance(attention_mask, dict):
+            causal_mask = attention_mask[self.config.layer_types[0]]
+        else:
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
