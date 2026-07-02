@@ -316,7 +316,8 @@ def _unpad_input(hidden_states, attention_mask, unused_mask=None):
     seqlens_in_batch = all_masks.sum(dim=-1, dtype=torch.int32)
     used_seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(all_masks.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max()
+    # using .item() here is required to prevent a performance regression (#46693)
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
 
     return (
@@ -365,7 +366,8 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.T
     """
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max()
+    # using .item() here is required to prevent a performance regression (#46693)
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,
@@ -595,8 +597,8 @@ def _process_flash_attention_kwargs(
     softcap: float | None = None,
     deterministic: bool | None = None,
     s_aux: torch.Tensor | None = None,
-    max_seqlen_q: int | torch.IntTensor | None = None,
-    max_seqlen_k: int | torch.IntTensor | None = None,
+    max_seqlen_q: int | None = None,
+    max_seqlen_k: int | None = None,
     supports_mapping: dict[str, bool] | None = None,
     **kwargs,
 ):
@@ -627,9 +629,9 @@ def _process_flash_attention_kwargs(
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
         s_aux (`torch.Tensor`, *optional*):
             Attention sink auxiliary that adds a `bias` to the attention calculation via an additional head.
-        max_seqlen_q (`Union[int, torch.IntTensor]`, *optional*):
+        max_seqlen_q (`int`, *optional*):
             The maximum sequence length in the query tensor during a varlen forward.
-        max_seqlen_k (`Union[int, torch.IntTensor]`, *optional*):
+        max_seqlen_k (`int`, *optional*):
             The maximum sequence length in the key/value tensor during a varlen forward.
     Return:
         flash_kwargs (`dict`):
@@ -673,15 +675,11 @@ def _process_flash_attention_kwargs(
     # to allow torch compile to handle scalar outputs in those cases.
     same_max_seqlen = max_seqlen_q is max_seqlen_k  # to avoid 2x device syncs
     if supports_mapping["max_seqlen_q"] and max_seqlen_q is not None:
-        if not isinstance(max_seqlen_q, int) and is_tracing(max_seqlen_q):
-            max_seqlen_q = max_seqlen_q.item()
         flash_kwargs["max_seqlen_q"] = max_seqlen_q
 
     if supports_mapping["max_seqlen_k"] and max_seqlen_k is not None:
         if same_max_seqlen and flash_kwargs["max_seqlen_q"] is not None:
             max_seqlen_k = flash_kwargs["max_seqlen_q"]
-        elif not isinstance(max_seqlen_k, int) and is_tracing(max_seqlen_k):
-            max_seqlen_k = max_seqlen_k.item()
         flash_kwargs["max_seqlen_k"] = max_seqlen_k
 
     return flash_kwargs
