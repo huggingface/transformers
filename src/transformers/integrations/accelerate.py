@@ -584,7 +584,7 @@ def load_offloaded_checkpoint_parameters(
     param_name = rename_source_key(param_name, renamings, converters, model.base_model_prefix, meta_state_dict)[0]
 
     # load parameter from model
-    tensor = load_offloaded_parameter(param_name)
+    tensor = load_offloaded_parameter(model, param_name)
 
     # Convert from target key to source key(s)
     loaded_state_dict = revert_weight_conversion(model, {param_name: tensor})
