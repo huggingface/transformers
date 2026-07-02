@@ -318,6 +318,7 @@ class PeftAdapterMixin:
             sharded_metadata=sharded_metadata,
             weight_mapping=peft_weight_conversions,
             device_map=device_map,
+            ignore_mismatched_sizes=True,
         )
 
         loading_info, _ = self._load_pretrained_model(
