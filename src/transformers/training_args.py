@@ -815,7 +815,8 @@ class TrainingArguments:
         },
     )
     adam_epsilon: float = field(
-        default=1e-8, metadata={"help": "Epsilon value for numerical stability in Adam-based optimizers."}
+        default=1e-8,
+        metadata={"help": "Epsilon value for numerical stability in Adam-based optimizers."},
     )
     optim_target_modules: None | str | list[str] = field(
         default=None,
@@ -841,10 +842,12 @@ class TrainingArguments:
         },
     )
     max_grad_norm: float = field(
-        default=1.0, metadata={"help": "Maximum gradient norm for gradient clipping. Set to 0 to disable."}
+        default=1.0,
+        metadata={"help": "Maximum gradient norm for gradient clipping. Set to 0 to disable."},
     )
     label_smoothing_factor: float = field(
-        default=0.0, metadata={"help": "Label smoothing factor to prevent overconfidence. Zero means no smoothing."}
+        default=0.0,
+        metadata={"help": "Label smoothing factor to prevent overconfidence. Zero means no smoothing."},
     )
 
     # --- Mixed Precision ---
@@ -893,7 +896,8 @@ class TrainingArguments:
 
     # --- Compilation ---
     torch_compile: bool = field(
-        default=False, metadata={"help": "Compile the model using `torch.compile()` for faster training."}
+        default=False,
+        metadata={"help": "Compile the model using `torch.compile()` for faster training."},
     )
     torch_compile_backend: str | None = field(
         default=None,
@@ -963,7 +967,8 @@ class TrainingArguments:
         },
     )
     logging_first_step: bool = field(
-        default=False, metadata={"help": "Whether to log the first `global_step` or not."}
+        default=False,
+        metadata={"help": "Whether to log the first `global_step` or not."},
     )
     log_on_each_node: bool = field(
         default=True,
@@ -1081,7 +1086,8 @@ class TrainingArguments:
         },
     )
     per_device_eval_batch_size: int = field(
-        default=8, metadata={"help": "The batch size per device (GPU/TPU core/CPU) for evaluation."}
+        default=8,
+        metadata={"help": "The batch size per device (GPU/TPU core/CPU) for evaluation."},
     )
     prediction_loss_only: bool = field(
         default=False,
@@ -1168,7 +1174,8 @@ class TrainingArguments:
 
     # --- Hub Integration ---
     push_to_hub: bool = field(
-        default=False, metadata={"help": "Whether or not to push the model to the Hub every time the model is saved."}
+        default=False,
+        metadata={"help": "Whether or not to push the model to the Hub every time the model is saved."},
     )
     hub_token: str | None = field(
         default=None,
@@ -1186,7 +1193,8 @@ class TrainingArguments:
         },
     )
     hub_model_id: str | None = field(
-        default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
+        default=None,
+        metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."},
     )
     hub_strategy: HubStrategy | str = field(
         default="every_save",
@@ -1245,7 +1253,10 @@ class TrainingArguments:
             )
         },
     )
-    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    seed: int = field(
+        default=42,
+        metadata={"help": "Random seed that will be set at the beginning of training."},
+    )
     data_seed: int | None = field(
         default=None,
         metadata={"help": "Random seed to be used with data samplers. If not set, uses the same seed as `seed`."},
@@ -1273,7 +1284,8 @@ class TrainingArguments:
 
     # --- Dataloader ---
     dataloader_drop_last: bool = field(
-        default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
+        default=False,
+        metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."},
     )
     dataloader_num_workers: int = field(
         default=0,
@@ -1307,7 +1319,8 @@ class TrainingArguments:
         metadata={"help": "Whether or not to automatically remove the columns unused by the model forward method."},
     )
     label_names: list[str] | None = field(
-        default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
+        default=None,
+        metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."},
     )
     train_sampling_strategy: str = field(
         default="random",
@@ -1780,7 +1793,10 @@ class TrainingArguments:
                     f"Please run `pip install transformers[torch]` or `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
         # Build kwargs for PartialState; actual init happens below
-        accelerator_state_kwargs: dict[str, Any] = {"enabled": True, "use_configured_state": False}
+        accelerator_state_kwargs: dict[str, Any] = {
+            "enabled": True,
+            "use_configured_state": False,
+        }
         if isinstance(self.accelerator_config, AcceleratorConfig):
             accelerator_state_kwargs["use_configured_state"] = self.accelerator_config.pop(
                 "use_configured_state", False
@@ -2143,7 +2159,11 @@ class TrainingArguments:
         Sanitized serialization to use with TensorBoard's hparams
         """
         d = self.to_dict()
-        d = {**d, "train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}
+        d = {
+            **d,
+            "train_batch_size": self.train_batch_size,
+            "eval_batch_size": self.eval_batch_size,
+        }
 
         valid_types = [bool, int, float, str]
         if is_torch_available():
