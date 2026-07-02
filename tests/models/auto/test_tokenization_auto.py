@@ -81,6 +81,39 @@ class AutoTokenizerTest(unittest.TestCase):
     def setUp(self):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
+    def test_tokenizer_json_is_byte_level(self):
+        from transformers.models.auto.tokenization_auto import _tokenizer_json_is_byte_level
+
+        cases = {
+            # byte-level (GPT-2 / tiktoken style, e.g. Llama-3): detected -> True
+            "byte_level_flat": ({"pre_tokenizer": {"type": "ByteLevel"}, "decoder": {"type": "ByteLevel"}}, True),
+            # byte-level nested inside a Sequence pre_tokenizer (real Llama-3 layout)
+            "byte_level_seq": (
+                {
+                    "pre_tokenizer": {"type": "Sequence", "pretokenizers": [{"type": "Split"}, {"type": "ByteLevel"}]},
+                    "decoder": {"type": "ByteLevel"},
+                },
+                True,
+            ),
+            # SentencePiece / Metaspace (Llama-1/2): not byte-level -> False
+            "metaspace": (
+                {
+                    "pre_tokenizer": {"type": "Metaspace", "replacement": "▁"},
+                    "decoder": {"type": "Metaspace", "replacement": "▁"},
+                },
+                False,
+            ),
+        }
+        for name, (tok_json, expected) in cases.items():
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                with open(os.path.join(tmp_dir, "tokenizer.json"), "w", encoding="utf-8") as f:
+                    json.dump(tok_json, f)
+                self.assertEqual(_tokenizer_json_is_byte_level(tmp_dir), expected, msg=name)
+
+        # No tokenizer.json available -> best-effort False (falls back to normal resolution).
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.assertFalse(_tokenizer_json_is_byte_level(tmp_dir))
+
     @slow
     def test_tokenizer_from_pretrained(self):
         for model_name in ("google-bert/bert-base-uncased", "google-bert/bert-base-cased"):
