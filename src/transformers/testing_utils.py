@@ -782,9 +782,9 @@ def require_peft_greater_or_equal(version: str):
     """
 
     def decorator(test_case):
-        return unittest.skipUnless(
-            is_peft_greater_or_equal(version), f"test requires PEFT version >= {version}"
-        )(test_case)
+        return unittest.skipUnless(is_peft_greater_or_equal(version), f"test requires PEFT version >= {version}")(
+            test_case
+        )
 
     return decorator
 
