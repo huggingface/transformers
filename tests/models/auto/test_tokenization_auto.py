@@ -821,6 +821,7 @@ class NopConfig(PreTrainedConfig):
 
         fake_config = mock.MagicMock()
         fake_config.model_type = "m2m_100"
+        fake_config._name_or_path = ""
         mock_tokenizer = mock.MagicMock(spec=NllbTokenizer)
 
         with (
@@ -859,11 +860,23 @@ class NopConfig(PreTrainedConfig):
         "allenai/OLMo-2-0425-1B",
         "stabilityai/tiny-random-stablelm-2",
         "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+        "almanach/camembert-base",
+        "google/rembert",
+        "facebook/xglm-564M",
+        "xlnet/xlnet-base-cased",
     ]
 
     @slow
     @require_tokenizers
     @parameterized.expand(TOKENIZERS_BACKEND_AUTO_MAPPING_CHECKPOINTS)
+    def test_right_to_left_mark(self, repo_id):
+        # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend.
+        # Text contains U+200F (RIGHT-TO-LEFT MARK) which exposes ‏ handling
+        # differences between TokenizersBackend and slow tokenizer backends.
+        TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT = "روڈولف انڈرسن کہیں نہیں ملا‏، اس لیے ہے ہم نے صرف ایک ہی U2 لیا۔"
+
+        tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
+        tokenizer_tok = TokenizersBackend.from_pretrained(repo_id)
     def test_tokenizers_auto_agreements_models_without_tokenizer_class(self, repo_id):
         # PR #45936: v5 tokenizer auto mapping changes to use TokenizersBackend
         TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT = "foo_bar\n\n123 "
