@@ -57,6 +57,7 @@ from .utils import (
 from .utils.generic import strtobool
 from .utils.import_utils import enable_tf32, is_optimum_neuron_available
 
+
 logger = logging.get_logger(__name__)
 log_levels = logging.get_log_levels_dict().copy()
 trainer_log_levels = dict(**log_levels, passive=-1)
@@ -1729,8 +1730,7 @@ class TrainingArguments:
         # ── 12. DeepSpeed (must be last) ──
         self.deepspeed_plugin = None
         if self.deepspeed:
-            from transformers.integrations.deepspeed import \
-                HfTrainerDeepSpeedConfig
+            from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             # Leave self.deepspeed unmodified; users may rely on the original value
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
