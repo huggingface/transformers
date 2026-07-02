@@ -482,20 +482,25 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             but found at least two devices, cuda:0 and cpu!
 
         The fix adds ``device=q.device`` to the ``.to()`` call so ``valid_k`` always follows
-        the query tensor's device. This test reproduces the exact failure conditions using a
-        real ``MiniMaxM3VLAttention`` sparse layer (the only thing patched is the actual
-        CuTe-DSL kernel op, which requires SM100/Blackwell hardware).
+        the query tensor's device.
+
+        Note on hardware requirements: ``@require_torch_accelerator`` (any CUDA GPU) is
+        sufficient — no SM100/Blackwell guard is needed. This test calls ``_sparse_attention``
+        directly, which bypasses ``msa_attention_forward`` and therefore never hits the
+        ``_validate_msa_init`` SM100 capability check. ``_msa_sparse_atten_op`` (the Blackwell
+        kernel binary) is stubbed out so the test runs on any CUDA-capable device.
         """
         from transformers.integrations.msa_attention import _sparse_attention
-        from transformers.models.minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLTextConfig
         from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLAttention
 
-        # Start from the tester's text config; override only the two values the MSA kernel
-        # requires: head_dim == 128 (MSA_SUPPORTED_HEAD_DIM) and index_block_size == 128
-        # (MSA_SUPPORTED_BLOCK_SIZE). hidden_size is adjusted to stay consistent.
-        text_cfg = dict(self.model_tester.text_config)
-        text_cfg.update({"head_dim": 128, "index_block_size": 128, "hidden_size": 256})
-        text_config = MiniMaxM3VLTextConfig(**text_cfg)
+        # Use the tester's standard config helper, then override only the two values the MSA
+        # kernel requires: head_dim == 128 (MSA_SUPPORTED_HEAD_DIM) and index_block_size == 128
+        # (MSA_SUPPORTED_BLOCK_SIZE). hidden_size is bumped to stay consistent with head_dim.
+        config, _ = self.model_tester.prepare_config_and_inputs()
+        text_config = config.text_config
+        text_config.head_dim = 128
+        text_config.index_block_size = 128
+        text_config.hidden_size = 256
 
         # layer_types from the tester already contains "minimax_m3_sparse" at index 1.
         attn_module = MiniMaxM3VLAttention(text_config, layer_idx=1).to(torch_device).eval()
