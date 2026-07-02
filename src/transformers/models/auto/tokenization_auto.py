@@ -426,6 +426,48 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "salesforce/instructblip-flan-t5-*",
 ]
 
+# Model types whose single Hub `tokenizer_class` spans BOTH SentencePiece (older) and byte-level
+# (newer) tokenizers. For these, the declared class alone is ambiguous, so we must look at the
+# serialized tokenizer.json to decide. Kept intentionally small — most model types are consistent.
+_DUAL_SCHEME_MODEL_TYPES = {"llama"}
+
+
+def _tokenizer_json_is_byte_level(pretrained_model_name_or_path, **kwargs) -> bool:
+    """True if the repo's tokenizer.json declares a ByteLevel pre_tokenizer/decoder (GPT-2 / tiktoken
+    style, e.g. Llama-3), as opposed to SentencePiece/Metaspace (Llama-1/2). Best-effort; returns
+    False on any error so callers fall back to the normal resolution."""
+    try:
+        _pass = {
+            k: kwargs[k]
+            for k in ("cache_dir", "force_download", "proxies", "token", "revision", "local_files_only", "subfolder")
+            if k in kwargs
+        }
+        resolved = cached_file(
+            pretrained_model_name_or_path,
+            "tokenizer.json",
+            _raise_exceptions_for_gated_repo=False,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+            **_pass,
+        )
+        if resolved is None:
+            return False
+        with open(resolved, encoding="utf-8") as f:
+            tok_json = json.load(f)
+
+        def _has_byte_level(node):
+            if isinstance(node, dict):
+                if node.get("type") == "ByteLevel":
+                    return True
+                return any(_has_byte_level(v) for v in node.values())
+            if isinstance(node, list):
+                return any(_has_byte_level(v) for v in node)
+            return False
+
+        return _has_byte_level(tok_json.get("pre_tokenizer")) or _has_byte_level(tok_json.get("decoder"))
+    except Exception:
+        return False
+
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -762,6 +804,19 @@ class AutoTokenizer:
                 tokenizer_auto_map = tokenizer_config["auto_map"]
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
+
+        # Dual-scheme model types (e.g. `llama`): the Hub tokenizer_class (LlamaTokenizerFast) is
+        # ambiguous because Llama-1/2 are SentencePiece while Llama-3 is byte-level. Forcing the
+        # SentencePiece LlamaTokenizer (Metaspace) onto a byte-level tokenizer.json silently drops
+        # spaces (see #45488). If tokenizer.json is byte-level, respect it via TokenizersBackend;
+        # SentencePiece Llama-1/2 (no ByteLevel in tokenizer.json) stays on LlamaTokenizer unchanged.
+        if (
+            tokenizer_auto_map is None
+            and TokenizersBackend is not None
+            and config_model_type in _DUAL_SCHEME_MODEL_TYPES
+            and _tokenizer_json_is_byte_level(pretrained_model_name_or_path, **kwargs)
+        ):
+            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Some specific checkpoints need TokenizersBackend because their config on the Hub really needs to be updated.
         _config_name_or_path = (
