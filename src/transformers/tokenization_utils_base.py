@@ -1840,7 +1840,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
         for args_name, file_path in resolved_vocab_files.items():
-            if args_name not in init_kwargs or init_kwargs[args_name] is None:
+            # `init_kwargs` also carries the values loaded from the (untrusted) `tokenizer_config.json`,
+            # which `save_pretrained` never serializes for these vocab-file arguments. A value present
+            # here therefore originates from the config and would be opened verbatim, so it could point
+            # at an arbitrary location outside the repository (path traversal, CWE-22). Let the
+            # repo-resolved path take precedence; only an explicit caller-provided path (in `kwargs`)
+            # is allowed to override it.
+            if args_name not in kwargs or kwargs[args_name] is None:
                 init_kwargs[args_name] = file_path
         tokenizer_file = resolved_vocab_files.get("tokenizer_file", None)
 
@@ -3368,7 +3374,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 A response template (preferred, new-style) or legacy response schema dict that indicates the
                 expected output format and how parsing should be performed. If not provided, the tokenizer's
                 `response_template` or `response_schema` attribute will be used (in that order).
-            prefix (`str`, token ids, 1D/2D tensor, or a list of these, *optional*):
+            prefix (`str`, token ids, 1D/2D tensor, or a list of these):
                 The prompt that came before generation. This is necessary because many chat templates
                 pre-write part of the message, so we need to see the prompt to parse correctly. For a batched
                 `response`, pass either a single prefix (broadcast to every item) or one prefix per item.
@@ -3399,6 +3405,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             raise ValueError(
                 "`prefix=` is only supported with new-style `response_template` specs, not legacy `response_schema`."
             )
+        if prefix is None and use_new_template:
+            raise ValueError(
+                "`parse_response` requires `prefix=` (the prompt that came before generation) when parsing with a "
+                "new-style `response_template`, because chat templates often pre-write part of the assistant message "
+                "(e.g. an opening `<think>` tag) that the parser must see to parse correctly. If you're sure you "
+                "don't need the prefix, you can pass an empty string or list."
+            )
 
         if isinstance(response, str):
             responses, batched = [response], False
@@ -3409,11 +3422,16 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             responses, batched = ([decoded], False) if isinstance(decoded, str) else (decoded, True)
 
         if prefix is None:
+            # Reachable only on the legacy path (new-style + None already raised above); `prefixes` is
+            # unused by `recursive_parse`, so the placeholder is harmless.
             prefixes: list[str | None] = [None] * len(responses)
         else:
             if isinstance(prefix, str):
                 prefix_texts, prefix_batched = [prefix], False
-            elif isinstance(prefix, (list, tuple)) and (not prefix or isinstance(prefix[0], str)):
+            elif isinstance(prefix, (list, tuple)) and not prefix:
+                # An empty list is the explicit opt-out (no prefix context); broadcast "" to every response.
+                prefix_texts, prefix_batched = [""], False
+            elif isinstance(prefix, (list, tuple)) and isinstance(prefix[0], str):
                 prefix_texts, prefix_batched = list(prefix), True
             else:
                 decoded = self.decode(prefix)
@@ -3444,11 +3462,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         parsing a streamed response. Uses the tokenizer's `response_template` attribute unless
         overridden.
 
-        When `prefix` is passed (as a string, list of token ids, or 1D tensor), the stream is
-        initialized in the state implied by the chat-prompt context (right-truncated past the
-        spec's `start_anchor`). Generated chunks fed via `stream.feed()` are then classified
-        correctly even when the chat template emitted assistant-turn content (e.g., `<think>\\n`)
-        that the model continues from."""
+        `prefix` (a string, list of token ids, or 1D tensor) is required: the stream is initialized in
+        the state implied by the chat-prompt context (right-truncated past the spec's `start_anchor`), so
+        generated chunks fed via `stream.feed()` are classified correctly even when the chat template
+        emitted assistant-turn content (e.g., `<think>\\n`) that the model continues from. Omitting it
+        raises; if the stream truly starts from a clean assistant turn, pass `prefix=""` to opt out."""
         template = response_template if response_template is not None else getattr(self, "response_template", None)
         if template is None:
             raise AttributeError(

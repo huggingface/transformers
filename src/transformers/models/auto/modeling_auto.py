@@ -301,6 +301,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("metaclip_2", "MetaClip2Model"),
         ("mgp-str", "MgpstrForSceneTextRecognition"),
         ("mimi", "MimiModel"),
+        ("mimo_v2_flash", "MiMoV2FlashModel"),
         ("minicpm3", "MiniCPM3Model"),
         ("minicpmv4_6", "MiniCPMV4_6Model"),
         ("minimax", "MiniMaxModel"),
@@ -360,6 +361,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ovis2", "Ovis2Model"),
         ("owlv2", "Owlv2Model"),
         ("owlvit", "OwlViTModel"),
+        ("paddleocr_vl", "PaddleOCRVLModel"),
         ("paligemma", "PaliGemmaModel"),
         ("parakeet_ctc", "ParakeetForCTC"),
         ("parakeet_encoder", "ParakeetEncoder"),
@@ -424,6 +426,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3_vl_moe_vision", "Qwen3VLMoeVisionModel"),
         ("qwen3_vl_text", "Qwen3VLTextModel"),
         ("qwen3_vl_vision", "Qwen3VLVisionModel"),
+        ("radio", "RadioModel"),
         ("recurrent_gemma", "RecurrentGemmaModel"),
         ("reformer", "ReformerModel"),
         ("regnet", "RegNetModel"),
@@ -548,6 +551,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("youtu", "YoutuModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
+        ("zaya", "ZayaModel"),
     ]
 )
 
@@ -753,6 +757,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
         ("mellum", "MellumForCausalLM"),
+        ("mimo_v2_flash", "MiMoV2FlashForCausalLM"),
         ("minicpm3", "MiniCPM3ForCausalLM"),
         ("minimax", "MiniMaxForCausalLM"),
         ("minimax_m2", "MiniMaxM2ForCausalLM"),
@@ -821,6 +826,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("youtu", "YoutuForCausalLM"),
         ("zamba", "ZambaForCausalLM"),
         ("zamba2", "Zamba2ForCausalLM"),
+        ("zaya", "ZayaForCausalLM"),
     ]
 )
 
