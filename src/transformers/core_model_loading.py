@@ -520,7 +520,7 @@ class UnfuseAndPermuteForRope(ConversionOps):
 
         tensor = next(iter(input_dict.values()))[0]
         targets = self.get_target_patterns(input_dict, target_patterns)
-        chunks = chunks = torch.chunk(tensor, len(targets), dim=self.dim)
+        chunks = torch.chunk(tensor, len(targets), dim=self.dim)
 
         output: dict[str, torch.Tensor] = dict(zip(targets, chunks))
         for key, value in output.items():
