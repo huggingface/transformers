@@ -80,7 +80,7 @@ class CacheLayerMixin(ABC):
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]: ...
 
     @abstractmethod
-    def get_seq_length(self) -> int: ...
+    def get_seq_length(self) -> int | torch.Tensor: ...
 
     @abstractmethod
     def get_max_length(self) -> int:
@@ -470,7 +470,7 @@ class StaticLayer(CacheLayerMixin):
         kv_length = self.max_cache_len
         return kv_length, kv_offset
 
-    def get_seq_length(self) -> int:
+    def get_seq_length(self) -> int | torch.Tensor:
         """Returns the sequence length of the cached states."""
         return self.cumulative_length if self.is_initialized else 0
 
