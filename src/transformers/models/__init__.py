@@ -265,6 +265,7 @@ if TYPE_CHECKING:
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
+    from .mimo_v2_flash import *
     from .minicpm3 import *
     from .minicpmv4_6 import *
     from .minimax import *
@@ -499,6 +500,7 @@ if TYPE_CHECKING:
     from .youtu import *
     from .zamba import *
     from .zamba2 import *
+    from .zaya import *
     from .zoedepth import *
 else:
     import sys
