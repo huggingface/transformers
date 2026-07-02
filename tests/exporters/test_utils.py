@@ -51,7 +51,6 @@ from transformers.exporters.base import HfExporter
 from transformers.exporters.configs import (
     DynamoConfig,
     ExecutorchConfig,
-    ExportConfigMixin,
     ExportFormat,
     OnnxConfig,
 )
