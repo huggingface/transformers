@@ -47,6 +47,7 @@ from ...utils import (
     auto_docstring,
     is_torchdynamo_compiling,
 )
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 
 
@@ -1118,6 +1119,7 @@ class UdopStack(UdopPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
+    @merge_with_config_defaults
     @capture_outputs
     def forward(
         self,
@@ -1133,11 +1135,8 @@ class UdopStack(UdopPreTrainedModel):
         position_bias=None,
         past_key_values=None,
         use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithAttentionMask:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithAttentionMask:
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # input embeddings processing
@@ -1316,6 +1315,7 @@ class UdopModel(UdopPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1331,11 +1331,8 @@ class UdopModel(UdopPreTrainedModel):
         past_key_values: Cache | None = None,
         decoder_inputs_embeds: Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | Seq2SeqModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Seq2SeqModelOutput:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1389,11 +1386,6 @@ class UdopModel(UdopPreTrainedModel):
         [1, 1, 1024]
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1404,13 +1396,11 @@ class UdopModel(UdopPreTrainedModel):
                 pixel_values=pixel_values,
                 visual_bbox=visual_bbox,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                **kwargs,
             )
 
         hidden_states = encoder_outputs[0]
-        encoder_attention_mask = encoder_outputs.attention_mask if return_dict else encoder_outputs[1]
+        encoder_attention_mask = encoder_outputs.attention_mask
 
         # Decode
         decoder_outputs = self.decoder(
@@ -1421,16 +1411,8 @@ class UdopModel(UdopPreTrainedModel):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
-
-        if not return_dict:
-            # we filter out the attention mask
-            decoder_outputs = tuple(value for idx, value in enumerate(decoder_outputs) if idx != 1)
-            encoder_outputs = tuple(value for idx, value in enumerate(encoder_outputs) if idx != 1)
-            return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1494,6 +1476,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1509,12 +1492,9 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         past_key_values: Cache | None = None,
         decoder_inputs_embeds: Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         labels: Tensor | None = None,
-        **kwargs,
-    ) -> tuple | Seq2SeqLMOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Seq2SeqLMOutput:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1573,11 +1553,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         ```"""
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if decoder_input_ids is None and labels is not None:
             decoder_input_ids = self._shift_right(labels)
@@ -1591,13 +1566,11 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
                 pixel_values=pixel_values,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                **kwargs,
             )
 
         hidden_states = encoder_outputs[0]
-        encoder_attention_mask = encoder_outputs.attention_mask if return_dict else encoder_outputs[1]
+        encoder_attention_mask = encoder_outputs.attention_mask
 
         # Decode
         decoder_outputs = self.decoder(
@@ -1608,9 +1581,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = decoder_outputs[0]
@@ -1624,10 +1595,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-
-        if not return_dict:
-            output = (lm_logits,) + decoder_outputs[2:] + (encoder_outputs[0],) + encoder_outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
@@ -1674,6 +1641,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1683,11 +1651,8 @@ class UdopEncoderModel(UdopPreTrainedModel):
         pixel_values: Tensor | None = None,
         visual_bbox: dict[str, Any] | None = None,
         inputs_embeds: Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithAttentionMask:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithAttentionMask:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
@@ -1733,12 +1698,6 @@ class UdopEncoderModel(UdopPreTrainedModel):
         >>> outputs = model(**encoding)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         encoder_outputs = self.encoder(
             input_ids=input_ids,
             bbox=bbox,
@@ -1746,9 +1705,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         return encoder_outputs
