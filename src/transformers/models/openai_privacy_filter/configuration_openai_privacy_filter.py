@@ -46,6 +46,13 @@ OPENAI_PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
 @auto_docstring(checkpoint="openai/privacy-filter")
 @strict
 class OpenAIPrivacyFilterConfig(PreTrainedConfig):
+    r"""
+    swiglu_alpha (`float`, *optional*, defaults to 1.702):
+        Sigmoid gain of the clamped/scaled SwiGLU activation.
+    swiglu_limit (`float`, *optional*, defaults to 7.0):
+        Clamp bound applied to the gate and up projections of the clamped/scaled SwiGLU activation.
+    """
+
     model_type = "openai_privacy_filter"
     attribute_map = {
         "num_experts": "num_local_experts",
@@ -74,6 +81,8 @@ class OpenAIPrivacyFilterConfig(PreTrainedConfig):
     num_key_value_heads: int = 2
     sliding_window: int = 128
     tie_word_embeddings: bool = False
+    swiglu_alpha: float = 1.702
+    swiglu_limit: float = 7.0
     initializer_range: float = 0.02
     max_position_embeddings: int = 131072
     rms_norm_eps: float = 1e-5

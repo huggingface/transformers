@@ -357,11 +357,26 @@ class Mxfp4GptOssExperts(nn.Module):
         self.down_proj_bias = nn.Parameter(
             torch.zeros(self.num_experts, self.hidden_size, dtype=torch.float32), requires_grad=False
         )
-        self.alpha = 1.702
-        self.limit = getattr(config, "swiglu_limit", 7.0)
+        self.swiglu_alpha = getattr(config, "swiglu_alpha", 1.702)
+        self.swiglu_limit = getattr(config, "swiglu_limit", 7.0)
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
-        self.limit = getattr(config, "swiglu_limit", 7.0)
+
+    @property
+    def alpha(self):
+        logger.warning_once(
+            f"`{self.__class__.__name__}.alpha` is deprecated and will be removed in v5.15. "
+            "Use `swiglu_alpha` instead."
+        )
+        return self.swiglu_alpha
+
+    @property
+    def limit(self):
+        logger.warning_once(
+            f"`{self.__class__.__name__}.limit` is deprecated and will be removed in v5.15. "
+            "Use `swiglu_limit` instead."
+        )
+        return self.swiglu_limit
 
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         FnSpecs, FusedActivation, matmul_ogs = (
@@ -372,7 +387,9 @@ class Mxfp4GptOssExperts(nn.Module):
         swiglu_fn = triton_kernels_hub.swiglu.swiglu_fn
 
         with on_device(hidden_states.device):
-            act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.alpha, self.limit), 2)
+            act = FusedActivation(
+                FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.swiglu_alpha, self.swiglu_limit), 2
+            )
 
             intermediate_cache1 = matmul_ogs(
                 hidden_states,

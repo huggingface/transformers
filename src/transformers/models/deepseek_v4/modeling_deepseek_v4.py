@@ -36,10 +36,13 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deepseek_v4 import DeepseekV4Config
+
+
+logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -981,12 +984,20 @@ class DeepseekV4MLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.limit = config.swiglu_limit
+        self.swiglu_limit = config.swiglu_limit
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        gate = self.gate_proj(x).clamp(max=self.limit)
-        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        gate = self.gate_proj(x).clamp(max=self.swiglu_limit)
+        up = self.up_proj(x).clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.down_proj(self.act_fn(gate) * up)
+
+    @property
+    def limit(self):
+        logger.warning_once(
+            f"`{self.__class__.__name__}.limit` is deprecated and will be removed in v5.15. "
+            "Use `swiglu_limit` instead."
+        )
+        return self.swiglu_limit
 
 
 @use_experts_implementation
@@ -1001,7 +1012,7 @@ class DeepseekV4Experts(nn.Module):
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
-        self.limit = config.swiglu_limit
+        self.swiglu_limit = config.swiglu_limit
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -1020,13 +1031,21 @@ class DeepseekV4Experts(nn.Module):
             final.index_add_(0, token_idx, current.to(final.dtype))
         return final
 
+    @property
+    def limit(self):
+        logger.warning_once(
+            f"`{self.__class__.__name__}.limit` is deprecated and will be removed in v5.15. "
+            "Use `swiglu_limit` instead."
+        )
+        return self.swiglu_limit
+
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
         # backends swapped in by `@use_experts_implementation` apply the same clamp +
         # SiLU on top of their packed gate_up output instead of bypassing it.
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.clamp(max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
+        gate = gate.clamp(max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.act_fn(gate) * up
 
 

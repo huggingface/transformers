@@ -73,14 +73,30 @@ class GptOssExperts(nn.Module):
         self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_size))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.intermediate_size, self.hidden_size)))
         self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.hidden_size))
-        self.alpha = 1.702
-        self.limit = 7.0
+        self.swiglu_alpha = config.swiglu_alpha
+        self.swiglu_limit = config.swiglu_limit
+
+    @property
+    def alpha(self):
+        logger.warning_once(
+            f"`{self.__class__.__name__}.alpha` is deprecated and will be removed in v5.15. "
+            "Use `swiglu_alpha` instead."
+        )
+        return self.swiglu_alpha
+
+    @property
+    def limit(self):
+        logger.warning_once(
+            f"`{self.__class__.__name__}.limit` is deprecated and will be removed in v5.15. "
+            "Use `swiglu_limit` instead."
+        )
+        return self.swiglu_limit
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up[..., ::2], gate_up[..., 1::2]
-        gate = gate.clamp(min=None, max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
-        glu = gate * torch.sigmoid(gate * self.alpha)
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
         gated_output = (up + 1) * glu
         return gated_output
 
