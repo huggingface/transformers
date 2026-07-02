@@ -65,18 +65,18 @@ def main(script_args, training_args, model_args):
     )
 
     peft_config = get_peft_config(model_args)
-    if peft_config is not None:
-        model = get_peft_model(model, peft_config)
+    # if peft_config is not None:
+    #     model = get_peft_model(model, peft_config)
 
-    model.enable_input_require_grads()
-    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
-    model.config.use_cache = False
+    # model.enable_input_require_grads()
+    # model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    # model.config.use_cache = False
 
-    if int(os.environ.get("COMPILE", "0")):
-        print("Compiling model")
-        model = torch.compile(model, backend="neuron")
+    # if int(os.environ.get("COMPILE", "0")):
+    #     print("Compiling model")
+    #     model = torch.compile(model, backend="neuron")
 
-    model.train()
+    # model.train()
 
     dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
 
@@ -85,6 +85,7 @@ def main(script_args, training_args, model_args):
         args=training_args,
         train_dataset=dataset[script_args.dataset_train_split],
         eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+        peft_config=peft_config,
     )
 
     trainer.train()

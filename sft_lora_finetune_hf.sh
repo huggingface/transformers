@@ -81,6 +81,7 @@ torchrun --nproc_per_node="${NUM_PROC}" \
     --per_device_train_batch_size $BATCH_SIZE \
     --gradient_accumulation_steps $GRAD_ACCUM_STEPS \
     --loss_type nll \
+    --torch_compile \
     --eos_token '<|im_end|>' \
     --eval_strategy no \
     --logging_steps 10 \
