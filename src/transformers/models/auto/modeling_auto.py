@@ -551,6 +551,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("youtu", "YoutuModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
+        ("zaya", "ZayaModel"),
     ]
 )
 
@@ -824,6 +825,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("youtu", "YoutuForCausalLM"),
         ("zamba", "ZambaForCausalLM"),
         ("zamba2", "Zamba2ForCausalLM"),
+        ("zaya", "ZayaForCausalLM"),
     ]
 )
 
