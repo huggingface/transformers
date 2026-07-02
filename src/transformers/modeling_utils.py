@@ -3616,7 +3616,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
                     # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
                     if state_dict_split.is_sharded:
-                        weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())
+                        weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())  # ty: ignore[unresolved-attribute]
                 except Exception:
                     raise RuntimeError(
                         "We could not revert some weight conversions because of offlading, and several weights needed for a single "
