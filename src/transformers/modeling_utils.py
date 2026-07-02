@@ -3479,9 +3479,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if distributed_checkpoint:
             if not is_torch_greater_or_equal("2.7"):
-                raise OSError(
-                    "save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7."
-                )
+                raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
             if not is_fsdp_model:
                 raise ValueError(
                     "save_pretrained(..., distributed_checkpoint=True) is only supported for FSDP-wrapped models."
@@ -3491,7 +3489,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         save_on_this_rank = is_main_process
         if _is_torch_distributed_initialized():
             save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
-        
+
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = model_to_save.dtype
@@ -3561,7 +3559,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             return
 
-        
         # Get the state dict
         used_distributed_gather = False
         if state_dict is None:

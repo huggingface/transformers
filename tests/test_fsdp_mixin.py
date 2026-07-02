@@ -397,9 +397,7 @@ def _test_fsdp2_save_load_dcp_impl(rank, config_class, config_dict):
             )
 
         if rank == 0:
-            logger.debug(
-                f"FSDP2 DCP save/load test passed: all {len(state_dict_before)} parameters match exactly."
-            )
+            logger.debug(f"FSDP2 DCP save/load test passed: all {len(state_dict_before)} parameters match exactly.")
 
 
 def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_word_embeddings):
