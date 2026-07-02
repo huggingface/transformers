@@ -179,7 +179,7 @@ with torch.no_grad():
 
 sequence = outputs.last_hidden_state # (batch_size, 1 + config.num_register_tokens + num_patches, hidden_size)
 cls_token_1 = sequence[:, 0] # (batch_size, hidden_size)
-cls_token_2 = sequence[:, 1 : 1 + model.config.num_register_tokens] # (batch_size, hidden_size)
+cls_token_2 = sequence[:, 1] # (batch_size, hidden_size)
 ```
 
 </hfoption>
