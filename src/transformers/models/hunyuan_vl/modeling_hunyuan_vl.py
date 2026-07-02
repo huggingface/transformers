@@ -38,6 +38,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_hunyuan_vl import HunYuanVLConfig, HunYuanVLTextConfig, HunYuanVLVisionConfig
@@ -340,6 +341,7 @@ class HunYuanVLVisionAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=True)
         self.is_causal = False
 
+    @deprecate_kwarg("hidden_state", new_name="hidden_states", version="v5.20")
     def forward(
         self,
         hidden_states: torch.Tensor,

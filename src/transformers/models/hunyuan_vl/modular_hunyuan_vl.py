@@ -703,46 +703,6 @@ class HunYuanVLVisionAttention(MllamaVisionAttention):
         self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=True)
 
-    # TODO: remove this override once #46977 deprecates the MllamaVisionAttention
-    # `hidden_state` argument name in favor of `hidden_states`. The implementation is
-    # otherwise identical to the parent, but SiglipEncoderLayer calls it with `hidden_states=`.
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        query = self.q_proj(hidden_states)
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
-
-        batch_size, q_seq_len, _ = query.shape
-        _, kv_seq_len, _ = key.shape
-
-        query = query.view(batch_size, q_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key = key.view(batch_size, kv_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value = value.view(batch_size, kv_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask,
-            dropout=0.0,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(batch_size, q_seq_len, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, attn_weights
-
 
 class HunYuanVLVisionBlock(SiglipEncoderLayer):
     def __init__(self, config: HunYuanVLVisionConfig):
