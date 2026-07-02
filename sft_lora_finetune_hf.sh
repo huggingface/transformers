@@ -80,6 +80,7 @@ torchrun --nproc_per_node="${NUM_PROC}" \
     --pad_to_multiple_of $MAX_SEQ_LENGTH \
     --per_device_train_batch_size $BATCH_SIZE \
     --gradient_accumulation_steps $GRAD_ACCUM_STEPS \
+    --loss_type nll \
     --eos_token '<|im_end|>' \
     --eval_strategy no \
     --logging_steps 10 \
@@ -93,5 +94,6 @@ torchrun --nproc_per_node="${NUM_PROC}" \
     --lora_alpha $LORA_ALPHA \
     --lora_target_modules $LORA_TARGET_MODULES \
     --lora_dropout $LORA_DROPOUT \
+    --dataloader_num_workers 0 \
     --report_to none \
     --output_dir "$OUTPUT_DIR"

@@ -976,7 +976,7 @@ class Trainer:
         else:
             data_collator = self._get_collator_with_removed_columns(self.data_collator, description=description)
 
-        # MPS requrires forking if multiple workers are specified
+        # MPS requires forking if multiple workers are specified
         should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
 
         dataloader_params = {
@@ -1407,12 +1407,6 @@ class Trainer:
             else:
                 DebugUnderflowOverflow(self.model)
 
-        # Print model and trainable parameter summary
-        print(self.model)
-        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        total_params = sum(p.numel() for p in self.model.parameters())
-        print(f"Trainable params: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
-
         # Load potential model checkpoint
         if isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
             resume_from_checkpoint = get_last_checkpoint(args.output_dir)
@@ -1749,8 +1743,7 @@ class Trainer:
                     tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
 
                 if (
-                    False 
-                    and self.args.logging_nan_inf_filter
+                    self.args.logging_nan_inf_filter
                     and not is_torch_xla_available()
                     and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
                 ):
@@ -1906,8 +1899,6 @@ class Trainer:
         # Prepare buffers for context parallelism
 
         cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
-
-        print({k: v.shape for k, v in inputs.items() if hasattr(v, "shape")})
 
         # Context manager is no-op if CP isn't enabled
         with cp_context():
@@ -2111,7 +2102,7 @@ class Trainer:
             self._save_checkpoint(model, trial)
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
 
-    # ---- Training Utilites ----
+    # ---- Training Utilities ----
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
     ) -> tuple[list, torch.Tensor | int | None]:
