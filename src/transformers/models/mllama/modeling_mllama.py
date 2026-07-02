@@ -1320,12 +1320,6 @@ class MllamaModel(MllamaPreTrainedModel):
         )
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1437,19 +1431,13 @@ class MllamaModel(MllamaPreTrainedModel):
     """,
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
-    # _tied_weights_keys = {"lm_head.weight": "model.language_moddel.embed_tokens.weight"}
+    # _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
         self.model = MllamaModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring

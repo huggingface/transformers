@@ -58,13 +58,47 @@ hf auth login
 Install PyTorch.
 
 ```bash
+# remove ! if installing from the CLI
 !pip install torch
 ```
 
 Then install an up-to-date version of Transformers and some additional libraries from the Hugging Face ecosystem for accessing datasets and vision models, evaluating training, and optimizing training for large models.
 
 ```bash
+# remove ! if installing from the CLI
 !pip install -U transformers datasets evaluate accelerate timm
+```
+
+## Agent skills
+
+[Hugging Face Skills](https://github.com/huggingface/skills) teach your coding agent how to work with Transformers. Instead of writing a training script yourself, ask your agent to fine-tune a vision model and let the skill guide it.
+
+<hfoptions id="install">
+<hfoption id="Claude Code">
+
+```sh
+/plugin marketplace add huggingface/skills
+/plugin install hf-cli@huggingface/skills
+```
+
+</hfoption>
+<hfoption id="Codex">
+
+```sh
+codex plugin marketplace add huggingface/skills
+```
+
+Then run `/plugins` in Codex and install a skill from the `huggingface/skills` repository.
+
+</hfoption>
+</hfoptions>
+
+See the [Installation](https://github.com/huggingface/skills#installation) guide for more supported platforms like Cursor and Gemini.
+
+Once a skill is installed, include it in your instructions to your coding agent.
+
+```md
+Use the HF Trainer skill to fine-tune RT-DETRv2 on [Lekim89/sportsmot](https://huggingface.co/datasets/Lekim89/sportsmot) for basketball player tracking.
 ```
 
 ## Pretrained models

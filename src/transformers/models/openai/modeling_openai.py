@@ -271,12 +271,12 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.config.n_positions))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of models predicting if two sentences are consecutive or not.
     """
 )
+@dataclass
 class OpenAIGPTDoubleHeadsModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

@@ -79,7 +79,7 @@ class Lfm2VlPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -88,12 +88,12 @@ class Lfm2VlPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Lfm2Vl causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Lfm2VlCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -118,12 +118,12 @@ class Lfm2VlCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Lfm2Vl outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Lfm2VlModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -152,12 +152,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         self.multi_modal_projector = Lfm2VlMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(
@@ -225,10 +219,10 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         n_image_features = image_features.shape[0]
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -307,12 +301,6 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
         self.model = Lfm2VlModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head

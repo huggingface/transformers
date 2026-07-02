@@ -26,7 +26,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3NaiveMoe
+from ...utils.output_capturing import OutputRecorder
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Experts
 from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
@@ -195,7 +196,7 @@ class Glm4vMoeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
         super().__init__(config)
 
 
-class Glm4vMoeTextNaiveMoe(DeepseekV3NaiveMoe):
+class Glm4vMoeTextExperts(DeepseekV3Experts):
     pass
 
 
@@ -203,7 +204,7 @@ class Glm4vMoeTextMoE(Glm4MoeMoE):
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
         self.config = config
-        self.experts = Glm4vMoeTextNaiveMoe(config)
+        self.experts = Glm4vMoeTextExperts(config)
         self.gate = Glm4vMoeTextTopkRouter(config)
         self.shared_experts = Glm4vMoeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
@@ -224,7 +225,7 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("text", "image", "video")
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {}
 
     def _init_weights(self, module):
@@ -252,7 +253,7 @@ class Glm4vMoeTextModel(Glm4vTextModel):
     _can_record_outputs = {
         "hidden_states": Glm4vMoeTextDecoderLayer,
         "attentions": Glm4vMoeTextAttention,
-        "router_logits": Glm4vMoeTextTopkRouter,
+        "router_logits": OutputRecorder(Glm4vMoeTextTopkRouter, index=0),
     }
 
     def forward(
@@ -287,7 +288,7 @@ class Glm4vMoeTextModel(Glm4vTextModel):
         # where each dim indicates visual spatial positions for temporal/height/width grids.
         # There are two scenarios when FA2-like packed masking might be activated.
         # 1. User specifically passed packed `position_ids` and no attention mask.
-        #    In this case we expect the useer to create correct position ids for all 3 grids
+        #    In this case we expect the user to create correct position ids for all 3 grids
         #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
         # 2. User runs forward with no attention mask and no position ids. In this case, position ids
         #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are

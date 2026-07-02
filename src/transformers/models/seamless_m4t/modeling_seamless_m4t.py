@@ -38,7 +38,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
@@ -76,13 +75,13 @@ SEAMLESS_M4T_COMMON_CUSTOM_ARGS = r"""
 """
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the generated outputs from [`SeamlessM4TModel`], [`SeamlessM4TForTextToText`],
     [`SeamlessM4TForTextToSpeech`], [`SeamlessM4TForSpeechToSpeech`] and [`SeamlessM4TForTextToSpeech`].
     """
 )
+@dataclass
 class SeamlessM4TGenerationOutput(ModelOutput):
     r"""
     waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -2023,7 +2022,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.model.encoder
 
     def get_decoder(self):
@@ -2250,7 +2249,6 @@ class SeamlessM4THifiGan(nn.Module):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def forward(self, inputs_embeds: torch.FloatTensor) -> torch.FloatTensor:
         r"""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
@@ -2470,7 +2468,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.text_encoder
 
     def get_decoder(self):
@@ -2720,7 +2718,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.speech_encoder
 
     def get_decoder(self):
@@ -2982,7 +2980,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.text_encoder
 
     def get_decoder(self):
@@ -3293,7 +3291,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.vocoder = SeamlessM4TCodeHifiGan(config)
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.speech_encoder
 
     def get_decoder(self):
@@ -3640,7 +3638,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
         else:
             raise ValueError(f"`modality={modality}` is not a valid modality. It must be `text` or `speech`.")
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         if self.current_modality == "text":
             return self.text_encoder
         else:

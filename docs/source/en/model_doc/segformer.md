@@ -12,13 +12,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 for our doc-builder (similar to MDX) that may not render properly
 in your Markdown viewer.
 -->
-*This model was released on 2021-05-31 and added to Hugging Face Transformers on 2021-10-28.*
+*This model was published in HF papers on 2021-05-31 and contributed to Hugging Face Transformers on 2021-10-28.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # SegFormer
 
@@ -41,10 +36,10 @@ The example below demonstrates semantic segmentation with [`Pipeline`] or the [`
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="image-segmentation", model="nvidia/segformer-b0-finetuned-ade-512-512", torch_dtype=torch.float16)
+
+pipeline = pipeline(task="image-segmentation", model="nvidia/segformer-b0-finetuned-ade-512-512")
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
@@ -54,15 +49,17 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 ```python
 import requests
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForSemanticSegmentation
+
+from transformers import AutoModelForSemanticSegmentation, AutoProcessor
+
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 processor = AutoProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
-model = AutoModelForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+model = AutoModelForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512", device_map="auto")
 
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 logits = outputs.logits # shape [batch, num_labels, height, width]
 ```
@@ -81,6 +78,8 @@ logits = outputs.logits # shape [batch, num_labels, height, width]
 
 ```python
 from transformers import SegformerImageProcessor
+
+
 processor = SegformerImageProcessor(do_reduce_labels=True)
 ```
 

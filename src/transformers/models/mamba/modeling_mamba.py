@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import lazy_load_kernel
+from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -118,6 +119,8 @@ class MambaMixer(nn.Module):
         mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
 
         self.warn_slow_implementation()
+
+        self.layer_type = config.layer_types[layer_idx]
 
     @torch.no_grad()
     def init_mamba_weights(self):
@@ -363,6 +366,7 @@ class MambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
@@ -470,12 +474,12 @@ class MambaPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, std=std)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for the MAMBA model outputs.
     """
 )
+@dataclass
 class MambaOutput(ModelOutput):
     r"""
     cache_params (`Cache`):
@@ -490,12 +494,12 @@ class MambaOutput(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class MambaCausalLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

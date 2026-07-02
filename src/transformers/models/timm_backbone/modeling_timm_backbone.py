@@ -17,7 +17,7 @@ import torch
 from torch import Tensor, nn
 
 from ... import initialization as init
-from ...backbone_utils import BackboneMixin, filter_output_hidden_states
+from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_timm_available, requires_backends
@@ -118,7 +118,6 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
                 init.zeros_(module.num_batches_tracked)
 
     @can_return_tuple
-    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: torch.FloatTensor,

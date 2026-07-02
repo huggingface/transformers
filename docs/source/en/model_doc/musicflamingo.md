@@ -13,13 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-
-*This model was released on 2025-11-03 and added to Hugging Face Transformers on 2026-03-30.*
+*This model was published in HF papers on 2025-11-13 and contributed to Hugging Face Transformers on 2026-03-30.*
 
 # Music Flamingo
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -56,7 +54,8 @@ The model supports audio-text instructions, including multi-turn interactions, a
 ➡️ audio + text instruction
 
 ```python
-from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, MusicFlamingoForConditionalGeneration
+
 
 model_id = "nvidia/music-flamingo-2601-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -89,7 +88,8 @@ print(decoded_outputs)
 ➡️ multi-turn:
 
 ```python
-from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, MusicFlamingoForConditionalGeneration
+
 
 model_id = "nvidia/music-flamingo-2601-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -135,7 +135,8 @@ print(decoded_outputs)
 ➡️ batched inference!
 
 ```python
-from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, MusicFlamingoForConditionalGeneration
+
 
 model_id = "nvidia/music-flamingo-2601-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -185,7 +186,8 @@ print(decoded_outputs)
 ➡️ Training:
 
 ```python
-from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, MusicFlamingoForConditionalGeneration
+
 
 model_id = "nvidia/music-flamingo-2601-hf"
 processor = AutoProcessor.from_pretrained(model_id)
@@ -283,6 +285,11 @@ loss.backward()
 ## MusicFlamingoProcessor
 
 [[autodoc]] MusicFlamingoProcessor
+
+## MusicFlamingoModel
+
+[[autodoc]] MusicFlamingoModel
+    - forward
 
 ## MusicFlamingoForConditionalGeneration
 

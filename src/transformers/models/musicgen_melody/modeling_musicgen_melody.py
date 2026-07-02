@@ -57,12 +57,12 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Musicgen Melody autoregressive outputs.
     """
 )
+@dataclass
 class MusicgenMelodyOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

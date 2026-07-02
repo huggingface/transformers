@@ -146,8 +146,8 @@ def _make_causal_mask(
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithProjectionAttentions(BaseModelOutputWithPooling):
     r"""
     projection_attentions (`tuple(torch.FloatTensor)`):
@@ -161,20 +161,14 @@ class BaseModelOutputWithProjectionAttentions(BaseModelOutputWithPooling):
     projection_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class Kosmos2ModelOutput(ModelOutput):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-        input) to speed up sequential decoding.
     image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
     projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
@@ -202,24 +196,18 @@ class Kosmos2ModelOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Model output class for `Kosmos2ForConditionalGeneration`.
     """
 )
+@dataclass
 class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-        input) to speed up sequential decoding.
     image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
     projection_attentions (`tuple(torch.FloatTensor)`, *optional*):

@@ -98,9 +98,7 @@ class T5Gemma2RotaryEmbedding(nn.Module):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-
         self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
@@ -112,7 +110,7 @@ class T5Gemma2RotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -913,10 +911,10 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
             special_image_mask = input_ids == image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
         )
         return special_image_mask
@@ -1103,7 +1101,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.encoder
 
     def get_decoder(self):
@@ -1210,8 +1208,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_encoder(self):
-        return self.model.get_encoder()
+    def get_encoder(self, modality: str | None = None):
+        return self.model.get_encoder(modality=modality)
 
     def get_decoder(self):
         return self.model.get_decoder()

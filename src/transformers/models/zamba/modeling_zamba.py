@@ -266,6 +266,8 @@ class ZambaMambaMixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d. If you want to use the naive implementation, set `use_mamba_kernels=False` in the model config"
             )
 
+        self.layer_type = config.layer_types[layer_idx]
+
     def cuda_kernels_forward(
         self, hidden_states: torch.Tensor, cache_params: Cache | None = None, attention_mask=None
     ):
@@ -642,9 +644,9 @@ class ZambaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ZambaHybridLayer", "ZambaMambaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = False
-    _supports_sdpa = False
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
     _is_stateful = True
     _can_record_outputs = {
         "hidden_states": ZambaMambaDecoderLayer,

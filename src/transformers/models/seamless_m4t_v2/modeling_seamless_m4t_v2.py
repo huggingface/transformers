@@ -38,7 +38,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config
 
 
@@ -76,13 +75,13 @@ SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS = r"""
 """
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the generated outputs from [`SeamlessM4Tv2Model`], [`SeamlessM4Tv2ForTextToText`],
     [`SeamlessM4Tv2ForTextToSpeech`], [`SeamlessM4Tv2ForSpeechToSpeech`] and [`SeamlessM4Tv2ForTextToSpeech`].
     """
 )
+@dataclass
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TGenerationOutput with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2GenerationOutput(ModelOutput):
     r"""
@@ -106,12 +105,12 @@ class SeamlessM4Tv2GenerationOutput(ModelOutput):
     unit_sequences: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the outputs from [`SeamlessM4Tv2TextToUnitDecoder`].
     """
 )
+@dataclass
 class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
     r"""
     padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -125,13 +124,13 @@ class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
     padding_mask: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the outputs from [`SeamlessM4Tv2TextToUnitForConditionalGeneration`] and
         [`SeamlessM4Tv2TextToUnitModel`].
     """
 )
+@dataclass
 class SeamlessM4Tv2TextToUnitOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -2225,7 +2224,7 @@ class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedMod
         self.post_init()
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TTextToUnitForConditionalGeneration.get_encoder
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.model.encoder
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TTextToUnitForConditionalGeneration.get_decoder
@@ -2446,7 +2445,6 @@ class SeamlessM4Tv2HifiGan(nn.Module):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def forward(self, inputs_embeds: torch.FloatTensor) -> torch.FloatTensor:
         r"""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
@@ -2675,7 +2673,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.text_encoder
 
     def get_decoder(self):
@@ -2927,7 +2925,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
         self.post_init()
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_encoder
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.speech_encoder
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_decoder
@@ -3196,7 +3194,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
         self.post_init()
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.get_encoder
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.text_encoder
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.get_decoder
@@ -3544,7 +3542,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
         self.post_init()
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.get_encoder
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.speech_encoder
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.get_decoder
@@ -3928,7 +3926,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
             raise ValueError(f"`modality={modality}` is not a valid modality. It must be `text` or `speech`.")
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel.get_encoder
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         if self.current_modality == "text":
             return self.text_encoder
         else:

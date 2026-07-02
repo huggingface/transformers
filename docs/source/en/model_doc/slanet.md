@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-07 and added to Hugging Face Transformers on 2026-04-22.*
+*This model was contributed to Hugging Face Transformers on 2026-04-22.*
 
 # SLANet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -38,12 +35,14 @@ The example below demonstrates how to detect text with SLANet using the [`AutoMo
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 from io import BytesIO
 
 import httpx
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForTableRecognition
+
 
 model_path="PaddlePaddle/SLANet_plus_safetensors"
 model = AutoModelForTableRecognition.from_pretrained(model_path, device_map="auto")

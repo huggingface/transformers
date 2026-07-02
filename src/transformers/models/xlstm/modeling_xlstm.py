@@ -1323,7 +1323,7 @@ class xLSTMCache:
             The device on which the cache should be initialized. Should be the same as the layer.
 
     Attributes:
-        seqlen_offset: int
+        seqlen_offset: torch.Tensor
         dtype: torch.dtype
 
     Example:
@@ -1351,7 +1351,11 @@ class xLSTMCache:
         device: str | None = None,
         **kwargs,
     ):
-        self.seqlen_offset = 0
+        # Follows the static-cache convention (`StaticLayer.cumulative_length` in cache_utils.py):
+        # compile/export-friendly caches store the position counter as a tensor, not a Python int,
+        # so it stays a tensor leaf in the cache pytree across `+= shape[i]` operations rather
+        # than getting promoted to a SymInt during dynamic-shape tracing.
+        self.seqlen_offset = torch.tensor([0], dtype=int, device=device)
         self.dtype = dtype
         self.config = config
         self.rnn_state = {
@@ -1378,8 +1382,8 @@ class xLSTMCache:
         }
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class xLSTMOutput(ModelOutput):
     r"""
     cache_params (`xLSTMCache`):
@@ -1396,7 +1400,7 @@ class xLSTMOutput(ModelOutput):
 class xLSTMModel(xLSTMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        # use embbeding_dim and num_blocks once here to make use of them
+        # use embedding_dim and num_blocks once here to make use of them
         self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
         self.blocks = nn.ModuleList([xLSTMBlock(config) for _ in range(config.num_blocks)])
         self.out_norm = xLSTMRMSNorm(config.hidden_size, eps=config.norm_eps)
@@ -1496,8 +1500,8 @@ class xLSTMModel(xLSTMPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class xLSTMCausalLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

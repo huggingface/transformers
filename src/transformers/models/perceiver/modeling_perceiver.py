@@ -28,6 +28,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
@@ -43,12 +44,12 @@ PostprocessorType = Callable[..., Any]
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver base model's outputs, with potential hidden states, attentions and cross-attentions.
     """
 )
+@dataclass
 class PerceiverModelOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
@@ -62,12 +63,12 @@ class PerceiverModelOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver decoder outputs, with potential cross-attentions.
     """
 )
+@dataclass
 class PerceiverDecoderOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
@@ -78,12 +79,12 @@ class PerceiverDecoderOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver's masked language model outputs.
     """
 )
+@dataclass
 class PerceiverMaskedLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -99,13 +100,13 @@ class PerceiverMaskedLMOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver's outputs of sequence/image classification models, optical flow and multimodal
     autoencoding.
     """
 )
+@dataclass
 class PerceiverClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -529,7 +530,7 @@ class PerceiverPreTrainedModel(PreTrainedModel):
     config: PerceiverConfig
     base_model_prefix = "perceiver"
     main_input_name = "inputs"
-    input_modalities = ("image",)  # techinically can be anything but HF impl has only image processor
+    input_modalities = ("image",)  # technically can be anything but HF impl has only image processor
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -745,16 +746,20 @@ class PerceiverModel(PerceiverPreTrainedModel):
         # If no attention mask is provided, make them all ones
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length), device=device)
-        # Make the attention mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        extended_attention_mask = self.invert_attention_mask(attention_mask)
 
         embedding_output = self.embeddings(batch_size=batch_size)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=None,
             inputs=inputs,
-            inputs_mask=extended_attention_mask,
+            inputs_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -777,7 +782,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
             decoder_outputs = self.decoder(
                 decoder_query,
                 z=sequence_output,
-                query_mask=extended_attention_mask,
+                query_mask=attention_mask,
                 output_attentions=output_attentions,
             )
             logits = decoder_outputs.logits
@@ -1996,7 +2001,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             pos = torch.stack(indices, dim=1)
             batch_size = inputs.shape[0]
             # Map these coordinates to [-1, 1]
-            pos = -1 + 2 * pos / torch.tensor(self.output_index_dims)[None, :]
+            pos = -1 + 2 * pos / torch.tensor(self.output_index_dims, device=pos.device)[None, :]
             pos = torch.broadcast_to(pos[None], [batch_size, pos.shape[0], pos.shape[1]])
             # Construct the position encoding.
             if self.position_encoding_type == "trainable":
@@ -2471,7 +2476,7 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
     min_freq = 1.0
     # Nyquist frequency at the target resolution:
     freq_bands = torch.stack(
-        [torch.linspace(start=min_freq, end=res / 2, steps=num_bands) for res in max_resolution], dim=0
+        [torch.linspace(start=min_freq, end=res / 2, steps=num_bands, device=pos.device) for res in max_resolution]
     )
 
     # Get frequency bands for each spatial dimension.

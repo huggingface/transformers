@@ -205,7 +205,7 @@ class FunnelAttentionStructure(nn.Module):
             pooled_pos = pos
 
         ref_point = pooled_pos[0] - pos[0]
-        num_remove = shift * len(pooled_pos)
+        num_remove = shift * pooled_pos.shape[0]
         max_dist = ref_point + num_remove * stride
         min_dist = pooled_pos[0] - pos[-1]
 
@@ -711,12 +711,12 @@ class FunnelClassificationHead(nn.Module):
         return self.linear_out(hidden)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`FunnelForPreTraining`].
     """
 )
+@dataclass
 class FunnelForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):

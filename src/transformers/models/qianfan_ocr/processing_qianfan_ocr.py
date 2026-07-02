@@ -73,6 +73,10 @@ class QianfanOCRProcessor(ProcessorMixin):
         self.video_token = None
         self.video_processor = None
 
+    @property
+    def image_token_ids(self) -> list[int]:
+        return [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
+
     def _insert_media_placeholders(
         self,
         text: list[str],

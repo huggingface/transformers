@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-12-31 and added to Hugging Face Transformers on 2026-01-21.*
+*This model was published in HF papers on 2026-01-11 and contributed to Hugging Face Transformers on 2026-01-22.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -52,8 +51,8 @@ top_k=50
 **Examples**
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 MODEL_ID = "upstage/Solar-Open-100B"
 
@@ -62,7 +61,6 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
 
 model = AutoModelForCausalLM.from_pretrained(
     pretrained_model_name_or_path=MODEL_ID,
-    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 
