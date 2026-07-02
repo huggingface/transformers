@@ -186,7 +186,9 @@ class UMT5Attention(nn.Module):
     T5's attention using relative_attention_bias.
     """
 
-    def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None, is_causal: bool = False):
+    def __init__(
+        self, config, has_relative_attention_bias=False, layer_idx: int | None = None, is_causal: bool = False
+    ):
         super().__init__()
         self.config = config
         self.is_decoder = config.is_decoder
