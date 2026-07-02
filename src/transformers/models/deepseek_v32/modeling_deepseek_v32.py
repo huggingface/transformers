@@ -419,56 +419,112 @@ class DeepseekV32Attention(nn.Module):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
-        key_states = torch.cat((k_pass, k_rot), dim=-1)
-
+        has_cache_data = False
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            try:
+                has_cache_data = past_key_values.get_seq_length(self.layer_idx) > 0
+            except (AttributeError, NotImplementedError):
+                has_cache_data = True
 
-        # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
-        indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
-        topk_indices = self.indexer(
-            hidden_states, q_resid, position_embeddings, indexer_mask, position_ids, past_key_values=past_key_values
-        )  # [B, S, topk]
+        if not has_cache_data:
+            k_pass_normed = self.kv_a_layernorm(k_pass)
 
-        sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
-            # Boolean mask: `True` at keys *not* selected by the indexer (to be masked out).
+            W_kv = self.kv_b_proj.weight.view(self.num_heads, -1, self.kv_lora_rank)
+            W_uk = W_kv[:, : self.qk_nope_head_dim, :]
+            W_uv = W_kv[:, self.qk_nope_head_dim :, :]
+
+            absorbed_q = torch.einsum("bhnd,hdk->bhnk", q_pass, W_uk)
+            compressed_k = k_pass_normed.unsqueeze(1)
+
+            attn_weights = torch.matmul(absorbed_q, compressed_k.transpose(-2, -1))
+            attn_weights = attn_weights + torch.matmul(q_rot, k_rot.transpose(-2, -1))
+            attn_weights = attn_weights * self.scaling
+
+            # DSA indexer
+            indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
+            topk_indices = self.indexer(
+                hidden_states, q_resid, position_embeddings, indexer_mask, position_ids,
+                past_key_values=past_key_values,
+            )
+
+            # Apply DSA sparse mask
             index_mask = (
-                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+                topk_indices.new_ones((batch_size, seq_length, seq_length), dtype=torch.bool)
                 .scatter(-1, topk_indices.long(), False)
                 .unsqueeze(1)
-            )  # [B, 1, S, T]; True = masked
+            )
             if attention_mask is None:
-                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
+                key_positions = torch.arange(seq_length, device=hidden_states.device)
                 index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
-                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
+                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, seq_length))
             attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
-        else:
-            sparse_indices = topk_indices
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            indices=sparse_indices,
-            **kwargs,
-        )
+            attn_weights = attn_weights + attention_mask
+            attn_weights = torch.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q_states.dtype)
+            attn_weights = F.dropout(attn_weights, p=0.0 if not self.training else self.attention_dropout)
+
+            attn_output = torch.matmul(attn_weights, compressed_k)
+            attn_output = torch.einsum("bhnk,hkv->bhnv", attn_output, W_uv.transpose(1, 2))
+
+            if past_key_values is not None:
+                k_pass_full = self.kv_b_proj(k_pass_normed).view(*key_shape).transpose(1, 2)
+                k_pass_full, value_states = torch.split(
+                    k_pass_full, [self.qk_nope_head_dim, self.v_head_dim], dim=-1
+                )
+                k_rot_full = k_rot.expand(*k_pass_full.shape[:-1], -1)
+                key_states = torch.cat((k_pass_full, k_rot_full), dim=-1)
+                past_key_values.update(key_states, value_states, self.layer_idx)
+        else:
+            k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
+            k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+
+            k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
+            query_states = torch.cat((q_pass, q_rot), dim=-1)
+            key_states = torch.cat((k_pass, k_rot), dim=-1)
+
+            if past_key_values is not None:
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+            indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
+            topk_indices = self.indexer(
+                hidden_states, q_resid, position_embeddings, indexer_mask, position_ids,
+                past_key_values=past_key_values,
+            )
+
+            sparse_indices = None
+            if self.config._attn_implementation in ("eager", "sdpa"):
+                index_mask = (
+                    topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+                    .scatter(-1, topk_indices.long(), False)
+                    .unsqueeze(1)
+                )
+                if attention_mask is None:
+                    key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
+                    index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
+                    attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
+                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+            else:
+                sparse_indices = topk_indices
+
+            attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+                self.config._attn_implementation, eager_attention_forward
+            )
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                indices=sparse_indices,
+                **kwargs,
+            )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
