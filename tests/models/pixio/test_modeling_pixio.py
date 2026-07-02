@@ -18,6 +18,7 @@ from functools import cached_property
 
 from transformers import PixioConfig
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_vision,
     slow,
@@ -269,10 +270,15 @@ class PixioModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 264, 1280))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[0.7420, -1.4220, 0.1580], [0.3938, -1.4386, 0.2878], [0.2898, -1.4012, 0.3667]],
-            device=torch_device,
+        # Re-baselined after the dinov2 refactor adopted ViT's fp32-softmax `eager_attention_forward`.
+        slice_expectations = Expectations(
+            {
+                ("cpu", None): [[0.7420, -1.4219, 0.1581], [0.3935, -1.4387, 0.2880], [0.2888, -1.4017, 0.3672]],
+                ("cuda", (8, 0)): [[0.7420, -1.4219, 0.1581], [0.3935, -1.4387, 0.2880], [0.2888, -1.4017, 0.3672]],
+                ("xpu", None): [[0.7420, -1.4219, 0.1581], [0.3935, -1.4387, 0.2880], [0.2888, -1.4017, 0.3672]],
+            }
         )
+        expected_slice = torch.tensor(slice_expectations.get_expectation(), device=torch_device)
         # valid the first three patch tokens
         torch.testing.assert_close(outputs.last_hidden_state[0, 8:11, :3], expected_slice, rtol=1e-4, atol=1e-4)
 

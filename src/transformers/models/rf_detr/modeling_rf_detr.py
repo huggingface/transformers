@@ -17,10 +17,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import collections.abc
 import math
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,7 +29,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...backbone_utils import BackboneMixin, filter_output_hidden_states
+from ...backbone_utils import BackboneMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithCrossAttentions
@@ -49,20 +48,18 @@ class RfDetrDinov2PatchEmbeddings(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: RfDetrDinov2Config):
         super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
+        image_size = config.image_size
+        patch_size = config.patch_size
+        image_size = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, Iterable) else (patch_size, patch_size)
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.num_channels = config.num_channels
+        self.projection = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
@@ -71,27 +68,22 @@ class RfDetrDinov2PatchEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        return embeddings
+        return self.projection(pixel_values).flatten(2).transpose(1, 2)
 
 
 class RfDetrDinov2Embeddings(nn.Module):
-    """
-    Construct the CLS token, mask token, position and patch embeddings.
-    """
+    """Construct the CLS token, mask token, position and patch embeddings."""
 
     def __init__(self, config: RfDetrDinov2Config) -> None:
         super().__init__()
-
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        if config.use_mask_token:
-            self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size)) if config.use_mask_token else None
         self.patch_embeddings = RfDetrDinov2PatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
+        self.position_embeddings = nn.Parameter(
+            torch.randn(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
+        )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
-        self.use_mask_token = config.use_mask_token
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -216,7 +208,7 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
@@ -225,95 +217,53 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->RfDetrDinov2
-class RfDetrDinov2SelfAttention(nn.Module):
+class RfDetrDinov2Attention(nn.Module):
     def __init__(self, config: RfDetrDinov2Config):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
         self.config = config
         self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = config.attention_probs_dropout_prob
-        self.scaling = self.attention_head_size**-0.5
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.attention_dropout = config.attention_probs_dropout_prob
+        self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size = hidden_states.shape[0]
-        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
-        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
-        context_layer, attention_probs = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
-            query_layer,
-            key_layer,
-            value_layer,
-            None,
-            is_causal=self.is_causal,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            dropout=0.0 if not self.training else self.dropout_prob,
             **kwargs,
         )
 
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
 
-        return context_layer, attention_probs
-
-
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->RfDetrDinov2
-class RfDetrDinov2SelfOutput(nn.Module):
-    """
-    The residual connection is defined in RfDetrDinov2Layer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
-    """
-
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
-
-
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->RfDetrDinov2
-class RfDetrDinov2Attention(nn.Module):
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__()
-        self.attention = RfDetrDinov2SelfAttention(config)
-        self.output = RfDetrDinov2SelfOutput(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, **kwargs)
-        output = self.output(self_attn_output, hidden_states)
-        return output
+        return attn_output, attn_weights
 
 
 class RfDetrDinov2LayerScale(nn.Module):
@@ -331,34 +281,29 @@ class RfDetrDinov2MLP(nn.Module):
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.fc1(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        hidden_state = self.fc2(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class RfDetrDinov2SwiGLUFFN(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+        self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.down_proj = nn.Linear(hidden_features, config.hidden_size, bias=True)
+        self.act_fn = nn.functional.silu
 
-        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
-        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.weights_in(hidden_state)
-        x1, x2 = hidden_state.chunk(2, dim=-1)
-        hidden = nn.functional.silu(x1) * x2
-        return self.weights_out(hidden)
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class RfDetrDinov2DropPath(nn.Module):
@@ -390,18 +335,12 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
 
     def __init__(self, config: RfDetrDinov2Config, layer_idx: int) -> None:
         super().__init__()
-
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = RfDetrDinov2Attention(config)
         self.layer_scale1 = RfDetrDinov2LayerScale(config)
         self.drop_path = RfDetrDinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        if config.use_swiglu_ffn:
-            self.mlp = RfDetrDinov2SwiGLUFFN(config)
-        else:
-            self.mlp = RfDetrDinov2MLP(config)
+        self.mlp = RfDetrDinov2SwiGLUFFN(config) if config.use_swiglu_ffn else RfDetrDinov2MLP(config)
         self.layer_scale2 = RfDetrDinov2LayerScale(config)
         self.num_windows = config.num_windows
         self.global_attention = layer_idx not in config.window_block_indexes
@@ -409,6 +348,8 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
 
@@ -417,7 +358,7 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
             hidden_states = self.window_unpartition_before_attention(hidden_states)
 
         hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output = self.attention(hidden_states_norm)
+        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask=attention_mask, **kwargs)
 
         # And reverse the operation after the attention
         if self.global_attention:
@@ -472,32 +413,29 @@ class RfDetrDinov2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _no_split_modules = ["RfDetrDinov2Layer"]
+    _no_split_modules = ["RfDetrDinov2Embeddings", "RfDetrDinov2Layer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": RfDetrDinov2Layer,
-        "attentions": RfDetrDinov2SelfAttention,
+        "attentions": RfDetrDinov2Attention,
     }
+    _input_embed_layer = "patch_embeddings"
 
     @torch.no_grad()
-    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
+    def _init_weights(self, module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, RfDetrDinov2Embeddings):
-            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+        super()._init_weights(module)
+        if isinstance(module, RfDetrDinov2Embeddings):
+            if module.position_embeddings is not None:
+                init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            if self.config.use_mask_token:
+            if module.mask_token is not None:
                 init.zeros_(module.mask_token)
-        elif isinstance(module, RfDetrDinov2LayerScale):
+        if isinstance(module, RfDetrDinov2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
 
 
@@ -509,10 +447,14 @@ class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
-    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states)
-
+            hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
@@ -524,21 +466,14 @@ class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
 class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = RfDetrDinov2Embeddings(config)
         self.encoder = RfDetrDinov2Encoder(config)
-
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> RfDetrDinov2PatchEmbeddings:
-        return self.embeddings.patch_embeddings
-
-    @can_return_tuple
-    @filter_output_hidden_states
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -569,12 +504,12 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        # Like Dinov2, we need to output the hidden states to extract the layers for the stages
-        kwargs["output_hidden_states"] = True
-
         embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
-        hidden_states = output.hidden_states
+        hidden_state = embedding_output
+        hidden_states = (hidden_state,)
+        for layer in self.encoder.layer:
+            hidden_state = layer(hidden_state, **kwargs)
+            hidden_states = hidden_states + (hidden_state,)
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -598,11 +533,7 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
 
                 feature_maps += (hidden_state,)
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states,
-            attentions=output.attentions,
-        )
+        return BackboneOutput(feature_maps=tuple(feature_maps))
 
     def window_unpartition(self, hidden_state: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -1156,7 +1087,7 @@ class RfDetrPreTrainedModel(PreTrainedModel):
             init.constant_(module.bbox_embed.layers[-1].weight, 0)
             init.constant_(module.bbox_embed.layers[-1].bias, 0)
         if hasattr(module, "segmentation_bias") and isinstance(module.segmentation_bias, nn.Parameter):
-            nn.init.constant_(module.segmentation_bias, 0.0)
+            init.constant_(module.segmentation_bias, 0.0)
 
 
 @auto_docstring(

@@ -279,21 +279,27 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         self.config = config
         self.base = config.rope_theta
         self.head_dim = config.hidden_size // config.num_attention_heads
+        image_height, image_width = (
+            config.image_size if isinstance(config.image_size, Iterable) else (config.image_size, config.image_size)
+        )
+        patch_height, patch_width = (
+            config.patch_size if isinstance(config.patch_size, Iterable) else (config.patch_size, config.patch_size)
+        )
+        self.num_patches_h = image_height // patch_height
+        self.num_patches_w = image_width // patch_width
 
         inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        image_size = config.image_size
-        image_h, image_w = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
-        patch_size = config.patch_size
-        patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
-        patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
-        self.num_patches_h = image_h // patch_size_h
-        self.num_patches_w = image_w // patch_size_w
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
-        num_patches_h = height // self.config.patch_size
-        num_patches_w = width // self.config.patch_size
+        patch_height, patch_width = (
+            self.config.patch_size
+            if isinstance(self.config.patch_size, Iterable)
+            else (self.config.patch_size, self.config.patch_size)
+        )
+        num_patches_h = height // patch_height
+        num_patches_w = width // patch_width
 
         device = pixel_values.device
         device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
@@ -795,15 +801,17 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Sapiens2Layer"]
+    _no_split_modules = ["Sapiens2Embeddings", "Sapiens2Layer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": Sapiens2Layer,
         "attentions": Sapiens2Attention,
     }
+    _input_embed_layer = "patch_embeddings"
 
     # Ignore periods as we use inv_freq instead which is automatically calculated from the config.
     _keys_to_ignore_on_load_unexpected = [r"periods"]
@@ -843,7 +851,6 @@ class Sapiens2Encoder(Sapiens2PreTrainedModel):
         self.layer = nn.ModuleList(
             [Sapiens2Layer(config, layer_idx=layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        # Initialize weights and apply final processing
         self.post_init()
 
     @merge_with_config_defaults
@@ -856,7 +863,6 @@ class Sapiens2Encoder(Sapiens2PreTrainedModel):
     ) -> BaseModelOutput:
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings, **kwargs)
-
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
@@ -868,7 +874,6 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
         self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
         self.model = Sapiens2Encoder(config)
         self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -908,20 +913,18 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
         torch.Size([1, 1024])
         ```
         """
-
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeddings = self.rope_embeddings(pixel_values)
 
-        output = self.model(hidden_states, position_embeddings, **kwargs)
-        sequence_output = self.norm(output.last_hidden_state)
+        encoder_outputs: BaseModelOutput = self.model(hidden_states, position_embeddings=position_embeddings, **kwargs)
+        sequence_output = self.norm(encoder_outputs.last_hidden_state)
         pooled_output = sequence_output[:, 0, :]
-
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -929,13 +932,10 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
 class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-
         self.embeddings = Sapiens2Embeddings(config)
         self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
         self.model = Sapiens2Encoder(config)
         self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.gradient_checkpointing = False
-
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.post_init()
 
@@ -973,11 +973,11 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         ```
         """
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
-        hidden_states = self.embeddings(pixel_values)
+        hidden_state = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
 
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
-        output = self.model(hidden_states, position_embeddings, **kwargs)
+        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
+        output: BaseModelOutput = self.model(hidden_state, position_embeddings, **kwargs)
         stage_hidden_states = output.hidden_states
 
         batch_size, _, image_height, image_width = pixel_values.shape
