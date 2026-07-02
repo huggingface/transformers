@@ -36,6 +36,7 @@ from ...utils import (
 )
 from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
@@ -421,7 +422,8 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         hidden_states = self.patch_embed(pixel_values, grid_thw=grid_thw)
-        position_ids = self.get_position_ids(grid_thw=grid_thw)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
+        position_ids = position_ids.transpose(0, 1).flip(0)[:, None, :]
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         lengths = torch.cat(
