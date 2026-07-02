@@ -111,7 +111,7 @@ if is_torch_available():
 
 from unittest.mock import patch
 
-from tests.exporters.test_utils import ExportGenerateTesterMixin
+from tests.exporters.test_export import ExportGenerateTesterMixin
 
 
 def is_moe_model(config):

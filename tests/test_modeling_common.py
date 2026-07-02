@@ -122,7 +122,7 @@ from transformers.utils import (
 from transformers.utils.import_utils import get_cuda_runtime_version
 from transformers.utils.output_capturing import CompileableContextVar
 
-from .exporters.test_utils import ExportTesterMixin
+from .exporters.test_export import ExportTesterMixin
 from .generation.test_utils import GenerationTesterMixin
 
 

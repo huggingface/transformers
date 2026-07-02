@@ -74,40 +74,84 @@ class AutoHfExporter:
     """
 
     @classmethod
-    def from_config(cls, export_config: ExportConfigMixin | dict, **kwargs) -> HfExporter | None:
-        # Convert it to a ExportConfigMixin if the q_config is a dict
-        if isinstance(export_config, dict):
-            export_config = AutoExportConfig.from_dict(export_config)
+    def from_config(cls, export_config: ExportConfigMixin | dict, **kwargs) -> HfExporter:
+        # Normalize to a dict so ``supports_export_format`` can act as the single gate.
+        export_config_dict = export_config.to_dict() if isinstance(export_config, ExportConfigMixin) else export_config
+        if not cls.supports_export_format(export_config_dict):
+            raise ValueError(
+                f"Unsupported export config: {export_config_dict!r}. "
+                f"Registered exporters: {sorted(AUTO_EXPORTER_MAPPING)}."
+            )
 
-        export_format = export_config.export_format
-
-        target_cls = AUTO_EXPORTER_MAPPING[export_format]
-        return target_cls(export_config, **kwargs)
+        export_format = export_config_dict["export_format"]
+        name = export_format.value if isinstance(export_format, ExportFormat) else export_format
+        return AUTO_EXPORTER_MAPPING[name](**kwargs)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> HfExporter | None:
         """
-        Load an exporter instance from a pretrained model/config that contains an export config.
-        This will look for common attributes on the model config (see `AutoExportConfig.from_pretrained`).
+        Load an exporter instance from a pretrained model/checkpoint that ships an export config.
+
+        **Not implemented yet** — placeholder for a first-class "export recipe" workflow.
+
+        The idea: model owners publish an ``export_config.json`` (or an ``export_config`` field in
+        ``config.json``) alongside their weights on the Hub. That file captures the settings the
+        owner has already validated for their architecture — the target format (``dynamo`` /
+        ``onnx`` / ``executorch``), exact dynamic-shape specs (e.g. ``text_ids`` dynamic to 4096,
+        image tiles fixed at 448, ``batch=1`` for edge deployment), ``strict`` flag, ONNX opset,
+        prefill vs. decode layout, ExecuTorch backend choice, and any other knob that today lives
+        as tribal knowledge in a README or a private notebook.
+
+        Consumers then get the owner-validated export in one call::
+
+            exporter = AutoHfExporter.from_pretrained("org/model-name")
+            program = exporter.export(model, inputs)
+
+        Composes with the [`register_export_input_preparer`] registry: the owner supplies the
+        shape spec via ``export_config.json``, transformers supplies the data-dependent
+        precomputations (``cu_seqlens``, vision position ids, window indices, …) for that
+        architecture. Together they cover the two hard parts of exporting new models — knowing
+        the right shape contract and preparing the right inputs — so downstream users don't
+        re-derive either from scratch (and don't break in production when they get it wrong).
         """
-        export_config = AutoExportConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        return cls.from_config(export_config.__dict__, **kwargs)
+        raise NotImplementedError(
+            "AutoHfExporter.from_pretrained is not implemented yet. "
+            "Load/export configs explicitly and call AutoHfExporter.from_config(...) instead."
+        )
 
     @staticmethod
     def supports_export_format(export_config_dict: dict) -> bool:
-        """Return True if the provided dict describes a supported export_format."""
+        """Return True if the provided dict describes an ``export_format`` that has both a
+        registered config class and a registered exporter class. Warns with an actionable message
+        when the format is missing entirely, unknown, or only half-registered."""
         export_fmt = export_config_dict.get("export_format")
         if export_fmt is None:
+            logger.warning(
+                "No 'export_format' key in export config — supported values are: "
+                f"{sorted(AUTO_EXPORTER_MAPPING)}. Skipping."
+            )
             return False
 
-        if isinstance(export_fmt, ExportFormat):
-            name = export_fmt.value
-        else:
-            name = export_fmt
+        name = export_fmt.value if isinstance(export_fmt, ExportFormat) else export_fmt
+        has_config = name in AUTO_EXPORT_CONFIG_MAPPING
+        has_exporter = name in AUTO_EXPORTER_MAPPING
 
-        if name not in AUTO_EXPORT_CONFIG_MAPPING:
+        if not has_config and not has_exporter:
             logger.warning(
-                f"Unknown export format, got {export_fmt} - supported types are: {list(AUTO_EXPORTER_MAPPING.keys())}. Skipping."
+                f"Unknown export format {export_fmt!r} — supported values are: "
+                f"{sorted(set(AUTO_EXPORTER_MAPPING) & set(AUTO_EXPORT_CONFIG_MAPPING))}. Skipping."
+            )
+            return False
+        if not has_config:
+            logger.warning(
+                f"Export format {name!r} has a registered exporter but no config class. "
+                f"Register one via ``@register_export_config({name!r})``. Skipping."
+            )
+            return False
+        if not has_exporter:
+            logger.warning(
+                f"Export format {name!r} has a registered config class but no exporter. "
+                f"Register one via ``@register_exporter({name!r})``. Skipping."
             )
             return False
         return True

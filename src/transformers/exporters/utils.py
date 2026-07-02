@@ -627,6 +627,14 @@ def decompose_prefill_decode(
             f"Make sure the inputs are compatible with model.generate()."
         ) from e
 
+    if len(calls) < 2:
+        raise RuntimeError(
+            f"decompose_prefill_decode expected at least 2 calls to {type(model).__name__}.forward() "
+            f"during generate(max_new_tokens=2), but captured {len(calls)}. This likely means "
+            "generate() bypasses the top-level forward() (e.g. delegates to an inner model), "
+            "so prefill/decode decomposition is not supported for this architecture."
+        )
+
     return {
         "prefill": (copy.copy(model), calls[0]),
         "decode": (copy.copy(model), calls[1]),
