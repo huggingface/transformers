@@ -52,6 +52,14 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
+from .distributed.fsdp import is_fsdp_managed_module
+from .distributed.utils import (
+    _distributed_barrier,
+    distribute_model,
+    gather_full_state_dict,
+    initialize_fully_sharded_data_parallelism,
+    save_model_checkpoint_distributed,
+)
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
@@ -78,7 +86,6 @@ from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     _get_parameter_tp_plan,
-    distribute_model,
     gather_state_dict_for_save,
     initialize_tensor_parallelism,
     shard_and_distribute_module,
@@ -130,6 +137,7 @@ from .utils.import_utils import (
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
     is_torch_cuda_available,
+    is_torch_greater_or_equal,
     is_tracing,
 )
 from .utils.loading_report import LoadStateDictInfo, log_state_dict_report
@@ -211,6 +219,12 @@ def _get_torch_distributed_world_size() -> int:
 
 def is_local_dist_rank_0():
     return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
+
+
+def _get_torch_distributed_rank() -> int:
+    if not _is_torch_distributed_initialized():
+        return 0
+    return torch.distributed.get_rank()
 
 
 @contextmanager
@@ -3364,6 +3378,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         token: str | bool | None = None,
         save_peft_format: bool = True,
         save_original_format: bool = True,
+        distributed_checkpoint: bool = False,
         **kwargs,
     ):
         """
@@ -3387,7 +3402,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 namespace).
             max_shard_size (`int` or `str`, *optional*, defaults to `"50GB"`):
                 The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
-                lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
+                lower than this size. If expressed as a string, needs be digits followed by a unit (like `"5MB"`).
 
                 <Tip warning={true}>
 
@@ -3409,6 +3424,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 For backward compatibility with the previous versions of `transformers` you can save the checkpoint with
                 its reverse mapping. The reverse mapping needs to exists even if the model was loaded from a None legacy
                 checkpoint.
+            distributed_checkpoint (`bool`, *optional*, defaults to `False`):
+                When saving an FSDP-wrapped model, use the distributed checkpoint (DCP) path instead of gathering weights
+                to CPU first. Every rank must call this method; rank 0 writes the consolidated Hugging Face safetensors.
+                When `False`, FSDP weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
+                Native FSDP requires `torch>=2.7`.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -3455,6 +3475,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
+        is_fsdp_model = is_fsdp_managed_module(model_to_save)
+
+        if distributed_checkpoint:
+            if not is_torch_greater_or_equal("2.7"):
+                raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
+            if not is_fsdp_model:
+                raise ValueError(
+                    "save_pretrained(..., distributed_checkpoint=True) is only supported for FSDP-wrapped models."
+                )
+
+        # Collectives run on every rank; checkpoint files are written on global rank 0 only.
+        save_on_this_rank = is_main_process
+        if _is_torch_distributed_initialized():
+            save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
+
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = model_to_save.dtype
@@ -3466,11 +3501,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self.is_remote_code():
+        if save_on_this_rank and self.is_remote_code():
             custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
-        if is_main_process:
+        if save_on_this_rank:
             if not _hf_peft_config_loaded:
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
@@ -3503,9 +3538,40 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
-        # Get the model state_dict
+        # --- FSDP path: DCP save (large models, torch >= 2.7) ---
+        if distributed_checkpoint:
+            if getattr(model_to_save, "device_mesh", None) is None:
+                raise ValueError(
+                    "save_pretrained(..., distributed_checkpoint=True) requires the model to have been "
+                    "initialized with a distributed_config (device_mesh is None)."
+                )
+            save_model_checkpoint_distributed(model_to_save, save_directory)
+            if push_to_hub and save_on_this_rank:
+                model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
+                model_card.save(os.path.join(save_directory, "README.md"))
+                self._upload_modified_files(
+                    save_directory,
+                    repo_id,
+                    files_timestamps,
+                    commit_message=commit_message,
+                    token=token,
+                    create_pr=create_pr,
+                )
+            return
+
+        # Get the state dict
+        used_distributed_gather = False
         if state_dict is None:
-            state_dict = model_to_save.state_dict()
+            if is_fsdp_model:
+                if not _is_torch_distributed_initialized():
+                    raise ValueError(
+                        "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
+                        "Call save_pretrained from every rank after init_process_group."
+                    )
+                state_dict = gather_full_state_dict(model_to_save)
+                used_distributed_gather = True
+            else:
+                state_dict = model_to_save.state_dict()
 
         # if any model parameters are offloaded, we need to know it for later
         is_offloaded = False
@@ -3534,6 +3600,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # If model was sharded with TP, gather full tensors for saving
         if self._tp_size is not None:
             state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
+            used_distributed_gather = True
+            if not save_on_this_rank:
+                state_dict = {}
 
         # Remove tied weights as safetensors do not handle them
         state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
@@ -3576,54 +3645,55 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
                 and filename not in state_dict_split.filename_to_tensors
-                and is_main_process
+                and save_on_this_rank
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
 
         # Save the model
-        for shard_file, tensor_names in logging.tqdm(
-            state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
-        ):
-            filename = os.path.join(save_directory, shard_file)
-            shard_state_dict = {}
-            for tensor_name in tensor_names:
-                # Get the tensor, and remove it from state_dict to avoid keeping the ref
-                tensor = state_dict.pop(tensor_name)
+        if save_on_this_rank:
+            for shard_file, tensor_names in logging.tqdm(
+                state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
+            ):
+                filename = os.path.join(save_directory, shard_file)
+                shard_state_dict = {}
+                for tensor_name in tensor_names:
+                    # Get the tensor, and remove it from state_dict to avoid keeping the ref
+                    tensor = state_dict.pop(tensor_name)
 
-                # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
-                # but it would otherwise not be contained in the saved shard if we were to simply move the file
-                # or something
-                if is_offloaded and tensor.device.type == "meta":
-                    tensor = load_offloaded_parameter(model_to_save, tensor_name)
+                    # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
+                    # but it would otherwise not be contained in the saved shard if we were to simply move the file
+                    # or something
+                    if is_offloaded and tensor.device.type == "meta":
+                        tensor = load_offloaded_parameter(model_to_save, tensor_name)
 
-                # only do contiguous after it's permuted correctly in case of TP
-                shard_state_dict[tensor_name] = tensor.contiguous()
+                    # only do contiguous after it's permuted correctly in case of TP
+                    shard_state_dict[tensor_name] = tensor.contiguous()
 
-            # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
-            # so it's not possible for now....
-            # Write the shard to disk
-            safe_save_file(shard_state_dict, filename, metadata=metadata)
-            # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
-            del shard_state_dict
+                # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
+                # so it's not possible for now....
+                # Write the shard to disk
+                safe_save_file(shard_state_dict, filename, metadata=metadata)
+                # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
+                del shard_state_dict
 
-        if index is None:
-            path_to_weights = os.path.join(save_directory, weights_name)
-            logger.info(f"Model weights saved in {path_to_weights}")
-        else:
-            save_index_file = SAFE_WEIGHTS_INDEX_NAME
-            save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
-            # Save the index as well
-            with open(save_index_file, "w", encoding="utf-8") as f:
-                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-                f.write(content)
-            logger.info(
-                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
-                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
-                f"index located at {save_index_file}."
-            )
+            if index is None:
+                path_to_weights = os.path.join(save_directory, weights_name)
+                logger.info(f"Model weights saved in {path_to_weights}")
+            else:
+                save_index_file = SAFE_WEIGHTS_INDEX_NAME
+                save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
+                # Save the index as well
+                with open(save_index_file, "w", encoding="utf-8") as f:
+                    content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                    f.write(content)
+                logger.info(
+                    f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                    f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
+                    f"index located at {save_index_file}."
+                )
 
-        if push_to_hub:
+        if push_to_hub and save_on_this_rank:
             # Eventually create an empty model card
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
 
@@ -3638,6 +3708,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 token=token,
                 create_pr=create_pr,
             )
+
+        # `gather_full_state_dict` concentrates the full state on rank 0 only;
+        # other ranks then loop over an empty shard list and would race ahead
+        # of rank 0's safetensors writes. Barrier so any subsequent
+        # `from_pretrained` on this path sees the consolidated files.
+        if used_distributed_gather:
+            _distributed_barrier()
 
     @wraps(PushToHubMixin.push_to_hub)
     def push_to_hub(self, *args, **kwargs):
@@ -4135,8 +4212,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         adapter_name = kwargs.pop("adapter_name", "default")
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
-        tp_plan = kwargs.pop("tp_plan", None)
-        tp_size = kwargs.pop("tp_size", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -4144,9 +4219,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
-
-        if distributed_config is not None and tp_plan is None:
-            tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
         for name in ["mirror", "_fast_init", "low_cpu_mem_usage", "from_tf", "from_flax", "offload_state_dict"]:
@@ -4184,10 +4256,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ": PartialState().process_index} where PartialState comes from accelerate library"
             )
 
-        if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
-            device_map, device_mesh, tp_size = initialize_tensor_parallelism(
-                tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
-            )
+        if distributed_config is not None:
+            if isinstance(distributed_config, dict):
+                distributed_config = DistributedConfig.from_dict(distributed_config)
+
+            if distributed_config.tp_size > 1:
+                if distributed_config.tp_plan is None:
+                    distributed_config.tp_plan = "auto"
+                device_map, device_mesh, tp_size = initialize_tensor_parallelism(
+                    distributed_config.tp_plan,
+                    tp_size=distributed_config.tp_size,
+                    device_mesh=device_mesh,
+                    device_map=device_map,
+                )
+            elif distributed_config.fsdp_size > 1:
+                device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
+
+            distributed_config.validate()
+            config.distributed_config = distributed_config
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
@@ -4341,7 +4427,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
-            model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
+            model = distribute_model(model, distributed_config, device_mesh)
 
         # Prepare the full device map
         if device_map is not None:

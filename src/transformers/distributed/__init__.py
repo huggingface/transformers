@@ -20,6 +20,14 @@ from ..utils import _LazyModule
 _import_structure = {
     "configuration_utils": ["DistributedConfig"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module", "verify_fsdp_plan"],
+    "utils": [
+        "distribute_model",
+        "gather_full_state_dict",
+        "initialize_fully_sharded_data_parallelism",
+        "load_optimizer_distributed",
+        "save_model_checkpoint_distributed",
+        "save_optimizer_distributed",
+    ],
 }
 
 
@@ -28,6 +36,14 @@ if TYPE_CHECKING:
         DistributedConfig,
     )
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module, verify_fsdp_plan
+    from .utils import (
+        distribute_model,
+        gather_full_state_dict,
+        initialize_fully_sharded_data_parallelism,
+        load_optimizer_distributed,
+        save_model_checkpoint_distributed,
+        save_optimizer_distributed,
+    )
 
 else:
     import sys
