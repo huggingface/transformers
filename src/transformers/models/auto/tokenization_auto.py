@@ -863,7 +863,7 @@ class AutoTokenizer:
             has_remote_code = False
             tokenizer_auto_map = None
 
-        if has_remote_code and not has_local_code:
+        if has_remote_code and not explicit_local_code:
             # V5: Always prefer fast tokenizer (index 1), fallback to slow (index 0)
             if tokenizer_auto_map[1] is not None:
                 class_ref = tokenizer_auto_map[1]

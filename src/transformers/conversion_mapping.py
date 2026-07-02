@@ -299,7 +299,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"blocks", target_patterns="layers"),
             WeightRenaming(
                 source_patterns=r"vision_tower.patch_embed.pos_emb.weight",
-                target_patterns="vision_tower.patch_embed.pos_emb.position_embeddings",
+                target_patterns="model.vision_tower.patch_embed.pos_emb.position_embeddings",
             ),
             # Unfuse qkv and apply rope permutation
             WeightConverter(
