@@ -25,16 +25,17 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor) -> bool:
+def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
     # GQA can only be used under the following conditions
     # 1.cuda or Ascend NPU
     #   - torch version >= 2.5
     #   - attention_mask is None (otherwise it will fall back to the math kernel)
+    #   - key head_dim == value head_dim <= 256 (otherwise it will fall back to the math kernel)
     # 2.xpu
     #   - torch version >= 2.8
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
-    return _is_torch_greater_or_equal_than_2_5 and attention_mask is None
+    return _is_torch_greater_or_equal_than_2_5 and attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
 
 
 def sdpa_attention_forward(
@@ -55,7 +56,7 @@ def sdpa_attention_forward(
         )
     sdpa_kwargs = {}
     if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
-        if not use_gqa_in_sdpa(attention_mask, key):
+        if not use_gqa_in_sdpa(attention_mask, key, value):
             key = repeat_kv(key, module.num_key_value_groups)
             value = repeat_kv(value, module.num_key_value_groups)
         else:
