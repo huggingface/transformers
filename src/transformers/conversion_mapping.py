@@ -124,6 +124,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "MaskFormerDetrDecoder": "DetrModel",
     "Qwen2_5_VLModel": "Qwen2VLModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
+    "Tipsv2VisionBackbone": "Tipsv2VisionModel",
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
     "ASTModel": "ViTModel",
     "BeitModel": "ViTModel",
@@ -1420,7 +1421,114 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(r"decode_head\.conv_matting\.", r"decode_head.predictor."),
         ],
+        "tipsv2": [
+            WeightRenaming("text_encoder", "text_model"),
+            WeightRenaming("vision_encoder", "vision_model"),
+        ],
+        "Tipsv2TextModel": [
+            PrefixChange(prefix_to_remove="text_encoder"),
+            WeightRenaming(r"ln_final\.", "final_layer_norm."),
+            WeightRenaming(r"token_embedding\.", "embeddings.token_embedding."),
+            WeightRenaming(r"transformer\.resblocks\.(\d+)\.", r"encoder.layers.\1."),
+            WeightRenaming(r"\.ln_1\.", ".layer_norm1."),
+            WeightRenaming(r"\.ln_2\.", ".layer_norm2."),
+            WeightRenaming(r"\.attn\.", ".self_attn."),
+            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),
+            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),
+            WeightConverter(
+                source_patterns=r"\.in_proj_weight",
+                target_patterns=[".q_proj.weight", ".k_proj.weight", ".v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.in_proj_bias",
+                target_patterns=[".q_proj.bias", ".k_proj.bias", ".v_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "Tipsv2VisionModel": [
+            PrefixChange(prefix_to_remove="vision_encoder"),
+            WeightRenaming(r"patch_embed\.proj\.", "embeddings.patch_embeddings.projection."),
+            WeightRenaming(r"cls_token", "embeddings.cls_token"),
+            WeightRenaming(r"mask_token", "embeddings.mask_token"),
+            WeightRenaming(r"register_tokens", "embeddings.register_tokens"),
+            WeightRenaming(r"pos_embed", "embeddings.position_embeddings"),
+            WeightRenaming(r"norm\.", "layernorm."),
+            WeightRenaming(r"blocks\.(\d+)\.", r"encoder.layer.\1."),
+            WeightRenaming(r"\.attn\.proj\.", ".attention.output.dense."),
+            WeightRenaming(r"\.ls1\.gamma", ".layer_scale1.lambda1"),
+            WeightRenaming(r"\.ls2\.gamma", ".layer_scale2.lambda1"),
+            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),  # if config.use_swiglu_ffn=False
+            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),  # if config.use_swiglu_ffn=False
+            WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."),  # if config.use_swiglu_ffn=True
+            WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."),  # if config.use_swiglu_ffn=True
+            WeightConverter(
+                source_patterns=r"\.attn\.qkv\.weight",
+                target_patterns=[
+                    ".attention.attention.query.weight",
+                    ".attention.attention.key.weight",
+                    ".attention.attention.value.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.attn\.qkv\.bias",
+                target_patterns=[
+                    ".attention.attention.query.bias",
+                    ".attention.attention.key.bias",
+                    ".attention.attention.value.bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "tipsv2_dpt": [
+            WeightRenaming("vision_encoder", "backbone"),
+            WeightRenaming(
+                r"head\.reassemble\.readout_projects\.(\d+)",
+                r"neck.reassemble_stage.readout_projects.\1.layers.0",
+            ),
+            WeightRenaming(
+                r"head\.reassemble\.out_projections\.(\d+)\.", r"neck.reassemble_stage.layers.\1.projection."
+            ),
+            WeightRenaming(r"head\.reassemble\.resize_layers\.(\d+)\.", r"neck.reassemble_stage.layers.\1.resize."),
+            WeightRenaming(r"head\.fusion_blocks\.(\d+)\.out_conv\.", r"neck.fusion_stage.layers.\1.projection."),
+            WeightRenaming(
+                r"head\.fusion_blocks\.(\d+)\.main_unit\.conv1\.",
+                r"neck.fusion_stage.layers.\1.residual_layer2.convolution1.",
+            ),
+            WeightRenaming(
+                r"head\.fusion_blocks\.(\d+)\.main_unit\.conv2\.",
+                r"neck.fusion_stage.layers.\1.residual_layer2.convolution2.",
+            ),
+            WeightRenaming(
+                r"head\.fusion_blocks\.(\d+)\.residual_unit\.conv1\.",
+                r"neck.fusion_stage.layers.\1.residual_layer1.convolution1.",
+            ),
+            WeightRenaming(
+                r"head\.fusion_blocks\.(\d+)\.residual_unit\.conv2\.",
+                r"neck.fusion_stage.layers.\1.residual_layer1.convolution2.",
+            ),
+            WeightRenaming(r"head\.convs", "neck.convs"),
+            WeightRenaming(r"head\.project", "decoder.project"),
+            WeightRenaming(r"depth_head\.depth_head\.", "depth_decoder.head."),
+            WeightRenaming(r"normals_head\.normals_head\.", "normals_decoder.head."),
+            WeightRenaming(r"segmentation_head\.segmentation_head\.", "segmentation_decoder.head."),
+        ],
     }
+
+    mapping["Tipsv2DptForDepthEstimation"] = mapping["tipsv2_dpt"] + [
+        WeightRenaming(r"depth_neck", "neck"),
+        WeightRenaming(r"depth_decoder", "decoder"),
+    ]
+    mapping["Tipsv2DptForNormalEstimation"] = mapping["tipsv2_dpt"] + [
+        WeightRenaming(r"normals_neck", "neck"),
+        WeightRenaming(r"normals_decoder", "decoder"),
+    ]
+    mapping["Tipsv2DptForSemanticSegmentation"] = mapping["tipsv2_dpt"] + [
+        WeightRenaming(r"segmentation_neck", "neck"),
+        WeightRenaming(r"segmentation_decoder", "decoder"),
+    ]
+
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()
 

@@ -495,6 +495,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
+        ("tipsv2", "Tipsv2Model"),
+        ("tipsv2_text_model", "Tipsv2TextModel"),
+        ("tipsv2_vision_model", "Tipsv2VisionModel"),
         ("tvp", "TvpModel"),
         ("udop", "UdopModel"),
         ("umt5", "UMT5Model"),
@@ -880,6 +883,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
+        ("tipsv2_vision_model", "Tipsv2VisionModel"),
         ("videomae", "VideoMAEModel"),
         ("videoprism_vision_model", "VideoPrismVisionModel"),
         ("vit", "ViTModel"),
@@ -989,6 +993,7 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("mobilevitv2", "MobileViTV2ForSemanticSegmentation"),
         ("sapiens2", "Sapiens2ForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
+        ("tipsv2_dpt", "Tipsv2DptForSemanticSegmentation"),
         ("upernet", "UperNetForSemanticSegmentation"),
     ]
 )
@@ -1230,6 +1235,7 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
         ("dpt", "DPTForDepthEstimation"),
         ("glpn", "GLPNForDepthEstimation"),
         ("prompt_depth_anything", "PromptDepthAnythingForDepthEstimation"),
+        ("tipsv2_dpt", "Tipsv2DptForDepthEstimation"),
         ("zoedepth", "ZoeDepthForDepthEstimation"),
     ]
 )
@@ -1817,6 +1823,7 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("metaclip_2", "MetaClip2Model"),
         ("siglip", "SiglipModel"),
         ("siglip2", "Siglip2Model"),
+        ("tipsv2", "Tipsv2Model"),
         ("videoprism", "VideoPrismClipModel"),
     ]
 )
@@ -1851,6 +1858,8 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2Backbone"),
         ("textnet", "TextNetBackbone"),
         ("timm_backbone", "TimmBackbone"),
+        ("tipsv2", "Tipsv2VisionBackbone"),
+        ("tipsv2_vision_model", "Tipsv2VisionBackbone"),
         ("uvdoc_backbone", "UVDocBackbone"),
         ("vitdet", "VitDetBackbone"),
         ("vitpose_backbone", "VitPoseBackbone"),
@@ -1914,6 +1923,7 @@ MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertModel"),
         ("t5", "T5EncoderModel"),
         ("t5gemma", "T5GemmaEncoderModel"),
+        ("tipsv2_text_model", "Tipsv2TextModel"),
         ("umt5", "UMT5EncoderModel"),
         ("xlm", "XLMModel"),
         ("xlm-roberta", "XLMRobertaModel"),
@@ -1967,6 +1977,7 @@ MODEL_FOR_IMAGE_MATTING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_NORMAL_ESTIMATION_MAPPING_NAMES = OrderedDict(
     [
         ("sapiens2", "Sapiens2ForNormalEstimation"),
+        ("tipsv2_dpt", "Tipsv2DptForNormalEstimation"),
     ]
 )
 
