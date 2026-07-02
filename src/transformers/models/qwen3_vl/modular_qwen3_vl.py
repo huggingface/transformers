@@ -37,6 +37,7 @@ from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import accepts_precomputed_kwargs, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
+from ..auto.modeling_auto import AutoModel
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLCausalLMOutputWithPast,
@@ -187,6 +188,9 @@ class Qwen3VLConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
+            # old ckpt with incorrect model type -> override manually
+            if self.vision_config.get("model_type") == "qwen3_vl":
+                self.vision_config["model_type"] = "qwen3_vl_vision"
             self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
         elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
@@ -401,7 +405,6 @@ class Qwen3VLPreTrainedModel(Qwen2VLPreTrainedModel):
 class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
     config: Qwen3VLVisionConfig
     input_modalities = ("image", "video")
-    _no_split_modules = ["Qwen3VLVisionBlock"]
     _can_record_outputs = {
         "hidden_states": Qwen3VLVisionBlock,
         "attentions": Qwen3VLVisionAttention,
@@ -534,7 +537,6 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
     config: Qwen3VLTextConfig
     input_modalities = ("text",)
-    _no_split_modules = ["Qwen3VLTextDecoderLayer"]
 
     def __init__(self, config: Qwen3VLTextConfig):
         super().__init__(config)
@@ -641,14 +643,10 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
 
 @auto_docstring
 class Qwen3VLModel(Qwen2VLModel):
-    config: Qwen3VLConfig
-    base_model_prefix = "model"
-    _no_split_modules = ["Qwen3VLTextDecoderLayer", "Qwen3VLVisionBlock"]
-
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Qwen3VLVisionModel._from_config(config.vision_config)
-        self.language_model = Qwen3VLTextModel._from_config(config.text_config)
+        self.visual = AutoModel.from_config(config.vision_config)
+        self.language_model = AutoModel.from_config(config.text_config)
 
     def get_rope_index(
         self,
@@ -843,8 +841,6 @@ class Qwen3VLCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 
 
 class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
-    config: Qwen3VLConfig
-
     @auto_docstring
     def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
         return super().get_image_features(**super_kwargs)

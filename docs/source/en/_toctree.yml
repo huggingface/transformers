@@ -117,6 +117,8 @@
         title: Kernels
       - local: kernel_doc/loading_kernels
         title: Loading kernels
+      - local: kernel_doc/writing_kernels
+        title: Writing kernels
       title: Kernels
     - local: perf_torch_compile
       title: torch.compile
@@ -209,6 +211,8 @@
         title: torch.compile
       - local: kernels
         title: Kernels
+      - local: padding_free
+        title: Padding-free training
       title: Speed optimization
     title: Performance
   - isExpanded: false
@@ -217,8 +221,10 @@
       title: Accelerator selection
     - local: accelerate
       title: Accelerate
+    - local: ddp
+      title: DDP
     - local: fsdp
-      title: FullyShardedDataParallel
+      title: FSDP2
     - local: deepspeed
       title: DeepSpeed ZeRO
     - local: deepspeed_alst
@@ -241,7 +247,7 @@
     - local: perf_hardware
       title: Building a GPU workstation
     - local: model_memory_anatomy
-      title: Model training anatomy
+      title: GPU memory usage
     title: Hardware
   title: Training
 - isExpanded: false
@@ -384,6 +390,8 @@
         title: Video classification
       - local: tasks/object_detection
         title: Object detection
+      - local: tasks/instance_segmentation
+        title: Instance segmentation
       - local: tasks/zero_shot_object_detection
         title: Zero-shot object detection
       - local: tasks/zero_shot_image_classification
@@ -565,6 +573,8 @@
         title: DeepSeek-V2
       - local: model_doc/deepseek_v3
         title: DeepSeek-V3
+      - local: model_doc/deepseek_v32
+        title: DeepSeek-V3.2
       - local: model_doc/deepseek_v4
         title: DeepSeek-V4
       - local: model_doc/dialogpt
@@ -733,10 +743,16 @@
         title: MegatronGPT2
       - local: model_doc/mellum
         title: Mellum
+      - local: model_doc/mimo_v2_flash
+        title: MiMo-V2-Flash
+      - local: model_doc/minicpm3
+        title: MiniCPM3
       - local: model_doc/minimax
         title: MiniMax
       - local: model_doc/minimax_m2
         title: MiniMax-M2
+      - local: model_doc/minimax_m3_vl
+        title: MiniMax-M3-VL
       - local: model_doc/ministral
         title: Ministral
       - local: model_doc/ministral3
@@ -847,6 +863,8 @@
         title: RWKV
       - local: model_doc/seed_oss
         title: Seed-Oss
+      - local: model_doc/smollm3
+        title: SmolLM3
       - local: model_doc/solar_open
         title: SolarOpen
       - local: model_doc/splinter
@@ -897,6 +915,8 @@
         title: Zamba
       - local: model_doc/zamba2
         title: Zamba2
+      - local: model_doc/zaya
+        title: ZAYA
       title: Text models
     - sections:
       - local: model_doc/aimv2
@@ -995,6 +1015,8 @@
         title: Pyramid Vision Transformer (PVT)
       - local: model_doc/pvt_v2
         title: Pyramid Vision Transformer v2 (PVTv2)
+      - local: model_doc/radio
+        title: RADIO
       - local: model_doc/regnet
         title: RegNet
       - local: model_doc/resnet
@@ -1109,12 +1131,18 @@
         title: MusicGen
       - local: model_doc/musicgen_melody
         title: MusicGen Melody
+      - local: model_doc/nemotron3_5_asr
+        title: Nemotron 3.5 ASR
+      - local: model_doc/nemotron_asr_streaming
+        title: Nemotron ASR Streaming
       - local: model_doc/parakeet
         title: Parakeet
       - local: model_doc/pe_audio
         title: PE Audio
       - local: model_doc/pop2piano
         title: Pop2Piano
+      - local: model_doc/qwen3_asr
+        title: Qwen3 ASR
       - local: model_doc/seamless_m4t
         title: Seamless-M4T
       - local: model_doc/seamless_m4t_v2
@@ -1153,6 +1181,8 @@
         title: Whisper
       - local: model_doc/xcodec
         title: X-Codec
+      - local: model_doc/xcodec2
+        title: X-Codec2
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2
@@ -1171,6 +1201,8 @@
         title: V-JEPA 2
       - local: model_doc/videomae
         title: VideoMAE
+      - local: model_doc/videoprism
+        title: VideoPrism
       - local: model_doc/vivit
         title: ViViT
       title: Video models
@@ -1213,6 +1245,8 @@
         title: ColPali
       - local: model_doc/colqwen2
         title: ColQwen2
+      - local: model_doc/cosmos3_omni
+        title: Cosmos3 Omni
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deepseek_vl
@@ -1221,6 +1255,8 @@
         title: DeepseekVLHybrid
       - local: model_doc/deplot
         title: DePlot
+      - local: model_doc/diffusion_gemma
+        title: DiffusionGemma
       - local: model_doc/donut
         title: Donut
       - local: model_doc/edgetam
@@ -1427,8 +1463,6 @@
         title: SLANet
       - local: model_doc/slanext
         title: SLANeXt
-      - local: model_doc/smollm3
-        title: SmolLM3
       - local: model_doc/smolvlm
         title: SmolVLM
       - local: model_doc/speech-encoder-decoder

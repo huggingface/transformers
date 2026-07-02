@@ -34,12 +34,16 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernelized_func
+from ...integrations import use_experts_implementation
 from ...masking_utils import (
+    _preprocess_mask_arguments,
+    blockwise_overlay,
     create_bidirectional_mask,
     create_causal_mask,
     create_masks_for_generate,
     create_sliding_window_causal_mask,
+    maybe_pad_block_sequence_ids,
+    sliding_window_overlay,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -201,7 +205,7 @@ class Gemma4RMSNorm(nn.Module):
 
     def _norm(self, hidden_states: torch.Tensor):
         mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
-        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to addess compiler differences between Torch and JAX
+        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -345,7 +349,7 @@ class Gemma4AudioAttention(nn.Module):
         attn_output = attn_weights @ value_states.permute(0, 3, 1, 2, 4)
         attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, num_blocks * self.chunk_size, -1)
         attn_output = attn_output[:, :seq_length].contiguous()
-        attn_output = self.post(attn_output.to(dtype=self.post.linear.weight.dtype))
+        attn_output = self.post(attn_output.to(hidden_states.dtype))
 
         return attn_output, attn_weights
 
@@ -425,7 +429,7 @@ class Gemma4AudioFeedForward(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # This is needed to avoid any underflow/overflow issues when clipping
-        gradient_clipping = min(self.gradient_clipping, torch.finfo(self.ffw_layer_1.linear.weight.dtype).max)
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(hidden_states.dtype).max)
 
         residual = hidden_states
         hidden_states = torch.clamp(hidden_states, -gradient_clipping, gradient_clipping)
@@ -508,7 +512,7 @@ class Gemma4AudioLightConv1d(nn.Module):
         hidden_states = self.depthwise_conv1d(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         # This is needed to avoid any underflow/overflow issues when clipping
-        gradient_clipping = min(self.gradient_clipping, torch.finfo(self.linear_start.linear.weight.dtype).max)
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(hidden_states.dtype).max)
         hidden_states = torch.clamp(hidden_states, -gradient_clipping, gradient_clipping)
         hidden_states = self.conv_norm(hidden_states)
 
@@ -908,7 +912,6 @@ def apply_multidimensional_rope(
     return torch.cat(y_parts, dim=-1)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Gemma4VisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1349,7 +1352,8 @@ class Gemma4TextRouter(nn.Module):
         hidden_states = hidden_states * self.scale * self.scalar_root_size
 
         expert_scores = self.proj(hidden_states)  # [B*S, E]
-        router_probabilities = nn.functional.softmax(expert_scores, dim=-1)
+        # fp32 for numerical stability
+        router_probabilities = nn.functional.softmax(expert_scores, dim=-1, dtype=torch.float32)
 
         # topk returns both values (probabilities) and indices directly
         top_k_weights, top_k_index = torch.topk(
@@ -1657,11 +1661,11 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
     ) -> Gemma4TextModelOutputWithPast:
         r"""
         per_layer_inputs (`torch.Tensor`, *optional*):
-            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
             hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
             via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
             you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
-            to reverse the main embedding, which is expensibe.
+            to reverse the main embedding, which is expensive.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1849,11 +1853,11 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
         per_layer_inputs (`torch.Tensor`, *optional*):
-            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
             hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
             via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
             you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
-            to reverse the main embedding, which is expensibe.
+            to reverse the main embedding, which is expensive.
 
         Example:
 
@@ -2103,6 +2107,61 @@ class Gemma4MultimodalEmbedder(nn.Module):
         return self.embedding_projection(embs_normed)
 
 
+def create_masks_for_vision_model(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    past_key_values: Cache | None,
+    position_ids: torch.Tensor | None,
+    block_sequence_ids: torch.Tensor,
+) -> dict:
+    """Create full_attention and sliding_attention masks with correct composition.
+
+    For global (full attention) layers:  causal only (no bidirectional)
+    For local (sliding window) layers:  AND(sliding_window, OR(causal, blockwise))
+
+    Unlike Gemma 3 (which applies bidirectional attention on all layers), Gemma 4
+    explicitly disables bidirectional attention on global attention layers.
+    """
+    mask_kwargs = {
+        "config": config,
+        "inputs_embeds": inputs_embeds,
+        "attention_mask": attention_mask,
+        "past_key_values": past_key_values,
+        "position_ids": position_ids,
+    }
+
+    # Full attention: causal only — no bidirectional blockwise overlay.
+    full_mask = create_causal_mask(**mask_kwargs)
+
+    # We need to manually pad the sequence IDs for the sliding mask
+    # as it's passed as an `or_mask_function` which bypasses internal padding.
+    early_exit, _, _, _, kv_length, _, kv_offset = _preprocess_mask_arguments(
+        **mask_kwargs,
+        layer_idx=0,
+    )
+    if early_exit:
+        padded_block_sequence_ids = block_sequence_ids
+    else:
+        padded_block_sequence_ids = maybe_pad_block_sequence_ids(
+            block_sequence_ids, attention_mask, kv_length, kv_offset
+        )
+
+    # Sliding attention: AND(sliding_window, OR(causal, blockwise))
+    # Pass blockwise as or_mask_function (applied as step 2 in create_causal_mask)
+    # Pass sliding_window as and_mask_function (applied as step 3, after OR)
+    sliding_mask = create_causal_mask(
+        **mask_kwargs,
+        or_mask_function=blockwise_overlay(padded_block_sequence_ids),
+        and_mask_function=sliding_window_overlay(config.sliding_window),
+    )
+
+    return {
+        "full_attention": full_mask,
+        "sliding_attention": sliding_mask,
+    }
+
+
 def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: torch.device) -> torch.Tensor:
     mm_token_type_ids = mm_token_type_ids.to(device)
 
@@ -2243,11 +2302,11 @@ class Gemma4Model(Gemma4PreTrainedModel):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
         per_layer_inputs (`torch.Tensor`, *optional*):
-            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
             hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
             via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
             you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
-            to reverse the main embedding, which is expensibe.
+            to reverse the main embedding, which is expensive.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -2346,19 +2405,19 @@ class Gemma4Model(Gemma4PreTrainedModel):
                 "position_ids": position_ids,
             }
 
-            # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-            # Smaller Gemma models use a conventional casual attention mask
-            if self.config.get_text_config().use_bidirectional_attention == "vision":
-                block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-                if mm_token_type_ids is not None:
-                    block_sequence_ids = get_block_sequence_ids_for_mask(
-                        mm_token_type_ids, device=inputs_embeds.device
-                    )
+            text_config = self.config.get_text_config()
+            use_bidir = text_config.use_bidirectional_attention == "vision"
 
-                mask_kwargs["block_sequence_ids"] = block_sequence_ids
-
-            # Create the masks
-            causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
+            if use_bidir and mm_token_type_ids is not None:
+                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+                causal_mask_mapping = create_masks_for_vision_model(
+                    block_sequence_ids=block_sequence_ids,
+                    **mask_kwargs,
+                )
+            else:
+                # Smaller Gemma models (use_bidirectional_attention=None) or
+                # text-only inputs use standard causal masking
+                causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
 
         outputs = self.language_model(
             per_layer_inputs=per_layer_inputs,
@@ -2500,11 +2559,11 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
         per_layer_inputs (`torch.Tensor`, *optional*):
-            Pre-computed per-layer input text embeddings of shape of shape `(batch_size, sequence_length, num_hidden_layers,
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
             hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
             via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
             you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
-            to reverse the main embedding, which is expensibe.
+            to reverse the main embedding, which is expensive.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -2623,14 +2682,15 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             "position_ids": position_ids,
         }
 
-        # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-        # Smaller Gemma models use a conventional casual attention mask
-        if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-            if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+        text_config = config.get_text_config()
+        use_bidir = getattr(text_config, "use_bidirectional_attention", None) == "vision"
 
-            mask_kwargs["block_sequence_ids"] = block_sequence_ids
+        if use_bidir and mm_token_type_ids is not None:
+            block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+            return create_masks_for_vision_model(
+                block_sequence_ids=block_sequence_ids,
+                **mask_kwargs,
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 

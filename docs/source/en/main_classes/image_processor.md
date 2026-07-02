@@ -26,7 +26,7 @@ Image processors use a backend-based architecture. The class hierarchy is:
 
 Both backends expose the same API. Use the `backend` attribute to inspect which backend a loaded processor uses (e.g. `processor.backend == "torchvision"`).
 
-Use [`AutoImageProcessor.from_pretrained`] with the `backend` argument to select a backend. When `backend` is omitted (the default), torchvision is picked when it is installed and PIL is used otherwise. Pass an explicit string to override that choice:
+Pass `backend` to [`AutoImageProcessor.from_pretrained`] to select a backend. When `backend` is omitted (the default), torchvision is picked if it's installed, otherwise PIL is used. A few models that use Lanczos interpolation (Chameleon, Flava, Idefics3, SmolVLM) are an exception, and they default to PIL when torchvision < 0.27. Forcing `backend="torchvision"` for these models on torchvision < 0.27 falls back to BICUBIC interpolation, since torchvision supports Lanczos for tensors only from 0.27 onward.
 
 ```python
 from transformers import AutoImageProcessor

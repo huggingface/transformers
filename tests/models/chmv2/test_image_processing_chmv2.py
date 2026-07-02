@@ -15,8 +15,19 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+    prepare_image_inputs,
+)
+
+
+if is_torch_available():
+    import torch
+
+    from transformers.modeling_outputs import SemanticSegmenterOutput
 
 
 class CHMv2ImageProcessingTester:
@@ -33,6 +44,7 @@ class CHMv2ImageProcessingTester:
         do_normalize=True,
         image_mean=[0.485, 0.456, 0.406],
         image_std=[0.229, 0.224, 0.225],
+        num_labels=5,
     ):
         size = size if size is not None else {"height": 512, "width": 512}
         self.parent = parent
@@ -46,6 +58,7 @@ class CHMv2ImageProcessingTester:
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
         return {
@@ -72,10 +85,28 @@ class CHMv2ImageProcessingTester:
             torchify=torchify,
         )
 
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {
+            "outputs": SemanticSegmenterOutput(
+                logits=torch.randn(
+                    self.batch_size,
+                    self.num_labels,
+                    self.size["height"],
+                    self.size["width"],
+                )
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.size["height"],
+            "width": self.size["width"],
+        }
+        return inputs, expected_shape
+
 
 @require_torch
 @require_vision
-class CHMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class CHMv2ImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = CHMv2ImageProcessingTester(self)

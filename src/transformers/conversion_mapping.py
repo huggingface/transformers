@@ -44,6 +44,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "afmoe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
     "deepseek_v3": "qwen2_moe",
+    "deepseek_v32": "qwen2_moe",
     "dots1": "qwen2_moe",
     "ernie4_5_moe": "qwen2_moe",
     "glm4_moe": "qwen2_moe",
@@ -66,20 +67,20 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
     "sam3_tracker_video": "sam3_tracker",
-    "altclip_vision_model": "clip_vision_model",
-    "chinese_clip_vision_model": "clip_vision_model",
-    "clipseg_vision_model": "clip_vision_model",
-    "metaclip_2_vision_model": "clip_vision_model",
-    "mlcd_vision": "clip_vision_model",
-    "mlcd": "clip_vision_model",
-    "siglip_vision_model": "clip_vision_model",
-    "siglip2_vision_model": "clip_vision_model",
-    "xclip_vision_model": "clip_vision_model",
-    "clipseg_text_model": "clip_text_model",
-    "metaclip_2_text_model": "clip_text_model",
-    "siglip_text_model": "clip_text_model",
-    "siglip2_text_model": "clip_text_model",
-    "xclip_text_model": "clip_text_model",
+    "AltCLIPVisionModel": "CLIPVisionModel",
+    "ChineseCLIPVisionModel": "CLIPVisionModel",
+    "CLIPSegVisionModel": "CLIPVisionModel",
+    "MetaClip2VisionModel": "CLIPVisionModel",
+    "mlcd_vision": "CLIPVisionModel",
+    "mlcd": "CLIPVisionModel",
+    "SiglipVisionModel": "CLIPVisionModel",
+    "Siglip2VisionModel": "CLIPVisionModel",
+    "xCLIPVisionModel": "CLIPVisionModel",
+    "CLIPSegTextModel": "CLIPTextModel",
+    "MetaClip2TextModel": "CLIPTextModel",
+    "SiglipTextModel": "CLIPTextModel",
+    "Siglip2TextModel": "CLIPTextModel",
+    "xCLIPTextModel": "CLIPTextModel",
     "paligemma": "llava",
     "aya_vision": "llava",
     "got_ocr2": "llava",
@@ -94,6 +95,8 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "glmasr": "qwen2_audio",
     "musicflamingo": "qwen2_audio",
     "granite_speech_plus": "granite_speech",
+    "granitemoeshared": "granitemoe",
+    "granitemoehybrid": "granitemoe",
     "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
@@ -119,6 +122,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "MusicFlamingoModel": "Qwen2AudioModel",
     "GraniteSpeechPlusModel": "GraniteSpeechModel",
     "MaskFormerDetrDecoder": "DetrModel",
+    "Qwen2_5_VLModel": "Qwen2VLModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
     "ASTModel": "ViTModel",
@@ -146,6 +150,25 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"embed_vision\.embedding_projection",
                 target_patterns="embed_vision.multimodal_embedder.embedding_projection",
+            ),
+        ],
+        "radio": [
+            WeightRenaming("radio_model.model.patch_generator.video_embedder", "embeddings.video_patch_projection"),
+            WeightRenaming("radio_model.model.patch_generator.embedder", "embeddings.patch_projection"),
+            WeightRenaming("radio_model.model.patch_generator.pos_embed", "embeddings.position_embedding"),
+            WeightRenaming("radio_model.model.patch_generator.cls_token.token", "embeddings.cls_register_token"),
+            WeightRenaming("radio_model.model.blocks", "encoder.layer"),
+            WeightRenaming("attn.proj", "attention.output.dense"),
+            WeightRenaming("radio_model.input_conditioner", "input_conditioner"),
+            WeightRenaming("radio_model.summary_idxs", "summary_idxs"),
+            WeightConverter(
+                source_patterns="attn.qkv",
+                target_patterns=[
+                    "attention.attention.query",
+                    "attention.attention.key",
+                    "attention.attention.value",
+                ],
+                operations=[Chunk(dim=0)],
             ),
         ],
         "hrm_text": [
@@ -474,6 +497,115 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
+        "minimax_m3_vl": [
+            # Ordering matters for save round-tripping: the reverse mapping flips the order *and* each
+            # transform (see deepseek_v4 above). We therefore split into two passes: structural prefix
+            # renames first (so they apply last on save / first on load), then specific in-prefix renames
+            # that operate on the already-prefixed keys. Every target prefix here is distinct and anchored,
+            # so no reversed source pattern is broad enough to steal keys from another namespace.
+            # ---- Pass 1: top-level + structural prefix renames ----
+            WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
+            # The vision tower flattens CLIP's `vision_model.{encoder.layers,embeddings.patch_embedding,
+            # pre_layrnorm}` nesting onto `vision_tower.{layers,embeddings.proj,pre_layrnorm}`. Each rule is
+            # anchored and leaf-specific so its reverse re-inserts `vision_model` only on the right keys (a
+            # blanket `.vision_model.` -> `.` rule reverses to "match any char" and mangles every key).
+            WeightRenaming(
+                source_patterns=r"^vision_tower\.vision_model\.embeddings\.patch_embedding\.",
+                target_patterns="model.vision_tower.embeddings.proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_tower\.vision_model\.encoder\.layers\.",
+                target_patterns="model.vision_tower.layers.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_tower\.vision_model\.pre_layrnorm\.",
+                target_patterns="model.vision_tower.pre_layrnorm.",
+            ),
+            # The projector hosts both the upstream `multi_modal_projector.linear_{1,2}` and the
+            # `patch_merge_mlp.linear_{1,2}` (registered as `merge_linear_{1,2}`). Spell each leaf out so the
+            # reversed `linear_*` source never also matches `merge_linear_*` (or vice versa).
+            WeightRenaming(
+                source_patterns=r"^multi_modal_projector\.linear_1\.",
+                target_patterns="model.multi_modal_projector.linear_1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^multi_modal_projector\.linear_2\.",
+                target_patterns="model.multi_modal_projector.linear_2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^patch_merge_mlp\.linear_1\.",
+                target_patterns="model.multi_modal_projector.merge_linear_1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^patch_merge_mlp\.linear_2\.",
+                target_patterns="model.multi_modal_projector.merge_linear_2.",
+            ),
+            # ---- Pass 2: specific in-prefix renames (operate on already-prefixed keys) ----
+            # MoE layers rename `block_sparse_moe.*` -> `mlp.*`, but dense layers already use `mlp.*`. A blanket
+            # `block_sparse_moe.` -> `mlp.` rule reverses to `mlp.` -> `block_sparse_moe.` and corrupts the dense
+            # layers on save, so we rename per MoE leaf (`experts` / `shared_experts` / `gate` / e-score). The
+            # reversed `mlp.experts.` / `mlp.shared_experts.` / `mlp.gate.weight` sources match only MoE
+            # sublayers, never the dense `mlp.gate_up_proj` / `mlp.down_proj`.
+            WeightRenaming(
+                source_patterns=r"\.language_model\.layers\.(\d+)\.block_sparse_moe\.experts\.",
+                target_patterns=r".language_model.layers.\1.mlp.experts.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.language_model\.layers\.(\d+)\.block_sparse_moe\.shared_experts\.",
+                target_patterns=r".language_model.layers.\1.mlp.shared_experts.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.language_model\.layers\.(\d+)\.block_sparse_moe\.gate\.weight",
+                target_patterns=r".language_model.layers.\1.mlp.gate.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.language_model\.layers\.(\d+)\.block_sparse_moe\.e_score_correction_bias",
+                target_patterns=r".language_model.layers.\1.mlp.gate.e_score_correction_bias",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_q_proj\.",
+                target_patterns=".self_attn.indexer.q_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_k_proj\.",
+                target_patterns=".self_attn.indexer.k_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_q_norm\.",
+                target_patterns=".self_attn.indexer.q_norm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_k_norm\.",
+                target_patterns=".self_attn.indexer.k_norm.",
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.w1.weight",
+                    "mlp.experts.*.w3.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.w2.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                target_patterns="mlp.gate_up_proj.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.shared_experts.gate_proj.weight",
+                    "mlp.shared_experts.up_proj.weight",
+                ],
+                target_patterns="mlp.shared_experts.gate_up_proj.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ],
         "qwen2_audio": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
@@ -488,6 +620,21 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^encoder", target_patterns="model.encoder"),
             WeightRenaming(source_patterns=r"^projector", target_patterns="model.projector"),
+        ],
+        # Legacy MoE weight names → standard ``@use_experts_implementation`` interface.
+        "granitemoe": [
+            WeightRenaming(
+                source_patterns=r"block_sparse_moe\.input_linear\.weight",
+                target_patterns="block_sparse_moe.experts.gate_up_proj",
+            ),
+            WeightRenaming(
+                source_patterns=r"block_sparse_moe\.output_linear\.weight",
+                target_patterns="block_sparse_moe.experts.down_proj",
+            ),
+            WeightRenaming(
+                source_patterns=r"block_sparse_moe\.router\.layer\.weight",
+                target_patterns="block_sparse_moe.router.weight",
+            ),
         ],
         "GraniteSpeechModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
@@ -513,8 +660,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
             WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
         ],
-        "clip_vision_model": [PrefixChange(prefix_to_remove="vision_model")],
-        "clip_text_model": [PrefixChange(prefix_to_remove="text_model")],
+        # Important to refer to classes by name, not model-type! Several classes share the same model type
+        "CLIPVisionModel": [PrefixChange(prefix_to_remove="vision_model")],
+        "CLIPTextModel": [PrefixChange(prefix_to_remove="text_model")],
         "VideoLlavaModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
@@ -551,6 +699,9 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^model(?!(\.visual|\.projector|\.language_model))",
                 target_patterns="model.language_model",
             ),
+        ],
+        "Qwen2VLModel": [
+            PrefixChange(prefix_to_add="language_model", model_prefix="model"),
         ],
         "Qwen2VLForConditionalGeneration": [
             WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
@@ -755,6 +906,27 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="mlp.experts.down_proj",
                 operations=[Transpose(1, 2, check_dims=True)],
             ),
+        ],
+        "cosmos3_omni": [
+            # Cosmos3 unified checkpoints store the Reasoner LLM with the old `model.` prefix
+            # stripped off and the ViT under flat `blocks.*` / `merger.*` / `patch_embed.*` /
+            # `pos_embed.*` / `deepstack_merger_list.*`. Re-target both to the nested Qwen3-VL
+            # layout (`model.language_model.*` and `model.visual.*`). Newer checkpoints also
+            # use Diffusers-style attention names; map them back to Qwen3-VL module names.
+            WeightRenaming(
+                source_patterns=r"^(layers\.|embed_tokens\.|norm\.)",
+                target_patterns=r"model.language_model.\1",
+            ),
+            WeightRenaming(
+                source_patterns=r"^(blocks\.|merger\.|patch_embed\.|pos_embed\.|deepstack_merger_list\.)",
+                target_patterns=r"model.visual.\1",
+            ),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_q\.", target_patterns=".self_attn.q_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_k\.", target_patterns=".self_attn.k_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_v\.", target_patterns=".self_attn.v_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_out\.", target_patterns=".self_attn.o_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.norm_q\.", target_patterns=".self_attn.q_norm."),
+            WeightRenaming(source_patterns=r"\.self_attn\.norm_k\.", target_patterns=".self_attn.k_norm."),
         ],
         "phimoe": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
@@ -1330,6 +1502,10 @@ def _build_checkpoint_conversion_mapping():
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
 
+    mapping["mimo_v2_flash"] = mapping["qwen2_moe"].copy()
+    mapping["mimo_v2_flash"] += [
+        WeightRenaming("self_attn.attention_sink_bias", "self_attn.sinks"),
+    ]
     # HYV3: qwen2_moe expert fusion + attribute renames for MiniMaxM2-style inheritance
     mapping["hy_v3"] = mapping["qwen2_moe"].copy()
     mapping["hy_v3"] += [
@@ -1364,6 +1540,9 @@ def get_checkpoint_conversion_mapping(model_type):
     return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type))
 
 
+USER_REGISTERED_MAPPINGS = set()
+
+
 def register_checkpoint_conversion_mapping(
     model_type_or_class_name: str,
     mapping: list[WeightConverter | WeightRenaming],
@@ -1385,6 +1564,8 @@ def register_checkpoint_conversion_mapping(
             f"Conversion mapping for '{model_type_or_class_name}' already exists. Pass overwrite=True to replace it."
         )
     _checkpoint_conversion_mapping_cache[model_type_or_class_name] = mapping
+    # Keep track of what was added manually by the user
+    USER_REGISTERED_MAPPINGS.add(model_type_or_class_name)
 
 
 def extract_weight_conversions_for_model(
@@ -1448,6 +1629,15 @@ def get_model_conversion_mapping(
 
         class_name = type(submodule).__name__
         model_type = submodule.config.model_type
+
+        # Skip it if it's custom code and it was NOT registered by the user directly: it may have the same `model_type`/ClassName
+        # as a native model inside the library, but it uses custom modeling so it should not share the conversions
+        if (
+            submodule.is_custom_code()
+            and class_name not in USER_REGISTERED_MAPPINGS
+            and model_type not in USER_REGISTERED_MAPPINGS
+        ):
+            continue
 
         # Skip if an ancestor already claimed this class (its unscoped transforms already cover this subtree).
         if any(seen == "" or module_name.startswith(seen + ".") for seen in seen_identifiers[class_name]):
