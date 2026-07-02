@@ -145,6 +145,7 @@ from .utils import (
     is_sentencepiece_available,
     is_seqio_available,
     is_serve_available,
+    is_soundfile_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -1505,6 +1506,13 @@ def require_librosa(test_case):
     Decorator marking a test that requires librosa
     """
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
+
+
+def require_soundfile(test_case):
+    """
+    Decorator marking a test that requires soundfile
+    """
+    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
 
 
 def require_multipart(test_case):
