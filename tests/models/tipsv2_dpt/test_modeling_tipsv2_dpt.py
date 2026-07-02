@@ -275,9 +275,6 @@ def prepare_img():
 class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
     model_id = "google/tipsv2-b14-dpt"
 
-    # TODO: remove before merge
-    revision = "refs/pr/1"
-
     @cached_property
     def default_image_processor(self):
         return Tipsv2DptImageProcessor.from_pretrained(self.model_id, revision=self.revision)
