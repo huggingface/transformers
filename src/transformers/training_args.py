@@ -482,7 +482,7 @@ class TrainingArguments:
             Enable Just-In-Time checkpointing on SIGTERM signal for graceful termination on
             preemptible workloads. **Important**: Configure your orchestrator's graceful shutdown
             period to allow sufficient time. For Kubernetes, set `terminationGracePeriodSeconds`
-            (default 30s is usually insufficient). For Slurm, use `--signal=TERM@<seconds>`.
+            (default 30s is usually insufficient). For Slurm, use `--signal=USR1@<seconds>`.
             Required grace period ≥ longest iteration time + checkpoint save time.
 
         > Hugging Face Hub Integration
@@ -1563,6 +1563,8 @@ class TrainingArguments:
         if self.torch_compile and self.torch_compile_backend is None:
             if not self.use_cpu and is_torch_hpu_available():
                 self.torch_compile_backend = "hpu_backend"
+            elif not self.use_cpu and is_torch_neuron_available():
+                self.torch_compile_backend = "neuron"
             else:
                 self.torch_compile_backend = "inductor"
 
