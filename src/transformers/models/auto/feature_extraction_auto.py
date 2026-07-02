@@ -40,6 +40,7 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("csm", "EncodecFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
         ("glmasr", "WhisperFeatureExtractor"),
+        ("granite_speech_nar", "GraniteSpeechNarFeatureExtractor"),
         ("granite_speech_plus", "GraniteSpeechFeatureExtractor"),
         ("higgs_audio_v2_tokenizer", "DacFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),

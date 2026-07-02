@@ -299,6 +299,8 @@ IGNORE_NON_TESTED = (
         "DiffusionGemmaDecoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
+        "GraniteSpeechNarLanguageModel",  # Building part of bigger (tested) model. Tested implicitly through GraniteSpeechNarForCTC.
+        "GraniteSpeechNarModel",  # Building part of bigger (tested) model. Tested implicitly through GraniteSpeechNarForCTC.
     ]
 )
 
@@ -531,6 +533,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
     "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
     "Granite4VisionTextModel",  # Building part of bigger (tested) model.
+    "GraniteSpeechNarModel",  # Building part of bigger (tested) model.
+    "GraniteSpeechNarLanguageModel",  # Building part of bigger (tested) model.
 ]
 
 
