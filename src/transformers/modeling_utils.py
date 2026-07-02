@@ -3660,7 +3660,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     # Note that `load_offloaded_parameter` may load multiple weights for a single tensor.
                     # While it is possible to overload CPU memory by loading parameters in a bad order,
                     # in practice `split_torch_state_dict_into_shards` preserves weight locality
-                    state_dict.update(load_offloaded_checkpoint_parameters(model_to_save, tensor_name, meta_state_dict))
+                    state_dict.update(
+                        load_offloaded_checkpoint_parameters(model_to_save, tensor_name, meta_state_dict)
+                    )
                     tensor = state_dict.pop(tensor_name)
 
                 # only do contiguous after it's permuted correctly in case of TP
