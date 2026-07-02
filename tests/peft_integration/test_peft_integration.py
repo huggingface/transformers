@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import importlib.metadata
 import json
 import os
 import re
@@ -22,6 +23,7 @@ from unittest.mock import patch
 
 from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
+from packaging import version
 from torch import nn
 
 from transformers import (
@@ -215,6 +217,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         Regression test: after save_pretrained + from_pretrained roundtrip, the reloaded model's LoRA
         weights must match the pre-save values. Covers both the encoder and decoder paths.
         """
+        if version.parse(importlib.metadata.version("peft")) < version.parse("0.20.0"):
+            self.skipTest("For this test to pass, PEFT 0.20 is required.")
+
         from peft import LoraConfig
 
         cases = [
@@ -1050,6 +1055,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
 
     def test_mixtral_lora_conversion(self):
+        if version.parse(importlib.metadata.version("peft")) < version.parse("0.20.0"):
+            self.skipTest("For this test to pass, PEFT 0.20 is required.")
+
         inputs = torch.arange(10).view(1, -1).to(torch_device)
         model_name = "hf-internal-testing/Mixtral-tiny"
         adapter_name = "peft-internal-testing/mixtral-pre-v5-lora"
