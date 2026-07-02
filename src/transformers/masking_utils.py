@@ -1555,8 +1555,7 @@ def create_masks_for_generate(
         "block_sequence_ids": block_sequence_ids,
     }
 
-    # If the attribute exists, we need several masks keyed by layer type. Some models use this mapping as the
-    # signal that the mask was already prepared by generate, even when all layers share the same type.
+    # If the attribute exists, we need several masks keyed by layer type.
     if hasattr(effective_config, "layer_types"):
         layer_patterns = set(effective_config.layer_types)
         # Without a registered attention-mask function, defer to the model by returning the raw attention mask
