@@ -261,7 +261,7 @@ def _can_skip_causal_mask_xpu(
 
     # XPU-specific: check if query window is all True and rest is all False.
     # This allows XPU to optimize the 1st token in static cache when the cache is empty.
-return kv_offset == 0 and padding_mask[:, :query_length].all() and not padding_mask[:, query_length:].any()
+    return kv_offset == 0 and padding_mask[:, :query_length].all() and not padding_mask[:, query_length:].any()
 
 
 def _ignore_causal_mask_sdpa(
