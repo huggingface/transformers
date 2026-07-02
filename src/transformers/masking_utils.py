@@ -231,6 +231,7 @@ def _can_skip_causal_mask_xpu(
     padding_mask: torch.Tensor | None,
     query_length: int,
     kv_length: int,
+    kv_offset: int,
     local_attention_size: int | None,
 ) -> bool:
     """
@@ -258,8 +259,10 @@ def _can_skip_causal_mask_xpu(
         # Single query token: skip only if no padding tokens present
         return padding_mask.all()
 
-    # XPU-specific: check if query window is all True and rest is all False
-    # This allows XPU to optimize the 1st token in static cache
+    # XPU-specific: check if query window is all True and rest is all False.
+    # This allows XPU to optimize the 1st token in static cache when the cache is empty.
+    if kv_offset != 0:
+        return False
     return padding_mask[:, :query_length].all() and not padding_mask[:, query_length:].any()
 
 
@@ -288,7 +291,7 @@ def _ignore_causal_mask_sdpa(
         # - Single query tokens use the same logic as CUDA
         # - Multi-query tokens can skip if padding_mask is provided and correctly structured
         #   (all True in query window, all False after)
-        return _can_skip_causal_mask_xpu(padding_mask, query_length, kv_length, local_attention_size)
+        return _can_skip_causal_mask_xpu(padding_mask, query_length, kv_length, kv_offset, local_attention_size)
     # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
@@ -1552,15 +1555,13 @@ def create_masks_for_generate(
         "block_sequence_ids": block_sequence_ids,
     }
 
-    # If the attribute exists, we need several masks - unless every layer shares the same type, in which
-    # case we return a single mask.
+    # If the attribute exists, we need several masks keyed by layer type. Some models use this mapping as the
+    # signal that the mask was already prepared by generate, even when all layers share the same type.
     if hasattr(effective_config, "layer_types"):
         layer_patterns = set(effective_config.layer_types)
         # Without a registered attention-mask function, defer to the model by returning the raw attention mask
         if any(layer_type not in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING for layer_type in layer_patterns):
             return attention_mask
-        if len(layer_patterns) == 1:
-            return LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[next(iter(layer_patterns))](**mask_kwargs)
         causal_masks = {}
         for layer_pattern in layer_patterns:
             causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
