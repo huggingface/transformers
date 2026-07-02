@@ -925,6 +925,7 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
         "attentions": OlmoHybridAttention,
     }
     _is_stateful = True
+    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1027,20 +1028,6 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _update_linear_attn_mask(self, attention_mask, past_key_values):
-        """
-        NOTE: Left-padding is used for linear attention mask.
-        No need for zeroing states when
-            1. Cached forward
-            2. Attending to all inputs
-        """
-        linear_attn_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state()) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
-            linear_attn_mask = None
-        return linear_attn_mask
 
 
 @auto_docstring
