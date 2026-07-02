@@ -1756,15 +1756,16 @@ class GenerationMixin(ContinuousMixin):
         generation_config.update(**self.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True)
         generation_config.update(**global_defaults, defaults_only=True)
 
-        # Finally, if there are any kwargs, update config with it -> highest priority at the end
-        model_kwargs = generation_config.update(**kwargs)
-
         # Related to #40039: prior to this PR, models with sliding window attention were forced to have
         # `cache_implementation="hybrid"` (the static sliding window cache). For these models, we now want to use
-        # the dynamic sliding window cache by default, so we UNSET `cache_implementation` if it is a default value.
-        # (if we're inside this branch, then it is because we're using default values from the Hub)
-        if generation_config.cache_implementation == "hybrid":
+        # the dynamic sliding window cache by default, so we UNSET `cache_implementation` if it is a default value
+        # from the Hub. This must happen before applying user kwargs, so that explicit `cache_implementation`
+        # passed by the user is still respected.
+        if not generation_config_provided and generation_config.cache_implementation == "hybrid":
             generation_config.cache_implementation = None
+
+        # Finally, if there are any kwargs, update config with it -> highest priority at the end
+        model_kwargs = generation_config.update(**kwargs)
 
         # It doesn't make sense to allow kwargs and `generation_config`, that should be mutually exclusive
         if generation_config_provided and set(kwargs.keys()) - set(model_kwargs.keys()):
