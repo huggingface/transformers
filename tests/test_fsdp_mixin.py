@@ -51,6 +51,7 @@ if is_torch_available():
     from transformers.distributed import DistributedConfig
     from transformers.distributed.fsdp import _resolve_tied_embed_lm_head_plan, expand_fsdp_plan
     from transformers.distributed.utils import (
+        gather_full_state_dict,
         load_optimizer_distributed,
         save_optimizer_distributed,
     )
@@ -238,22 +239,6 @@ def _load_training_state(model, optimizer, training_state_dir):
             accelerator_module.set_rng_state(rng["accel"])
 
 
-def _state_dict_from_distributed_checkpoint(model, dtype, rank):
-    """Rank 0 loads consolidated weights written via save_pretrained(distributed_checkpoint=True)."""
-    #TODO(3outeille): do we need to gather the state dict in tests?
-    with _distributed_tmpdir(rank) as tmpdir:
-        model.save_pretrained(tmpdir, is_main_process=(rank == 0), distributed_checkpoint=True)
-        dist.barrier()
-        if rank == 0:
-            cpu_model = AutoModelForCausalLM.from_pretrained(tmpdir, torch_dtype=dtype)
-            state_dict = {k: v.detach().cpu() for k, v in cpu_model.state_dict().items()}
-            del cpu_model
-        else:
-            state_dict = {}
-        dist.barrier()
-    return state_dict
-
-
 def _checkpoint_and_resume(pre_model, pre_optimizer, dtype, distributed_config, lr):
     """Save model+optimizer, scramble RNG, reload and restore training state."""
     rank = dist.get_rank()
@@ -261,7 +246,7 @@ def _checkpoint_and_resume(pre_model, pre_optimizer, dtype, distributed_config, 
         model_dir = os.path.join(tmpdir, "model")
         training_state_dir = os.path.join(tmpdir, "training_state")
 
-        pre_model.save_pretrained(model_dir, is_main_process=(rank == 0), distributed_checkpoint=True)
+        pre_model.save_pretrained(model_dir, is_main_process=(rank == 0))
         _save_training_state(pre_model, pre_optimizer, training_state_dir)
         dist.barrier()
 
@@ -292,7 +277,7 @@ def train_ddp(rank, batches, lr, device, dtype, init_model_dir):
     if dist.get_rank() != 0:
         state_dict = {}
     else:
-        # Only rank 0 returns data for cross-rank comparison.
+        # Only rank 0 returns data to match gather_full_state_dict semantics.
         state_dict = {k: v.clone().detach().cpu() for k, v in ddp_model.module.state_dict().items()}
 
     del optimizer, ddp_model, model
@@ -336,7 +321,7 @@ def train_fsdp2(
     return (
         pre_ckpt_losses + post_ckpt_losses,
         pre_ckpt_grad_norms + post_ckpt_grad_norms,
-        _state_dict_from_distributed_checkpoint(resumed_model, dtype, rank),
+        gather_full_state_dict(resumed_model),
     )
 
 
@@ -346,46 +331,38 @@ def train_fsdp2(
 
 
 def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
-    """Save FSDP2 model via distributed_checkpoint, load via from_pretrained, compare logits."""
+    """Save FSDP2 model via save_pretrained, load via from_pretrained, compare state dicts."""
     init_test_logger()
 
     config = config_class.from_dict(config_dict)
     distributed_config = DistributedConfig(fsdp_size=dist.get_world_size())
-    device = _get_rank_device(rank)
 
     with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
         _set_determinism(SEED)
         model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
         dist.barrier()
 
-        generator = torch.Generator(device=device)
-        generator.manual_seed(SEED)
-        input_ids = torch.randint(0, config.vocab_size, (BATCH_SIZE, SEQ_LEN), device=device, generator=generator)
-
-        model.eval()
-        with torch.no_grad():
-            logits_before = model(input_ids=input_ids, use_cache=False).logits
+        state_dict_before = gather_full_state_dict(model)
 
         with _distributed_tmpdir(rank) as tmpdir:
-            model.save_pretrained(tmpdir, is_main_process=(rank == 0), distributed_checkpoint=True)
+            model.save_pretrained(tmpdir, is_main_process=(rank == 0))
             dist.barrier()
             new_model = AutoModelForCausalLM.from_pretrained(tmpdir, distributed_config=distributed_config)
             dist.barrier()
 
-        new_model.eval()
-        with torch.no_grad():
-            logits_after = new_model(input_ids=input_ids, use_cache=False).logits
-
-        torch.testing.assert_close(
-            logits_before,
-            logits_after,
-            rtol=0,
-            atol=0,
-            msg="After save/load: logits mismatch",
-        )
+        state_dict_after = gather_full_state_dict(new_model)
+        for key in state_dict_before:
+            assert key in state_dict_after, f"After save/load: Key {key} missing after load"
+            torch.testing.assert_close(
+                state_dict_before[key],
+                state_dict_after[key],
+                rtol=0,
+                atol=0,
+                msg=f"After save/load: Weight mismatch for {key}",
+            )
 
         if rank == 0:
-            logger.debug("FSDP2 save/load test passed: logits match after distributed checkpoint round-trip.")
+            logger.debug(f"FSDP2 save/load test passed: all {len(state_dict_before)} parameters match exactly.")
 
 
 def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_word_embeddings):
@@ -597,13 +574,13 @@ class FSDPTesterMixin(ABC):
             label == "tied",
         )
 
-    @require_torch_greater_or_equal("2.7")
+    @require_torch_greater_or_equal("2.6")
     @is_fsdp_test
     def test_fsdp2_save_load(self):
         self._run_fsdp2_distributed_test("test_fsdp2_save_load", _test_fsdp2_save_load_impl)
 
     @parameterized.expand(["untied", "tied"])
-    @require_torch_greater_or_equal("2.7")
+    @require_torch_greater_or_equal("2.6")
     @is_fsdp_test
     def test_fsdp2_plan_vs_ddp(self, label):
         self._run_fsdp2_distributed_test(

@@ -30,6 +30,7 @@ if is_torch_available():
     #TODO(3outeille): guarding?
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.state_dict import (
+        StateDictOptions,
         get_model_state_dict,
         get_optimizer_state_dict,
         set_optimizer_state_dict,
@@ -142,6 +143,15 @@ def distribute_model(model, distributed_config: DistributedConfig, device_mesh) 
         fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
         model = apply_fully_sharded_data_parallel(model, fsdp_mesh)
     return model
+
+
+def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
+    """Gather FSDP-sharded params to full plain CPU tensors.
+
+    Only rank 0 receives the state dict; other ranks return ``{}``.
+    """
+    options = StateDictOptions(full_state_dict=True, cpu_offload=True)
+    return get_model_state_dict(model, options=options)
 
 
 def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
