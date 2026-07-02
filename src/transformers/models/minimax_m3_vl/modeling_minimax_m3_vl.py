@@ -1196,7 +1196,7 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
-    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.14.0")
+    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.16.0")
     def forward(
         self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:
