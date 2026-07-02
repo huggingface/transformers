@@ -108,8 +108,11 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, modality_inputs):
+        mm_token_type_ids = torch.zeros_like(input_ids, device=torch_device)
+        mm_token_type_ids[input_ids == self.image_token_id] = 1
         return {
-            "image_grid_thw": torch.tensor([[1, self.grid_hw, self.grid_hw]] * self.batch_size, device=torch_device)
+            "image_grid_thw": torch.tensor([[1, self.grid_hw, self.grid_hw]] * self.batch_size, device=torch_device),
+            "mm_token_type_ids": mm_token_type_ids,
         }
 
     def prepare_config_and_inputs(self):
@@ -200,6 +203,7 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
 
         position_ids, rope_deltas = model.model.get_rope_index(
             inputs_dict["input_ids"],
+            mm_token_type_ids=inputs_dict["mm_token_type_ids"],
             image_grid_thw=inputs_dict["image_grid_thw"],
             attention_mask=inputs_dict["attention_mask"],
         )
@@ -295,6 +299,7 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
             attention_mask = input_dict["attention_mask"][:1]
             pixel_values = input_dict["pixel_values"][: self.model_tester.num_image_patches]
             image_grid_thw = input_dict["image_grid_thw"][:1]
+            mm_token_type_ids = input_dict["mm_token_type_ids"][:1]
 
             with self.assertRaises(ValueError):
                 _ = model(
@@ -302,6 +307,7 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
                     attention_mask=torch.cat([attention_mask, attention_mask], dim=0),
                     pixel_values=pixel_values,
                     image_grid_thw=image_grid_thw,
+                    mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
                 )
 
             _ = model(
@@ -309,6 +315,7 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
                 attention_mask=torch.cat([attention_mask, attention_mask], dim=0),
                 pixel_values=torch.cat([pixel_values, pixel_values], dim=0),
                 image_grid_thw=torch.cat([image_grid_thw, image_grid_thw], dim=0),
+                mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
             )
 
     def test_prepare_inputs_for_generation_drops_pixel_values_after_prefill(self):

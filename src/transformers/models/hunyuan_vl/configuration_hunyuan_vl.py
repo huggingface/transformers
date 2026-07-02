@@ -35,22 +35,14 @@ class HunYuanVLVisionConfig(PreTrainedConfig):
     r"""
     interpolate_mode (`str`, *optional*, defaults to `"bilinear"`):
         Interpolation mode used when resizing learned patch positional embeddings to match the current image grid.
-    learnable_mlp_pooling_size (`int`, *optional*, defaults to 0):
-        Optional learnable pooling size for the vision tower.
     out_hidden_size (`int`, *optional*, defaults to 4096):
         Output hidden size produced by the vision tower before it is consumed by the text backbone.
-    remove_prenorm (`bool`, *optional*, defaults to `True`):
-        Whether to remove the pre-normalization behavior used by some internal vision variants.
-    resize_resolution (`int`, *optional*, defaults to 2048):
-        Reference resolution used when deriving image resizing and tokenization behavior.
     img_max_token_num (`int`, *optional*, defaults to 4096):
         Maximum image token count expected by the vision stack.
     max_image_size (`int`, *optional*, defaults to 2048):
         Maximum supported image size for the current open-source vision configuration.
     min_image_size (`int`, *optional*, defaults to 512):
         Minimum supported image size for the current open-source vision configuration.
-    anyres_vit_max_image_size (`int`, *optional*, defaults to 2048):
-        Maximum image size supported by the any-resolution vision preprocessing path.
     max_vit_seq_len (`int`, *optional*, defaults to 16384):
         Maximum sequence length produced by the vision transformer.
     text_hidden_size (`int`, *optional*, defaults to 3072):
@@ -75,7 +67,6 @@ class HunYuanVLVisionConfig(PreTrainedConfig):
     intermediate_size: int = 4304
     interpolate_mode: str = "bilinear"
     rms_norm_eps: float = 1e-5
-    learnable_mlp_pooling_size: int = 0
     attention_dropout: float = 0.0
     num_attention_heads: int = 16
     num_key_value_heads: int | None = None
@@ -83,14 +74,11 @@ class HunYuanVLVisionConfig(PreTrainedConfig):
     num_hidden_layers: int = 27
     out_hidden_size: int = 4096
     patch_size: int = 16
-    remove_prenorm: bool = True
     spatial_merge_size: int = 2
     temporal_patch_size: int = 1
-    resize_resolution: int = 2048
     img_max_token_num: int = 4096
     max_image_size: int = 2048
     min_image_size: int = 512
-    anyres_vit_max_image_size: int = 2048
     max_vit_seq_len: int = 16384
     text_hidden_size: int = 3072
 
@@ -127,12 +115,6 @@ class HunYuanVLTextConfig(PreTrainedConfig):
         share the same value on that axis.
     sep_token_id (`int`, *optional*, defaults to 4):
         Token id used as a separator marker by HunYuan tokenizers.
-    use_qk_norm (`bool`, *optional*, defaults to `False`):
-        Legacy flag preserved for checkpoint compatibility. Has no runtime effect in the open-source variant.
-    use_cla (`bool`, *optional*, defaults to `False`):
-        Legacy flag preserved for checkpoint compatibility. Has no runtime effect in the open-source variant.
-    enable_lm_head_fp32 (`bool`, *optional*, defaults to `False`):
-        Legacy flag preserved for checkpoint compatibility. Has no runtime effect in the open-source variant.
     """
 
     model_type = "hunyuan_vl_text"
@@ -169,19 +151,11 @@ class HunYuanVLTextConfig(PreTrainedConfig):
         "mrope_section",
     }
 
-    # Legacy checkpoint fields that map onto canonical Transformers config names. The base class redirects every read
-    # and write of the legacy name to the canonical slot, so the model only ever holds the canonical attribute. See
-    # `problems.md` for the compatibility assumption behind `pad_id`.
     attribute_map = {
         "pad_id": "pad_token_id",
-        "attention_head_dim": "head_dim",
-        "org_vocab_size": "vocab_size",
     }
 
     sep_token_id: int | None = 4
-    use_qk_norm: bool = False
-    use_cla: bool = False
-    enable_lm_head_fp32: bool = False
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

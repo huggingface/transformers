@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional
@@ -37,7 +38,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_hunyuan_vl import HunYuanVLConfig, HunYuanVLTextConfig, HunYuanVLVisionConfig
@@ -46,11 +46,11 @@ from .configuration_hunyuan_vl import HunYuanVLConfig, HunYuanVLTextConfig, HunY
 @dataclass
 class HunYuanVLModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        Image features produced by the vision tower and scattered into the language-model token stream.
+    image_last_hidden_state (`torch.FloatTensor`, *optional*):
+        Last image features produced by the vision tower and scattered into the language-model token stream.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
+    image_last_hidden_state: torch.FloatTensor | None = None
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -138,11 +138,9 @@ class HunYuanVLRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x, position_ids):
-        output_shape = None
+        output_shape = position_ids.shape
         if position_ids.dim() == 3:
-            num_axes, batch_size, seq_len = position_ids.shape
-            output_shape = (num_axes, batch_size, seq_len)
-            position_ids = position_ids.reshape(num_axes * batch_size, seq_len)
+            position_ids = position_ids.flatten(0, 1)
 
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -154,11 +152,8 @@ class HunYuanVLRotaryEmbedding(nn.Module):
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 
-        cos = cos.to(dtype=x.dtype)
-        sin = sin.to(dtype=x.dtype)
-        if output_shape is not None:
-            cos = cos.view(*output_shape, -1)
-            sin = sin.view(*output_shape, -1)
+        cos = cos.view(*output_shape, -1).to(dtype=x.dtype)
+        sin = sin.view(*output_shape, -1).to(dtype=x.dtype)
         return cos, sin
 
 
@@ -199,14 +194,7 @@ class HunYuanVLVisionPatchEmbed(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing and no class embeddings.
-
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
-        """
+        """Interpolate the learned patch positional grid to the current image grid size."""
         patch_pos_embed = self.position_embedding.weight[1:, :].reshape(
             1, self.position_edge, self.position_edge, self.embed_dim
         )
@@ -219,15 +207,7 @@ class HunYuanVLVisionPatchEmbed(nn.Module):
         )
         return patch_pos_embed.permute(0, 2, 3, 1).reshape(1, -1, self.embed_dim).to(embeddings.dtype)
 
-    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(self, pixel_values: torch.Tensor, grid_thw: list[list[int]]) -> torch.Tensor:
-        """
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
-                The tensors corresponding to the input images.
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-        """
         num_patches, _ = pixel_values.shape
         pixel_values = pixel_values.reshape(1, num_patches, self.config.num_channels, self.patch_size, self.patch_size)
         batch_size, sequence_len, channel, height, width = pixel_values.shape
@@ -254,49 +234,54 @@ class HunYuanVLVisionPatchMerger(nn.Module):
         super().__init__()
 
         self.config = config
-        in_channels = config.hidden_size
-        out_channels = config.text_hidden_size
-        spatial_merge_size = config.spatial_merge_size
-        rms_norm_eps = config.rms_norm_eps
-        embed_std = out_channels**-0.5
-        self.spatial_merge_size = spatial_merge_size
+        self.spatial_merge_size = config.spatial_merge_size
         self.proj_conv = nn.Conv2d(
-            in_channels, in_channels * 2, kernel_size=spatial_merge_size, stride=spatial_merge_size
+            config.hidden_size,
+            config.hidden_size * 2,
+            kernel_size=config.spatial_merge_size,
+            stride=config.spatial_merge_size,
         )
-        self.proj_act = nn.GELU()
-        self.proj_out = nn.Conv2d(in_channels * 2, in_channels * 4, kernel_size=1)
-        self.mlp = nn.Linear(in_channels * 4, out_channels)
-        self.image_newline = nn.Parameter(torch.randn(in_channels * 4) * embed_std)
-        self.image_begin = nn.Parameter(torch.randn(out_channels) * embed_std)
-        self.image_end = nn.Parameter(torch.randn(out_channels) * embed_std)
-        self.image_sep = nn.Parameter(torch.randn(out_channels) * embed_std)
+        self.proj_act = ACT2FN[config.hidden_act]
+        self.proj_out = nn.Conv2d(config.hidden_size * 2, config.hidden_size * 4, kernel_size=1)
+        self.mlp = nn.Linear(config.hidden_size * 4, config.text_hidden_size)
+        self.image_newline = nn.Parameter(torch.empty(config.hidden_size * 4))
+        self.image_begin = nn.Parameter(torch.empty(config.text_hidden_size))
+        self.image_end = nn.Parameter(torch.empty(config.text_hidden_size))
+        self.image_sep = nn.Parameter(torch.empty(config.text_hidden_size))
 
-        self.before_rms = HunYuanVLRMSNorm(in_channels, eps=rms_norm_eps)
-        self.after_rms = HunYuanVLRMSNorm(out_channels, eps=rms_norm_eps)
+        self.before_rms = HunYuanVLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.after_rms = HunYuanVLRMSNorm(config.text_hidden_size, eps=config.rms_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor, size: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
         hidden_states = self.before_rms(hidden_states)
-        h, w = size
         dtype = hidden_states.dtype
-        hidden_states = hidden_states.permute(0, 2, 1).reshape(
-            hidden_states.shape[0], -1, int(h.item()), int(w.item())
-        )
+        hidden_states = hidden_states.permute(0, 2, 1).reshape(hidden_states.shape[0], -1, *size)
         hidden_states = self.proj_conv(hidden_states)
         hidden_states = self.proj_act(hidden_states)
         hidden_states = self.proj_out(hidden_states)
-        b, c, h, w = hidden_states.shape
+        batch_size, channels, height, width = hidden_states.shape
         hidden_states = torch.cat(
             [
                 hidden_states,
-                self.image_newline.reshape(1, c, 1, 1).expand(b, c, h, 1).to(dtype, non_blocking=True),
+                self.image_newline.reshape(1, channels, 1, 1)
+                .expand(batch_size, channels, height, 1)
+                .to(dtype, non_blocking=True),
             ],
             dim=-1,
         )
-        hidden_states = hidden_states.reshape(b, c, -1).permute(0, 2, 1)
+        hidden_states = hidden_states.reshape(batch_size, channels, -1).permute(0, 2, 1)
         hidden_states = self.mlp(hidden_states)
 
-        begin = self.image_begin.reshape(1, 1, -1).expand(b, 1, hidden_states.shape[-1]).to(dtype, non_blocking=True)
-        end = self.image_end.reshape(1, 1, -1).expand(b, 1, hidden_states.shape[-1]).to(dtype, non_blocking=True)
+        begin = (
+            self.image_begin.reshape(1, 1, -1)
+            .expand(batch_size, 1, hidden_states.shape[-1])
+            .to(dtype, non_blocking=True)
+        )
+        end = (
+            self.image_end.reshape(1, 1, -1)
+            .expand(batch_size, 1, hidden_states.shape[-1])
+            .to(dtype, non_blocking=True)
+        )
         hidden_states = torch.cat([begin, hidden_states, end], dim=1)
 
         return self.after_rms(hidden_states)
@@ -539,17 +524,10 @@ class HunYuanVLDenseV1Attention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if position_embeddings is None:
-            raise ValueError("HunYuanVLDenseV1Attention requires precomputed rotary embeddings.")
-
-        if self.mrope_section is not None:
-            cos, sin = position_embeddings
-            query_states, key_states = apply_multimodal_rotary_pos_emb(
-                query_states, key_states, cos, sin, self.mrope_section
-            )
-        else:
-            cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        cos, sin = position_embeddings
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, self.mrope_section
+        )
 
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)
@@ -701,7 +679,7 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
         super().__init__(config)
         self.embeddings = HunYuanVLVisionPatchEmbed(config)
         self.layers = nn.ModuleList([HunYuanVLVisionBlock(config) for _ in range(config.num_hidden_layers)])
-        self.perceive = HunYuanVLVisionPatchMerger(config)
+        self.patch_merger = HunYuanVLVisionPatchMerger(config)
         self.gradient_checkpointing = False
 
         self.post_init()
@@ -729,9 +707,9 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
         split_items = torch.split(hidden_states, split_sizes, dim=1)
 
         processed_items = []
-        for grid, item in zip(grid_thw, split_items):
+        for grid, item in zip(grid_thw.tolist(), split_items):
             _, h, w = grid
-            processed_items.append(self.perceive(item, size=(h, w)))
+            processed_items.append(self.patch_merger(item, size=(h, w)))
 
         image_features = torch.cat(processed_items, dim=1)
 
@@ -792,24 +770,28 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             ).unsqueeze(0)
 
+        if attention_mask is not None:
+            text_position_ids = attention_mask.long().cumsum(-1) - 1
+            text_position_ids = text_position_ids.masked_fill(attention_mask == 0, 0)
+            text_position_ids = text_position_ids[:, -inputs_embeds.shape[1] :]
+        elif position_ids.dim() == 2:
+            text_position_ids = position_ids
+        else:
+            text_position_ids = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+            text_position_ids = text_position_ids.unsqueeze(0).expand(inputs_embeds.shape[0], -1)
+
         if num_mrope_axes and position_ids.dim() == 2:
             position_ids = position_ids[None, ...].expand(num_mrope_axes, -1, -1)
 
-        text_position_ids = None
         rotary_position_ids = position_ids
         if num_mrope_axes and position_ids.dim() == 3:
-            if position_ids.shape[0] == num_mrope_axes + 1:
-                text_position_ids = position_ids[0]
-                rotary_position_ids = position_ids[1:]
-            elif position_ids.shape[0] == num_mrope_axes:
-                text_position_ids = position_ids[0]
-            else:
+            if position_ids.shape[0] != num_mrope_axes:
                 raise ValueError(
-                    f"Expected {num_mrope_axes} multimodal RoPE channels, optionally preceded by a text-only channel, got "
+                    f"Expected {num_mrope_axes} multimodal RoPE channels, got "
                     f"position_ids with shape {tuple(position_ids.shape)}."
                 )
-        elif position_ids.dim() == 2:
-            text_position_ids = position_ids
 
         causal_mask = create_causal_mask(
             self.config,
@@ -869,54 +851,17 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         llm_grid_h = grid_h // spatial_merge_size
         llm_grid_w = grid_w // spatial_merge_size
 
-        position_width = torch.arange(llm_grid_w + 1, dtype=torch.long, device=device).repeat(llm_grid_h)
-        position_height = torch.arange(llm_grid_h, dtype=torch.long, device=device).repeat_interleave(llm_grid_w + 1)
-        return torch.stack([position_width, position_height], dim=0)
-
-    def get_image_placeholder_spans(self, input_ids: torch.LongTensor) -> list[tuple[int, int]]:
-        """
-        Locate expanded image placeholder spans in one unpadded token sequence.
-
-        Processor-produced inputs are wrapped as `im_start image* im_end`; manually constructed test inputs can also
-        provide a bare contiguous run of image placeholder tokens.
-        """
-        image_token_id = self.config.image_token_id
-        image_start_positions = torch.where(input_ids == self.config.im_start_id)[0]
-        spans = []
-
-        if len(image_start_positions) > 0:
-            for start_pos in image_start_positions.tolist():
-                end_candidates = torch.where(input_ids[start_pos + 1 :] == self.config.im_end_id)[0]
-                if len(end_candidates) == 0:
-                    raise ValueError("Found an image start token without a matching image end token.")
-
-                end_pos = start_pos + 1 + int(end_candidates[0].item())
-                image_positions = torch.where(input_ids[start_pos + 1 : end_pos] == image_token_id)[0]
-                if len(image_positions) == 0:
-                    continue
-
-                span_start = start_pos + 1 + int(image_positions[0].item())
-                span_end = start_pos + 1 + int(image_positions[-1].item()) + 1
-                spans.append((span_start, span_end))
-            return spans
-
-        image_positions = torch.where(input_ids == image_token_id)[0].tolist()
-        if not image_positions:
-            return spans
-
-        span_start = image_positions[0]
-        previous_position = image_positions[0]
-        for position in image_positions[1:]:
-            if position != previous_position + 1:
-                spans.append((span_start, previous_position + 1))
-                span_start = position
-            previous_position = position
-        spans.append((span_start, previous_position + 1))
-        return spans
+        position_height, position_width = torch.meshgrid(
+            torch.arange(llm_grid_h, dtype=torch.long, device=device),
+            torch.arange(llm_grid_w + 1, dtype=torch.long, device=device),
+            indexing="ij",
+        )
+        return torch.stack([position_width.flatten(), position_height.flatten()], dim=0)
 
     def get_rope_index(
         self,
         input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
         image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.LongTensor, torch.LongTensor]:
@@ -927,20 +872,18 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         value is the number of half-rotary dimensions assigned to the corresponding axis, and the sections must sum to
         `head_dim // 2`.
 
-        This method returns only the multimodal rotary axes consumed by the text backbone:
-
-        - 3-axis configs use `(width, height, image_index)`.
-        - 4-axis configs use `(position, width, height, image_index)`.
+        This method returns only the multimodal rotary axes consumed by the text backbone. The last three axes are
+        `(width, height, image_index)`; any preceding axes keep their default 1D sequence positions.
 
         `width` and `height` index the pooled visual grid inside one image. `image_index` is the ordinal of the
         image/frame in the input sequence, so all visual tokens from the first image get `0`, the second image get
-        `1`, and so on. The optional leading text-only channel that may be concatenated by generation helpers is not
-        part of `mrope_section`.
+        `1`, and so on. Text-only 1D positions for the causal mask are inferred by the text backbone and are not part
+        of this return value.
         """
         rope_parameters = self.config.text_config.rope_parameters or {}
         num_mrope_axes = len(rope_parameters.get("mrope_section", []))
-        if num_mrope_axes not in {3, 4}:
-            raise ValueError(f"HunYuanVL expects 3 or 4 multimodal RoPE axes, got {num_mrope_axes}.")
+        if num_mrope_axes < 3:
+            raise ValueError(f"HunYuanVL expects at least 3 multimodal RoPE axes, got {num_mrope_axes}.")
         position_ids = torch.zeros(
             num_mrope_axes,
             input_ids.shape[0],
@@ -953,10 +896,12 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         image_index = 0
 
         for batch_idx, current_input_ids in enumerate(input_ids):
+            input_token_type = mm_token_type_ids[batch_idx]
             valid_token_mask = None
             if attention_mask is not None:
                 valid_token_mask = attention_mask[batch_idx].bool()
                 current_input_ids = current_input_ids[valid_token_mask]
+                input_token_type = input_token_type[valid_token_mask]
 
             current_position_ids = torch.arange(
                 current_input_ids.shape[-1], dtype=input_ids.dtype, device=input_ids.device
@@ -964,7 +909,12 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             current_position_ids = current_position_ids.view(1, -1).expand(num_mrope_axes, -1).clone()
 
             if grid_iter is not None:
-                for span_start, span_end in self.get_image_placeholder_spans(current_input_ids):
+                for modality_type, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
+                    if modality_type != 1:
+                        continue
+                    group = list(group)
+                    span_start = group[0][0]
+                    span_end = group[-1][0] + 1
                     try:
                         grid_thw = next(grid_iter)
                     except StopIteration as error:
@@ -990,7 +940,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
                         )
 
                     grid_end = grid_start + grid_tokens
-                    offset = 1 if num_mrope_axes == 4 else 0
+                    offset = num_mrope_axes - 3
                     current_position_ids[offset : offset + 2, grid_start:grid_end] = vision_position_ids.to(
                         dtype=input_ids.dtype
                     )
@@ -1017,28 +967,25 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
     ) -> torch.LongTensor | None:
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
+        if image_grid_thw is not None and mm_token_type_ids is None and input_ids is not None:
+            raise ValueError(
+                "Multimodal data was passed via `image_grid_thw` but `mm_token_type_ids` is missing. Please pass "
+                "`mm_token_type_ids` to the model so that multimodal RoPE can be computed correctly. "
+                "`mm_token_type_ids` is returned by the processor alongside `input_ids`."
+            )
         if input_ids is None or image_grid_thw is None or past_seen_tokens != 0:
             return None
         rope_positions, rope_deltas = self.get_rope_index(
-            input_ids, image_grid_thw=image_grid_thw, attention_mask=attention_mask
+            input_ids,
+            mm_token_type_ids=mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            attention_mask=attention_mask,
         )
         self.rope_deltas = rope_deltas
-        text_positions = torch.zeros_like(input_ids)
-        for batch_idx, current_input_ids in enumerate(input_ids):
-            if attention_mask is not None:
-                valid_token_mask = attention_mask[batch_idx].bool()
-                current_input_ids = current_input_ids[valid_token_mask]
-                text_positions[batch_idx, valid_token_mask] = torch.arange(
-                    current_input_ids.shape[-1], dtype=input_ids.dtype, device=input_ids.device
-                )
-            else:
-                text_positions[batch_idx] = torch.arange(
-                    current_input_ids.shape[-1], dtype=input_ids.dtype, device=input_ids.device
-                )
-        text_positions = text_positions.unsqueeze(0)
-        return torch.cat([text_positions, rope_positions], dim=0)
+        return rope_positions
 
     @can_return_tuple
     def get_image_features(
@@ -1098,6 +1045,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         use_cache: bool | None = None,
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> HunYuanVLModelOutputWithPast:
         r"""
@@ -1130,6 +1078,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
                 image_grid_thw=image_grid_thw,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
             )
 
         outputs: BaseModelOutputWithPast = self.language_model(
@@ -1147,7 +1096,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_embeds if pixel_values is not None else None,
+            image_last_hidden_state=image_embeds if pixel_values is not None else None,
         )
 
 
@@ -1195,6 +1144,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         logits_to_keep: int | torch.Tensor = 0,
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -1247,6 +1197,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             use_cache=use_cache,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
+            mm_token_type_ids=mm_token_type_ids,
             **kwargs,
         )
 
@@ -1276,6 +1227,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         use_cache=True,
         pixel_values=None,
         image_grid_thw=None,
+        mm_token_type_ids=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -1287,6 +1239,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             position_ids=position_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
+            mm_token_type_ids=mm_token_type_ids,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -1307,15 +1260,20 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
         if past_length != 0 and self.model.rope_deltas is not None:
-            return text_positions[None, ...] + self.model.rope_deltas
+            return (text_positions + self.model.rope_deltas).unsqueeze(0).expand(num_mrope_axes, -1, -1)
 
         if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
             inputs_tensor = model_kwargs["input_ids"]
 
         is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
-        if is_input_ids and model_kwargs.get("image_grid_thw") is not None:
+        if (
+            is_input_ids
+            and model_kwargs.get("mm_token_type_ids") is not None
+            and model_kwargs.get("image_grid_thw") is not None
+        ):
             rope_positions, rope_deltas = self.model.get_rope_index(
                 inputs_tensor,
+                mm_token_type_ids=model_kwargs.get("mm_token_type_ids"),
                 image_grid_thw=model_kwargs.get("image_grid_thw"),
                 attention_mask=model_kwargs.get("attention_mask"),
             )
@@ -1326,8 +1284,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
                 inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
             )
 
-        text_positions = text_positions[None, ...]
-        return torch.cat([text_positions, rope_positions], dim=0)
+        return rope_positions
 
 
 __all__ = ["HunYuanVLPreTrainedModel", "HunYuanVLModel", "HunYuanVLTextModel", "HunYuanVLForConditionalGeneration"]

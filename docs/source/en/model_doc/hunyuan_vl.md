@@ -87,9 +87,6 @@ inputs = processor.apply_chat_template(
     messages,
     tokenize=True,
     add_generation_prompt=True,
-    return_tensors="pt",
-    return_dict=True,
-    processor_kwargs={"padding": True},
 ).to(model.device)
 
 with torch.no_grad():

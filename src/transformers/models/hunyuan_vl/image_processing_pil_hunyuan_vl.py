@@ -17,16 +17,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import math
 from collections.abc import Iterable
 
 import numpy as np
+from PIL import Image
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torchvision_available
+
+
+if is_torchvision_available():
+    import torchvision.transforms as transforms
 
 
 # Adapted from transformers.models.hunyuan_vl.image_processing_hunyuan_vl.HunYuanVLImageProcessorKwargs
@@ -161,6 +167,15 @@ class HunYuanVLImageProcessorPil(PilBackend):
 
         for image in images:
             height, width = image.shape[-2:]
+            # Match the original HunyuanOCR PIL/torchvision preprocessing path:
+            # PIL.Image.resize(...) -> torchvision.transforms.ToTensor() -> Normalize().
+            # `PilBackend` has already converted incoming PIL images to channels-first
+            # NumPy arrays, so convert back to PIL before applying the legacy path.
+            if image.ndim == 3:
+                pil_image = Image.fromarray(np.transpose(image, (1, 2, 0)).astype(np.uint8))
+            else:
+                pil_image = Image.fromarray(image.astype(np.uint8))
+
             if do_resize:
                 resized_height, resized_width = smart_resize(
                     height,
@@ -169,18 +184,25 @@ class HunYuanVLImageProcessorPil(PilBackend):
                     min_pixels=size.shortest_edge,
                     max_pixels=size.longest_edge,
                 )
-                image = self.resize(
-                    image,
-                    size=SizeDict(height=resized_height, width=resized_width),
-                    resample=resample,
-                )
+                # Intentionally do not pass `resample`: the baseline implementation
+                # calls `image.resize((width, height))` directly.
+                pil_image = pil_image.resize((resized_width, resized_height))
             else:
                 resized_height, resized_width = height, width
 
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
             if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
+                image = transforms.Compose(
+                    [
+                        transforms.ToTensor(),
+                        transforms.Normalize(image_mean, image_std),
+                    ]
+                )(pil_image).numpy()
+            else:
+                image = np.array(pil_image)
+                if image.ndim == 3:
+                    image = np.transpose(image, (2, 0, 1))
+                if do_rescale:
+                    image = self.rescale(image, rescale_factor)
 
             patches = np.expand_dims(image, axis=0)
             if patches.ndim == 4:
@@ -194,23 +216,41 @@ class HunYuanVLImageProcessorPil(PilBackend):
             batch_size, grid_t, channel = patches.shape[0], patches.shape[1] // temporal_patch_size, patches.shape[2]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-            patches = patches.reshape(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-            patches = patches.transpose(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-            flatten_patches = patches.reshape(
-                batch_size * grid_t * grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
-            )
+            if batch_size == 1 and grid_t == 1 and temporal_patch_size == 1:
+                patches = patches.reshape(
+                    batch_size,
+                    channel,
+                    grid_h // merge_size,
+                    merge_size,
+                    patch_size,
+                    grid_w // merge_size,
+                    merge_size,
+                    patch_size,
+                )
+                patches = patches.transpose(0, 2, 3, 5, 6, 1, 4, 7)
+                flatten_patches = patches.reshape(
+                    batch_size * grid_h * grid_w,
+                    channel * patch_size * patch_size,
+                )
+            else:
+                patches = patches.reshape(
+                    batch_size,
+                    grid_t,
+                    temporal_patch_size,
+                    channel,
+                    grid_h // merge_size,
+                    merge_size,
+                    patch_size,
+                    grid_w // merge_size,
+                    merge_size,
+                    patch_size,
+                )
+
+                patches = patches.transpose(0, 1, 4, 5, 7, 8, 3, 2, 6, 9)
+                flatten_patches = patches.reshape(
+                    batch_size * grid_t * grid_h * grid_w,
+                    channel * temporal_patch_size * patch_size * patch_size,
+                )
 
             all_patches.append(flatten_patches)
             all_grids.append([grid_t, grid_h, grid_w])
