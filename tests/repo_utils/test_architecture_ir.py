@@ -168,6 +168,13 @@ class ArchitectureIrGeneratorTest(unittest.TestCase):
             self.assertTrue(caps["tensor_parallel"])
             self.assertEqual(artifacts["bert"]["capabilities"]["attention_patterns"], ["bidirectional"])
             self.assertIn("masked_lm", artifacts["bert"]["capabilities"]["task_heads"])
+
+            # Kernelizable layers: llama's RMSNorm is @use_kernel_forward_from_hub, with Hub repos.
+            self.assertIn("RMSNorm", caps["kernels"])
+            self.assertTrue(caps["kernels"]["RMSNorm"])  # non-empty repo list (read from source, offline)
+            norm = next(c for c in artifacts["llama"]["templates"] if c["kind"] == "normalization")
+            self.assertEqual(norm["attributes"]["kernel"], "RMSNorm")
+            self.assertEqual(norm["attributes"]["norm_type"], "rms")  # kernel merges with existing attrs
             # The MLP container carries dims + activation for its caption.
             mlp = templates_by_id["decoder_layer.mlp"]
             self.assertEqual(mlp["attributes"]["activation"], "silu")
@@ -533,6 +540,25 @@ class ModularGraphTest(unittest.TestCase):
         graph = build_modular_graph(only=["bert"])
         self.assertNotIn("bert", graph["nodes"])
         self.assertEqual(graph["roots"], [])
+
+
+class KernelizationTest(unittest.TestCase):
+    """Kernel detection is pure source `ast` — no torch, no `kernels` package, offline."""
+
+    def test_decorated_layers_and_repos_from_source(self):
+        from architecture_ir.kernelization import detect_kernel_layers, kernel_repositories
+        from architecture_ir.modular_graph import models_root
+
+        root = models_root()
+        # gpt_oss decorates both a norm and its MoE MLP.
+        gpt_oss = detect_kernel_layers(os.path.join(root, "gpt_oss"))
+        self.assertEqual(gpt_oss.get("GptOssRMSNorm"), "RMSNorm")
+        self.assertEqual(gpt_oss.get("GptOssMLP"), "MegaBlocksMoeMLP")
+
+        repos = kernel_repositories()
+        self.assertTrue(repos.get("RMSNorm"))  # e.g. kernels-community/rmsnorm
+        self.assertTrue(repos.get("MegaBlocksMoeMLP"))  # e.g. kernels-community/megablocks
+        self.assertTrue(all(isinstance(r, str) for r in repos["RMSNorm"]))
 
 
 def _repeats_by_id(artifact):

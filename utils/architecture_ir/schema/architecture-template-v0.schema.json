@@ -72,6 +72,11 @@
         "tensor_parallel": {
           "type": "boolean",
           "description": "Whether the model ships a base tensor-parallel plan (per-projection colwise/rowwise on the projection nodes)."
+        },
+        "kernels": {
+          "type": "object",
+          "description": "Kernelizable layers present in the model (from @use_kernel_forward_from_hub) -> compatible Hub kernel repo ids. Nodes reference these by name via attributes.kernel. Empty repo list = kernel-swap-ready but no Hub repo registered.",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } }
         }
       }
     },

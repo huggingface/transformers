@@ -30,8 +30,8 @@ Output layout:
 The data contract is specified in [`SPEC.md`](./SPEC.md), which defines two levels: the compact, config-parametric
 `ArchitectureTemplate` (one per `model_type`, the canonical artifact produced here) and the `ResolvedGraph` obtained by
 resolving a template against a checkpoint `config.json`. [`SPEC.md` §12](./SPEC.md#12-field-reference) is a key-by-key
-field reference, and [`EXAMPLE.jsonc`](./EXAMPLE.jsonc) is a filled-in, annotated sample artifact (a trimmed
-`mistral.json`) that tours every field.
+field reference, and [`examples/`](./examples/) holds four tiered, annotated sample artifacts (trimmed `mistral.json`)
+that build up by depth: `01-structure` → `02-capabilities` → `03-modularity` → `04-full`.
 
 Each generated artifact is an `ArchitectureTemplate`, validated by `schema/architecture-template-v0.schema.json`, and
 contains:

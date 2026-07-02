@@ -12,8 +12,8 @@ The prose here is normative for v0; the machine-checkable rules live in:
 
 **Looking for the key-by-key contract?** Jump to [§12 Field reference](#12-field-reference) — a complete table of every
 key, its type/allowed values, and a one-line description for each artifact. The sections before it explain the *why*.
-For a filled-in, annotated sample of a real artifact, see [`EXAMPLE.jsonc`](./EXAMPLE.jsonc) (a trimmed, commented
-`mistral.json`).
+For filled-in, annotated samples, see [`examples/`](./examples/) — four tiered JSONC files (a trimmed, commented
+`mistral.json`) that build up by depth: `01-structure` → `02-capabilities` → `03-modularity` → `04-full`.
 
 See [`IR.md`](../../IR.md) at the repository root for the broader motivation and long-term vision. This file is the
 concrete v0 data contract.
@@ -172,6 +172,11 @@ what the architecture *can do / run with*:
   for, beyond the single base-model `family`.
 - **`tensor_parallel`**: whether the model ships a base tensor-parallel plan; when it does, each projection component
   also carries a `tp` attribute (`colwise`/`rowwise`) resolved from `base_model_tp_plan`.
+- **`kernels`**: layers augmented by `@use_kernel_forward_from_hub` (kernel-swappable) present in the model, mapped to
+  their compatible Hub kernel repos (e.g. `RMSNorm → [kernels-community/liger-kernels, …]`). Each such node also
+  carries `attributes.kernel` (the layer name) pointing back here. Both the decorated classes and the repo mapping are
+  read from source with `ast` (from each model's `modeling_*.py` and the `_KERNEL_MAPPING` in `hub_kernels.py`) — no
+  torch, no network, and no dependency on the optional `kernels` package.
 
 A single unambiguous attention pattern is also stamped on each attention component as `attributes.pattern`.
 
@@ -492,7 +497,8 @@ Fields that don't apply are omitted (absent ⇒ "not present / undeterminable").
 | `attention_patterns` | ▲ | string[] ⊆ {`causal`, `bidirectional`, `sliding`, `chunked`, `compressed`} | Distinct per-layer mask kinds. |
 | `attention_schedule` | ▲ | string[] \| null | Raw `config.layer_types` when non-uniform, else null. |
 | `task_heads` | ▲ | string[] | Task families available for the `model_type` across Auto\* mappings. |
-| `tensor_parallel` | ▲ | bool | Ships a base TP plan (adds `tp` to projection nodes — §12.12). |
+| `tensor_parallel` | ▲ | bool | Ships a base TP plan (adds `tp` to projection nodes — §12.11). |
+| `kernels` | ○ | object `{layer: [repo_id, …]}` | Kernelizable layers present → compatible Hub kernel repos. Nodes point in via `attributes.kernel`. Present only when the model has kernelizable layers. |
 
 ### 12.8 Modular fields — `extends` + `patches`
 
@@ -543,6 +549,7 @@ structural connector, e.g. a VLM sub-model wrapper). **Open set** — consumers 
 | `embedding` | `num_embeddings, embedding_dim` | values are a config expression (`config.vocab_size`) or an int. |
 | `position` | `scheme` + one of `rope_theta`/`head_dim` \| `num_buckets` \| `max_position_embeddings` | keyed by scheme. |
 | `projection` | `in_features, out_features, tp` | features are a config expression or int; `tp` = `colwise` \| `rowwise` (from the TP plan). |
+| *(any kernelizable node)* | `kernel` | Hub kernel layer name (e.g. `RMSNorm`); joins to `capabilities.kernels[name]` for the compatible repos. |
 
 ### 12.12 `ResolvedGraph` (`resolve_template_to_graph` output) — delta vs the template
 

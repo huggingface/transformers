@@ -23,6 +23,7 @@ from .enrich import (
     tensor_parallel_plan,
     tp_style_for,
 )
+from .kernelization import detect_kernel_layers, kernel_repositories
 from .modular import compute_modularity, modularity_payload
 from .recognizers import build_edges, classify_component, detect_repeats, summarize_semantic_components
 from .semantic_model import SCHEMA_VERSION, ArchitectureArtifact, Component, Edge, Repeat
@@ -94,9 +95,36 @@ def _enrich_artifact(artifact: dict[str, Any], model_type: str, resolved: Any) -
             if attributes:
                 component["attributes"] = attributes
 
+    _attach_kernels(artifact, resolved)
     _attach_projection_edges(artifact)
     _attach_cache_edges(artifact, view)
     _attach_route_edges(artifact)
+
+
+def _attach_kernels(artifact: dict[str, Any], resolved: Any) -> None:
+    """Mark kernelizable components (`@use_kernel_forward_from_hub`) and list compatible Hub repos.
+
+    Per-node `attributes.kernel` = the layer name; model-level `capabilities.kernels` maps each present
+    layer name -> its compatible Hub repos (listed once, not per node). Best-effort; source-derived, offline.
+    """
+    try:
+        model_dir = os.path.dirname(inspect.getfile(resolved.config.__class__))
+        kernel_map = detect_kernel_layers(model_dir)
+    except Exception:
+        kernel_map = {}
+    if not kernel_map:
+        return
+
+    present: list[str] = []
+    for component in [*artifact["components"], *artifact["templates"]]:
+        layer = kernel_map.get(component.get("class_name"))
+        if layer:
+            component.setdefault("attributes", {})["kernel"] = layer
+            if layer not in present:
+                present.append(layer)
+    if present:
+        repos = kernel_repositories()
+        artifact["capabilities"]["kernels"] = {layer: repos.get(layer, []) for layer in present}
 
 
 def _attach_projection_edges(artifact: dict[str, Any]) -> None:
