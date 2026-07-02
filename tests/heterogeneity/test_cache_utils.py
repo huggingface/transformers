@@ -22,10 +22,10 @@ if is_torch_available():
     import torch
 
     from tests.heterogeneity.testing_utils import (
-        _build_model,
-        _dummy_input_ids,
-        _hetero_context,
-        _tiny_llama_config,
+        build_model,
+        dummy_input_ids,
+        hetero_context,
+        tiny_llama_config,
     )
     from transformers import DynamicCache, LlamaForCausalLM, StaticCache
     from transformers.cache_utils import DynamicSlidingWindowLayer, StaticSlidingWindowLayer
@@ -41,11 +41,11 @@ class TestHeterogeneousCache(unittest.TestCase):
 
     def test_per_layer_kv_cache_shapes(self):
         """KV cache tensors should reflect per-layer num_key_value_heads after a cached forward pass."""
-        config = _tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 2: {"num_key_value_heads": 1}})
-        with _hetero_context("llama"):
-            model = _build_model(config, LlamaForCausalLM)
+        config = tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 2: {"num_key_value_heads": 1}})
+        with hetero_context("llama"):
+            model = build_model(config, LlamaForCausalLM)
         with torch.no_grad():
-            cache = model(_dummy_input_ids(), use_cache=True).past_key_values
+            cache = model(dummy_input_ids(), use_cache=True).past_key_values
         # keys shape: [batch, num_heads, seq_len, head_dim]
         self.assertEqual(cache.layers[0].keys.shape[1], 2)
         self.assertEqual(cache.layers[1].keys.shape[1], 4)  # default
@@ -57,9 +57,9 @@ class TestHeterogeneousCache(unittest.TestCase):
         # Model code calls it without a `layer_idx` to derive position IDs and mask offsets, so it returned zero
         # instead of the cached sequence length and broke cached decoding.
         # This test verifies that the fix restores correct behavior.
-        config = _tiny_llama_config(per_layer_config={0: {"skip": ["attention"]}})
-        with _hetero_context("llama"):
-            model = _build_model(config, LlamaForCausalLM).eval()
+        config = tiny_llama_config(per_layer_config={0: {"skip": ["attention"]}})
+        with hetero_context("llama"):
+            model = build_model(config, LlamaForCausalLM).eval()
         input_ids = torch.tensor([[0, 0, 1, 2, 3]], device=torch_device)
         attention_mask = torch.tensor([[0, 0, 1, 1, 1]], device=torch_device)
         caches = (
@@ -99,7 +99,7 @@ class TestHeterogeneousCache(unittest.TestCase):
 
     def test_dynamic_cache_heterogeneous_sliding_window(self):
         """DynamicCache should create sliding layers matching per-layer sliding_window."""
-        config = _tiny_llama_config(
+        config = tiny_llama_config(
             sliding_window=None, per_layer_config={0: {"sliding_window": 32}, 2: {"sliding_window": 16}}
         )
         layers = DynamicCache(config=config).layers
@@ -114,7 +114,7 @@ class TestHeterogeneousCache(unittest.TestCase):
 
     def test_static_cache_heterogeneous_sliding_window(self):
         """StaticCache should create sliding layers for the right layers."""
-        config = _tiny_llama_config(
+        config = tiny_llama_config(
             sliding_window=None, per_layer_config={1: {"sliding_window": 24}, 3: {"sliding_window": 48}}
         )
         layers = StaticCache(config=config, batch_size=1, max_cache_len=64).layers

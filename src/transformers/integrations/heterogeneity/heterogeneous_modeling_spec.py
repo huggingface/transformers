@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeAlias
 
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
 
 _MODEL_MODULE_PREFIX = "transformers.models."
 
-SkipDescriptor: TypeAlias = "dict[str | tuple[str, type], type[nn.Module]]"
+SkipDescriptor: TypeAlias = "dict[str | tuple[str, type], Callable[[], nn.Module]]"
 
 
 @dataclass

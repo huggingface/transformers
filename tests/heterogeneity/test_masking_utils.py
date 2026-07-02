@@ -21,7 +21,7 @@ from transformers.testing_utils import cleanup, is_torch_available, require_torc
 if is_torch_available():
     import torch
 
-    from tests.heterogeneity.testing_utils import _tiny_gpt_oss_config, _tiny_llama4_config, _tiny_llama_config
+    from tests.heterogeneity.testing_utils import tiny_gpt_oss_config, tiny_llama4_config, tiny_llama_config
     from transformers import DynamicCache
     from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByAttributeValue
     from transformers.masking_utils import (
@@ -40,7 +40,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_sliding_window_masks_are_keyed_by_attribute_value(self):
-        config = _tiny_llama_config(
+        config = tiny_llama_config(
             sliding_window=None,
             per_layer_config={0: {"sliding_window": 2}, 1: {"sliding_window": 2}, 2: {"sliding_window": 3}},
         )
@@ -74,7 +74,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             torch.testing.assert_close(mask[sliding_window], expected_mask[None, None])
 
     def test_sliding_window_mask_uses_updated_layer_with_matching_window(self):
-        config = _tiny_llama_config(
+        config = tiny_llama_config(
             sliding_window=None,
             per_layer_config={
                 0: {"sliding_window": 3},
@@ -98,7 +98,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
         self.assertEqual(mask[3].shape[-1], 3)
 
     def test_chunked_attention_masks_are_keyed_by_attribute_value(self):
-        config = _tiny_llama4_config(
+        config = tiny_llama4_config(
             attention_chunk_size=3,
             per_layer_config={
                 0: {"attention_chunk_size": 2},
@@ -135,7 +135,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             torch.testing.assert_close(mask[attention_chunk_size], expected_mask[None, None])
 
     def test_single_attention_pattern_name_returns_same_mask_mapping(self):
-        config = _tiny_gpt_oss_config(
+        config = tiny_gpt_oss_config(
             layer_types=["sliding_attention"] * 4,
             per_layer_config={0: {"sliding_window": 16}, 1: {"sliding_window": 8}},
         )

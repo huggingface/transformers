@@ -22,7 +22,7 @@ from transformers.models.llama4.configuration_llama4 import Llama4TextConfig
 from transformers.models.nemotron_h.configuration_nemotron_h import NemotronHConfig
 
 
-def _tiny_llama_config(per_layer_config=None, **overrides):
+def tiny_llama_config(per_layer_config=None, **overrides):
     defaults = {
         "hidden_size": 64,
         "intermediate_size": 128,
@@ -37,7 +37,7 @@ def _tiny_llama_config(per_layer_config=None, **overrides):
     return LlamaConfig(per_layer_config=per_layer_config, **defaults)
 
 
-def _tiny_gpt_oss_config(per_layer_config=None, **overrides):
+def tiny_gpt_oss_config(per_layer_config=None, **overrides):
     defaults = {
         "hidden_size": 64,
         "intermediate_size": 32,
@@ -55,7 +55,7 @@ def _tiny_gpt_oss_config(per_layer_config=None, **overrides):
     return GptOssConfig(per_layer_config=per_layer_config, **defaults)
 
 
-def _tiny_llama4_config(per_layer_config=None, **overrides):
+def tiny_llama4_config(per_layer_config=None, **overrides):
     defaults = {
         "hidden_size": 64,
         "intermediate_size": 32,
@@ -77,7 +77,7 @@ def _tiny_llama4_config(per_layer_config=None, **overrides):
     return Llama4TextConfig(per_layer_config=per_layer_config, **defaults)
 
 
-def _tiny_nemotron_h_config(per_layer_config=None, **overrides):
+def tiny_nemotron_h_config(per_layer_config=None, **overrides):
     defaults = {
         "hidden_size": 64,
         "intermediate_size": 128,
@@ -101,7 +101,7 @@ def _tiny_nemotron_h_config(per_layer_config=None, **overrides):
 
 
 @contextmanager
-def _hetero_context(model_key):
+def hetero_context(model_key):
     """Temporarily set the production heterogeneous modeling spec on a model class."""
     from tests.heterogeneity.model_fixtures import MODEL_FIXTURES
 
@@ -111,7 +111,7 @@ def _hetero_context(model_key):
         yield modeling_spec
 
 
-def _build_model(config, model_cls, seed=42):
+def build_model(config, model_cls, seed=42):
     """Build a model deterministically on CPU."""
     import torch
 
@@ -119,7 +119,7 @@ def _build_model(config, model_cls, seed=42):
     return model_cls(config).eval()
 
 
-def _forward_logits(model, input_ids):
+def forward_logits(model, input_ids):
     """Run a forward pass and return logits."""
     import torch
 
@@ -127,7 +127,7 @@ def _forward_logits(model, input_ids):
         return model(input_ids).logits
 
 
-def _dummy_input_ids(batch=1, seq_len=8):
+def dummy_input_ids(batch=1, seq_len=8):
     import torch
 
     return torch.randint(0, 32, (batch, seq_len))

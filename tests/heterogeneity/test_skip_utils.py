@@ -27,15 +27,15 @@ if is_torch_available():
 @require_torch
 class TestSkipReplacement(unittest.TestCase):
     def test_get_skip_replacement_returns_none(self):
-        replacement_cls = get_skip_replacement(torch.nn.Linear, None)
+        replacement_factory = get_skip_replacement(torch.nn.Linear, None)
 
-        self.assertIsNone(replacement_cls()(torch.randn(2, 4)))
+        self.assertIsNone(replacement_factory()(torch.randn(2, 4)))
 
     def test_get_skip_replacement_transforms_configured_argument(self):
-        replacement_cls = get_skip_replacement(
+        replacement_factory = get_skip_replacement(
             torch.nn.Linear, ReturnEntry(arg_name="input", transform=lambda x: x * 2)
         )
-        module = replacement_cls()
+        module = replacement_factory()
         inputs = torch.randn(2, 4, 64)
 
         torch.testing.assert_close(module(inputs), inputs * 2)
@@ -48,9 +48,9 @@ class TestSkipReplacement(unittest.TestCase):
         def fail_transform(_):
             raise RuntimeError("transform failed")
 
-        replacement_cls = get_skip_replacement(
+        replacement_factory = get_skip_replacement(
             torch.nn.Linear, ReturnEntry(arg_name="input", transform=fail_transform)
         )
 
         with self.assertRaisesRegex(RuntimeError, "failed to apply transform.*argument 'input'.*transform failed"):
-            replacement_cls()(torch.randn(2, 4))
+            replacement_factory()(torch.randn(2, 4))

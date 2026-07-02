@@ -34,11 +34,12 @@ from transformers.integrations.heterogeneity.masking_utils import AttentionMasks
 if TYPE_CHECKING:
     from torch import nn
 
-    from transformers import PreTrainedModel
+    from transformers import PreTrainedConfig, PreTrainedModel
 
 
 @dataclass
 class _LayerInitContext:
+    model_config: PreTrainedConfig
     layer_cls: type[nn.Module]
     per_layer_skip_types: list[list[str]]
     skip_descriptors: dict[str, SkipDescriptor]
@@ -48,6 +49,9 @@ class _LayerInitContext:
 
 _layer_init_context: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
     "_layer_init_context", default=()
+)
+_model_init_stack: contextvars.ContextVar[tuple[PreTrainedModel, ...]] = contextvars.ContextVar(
+    "_model_init_stack", default=()
 )
 _layer_patching_lock = threading.Lock()
 
@@ -99,6 +103,7 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
     _validate_skip_descriptors(per_layer_skip_types, skip_descriptors)
 
     ctx = _LayerInitContext(
+        model_config=model.config,
         layer_cls=heterogeneous_modeling_spec.layer_cls,
         per_layer_skip_types=per_layer_skip_types,
         skip_descriptors=skip_descriptors,
@@ -117,16 +122,24 @@ def wrap_model_init_with_heterogeneous_cleanup(orig_init: Callable[..., None]) -
 
     @wraps(orig_init)
     def _patched_init(self, *args, **kwargs):
+        model_init_stack = _model_init_stack.get()
+        if any(model is self for model in model_init_stack):
+            return orig_init(self, *args, **kwargs)
+
+        token = _model_init_stack.set((*model_init_stack, self))
         try:
             orig_init(self, *args, **kwargs)
         finally:
-            _clean_up_post_heterogeneous_modeling(self)
+            try:
+                _reset_heterogeneous_modeling_context(self)
+            finally:
+                _model_init_stack.reset(token)
 
     _patched_init._wrapped_by_heterogeneous_modeling_cleanup = True
     return _patched_init
 
 
-def _clean_up_post_heterogeneous_modeling(model: PreTrainedModel) -> None:
+def _reset_heterogeneous_modeling_context(model: PreTrainedModel) -> None:
     if not hasattr(model, "_layer_init_context_token"):
         return
 
@@ -145,7 +158,14 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
 
         @wraps(orig_layer_init)
         def _patched_layer_init(self, config, *args, **kwargs):
-            ctx = next((ctx for ctx in reversed(_layer_init_context.get()) if ctx.layer_cls is layer_cls), None)
+            ctx = next(
+                (
+                    ctx
+                    for ctx in reversed(_layer_init_context.get())
+                    if ctx.layer_cls is layer_cls and ctx.model_config is config
+                ),
+                None,
+            )
             if ctx is None or not getattr(config, "is_heterogeneous", False):
                 return orig_layer_init(self, config, *args, **kwargs)
 

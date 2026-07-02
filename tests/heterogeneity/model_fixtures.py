@@ -17,7 +17,7 @@
 
 Contains architecture-dependent test metadata:
 - Skip-aware reference layer classes (for building ground-truth models)
-- Model class mappings (for _hetero_context setup)
+- Model class mappings (for hetero_context setup)
 - References to production heterogeneous modeling spec factories
 
 When adding a new architecture, update the production spec in

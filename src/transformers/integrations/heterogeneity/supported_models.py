@@ -27,6 +27,10 @@ MODEL_TO_SPEC_FACTORY: dict[str, Callable[[], HeterogeneousModelingSpec]] = {
 }
 
 
+def _identity(value):
+    return value
+
+
 def gpt_oss() -> HeterogeneousModelingSpec:
     import torch
 
@@ -43,7 +47,7 @@ def gpt_oss() -> HeterogeneousModelingSpec:
         skip_descriptors={
             "attention": {
                 "input_layernorm": get_skip_replacement(
-                    GptOssRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda x: x)
+                    GptOssRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
                 ),
                 "self_attn": get_skip_replacement(
                     GptOssAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
@@ -51,7 +55,7 @@ def gpt_oss() -> HeterogeneousModelingSpec:
             },
             "mlp": {
                 "post_attention_layernorm": get_skip_replacement(
-                    GptOssRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda x: x)
+                    GptOssRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
                 ),
                 "mlp": get_skip_replacement(
                     GptOssMLP, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
@@ -77,7 +81,7 @@ def llama() -> HeterogeneousModelingSpec:
         skip_descriptors={
             "attention": {
                 "input_layernorm": get_skip_replacement(
-                    LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda x: x)
+                    LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
                 ),
                 "self_attn": get_skip_replacement(
                     LlamaAttention,
@@ -86,7 +90,7 @@ def llama() -> HeterogeneousModelingSpec:
             },
             "mlp": {
                 "post_attention_layernorm": get_skip_replacement(
-                    LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda x: x)
+                    LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
                 ),
                 "mlp": get_skip_replacement(LlamaMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)),
             },
@@ -111,7 +115,7 @@ def llama4() -> HeterogeneousModelingSpec:
         skip_descriptors={
             "attention": {
                 "input_layernorm": get_skip_replacement(
-                    Llama4TextRMSNorm, ReturnEntry(arg_name="x", transform=lambda x: x)
+                    Llama4TextRMSNorm, ReturnEntry(arg_name="x", transform=_identity)
                 ),
                 "self_attn": get_skip_replacement(
                     Llama4TextAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
@@ -119,7 +123,7 @@ def llama4() -> HeterogeneousModelingSpec:
             },
             "mlp": {
                 "post_attention_layernorm": get_skip_replacement(
-                    Llama4TextRMSNorm, ReturnEntry(arg_name="x", transform=lambda x: x)
+                    Llama4TextRMSNorm, ReturnEntry(arg_name="x", transform=_identity)
                 ),
                 "feed_forward": get_skip_replacement(
                     Llama4TextMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
@@ -149,7 +153,7 @@ def nemotron_h() -> HeterogeneousModelingSpec:
         skip_descriptors={
             "mixer": {
                 "norm": get_skip_replacement(
-                    NemotronHRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda x: x)
+                    NemotronHRMSNorm, ReturnEntry(arg_name="hidden_states", transform=_identity)
                 ),
                 ("mixer", NemotronHAttention): get_skip_replacement(
                     NemotronHAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]

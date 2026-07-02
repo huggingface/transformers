@@ -70,7 +70,10 @@ from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.heterogeneity import apply_heterogeneous_modeling, wrap_model_init_with_heterogeneous_cleanup
+from .integrations.heterogeneity import (
+    apply_heterogeneous_modeling,
+    wrap_model_init_with_heterogeneous_cleanup,
+)
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
@@ -1349,6 +1352,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "__init__" in cls.__dict__:
             cls.__init__ = wrap_model_init_with_heterogeneous_cleanup(cls.__init__)
 
+    @wrap_model_init_with_heterogeneous_cleanup
     def __init__(self, config: PreTrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PreTrainedConfig):
