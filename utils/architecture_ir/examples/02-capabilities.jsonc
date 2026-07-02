@@ -1,0 +1,62 @@
+// 02 — everything in 01, plus `capabilities`: what the model can do / run with.
+// (structure/dataflow trimmed here to keep the focus on the new block — see 01 for the full diagram.)
+{
+  "schema_version": "architecture-template-v0",
+  "model_type": "mistral",
+  "architecture": {
+    "view": "decoder", "family": "causal_lm", "attention_variant": "GQA",
+    "positional": "rope", "is_moe": false, "sliding_window": 4096, "tie_word_embeddings": false
+  },
+
+  // ▼▼▼ the tier-02 addition ▼▼▼
+  "capabilities": {
+    "attention_backends": ["eager", "sdpa", "flash_attention", "flex_attention"],  // "can run with", not "installed"
+    "attention_patterns": ["sliding"],       // distinct per-layer mask kinds
+    "attention_schedule": null,              // raw config.layer_types when non-uniform, else null
+    "task_heads": ["causal_lm", "question_answering", "sequence_classification", "token_classification"],
+    "tensor_parallel": true,                 // → projection nodes carry attributes.tp (colwise/rowwise)
+    "kernels": {                             // kernelizable layers → compatible Hub kernel repos
+      "RMSNorm": ["kernels-community/liger-kernels", "kernels-community/rmsnorm", "kernels-community/mlx_rmsnorm"]
+    }
+  },
+  // ▲▲▲ nodes point in via attributes.kernel: "RMSNorm" ▲▲▲
+
+  "config": {
+    "class_name": "MistralConfig", "module": "transformers.models.mistral.configuration_mistral", "model_type": "mistral",
+    "referenced_fields": { "num_hidden_layers": 32 },
+    "salient_fields": { "hidden_size": 4096, "intermediate_size": 14336, "num_key_value_heads": 8, "head_dim": 128 }
+  },
+  "components": [
+    { "id": "model", "kind": "model", "class_name": "MistralModel", "path_pattern": "model",
+      "children": ["embed_tokens", "decoder_layers", "norm"] },
+    { "id": "norm", "kind": "normalization", "class_name": "MistralRMSNorm", "path_pattern": "model.norm",
+      "attributes": { "norm_type": "rms", "kernel": "RMSNorm" } }  // ← joins to capabilities.kernels["RMSNorm"]
+    // … embed_tokens, rotary_emb (see 01)
+  ],
+  "templates": [
+    { "id": "decoder_layer.self_attn", "kind": "attention", "class_name": "MistralAttention",
+      "path_pattern": "model.layers.{i}.self_attn",
+      "attributes": { "variant": "GQA", "n_heads": 32, "n_kv_heads": 8, "head_dim": 128, "pattern": "sliding" } }
+    // … decoder_layer + its projection / norm / mlp children (see 01)
+  ],
+  "repeats": [
+    { "id": "decoder_layers", "kind": "symbolic_repeat", "body": "decoder_layer",
+      "count_expr": "config.num_hidden_layers", "count": 32, "count_source": "config", "index_symbol": "i",
+      "container_path_pattern": "model.layers", "item_path_pattern": "model.layers.{i}",
+      "repeated_class_name": "MistralDecoderLayer" }
+  ],
+  "edges": [
+    { "source": "embed_tokens", "target": "decoder_layers", "kind": "data" },
+    { "source": "decoder_layers", "target": "norm", "kind": "data" }
+  ],
+  "dataflow": {
+    "source": "observed_forward_meta",
+    "input": { "name": "input_ids", "shape": ["B", "S"] },
+    "output": { "shape": ["B", "S", "config.hidden_size"] },
+    "shapes": { "embed_tokens": { "in": ["B", "S"], "out": ["B", "S", "config.hidden_size"] } }
+  },
+  "provenance": {
+    "config_class": "MistralConfig", "config_module": "transformers.models.mistral.configuration_mistral",
+    "model_class": "MistralModel", "model_module": "transformers.models.mistral.modeling_mistral"
+  }
+}

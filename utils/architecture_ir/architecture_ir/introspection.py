@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import os
 import re
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import asdict, is_dataclass
 from typing import Any
@@ -20,6 +21,7 @@ from .enrich import (
     norm_type,
     position_spec,
     projection_role,
+    state_space_spec,
     tensor_parallel_plan,
     tp_style_for,
 )
@@ -58,6 +60,21 @@ def _enrich_artifact(artifact: dict[str, Any], model_type: str, resolved: Any) -
     view = facts.get("view")
     tp_plan = tensor_parallel_plan(config, getattr(config, "text_config", None))
 
+    # Token-mixer family: what kind(s) of sequence mixing the blocks use. Gates attention_variant
+    # (an SSM's config `num_heads` must not be read as an attention variant) and flags hybrids.
+    kinds_present = {c["kind"] for c in [*artifact["components"], *artifact["templates"]]}
+    mixers = [m for k, m in (("attention", "attention"), ("state_space", "state_space"),
+                             ("linear_attention", "linear_attention")) if k in kinds_present]
+    if "cross_attention" in kinds_present and "attention" not in mixers:
+        mixers.insert(0, "attention")
+    if mixers:
+        facts["mixer"] = "hybrid" if len(mixers) > 1 else mixers[0]
+    if not (kinds_present & {"attention", "cross_attention"}):
+        facts.pop("attention_variant", None)  # no real attention → the "variant" was an SSM false positive
+    layers_block_type = getattr(config, "layers_block_type", None)
+    if isinstance(layers_block_type, (list, tuple)) and layers_block_type:
+        facts["layer_summary"] = dict(Counter(str(x) for x in layers_block_type))  # hybrid schedule counts
+
     attn = attention_spec(config)
     moe = moe_spec(config)
     mlp = mlp_spec(config)
@@ -79,6 +96,8 @@ def _enrich_artifact(artifact: dict[str, Any], model_type: str, resolved: Any) -
             component["attributes"] = {"norm_type": norm_type(component["class_name"])}
         elif kind == "moe" and moe:
             component["attributes"] = dict(moe)
+        elif kind == "state_space" and (ss := state_space_spec(config)):
+            component["attributes"] = ss
         elif kind == "embedding":
             spec = embedding_spec(config, component.get("attributes"))
             component["attributes"] = {key: symbolize_dim(value, config) for key, value in spec.items()}
@@ -740,6 +759,8 @@ def _include_canonical_component(component: Component, parent_kind: str | None =
         "cross_attention",
         "feed_forward",
         "moe",
+        "state_space",
+        "linear_attention",
         "normalization",
         "pooler",
         "transformer_block",

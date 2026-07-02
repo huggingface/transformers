@@ -1,0 +1,255 @@
+// 01 — structure: components, edges, dataflow + per-node facts (the annotated diagram).
+// Trimmed mistral (real values); "…" marks omitted repetition. Tiers 02–04 add to this.
+{
+  "schema_version": "architecture-template-v0",
+  "model_type": "mistral",
+  "architecture": {
+    "view": "decoder",
+    "family": "causal_lm",
+    "attention_variant": "GQA",
+    "positional": "rope",
+    "is_moe": false,
+    "sliding_window": 4096,
+    "tie_word_embeddings": false
+  },
+  "config": {
+    "class_name": "MistralConfig",
+    "module": "transformers.models.mistral.configuration_mistral",
+    "model_type": "mistral",
+    "referenced_fields": {
+      "num_hidden_layers": 32
+    },
+    "salient_fields": {
+      "hidden_size": 4096,
+      "intermediate_size": 14336,
+      "num_attention_heads": 32,
+      "num_key_value_heads": 8,
+      "head_dim": 128,
+      "vocab_size": 32000,
+      "sliding_window": 4096
+    }
+  },
+  "components": [
+    {
+      "id": "model",
+      "kind": "model",
+      "class_name": "MistralModel",
+      "path_pattern": "model",
+      "children": [
+        "embed_tokens",
+        "decoder_layers",
+        "norm",
+        "rotary_emb"
+      ]
+    },
+    // "decoder_layers" is the repeat id
+    {
+      "id": "embed_tokens",
+      "kind": "embedding",
+      "class_name": "Embedding",
+      "path_pattern": "model.embed_tokens",
+      "attributes": {
+        "num_embeddings": "config.vocab_size",
+        "embedding_dim": "config.hidden_size"
+      }
+    },
+    {
+      "id": "norm",
+      "kind": "normalization",
+      "class_name": "MistralRMSNorm",
+      "path_pattern": "model.norm",
+      "attributes": {
+        "norm_type": "rms",
+        "kernel": "RMSNorm"
+      }
+    },
+    {
+      "id": "rotary_emb",
+      "kind": "position",
+      "class_name": "MistralRotaryEmbedding",
+      "path_pattern": "model.rotary_emb",
+      "attributes": {
+        "scheme": "rope",
+        "rope_theta": 10000.0,
+        "head_dim": "config.head_dim"
+      }
+    }
+  ],
+  "templates": [
+    {
+      "id": "decoder_layer",
+      "kind": "transformer_block",
+      "class_name": "MistralDecoderLayer",
+      "path_pattern": "model.layers.{i}",
+      // {i} = layer index
+      "children": [
+        "decoder_layer.input_layernorm",
+        "decoder_layer.self_attn",
+        "decoder_layer.post_attention_layernorm",
+        "decoder_layer.mlp"
+      ]
+    },
+    {
+      "id": "decoder_layer.self_attn",
+      "kind": "attention",
+      "class_name": "MistralAttention",
+      "path_pattern": "model.layers.{i}.self_attn",
+      "children": [
+        "decoder_layer.self_attn.q_proj",
+        "decoder_layer.self_attn.o_proj"
+      ],
+      // … k_proj, v_proj
+      "attributes": {
+        "variant": "GQA",
+        "n_heads": 32,
+        "n_kv_heads": 8,
+        "head_dim": 128,
+        "rope": true,
+        "sliding_window": 4096,
+        "pattern": "sliding"
+      }
+    },
+    {
+      "id": "decoder_layer.self_attn.q_proj",
+      "kind": "projection",
+      "class_name": "Linear",
+      "path_pattern": "model.layers.{i}.self_attn.q_proj",
+      "attributes": {
+        "in_features": "config.hidden_size",
+        "out_features": 4096,
+        "tp": "colwise"
+      }
+    },
+    {
+      "id": "decoder_layer.mlp",
+      "kind": "feed_forward",
+      "class_name": "MistralMLP",
+      "path_pattern": "model.layers.{i}.mlp",
+      "children": [
+        "decoder_layer.mlp.gate_proj",
+        "decoder_layer.mlp.up_proj",
+        "decoder_layer.mlp.down_proj"
+      ],
+      "attributes": {
+        "hidden_size": 4096,
+        "intermediate_size": 14336,
+        "activation": "silu"
+      }
+    },
+    {
+      "id": "decoder_layer.input_layernorm",
+      "kind": "normalization",
+      "class_name": "MistralRMSNorm",
+      "path_pattern": "model.layers.{i}.input_layernorm",
+      "attributes": {
+        "norm_type": "rms",
+        "kernel": "RMSNorm"
+      }
+    }
+    // … post_attention_layernorm, and the k/v/o + gate/up/down projection nodes
+  ],
+  "repeats": [
+    {
+      "id": "decoder_layers",
+      "kind": "symbolic_repeat",
+      "body": "decoder_layer",
+      "count_expr": "config.num_hidden_layers",
+      "count": 32,
+      "count_source": "config",
+      "index_symbol": "i",
+      "container_path_pattern": "model.layers",
+      "item_path_pattern": "model.layers.{i}",
+      "repeated_class_name": "MistralDecoderLayer"
+    }
+    // 32 identical layers → one symbolic entry
+  ],
+  "edges": [
+    {
+      "source": "embed_tokens",
+      "target": "decoder_layers",
+      "kind": "data"
+    },
+    {
+      "source": "decoder_layers",
+      "target": "norm",
+      "kind": "data"
+    },
+    {
+      "source": "decoder_layer.input_layernorm",
+      "target": "decoder_layer.self_attn",
+      "kind": "data",
+      "provenance": "observed_forward"
+    },
+    {
+      "source": "decoder_layer",
+      "target": "decoder_layer.self_attn",
+      "kind": "residual"
+    },
+    {
+      "source": "rotary_emb",
+      "target": "decoder_layer.self_attn",
+      "kind": "position"
+    },
+    {
+      "source": "input:attention_mask",
+      "target": "decoder_layer.self_attn",
+      "kind": "mask"
+    },
+    {
+      "source": "state:kv_cache",
+      "target": "decoder_layer.self_attn",
+      "kind": "cache_read"
+    }
+    // … kinds: data | residual | mask | position | cross_attention | route | cache_read | cache_write
+  ],
+  "dataflow": {
+    "source": "observed_forward_meta",
+    "input": {
+      "name": "input_ids",
+      "shape": [
+        "B",
+        "S"
+      ]
+    },
+    // B=batch, S=sequence
+    "output": {
+      "shape": [
+        "B",
+        "S",
+        "config.hidden_size"
+      ]
+    },
+    "shapes": {
+      // per-node observed shapes (symbolized); node ORDER lives in edges
+      "embed_tokens": {
+        "in": [
+          "B",
+          "S"
+        ],
+        "out": [
+          "B",
+          "S",
+          "config.hidden_size"
+        ]
+      },
+      "decoder_layer.self_attn": {
+        "in": [
+          "B",
+          "S",
+          "config.hidden_size"
+        ],
+        "out": [
+          "B",
+          "S",
+          "config.hidden_size"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "config_class": "MistralConfig",
+    "config_module": "transformers.models.mistral.configuration_mistral",
+    "model_class": "MistralModel",
+    "model_module": "transformers.models.mistral.modeling_mistral"
+  }
+}

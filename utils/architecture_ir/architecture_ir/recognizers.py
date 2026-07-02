@@ -71,6 +71,12 @@ def classify_component(path: str, class_name: str) -> str:
         return "position"
     if _MOE_RE.search(semantic_key):
         return "moe"
+    # Linear-attention token mixers (DeltaNet/RWKV/retention/GLA/LinearAttention). Its tokens are
+    # specific, so it's safe to check before "attention" (routes LinearAttention-style names here);
+    # guarded so a block *wrapper* stays a transformer_block. The Mamba/SSM check is later (below the
+    # norm/embedding checks) because SSM class names like "Mamba2RMSNorm" would otherwise be swallowed.
+    if not _looks_like_transformer_block(class_lower) and _LINEAR_ATTN_RE.search(class_lower):
+        return "linear_attention"
     if "embedding" in class_lower or path_lower.endswith("embed_tokens") or path_lower == "shared":
         return "embedding"
     if "attention" in class_lower or path_lower.endswith("attention") or path_lower.endswith("self_attn"):
@@ -90,6 +96,11 @@ def classify_component(path: str, class_name: str) -> str:
         return "activation"
     if "pooler" in class_lower or path_lower.endswith("pooler"):
         return "pooler"
+    # Mamba/SSM mixer — checked here (after norm/embedding/proj/ff) so SSM-named norms like
+    # "Mamba2RMSNorm" are classified as normalization, not state_space. Guarded so the block wrapper
+    # (e.g. "Mamba2Block") falls through to transformer_block below.
+    if not _looks_like_transformer_block(class_lower) and _MAMBA_RE.search(class_lower):
+        return "state_space"
     if _looks_like_transformer_block(class_lower):
         return "transformer_block"
     if path_lower.endswith("encoder") or class_lower.endswith("encoder"):

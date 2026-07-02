@@ -1,0 +1,61 @@
+// 03 — everything in 01+02, plus modular inheritance: `extends` + `patches`.
+// (structure/capabilities trimmed here — see 01/02.) Standalone models have extends=null and no patches.
+{
+  "schema_version": "architecture-template-v0",
+  "model_type": "mistral",
+
+  // ▼▼▼ the tier-03 addition ▼▼▼
+  "extends": "llama",           // dominant parent model_type (from modular_mistral.py)
+  "patches": [                  // per-class changes vs the parent; trivial (unchanged) classes are omitted
+    { "relation": "inherits", "target_class": "MistralAttention", "component_kind": "attention",
+      "parent_class": "LlamaAttention", "overridden": { "methods": ["__init__", "forward"] } },
+    { "relation": "inherits", "target_class": "MistralMLP", "component_kind": "feed_forward",
+      "parent_class": "LlamaMLP", "overridden": { "methods": ["__init__"] } },
+    { "relation": "new", "target_class": "MistralForQuestionAnswering", "component_kind": null,
+      "parent_class": "MistralPreTrainedModel" }
+    // … relation: "inherits" | "new"; buckets: overridden / added / deleted, each { methods?, attrs? }
+  ],
+  // ▲▲▲ the diff_size metric is NOT here — it lives per-node in modular_graph.json (see bottom) ▲▲▲
+
+  "architecture": { "view": "decoder", "family": "causal_lm", "attention_variant": "GQA", "positional": "rope" },
+  "capabilities": { "attention_backends": ["eager", "sdpa", "flash_attention", "flex_attention"],
+                    "kernels": { "RMSNorm": ["kernels-community/rmsnorm"] } },
+  "config": {
+    "class_name": "MistralConfig", "module": "transformers.models.mistral.configuration_mistral", "model_type": "mistral",
+    "referenced_fields": { "num_hidden_layers": 32 }
+  },
+  "components": [
+    { "id": "model", "kind": "model", "class_name": "MistralModel", "path_pattern": "model",
+      "children": ["embed_tokens", "decoder_layers", "norm"] }
+    // … see 01
+  ],
+  "templates": [
+    { "id": "decoder_layer.self_attn", "kind": "attention", "class_name": "MistralAttention",
+      "path_pattern": "model.layers.{i}.self_attn", "attributes": { "variant": "GQA", "pattern": "sliding" } }
+    // … see 01
+  ],
+  "repeats": [
+    { "id": "decoder_layers", "kind": "symbolic_repeat", "body": "decoder_layer",
+      "count_expr": "config.num_hidden_layers", "count": 32, "count_source": "config", "index_symbol": "i",
+      "container_path_pattern": "model.layers", "item_path_pattern": "model.layers.{i}",
+      "repeated_class_name": "MistralDecoderLayer" }
+  ],
+  "edges": [ { "source": "embed_tokens", "target": "decoder_layers", "kind": "data" } ],
+  "dataflow": {
+    "source": "observed_forward_meta",
+    "input": { "name": "input_ids", "shape": ["B", "S"] },
+    "output": { "shape": ["B", "S", "config.hidden_size"] },
+    "shapes": { "embed_tokens": { "in": ["B", "S"], "out": ["B", "S", "config.hidden_size"] } }
+  },
+  "provenance": {
+    "config_class": "MistralConfig", "config_module": "transformers.models.mistral.configuration_mistral",
+    "model_class": "MistralModel", "model_module": "transformers.models.mistral.modeling_mistral"
+  }
+}
+
+// Companion library-wide file `modular_graph.json` (one for the whole library, not per model):
+//   { "schema_version": "modular-graph-v0",
+//     "roots": ["llama", "vit", "clip"],
+//     "nodes": { "mistral": { "extends": "llama", "children": ["mixtral"], "root": "llama",
+//                             "depth": 1, "is_modular": true, "diff_size": 9 } } }
+// → models sharing a `root` are the same lineage (align cleanly for comparison); diff_size = modularity metric.

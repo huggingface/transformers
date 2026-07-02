@@ -113,6 +113,17 @@ def projection_role(name: str) -> str:
     return "input"
 
 
+def state_space_spec(config: Any) -> dict[str, Any]:
+    """Config-derived state-space (Mamba/SSM) facts attached to state_space mixer components."""
+    spec = {
+        "state_size": _cfg(config, "state_size", "d_state", "mamba_d_state", "ssm_state_size"),
+        "conv_kernel": _cfg(config, "conv_kernel", "d_conv", "mamba_d_conv", "mamba_conv_kernel"),
+        "expand": _cfg(config, "expand", "mamba_expand"),
+        "n_groups": _cfg(config, "n_groups", "mamba_n_groups"),
+    }
+    return {key: value for key, value in spec.items() if value is not None}
+
+
 def mlp_spec(config: Any) -> dict[str, Any]:
     """Config-derived feed-forward facts (dims + activation) attached to MLP components."""
     spec = {
