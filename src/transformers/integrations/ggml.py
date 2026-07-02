@@ -337,6 +337,29 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
         "expert_gating_func": "scoring_func",
     },
+    "glm4moe": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        # NOTE: partial rotary (partial_rotary_factor=0.5) keeps its config default;
+        # attention.key_length carries the full head_dim.
+        "attention.key_length": "head_dim",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "expert_count": "n_routed_experts",
+        "expert_used_count": "num_experts_per_tok",
+        "expert_shared_count": "n_shared_experts",
+        "expert_feed_forward_length": "moe_intermediate_size",
+        "expert_group_count": "n_group",
+        "expert_group_used_count": "topk_group",
+        "expert_weights_scale": "routed_scaling_factor",
+        "leading_dense_block_count": "first_k_dense_replace",
+        "vocab_size": "vocab_size",
+    },
 }
 
 GGUF_TOKENIZER_MAPPING = {
@@ -824,6 +847,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "deci": GGUFLlamaConverter,
     "decilm": GGUFLlamaConverter,
     "minimax_m2": GGUFQwen2Converter,
+    "glm4_moe": GGUFGPTConverter,
 }
 
 

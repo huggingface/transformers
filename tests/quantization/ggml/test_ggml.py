@@ -311,6 +311,8 @@ class GgufModelTests(unittest.TestCase):
     qwen3moe_model_id = "Qwen/Qwen3-30B-A3B-GGUF"
     umt5_encoder_model_id = "city96/umt5-xxl-encoder-gguf"
     lfm2_model_id = "LiquidAI/LFM2-1.2B-GGUF"
+    glm4moe_model_id = "mironableee/tiny-glm4moe-gguf"
+    glm4moe_original_model_id = "trl-internal-testing/tiny-Glm4MoeForCausalLM"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -328,6 +330,7 @@ class GgufModelTests(unittest.TestCase):
     fp16_t5_model_id = "flan-t5-small.F16.gguf"
     q8_0_t5_model_id = "flan-t5-small.Q8_0.gguf"
     fp16_qwen2moe_model_id = "Qwen1.5-MoE-A2.7B.gguf"
+    f16_glm4moe_gguf_file = "tiny-glm4moe-f16.gguf"
     fp16_gpt2_model_id = "gpt2.f16.gguf"
     q8_gpt2_model_id = "gpt2.Q8_0.gguf"
     q6_k_gpt2_xl_model_id = "gpt2-xl.Q6_K.gguf"
@@ -1145,3 +1148,22 @@ class GgufModelTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello Atari 2600! es un videoj"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    @unittest.skipUnless(is_gguf_available("0.19.0"), "GLM4_MOE requires gguf version >= 0.19.0")
+    def test_glm4moe_f16(self):
+        # The fixture is a tiny-random model, so we check load fidelity against the original weights
+        # (covers the dense layer, merged routed experts, shared experts and routing bias paths)
+        # rather than asserting decoded text.
+        model = AutoModelForCausalLM.from_pretrained(
+            self.glm4moe_model_id,
+            gguf_file=self.f16_glm4moe_gguf_file,
+            dtype=torch.float16,
+        )
+        original_model = AutoModelForCausalLM.from_pretrained(self.glm4moe_original_model_id, dtype=torch.float16)
+
+        text = torch.tensor([[1, 2, 3, 4, 5]])
+        with torch.no_grad():
+            logits = model(text).logits
+            original_logits = original_model(text).logits
+
+        torch.testing.assert_close(logits, original_logits, rtol=1e-3, atol=1e-3)
