@@ -18,7 +18,7 @@ limitations under the License.
 -->
 
 
-*This model was contributed to Hugging Face Transformers on 2026-06-30.*
+*This model was contributed to Hugging Face Transformers on 2026-07-02.*
 
 # Kimi_K25
 

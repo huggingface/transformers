@@ -88,10 +88,10 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
 @strict
 class Kimi_K25Config(PreTrainedConfig):
     r"""
-    projection_layer_norm_eps (`float`, *optional*, defaults to `1e-5`):
-        Layer norm epsilon for projector.
     projection_hidden_size (`int`, *optional*, defaults to `1152`):
         The output hidden size for multimodal projector.
+    projection_layer_norm_eps (`float`, *optional*, defaults to `1e-5`):
+        Layer norm epsilon for projector.
     """
 
     model_type = "kimi_k25"
