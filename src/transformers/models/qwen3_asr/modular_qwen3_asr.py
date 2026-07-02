@@ -132,7 +132,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
 @auto_docstring
 class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
-    _no_split_modules = ["Qwen3ASREncoderLayer", "Qwen3DecoderLayer"]
+    _no_split_modules = ["Qwen3DecoderLayer"]
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
@@ -155,6 +155,7 @@ class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
 )
 class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
     config: Qwen3ASREncoderConfig
+    _no_split_modules = ["Qwen3ASRAudioEncoderLayer"]
 
     def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__(config)
