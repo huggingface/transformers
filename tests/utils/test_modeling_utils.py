@@ -92,7 +92,6 @@ from transformers.utils.import_utils import (
     is_flash_attn_4_available,
     is_kernels_available,
     is_torch_npu_available,
-    is_torch_xpu_available,
 )
 
 from ..test_modeling_common import compare_state_dicts
@@ -2917,44 +2916,21 @@ class TestAttentionImplementation(unittest.TestCase):
             )
         self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
-    def test_use_gqa_in_sdpa_skips_large_head_dim(self):
-        # head_dim > 256 must disable GQA-in-SDPA: `enable_gqa` would otherwise silently fall back to the math
-        # kernel. key and value head_dim can differ (e.g. MLA models), so a large value alone must disable it too.
-        from transformers.integrations.sdpa_attention import use_gqa_in_sdpa
-
-        if is_torch_xpu_available():
-            self.skipTest(reason="The head_dim guard only applies to the CUDA/NPU/CPU dispatch path, not XPU")
-
-        small = torch.empty(1, 2, 4, 256)  # head_dim == 256
-        large = torch.empty(1, 2, 4, 512)  # head_dim == 512
-
-        self.assertFalse(use_gqa_in_sdpa(None, large, small))
-        self.assertFalse(use_gqa_in_sdpa(None, small, large))
-        self.assertTrue(use_gqa_in_sdpa(None, small, small))
-        # An explicit mask always disables GQA-in-SDPA (it would otherwise fall back to the math kernel).
-        self.assertFalse(use_gqa_in_sdpa(torch.empty(1, 1, 4, 4), small, small))
-
-    def test_use_gqa_in_sdpa_skips_mismatched_head_dim(self):
-        # Mismatched key/value head_dim (e.g. MLA) must disable GQA-in-SDPA even when both are <= 256: `enable_gqa`
-        # would then be served only by cuDNN and silently fall back to the math kernel where cuDNN is unavailable.
-        from transformers.integrations.sdpa_attention import use_gqa_in_sdpa
-
-        if is_torch_xpu_available():
-            self.skipTest(reason="The head_dim guard only applies to the CUDA/NPU/CPU dispatch path, not XPU")
-
-        key = torch.empty(1, 2, 4, 192)
-        value = torch.empty(1, 2, 4, 128)  # both <= 256 but differ
-        self.assertFalse(use_gqa_in_sdpa(None, key, value))
-        self.assertFalse(use_gqa_in_sdpa(None, value, key))
-        self.assertTrue(use_gqa_in_sdpa(None, value, value))
-
     @require_torch_gpu
     def test_gqa_in_sdpa_does_not_fall_back_to_math(self):
-        # Forcing mem-efficient (excludes `math`) turns the silent fallback into a hard error, so the fix works iff
-        # `enable_gqa=True` errors while `sdpa_attention_forward` (repeat_kv path) does not.
+        # Forcing mem-efficient (no `math`) makes SDPA's silent fallback a hard error, so `enable_gqa=True` must raise
+        # for head_dim > 256 or mismatched (MLA) key/value while `sdpa_attention_forward`'s repeat_kv path must not.
         from torch.nn.attention import SDPBackend, sdpa_kernel
 
-        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward, use_gqa_in_sdpa
+
+        small, large = torch.empty(1, 2, 4, 256), torch.empty(1, 2, 4, 512)
+        self.assertTrue(use_gqa_in_sdpa(None, small, small))
+        self.assertFalse(use_gqa_in_sdpa(None, large, large))
+        self.assertFalse(use_gqa_in_sdpa(None, large, small))
+        self.assertFalse(use_gqa_in_sdpa(None, small, large))
+        self.assertFalse(use_gqa_in_sdpa(None, torch.empty(1, 2, 4, 192), torch.empty(1, 2, 4, 128)))  # MLA k/v differ
+        self.assertFalse(use_gqa_in_sdpa(torch.empty(1, 1, 4, 4), small, small))  # a mask disables it
 
         module = torch.nn.Module()
         module.num_key_value_groups = 4
