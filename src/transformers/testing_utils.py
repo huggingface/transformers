@@ -128,6 +128,7 @@ from .utils import (
     is_optimum_quanto_available,
     is_pandas_available,
     is_peft_available,
+    is_peft_greater_or_equal,
     is_phonemizer_available,
     is_pretty_midi_available,
     is_psutil_available,
@@ -771,6 +772,21 @@ def require_peft(test_case):
 
     """
     return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
+
+
+def require_peft_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires PEFT version >= `version`.
+
+    These tests are skipped when PEFT version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_peft_greater_or_equal(version), f"test requires PEFT version >= {version}")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_torchvision(test_case):
