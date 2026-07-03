@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-06-30.*
+*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-07-03.*
 
 
 # VibeVoice
@@ -84,8 +84,7 @@ import os
 import diffusers
 from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
 
-model_id = "bezzam/VibeVoice-1.5B-hf"
-# model_id = "bezzam/VibeVoice-7B-hf"
+model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
 set_seed(42)  # for deterministic results
 
@@ -119,15 +118,12 @@ print(f"Saved output to {fn}")
 
 A voice can be cloned by providing a reference audio alongside the text within the chat template dictionary.
 
-A url (`url`), local path (`path`), or loaded audio array (`audio`) can be provided as a reference audio.
-
 ```python
 import os
 import diffusers
 from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
 
-model_id = "bezzam/VibeVoice-1.5B-hf"
-# model_id = "bezzam/VibeVoice-7B-hf"
+model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
 set_seed(42)  # for deterministic results
 
@@ -184,8 +180,7 @@ import torch
 from tqdm import tqdm
 from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
 
-model_id = "bezzam/VibeVoice-1.5B-hf"
-# model_id = "bezzam/VibeVoice-7B-hf"
+model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 max_new_tokens = 400  # `None` to ensure full generation
 set_seed(42)  # for deterministic results
 
@@ -297,8 +292,7 @@ import torch
 from tqdm import tqdm
 from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
 
-model_id = "bezzam/VibeVoice-1.5B-hf"
-# model_id = "bezzam/VibeVoice-7B-hf"
+model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 max_new_tokens = 400  # `None` to ensure full generation
 set_seed(42)  # for deterministic results
 
@@ -456,8 +450,7 @@ import diffusers
 import soundfile as sf
 from transformers import pipeline, set_seed
 
-model_id = "bezzam/VibeVoice-1.5B-hf"
-# model_id = "bezzam/VibeVoice-7B-hf"
+model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
 set_seed(42)  # for deterministic results
 
@@ -500,8 +493,7 @@ import diffusers
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 
-model_id = "bezzam/VibeVoice-1.5B-hf"
-# model_id = "bezzam/VibeVoice-7B-hf"
+model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 
 # Load model and processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -584,8 +576,7 @@ import diffusers
 import torch
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
-model_id = "bezzam/VibeVoice-1.5B-hf"
-# model_id = "bezzam/VibeVoice-7B-hf"
+model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 num_warmup = 5
 
 torch.set_float32_matmul_precision("high")
@@ -593,8 +584,8 @@ torch.set_float32_matmul_precision("high")
 # Load processor + model
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(
-    model_id, dtype=torch.bfloat16,
-).to("cuda")
+    model_id, dtype=torch.bfloat16, device_map="auto"
+)
 
 # Prepare inputs
 chat_template = [
@@ -615,7 +606,7 @@ inputs = processor.apply_chat_template(
     chat_template,
     tokenize=True,
     return_dict=True,
-).to("cuda", torch.bfloat16)
+).to(model.device, model.dtype)
 
 noise_scheduler = diffusers.DPMSolverMultistepScheduler(
     beta_schedule="squaredcos_cap_v2",
