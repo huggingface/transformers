@@ -17,12 +17,6 @@ import torch
 from torch import nn
 
 from ..core_model_loading import ConversionOps
-from ..utils import is_compressed_tensors_available
-
-
-if is_compressed_tensors_available():
-    from compressed_tensors.compressors import BaseCompressor
-    from compressed_tensors.compressors.format import infer_module_format
 
 
 class DecompressExperts(ConversionOps):
@@ -47,6 +41,9 @@ class DecompressExperts(ConversionOps):
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
+        from compressed_tensors.compressors import BaseCompressor
+        from compressed_tensors.compressors.format import infer_module_format
+
         ct_quantization_config = self.hf_quantizer.compressor.quantization_config
 
         quantization_scheme = list(ct_quantization_config.config_groups.values())[0]
