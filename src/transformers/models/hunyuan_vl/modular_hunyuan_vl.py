@@ -18,7 +18,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-import torchvision.transforms as transforms
 from huggingface_hub.dataclasses import strict
 from PIL import Image
 from torch import nn
