@@ -431,10 +431,12 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
                 resized_height, resized_width = height, width
 
             if do_normalize:
-                image = transforms.Compose([
-                    transforms.ToTensor(),
-                    transforms.Normalize(image_mean, image_std),
-                ])(pil_image).numpy()
+                image = transforms.Compose(
+                    [
+                        transforms.ToTensor(),
+                        transforms.Normalize(image_mean, image_std),
+                    ]
+                )(pil_image).numpy()
             else:
                 image = np.array(pil_image)
                 if image.ndim == 3:
@@ -680,10 +682,14 @@ class HunYuanVLVisionPatchMerger(nn.Module):
         hidden_states = self.mlp(hidden_states)
 
         begin = (
-            self.image_begin.reshape(1, 1, -1).expand(batch_size, 1, hidden_states.shape[-1]).to(dtype, non_blocking=True)
+            self.image_begin.reshape(1, 1, -1)
+            .expand(batch_size, 1, hidden_states.shape[-1])
+            .to(dtype, non_blocking=True)
         )
         end = (
-            self.image_end.reshape(1, 1, -1).expand(batch_size, 1, hidden_states.shape[-1]).to(dtype, non_blocking=True)
+            self.image_end.reshape(1, 1, -1)
+            .expand(batch_size, 1, hidden_states.shape[-1])
+            .to(dtype, non_blocking=True)
         )
         hidden_states = torch.cat([begin, hidden_states, end], dim=1)
 

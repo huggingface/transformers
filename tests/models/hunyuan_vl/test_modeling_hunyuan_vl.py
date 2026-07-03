@@ -402,9 +402,7 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.radar_prompt = "What is shown in this image?"
         self.ocr_prompt = "Extract the text from the image."
         self.candy_prompt = "What animal is on the candy?"
-        self.compare_prompt = (
-            "What is shown in the first image, and what animal is on the candy in the second image?"
-        )
+        self.compare_prompt = "What is shown in the first image, and what animal is on the candy in the second image?"
         self.text_prompt = "Briefly explain what OCR is used for."
 
     def tearDown(self):

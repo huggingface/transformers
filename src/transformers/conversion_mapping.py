@@ -204,7 +204,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"perceive\.proj\.2\.", target_patterns="perceive.proj_out."),
             WeightRenaming(source_patterns=r"perceive\.", target_patterns="patch_merger."),
             WeightRenaming(
-                source_patterns=r"^model(?!\.(language_model|vit|vision_tower))", target_patterns="model.language_model"
+                source_patterns=r"^model(?!\.(language_model|vit|vision_tower))",
+                target_patterns="model.language_model",
             ),
             WeightRenaming(source_patterns=r"^model\.vit", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^vit", target_patterns="model.vision_tower"),
