@@ -19,7 +19,6 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 import torch.nn as nn
@@ -900,9 +899,6 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
             model_inputs["pixel_values_videos"] = None
 
         return model_inputs
-
-    def _expand_inputs_for_generation(self, **kwargs) -> tuple[torch.LongTensor, dict[str, Any]]:
-        return super()._expand_inputs_for_generation(**kwargs)
 
 
 __all__ = ["Kimi_K25ForConditionalGeneration", "Kimi_K25Model", "Kimi_K25PreTrainedModel", "Kimi_K25VisionModel"]
