@@ -30,18 +30,18 @@ if is_torch_available():
     import torch
 
     _torch_distributed_available = torch.distributed.is_available()
-
-    if is_torch_greater_or_equal("2.7"):
-        import torch.distributed.checkpoint as dcp
-        from torch.distributed.checkpoint.state_dict import (
-            StateDictOptions,
-            get_model_state_dict,
-            get_optimizer_state_dict,
-            set_optimizer_state_dict,
-        )
-        from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
 else:
     _torch_distributed_available = False
+
+if is_torch_available() and is_torch_greater_or_equal("2.7"):
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
+    from torch.distributed.checkpoint.state_dict import (
+        StateDictOptions,
+        get_model_state_dict,
+        get_optimizer_state_dict,
+        set_optimizer_state_dict,
+    )
 
 
 def _is_torch_distributed_initialized() -> bool:
@@ -181,8 +181,6 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
 
     Only rank 0 accumulates the result; other ranks return ``{}``.
     """
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed state dict gathering requires `torch>=2.7`.")
     options = StateDictOptions(full_state_dict=True, cpu_offload=True)
     full_state_dict = get_model_state_dict(model, options=options)
     if _get_torch_distributed_rank() == 0:
@@ -219,16 +217,12 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
 
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Save optimizer state via DCP."""
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed optimizer saving requires `torch>=2.7`.")
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
 
 
 def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Load optimizer state via DCP."""
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed optimizer loading requires `torch>=2.7`.")
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
     dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
