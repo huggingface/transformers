@@ -43,6 +43,15 @@ _ci_fallback_cache_dir = None
 
 
 def _with_tmpdir_cache_fallback(fn):
+    """Decorator that retries `fn` with a writable tmp cache dir if it raises EROFS.
+
+    In CI, the shared HF cache is read-only. Most models are pre-populated there and
+    work fine. Only downloads of new or updated files fail with EROFS. On such failure,
+    a session-scoped tmp dir is created once (via `tempfile.mkdtemp`, which is atomic
+    and process-safe) and both `HF_HUB_CACHE` and `HF_XET_CACHE` are temporarily
+    redirected to it for the retry, keeping all internal huggingface_hub logic consistent.
+    """
+
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         try:
