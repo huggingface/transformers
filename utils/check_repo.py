@@ -299,6 +299,7 @@ IGNORE_NON_TESTED = (
         "DiffusionGemmaDecoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
+        "Kimi_K25VisionModel",
     ]
 )
 

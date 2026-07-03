@@ -18,7 +18,7 @@ limitations under the License.
 -->
 
 
-*This model was contributed to Hugging Face Transformers on 2026-07-02.*
+*This model was contributed to Hugging Face Transformers on 2026-07-03.*
 
 # KimiK-2.5, KimiK-2.6, KimiK-2.7
 
@@ -78,27 +78,6 @@ generated_text = processor.batch_decode(generated_ids[:, inputs["input_ids"].sha
 print(generated_text)
 
 ```
-## Kimi_K25Config
-
-[[autodoc]] Kimi_K25Config
-
-## Kimi_K25VisionConfig
-
-[[autodoc]] Kimi_K25VisionConfig
-
-## Kimi_K25ForConditionalGeneration
-
-[[autodoc]] Kimi_K25ForConditionalGeneration
-
-## Kimi_K25Model
-
-[[autodoc]] Kimi_K25Model
-    - forward
-
-## Kimi_K25PreTrainedModel
-
-[[autodoc]] Kimi_K25PreTrainedModel
-    - forward
 
 ## Kimi_K25ImageProcessor
 
@@ -107,3 +86,33 @@ print(generated_text)
 ## Kimi_K25Processor
 
 [[autodoc]] Kimi_K25Processor
+
+## Kimi_K25VideoProcessor
+
+[[autodoc]] Kimi_K25VideoProcessor
+
+## Kimi_K25Config
+
+[[autodoc]] Kimi_K25Config
+
+## Kimi_K25VisionConfig
+
+[[autodoc]] Kimi_K25VisionConfig
+
+## Kimi_K25PreTrainedModel
+
+[[autodoc]] Kimi_K25PreTrainedModel
+    - forward
+
+## Kimi_K25VisionModel
+
+[[autodoc]] Kimi_K25VisionModel
+
+## Kimi_K25Model
+
+[[autodoc]] Kimi_K25Model
+    - forward
+
+## Kimi_K25ForConditionalGeneration
+
+[[autodoc]] Kimi_K25ForConditionalGeneration
