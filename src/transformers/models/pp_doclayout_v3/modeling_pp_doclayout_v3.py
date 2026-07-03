@@ -246,6 +246,7 @@ class PPDocLayoutV3PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, PPDocLayoutV3MultiscaleDeformableAttention):
             init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
@@ -277,7 +278,7 @@ class PPDocLayoutV3PreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.decoder.class_embed.weight)
             init.constant_(module.decoder.class_embed.bias, bias)
 
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -285,15 +286,6 @@ class PPDocLayoutV3PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-
-        if isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight.data[module.padding_idx])
 
 
 @dataclass

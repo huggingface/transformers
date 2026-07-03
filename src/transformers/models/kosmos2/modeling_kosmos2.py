@@ -58,6 +58,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if hasattr(self.config, "initializer_factor"):
             factor = self.config.initializer_factor
         elif hasattr(self.config, "vision_config"):
@@ -102,17 +103,11 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             init.normal_(module.embed_tokens.weight, mean=0.0, std=std)
             if module.embed_tokens.padding_idx is not None:
                 init.zeros_(module.embed_tokens.weight[module.embed_tokens.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
         elif isinstance(module, Kosmos2TextSinusoidalPositionalEmbedding):
             emb_weights = module.get_embedding(
                 module.num_positions + module.offset, module.embedding_dim, module.padding_idx
             )
             init.copy_(module.weights, emb_weights)
-
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
 
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int | None = None):

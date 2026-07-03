@@ -439,7 +439,7 @@ class MambaPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        std = self.config.initializer_range
+        super()._init_weights(module)
         if isinstance(module, MambaMixer):
             # S4D real initialization. These are not discretized!
             # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
@@ -463,15 +463,6 @@ class MambaPreTrainedModel(PreTrainedModel):
                 # Having just p *= scale would repeatedly scale it down
                 p = module.out_proj.weight
                 p /= math.sqrt(self.config.num_hidden_layers)
-
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, MambaRMSNorm):
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, std=std)
 
 
 @auto_docstring(

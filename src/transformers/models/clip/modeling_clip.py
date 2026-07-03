@@ -405,6 +405,7 @@ class CLIPPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, CLIPTextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
@@ -451,12 +452,6 @@ class CLIPPreTrainedModel(PreTrainedModel):
                 module.classifier.weight,
                 std=self.config.vision_config.hidden_size**-0.5 * factor,
             )
-
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
 
 
 class CLIPEncoder(nn.Module):

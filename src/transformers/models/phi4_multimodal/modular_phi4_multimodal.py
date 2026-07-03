@@ -346,6 +346,7 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, Phi4MultimodalVisionEmbeddings):
             width = (
                 self.config.hidden_size
@@ -377,9 +378,6 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             init.lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings):

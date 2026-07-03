@@ -479,8 +479,8 @@ class UVDocPreTrainedModel(PPOCRV5ServerDetPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(module)
         """Initialize the weights."""
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, nn.PReLU):
             module.reset_parameters()
 

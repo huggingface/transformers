@@ -381,6 +381,8 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
+
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
             cutoff_factor = 3
@@ -421,10 +423,6 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
             init_weight(module.classifier, stds["final_out"])
         elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
         elif isinstance(module, ModernBertDecoderRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
