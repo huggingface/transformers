@@ -36,7 +36,7 @@ if is_torch_available():
 @require_torchvision
 class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kimi_K25Processor
-    model_id = "moonshotai/Kimi-K2.6"
+    model_id = "RaushanTurganbay/kimi2.7-processor"  # official repo has no fast tokenizer
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
