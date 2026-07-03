@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
+from ..utils.import_utils import requires
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
 
@@ -147,6 +148,11 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         return updated
 
 
+@requires(
+    backends=[
+        "torch",
+    ]
+)
 class DecompressExperts(ConversionOps):
     """
     Dequantize MoE layers when they are in new layout, because they aren't `nn.Module` anymore!
