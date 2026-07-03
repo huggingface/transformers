@@ -39,6 +39,24 @@ if is_torch_available():
     import torch
 
 
+@require_torch
+def test_qwen3_omni_moe_post_process_multimodal_output_keeps_text_batch():
+    class TokenizerStub:
+        def batch_decode(self, generated_ids, skip_special_tokens=True, **kwargs):
+            return [f"decoded-{row.tolist()}" for row in generated_ids]
+
+    processor = Qwen3OmniMoeProcessor.__new__(Qwen3OmniMoeProcessor)
+    processor.tokenizer = TokenizerStub()
+    generated_ids = torch.tensor([[1, 2], [3, 4]])
+    expected = ["decoded-[1, 2]", "decoded-[3, 4]"]
+
+    decoded = processor.post_process_multimodal_output(generated_ids, generation_mode="text")
+    assert decoded == expected
+
+    decoded_from_tuple = processor.post_process_multimodal_output((generated_ids,), generation_mode="text")
+    assert decoded_from_tuple == expected
+
+
 @require_vision
 @require_torch
 @require_torchaudio
