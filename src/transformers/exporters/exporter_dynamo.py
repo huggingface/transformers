@@ -328,12 +328,6 @@ def _reshaped_vision_attention_forward(
             query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(0), position_embeddings).squeeze(0)
             key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(0), position_embeddings).squeeze(0)
 
-        # Normalise back to (seq, heads, head_dim): some encoders' rotary (e.g. Kimi-K2.5) return
-        # cos/sin carrying a leading batch dim, which `apply_rotary_pos_emb_vision` propagates onto
-        # q/k. `-1` keeps this a no-op for the (seq, heads, head_dim) encoders and for GQA k/v.
-        query_states = query_states.reshape(seq_length, -1, self.head_dim)
-        key_states = key_states.reshape(seq_length, -1, self.head_dim)
-
     seg_len = seq_length // num_segments
 
     # (seq, heads, dim) → (n_seg, seg_len, heads, dim) → (n_seg, heads, seg_len, dim)
@@ -356,10 +350,8 @@ def _reshaped_vision_attention_forward(
         enable_gqa=getattr(self, "num_key_value_heads", self.num_heads) != self.num_heads,
     )
 
-    # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim).
-    # `.contiguous()` before the reshape (not after) so it stays a plain view — executorch's
-    # edge-lowering reshape ref cannot copy a non-contiguous (post-transpose) tensor.
-    attn_output = attn_output.transpose(1, 2).contiguous().reshape(seq_length, -1)
+    # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim)
+    attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1).contiguous()
     out_proj = self.proj if hasattr(self, "proj") else self.out_proj
     attn_output = out_proj(attn_output)
 
@@ -389,8 +381,6 @@ def _reshaped_vision_attention_forward(
     "transformers.models.glm_image.modeling_glm_image.GlmImageVisionAttention.forward",
     # Separate `.q` / `.k` / `.v` + single rotary tensor + `.proj`
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniVisionAttention.forward",
-    # Separate `q_proj`/`k_proj`/`v_proj` + `(cos, sin)` rotary + `.proj` (single return)
-    "transformers.models.kimi_k25.modeling_kimi_k25.Kimi_K25VisionAttention.forward",
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
@@ -410,95 +400,6 @@ def _patch_chunked_vision_attention(original):
         return _reshaped_vision_attention_forward(self, *args, returns_tuple=returns_tuple, **kwargs)
 
     return forward
-
-
-# --- Kimi-K2.5 vision per-image `grid_thw.tolist()` loops ────────────────────
-# Kimi's vision encoder has two Python loops over `for t, h, w in grid_thw.tolist():`
-# that `torch.export` can't trace. Both are replaced with a vectorised forward that
-# assumes a uniform grid across the batch (same `(t, h, w)` for every image/video —
-# the same assumption `_reshaped_vision_attention_forward` makes and asserts). The
-# vectorised form is numerically identical to the eager loop for that uniform case.
-
-
-@register_patch(
-    "dynamo", "transformers.models.kimi_k25.modeling_kimi_k25.Kimi_K25VisionPositionEmbeddings.forward"
-)
-def _patch_kimi_vision_position_embeddings(_original):
-    """Export-safe learned 2D position embeddings for Kimi-K2.5 vision.
-
-    Eager loops over `grid_thw.tolist()` and, per image: bicubic-interpolates the learned
-    `(H, W)` table to that image's `(h, w)`, tiles it across `t` frames, and adds a temporal
-    sinusoid when `t > 1`. The `.tolist()`, the `if (h, w) == table` branch, the `if t > 1`
-    branch and the symbolic-size `F.interpolate` are all untraceable.
-
-    With a uniform grid every per-image block is identical, so the table is tiled across images
-    and frames in one shot — driven entirely by shapes and the table itself so that no
-    (data-dependent, unbacked) `grid_thw` value enters the graph (which would break executorch
-    edge-lowering). Export is restricted to images whose `(h, w)` equals the table's own
-    `(H, W)`: same-size bicubic interpolation is exactly the identity, while symbolic-size
-    interpolation is not traceable. `frames` is inferred from the total patch count assuming
-    that constraint; a mismatch trips the shape assertion below.
-    """
-
-    def forward(self, hidden_states, grid_thw):
-        table = self.position_embeddings  # (H, W, dim)
-        spatial = table.flatten(0, 1)  # (H*W, dim)
-        hw = spatial.shape[0]
-        num_images = grid_thw.shape[0]
-        torch_compilable_check(
-            hidden_states.shape[0] % (num_images * hw) == 0,
-            "Kimi-K2.5 vision export expects a uniform grid whose (h, w) matches the "
-            "position-embedding table (pos_emb_height/pos_emb_width); interpolation is not traceable.",
-        )
-        frames = hidden_states.shape[0] // (num_images * hw)  # == t, derived from shapes
-
-        # Spatial table tiled across every frame of every image.
-        pos = spatial.repeat(num_images * frames, 1)  # (total, dim)
-        # Temporal sinusoid: frame i gets time_position_embeddings[i], repeated over the hw
-        # patches and tiled across images. Gated to zero for t == 1 to match eager (which skips
-        # the sinusoid for single-frame images). The gate is derived from the shape-inferred
-        # frame count — a backed symbol — so nothing data-dependent enters the graph.
-        time = self.time_position_embeddings[:frames].expand(frames, hw, -1).reshape(frames * hw, -1)
-        time = time.repeat(num_images, 1)  # (total, dim)
-        pos = pos + time * (pos.new_zeros(()) + frames > 1).to(pos.dtype)
-
-        return hidden_states + pos.to(hidden_states.dtype)
-
-    return forward
-
-
-@register_patch("dynamo", "transformers.models.kimi_k25.modeling_kimi_k25.Kimi_K25VisionModel.temporal_patch_merger")
-def _patch_kimi_temporal_patch_merger(_original):
-    """Export-safe temporal patch merger for Kimi-K2.5 vision.
-
-    Eager loops over `grid_thw.tolist()` and, per clip, reshapes its slice to `(t, h, w)`,
-    groups spatial patches into `merge_kernel_size` blocks, and mean-pools over time. With a
-    uniform grid the whole batch reshapes in one shot. `(h, w)` is taken from the
-    position-embedding table dims (`pos_emb_height`/`width`) — the same no-interpolation
-    constraint the position-embeddings patch enforces — so only shapes/config drive the
-    reshape and no (unbacked) `grid_thw` values enter the graph.
-    """
-
-    def temporal_patch_merger(self, hidden_states, grid_thw):
-        kernel_height, kernel_width = self.merge_kernel_size
-        h_cfg, w_cfg = self.config.pos_emb_height, self.config.pos_emb_width
-        hidden_dim = hidden_states.shape[-1]
-        num_clips = grid_thw.shape[0]
-        new_height, new_width = h_cfg // kernel_height, w_cfg // kernel_width
-        torch_compilable_check(
-            hidden_states.shape[0] % (num_clips * h_cfg * w_cfg) == 0,
-            "Kimi-K2.5 vision export expects a uniform grid whose (h, w) matches the "
-            "position-embedding table (pos_emb_height/pos_emb_width).",
-        )
-        frames = hidden_states.shape[0] // (num_clips * h_cfg * w_cfg)  # == t, from shapes
-
-        reshaped = hidden_states.view(
-            num_clips, frames, new_height, kernel_height, new_width, kernel_width, hidden_dim
-        )
-        reshaped = reshaped.transpose(3, 4).mean(dim=1)  # (num_clips, new_h, new_w, kh, kw, dim)
-        return reshaped.reshape(num_clips * new_height * new_width, kernel_height * kernel_width, hidden_dim)
-
-    return temporal_patch_merger
 
 
 # ── Stage 3: Pytree registration ─────────────────────────────────────────────
