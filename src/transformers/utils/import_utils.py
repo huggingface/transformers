@@ -939,7 +939,7 @@ def is_detectron2_available() -> bool:
 
 @lru_cache
 def is_diffusers_available() -> bool:
-    return _is_package_available("diffusers")
+    return _is_package_available("diffusers")[0]
 
 
 @lru_cache

@@ -26,7 +26,7 @@ from ...generation import (
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...generation.utils import ALL_CACHE_NAMES, GenerateNonBeamOutput
-from ...utils import logging
+from ...utils import is_diffusers_available, logging
 
 
 if TYPE_CHECKING:
@@ -50,7 +50,13 @@ class VibeVoiceGenerateOutput(GenerateDecoderOnlyOutput):
 
 
 class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
-    """Constrains token generation to only valid tokens during audio generation."""
+    """
+    Constrains token generation to only diffusion-related tokens during audio generation, as the role of the
+    language model is to emit:
+    - another audio-diffusion placeholder (which triggers the diffusion head to synthesize the next acoustic latent)
+    - or an EOS token (which signals the end of the audio generation).
+    The actual audio comes from the diffusion head, not from sampling the vocabulary.
+    """
 
     def __init__(self, valid_token_ids: list[int], device: torch.device = None):
         self.valid_token_ids = torch.tensor(valid_token_ids, dtype=torch.long, device=device)
@@ -72,11 +78,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         It extracts VibeVoice-specific parameters for the generation config.
 
         VibeVoice-specific parameters include:
-        - `noise_scheduler`: A noise scheduler instance (required).
-        - `monitor_progress`: A callable to monitor generation progress. If provided, this function can be called to
-            report the progress of the audio generation. The function takes a tensor argument `p` of shape `(n, 2)`,
-            where `n` is the batch size. `p[i, 0]` contains the current generation step for batch item `i`, and `p[i, 1]`
-            contains the maximum generation steps for batch item `i`. No return value is expected.
+        - `noise_scheduler`: A custom noise scheduler instance. Optional: if not provided, a default one is built
+            from `noise_scheduler_class`/`noise_scheduler_config` on the generation config (requires `diffusers`).
+        - `monitor_progress`: Whether to display a progress bar tracking audio generation. Defaults to `False`.
         - `num_diffusion_steps`: Number of diffusion steps to use during generation of each audio chunk.
         """
 
@@ -92,13 +96,20 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         if max_new_tokens is not None:
             generation_config.max_new_tokens = max_new_tokens
 
-        # Fall back to value already set on generation_config (e.g. model.generation_config.noise_scheduler = ...)
+        # Resolve the noise scheduler used to sample audio latents from the diffusion head. Priority:
+        #   1. a `noise_scheduler` instance passed to `generate(...)` (custom scheduler),
+        #   2. an instance already cached on the generation config (e.g. from a previous call),
+        #   3. a default built from `noise_scheduler_class` + `noise_scheduler_config` on the generation config
+        #      (this is what the released checkpoints ship with, and requires `diffusers`).
         if noise_scheduler is None:
             noise_scheduler = getattr(generation_config, "noise_scheduler", None)
         if noise_scheduler is None:
+            noise_scheduler = self._build_default_noise_scheduler(generation_config)
+        if noise_scheduler is None:
             raise ValueError(
-                "VibeVoice generation requires a `noise_scheduler` to be provided, e.g., "
-                "`diffusers.DPMSolverMultistepScheduler(beta_schedule='squaredcos_cap_v2', prediction_type='v_prediction')`."
+                "VibeVoice generation requires a `noise_scheduler`. Either pass one to `generate(...)`, e.g. "
+                "`diffusers.DPMSolverMultistepScheduler(beta_schedule='squaredcos_cap_v2', prediction_type='v_prediction')`, "
+                "or set `noise_scheduler_class` (and optionally `noise_scheduler_config`) on the model's generation config."
             )
         if not (
             hasattr(noise_scheduler, "set_timesteps")
@@ -115,6 +126,32 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         if num_diffusion_steps is not None:
             generation_config.num_diffusion_steps = num_diffusion_steps
         return generation_config, model_kwargs
+
+    @staticmethod
+    def _build_default_noise_scheduler(generation_config: GenerationConfig):
+        scheduler_class_name = getattr(generation_config, "noise_scheduler_class", "DPMSolverMultistepScheduler")
+
+        if not is_diffusers_available():
+            raise ImportError(
+                f"The default VibeVoice noise scheduler (`{scheduler_class_name}`) requires `diffusers`. Install it "
+                "with `pip install diffusers`, or pass a custom `noise_scheduler` instance to `generate(...)`."
+            )
+
+        import diffusers
+
+        try:
+            scheduler_class = getattr(diffusers, scheduler_class_name)
+        except AttributeError:
+            raise ValueError(
+                f"Could not find noise scheduler `{scheduler_class_name}` in `diffusers`. Set `noise_scheduler_class` "
+                "on the generation config to a valid `diffusers` scheduler, or pass a custom `noise_scheduler`."
+            )
+        scheduler_config = getattr(
+            generation_config,
+            "noise_scheduler_config",
+            {"beta_schedule": "squaredcos_cap_v2", "prediction_type": "v_prediction"},
+        )
+        return scheduler_class(**scheduler_config)
 
     def _sample(
         self,
@@ -174,7 +211,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
         # *************** VibeVoice specific ***************
         noise_scheduler = generation_config.noise_scheduler
-        monitor_progress = getattr(generation_config, "monitor_progress", None)
+        monitor_progress = getattr(generation_config, "monitor_progress", False)
         num_diffusion_steps = getattr(generation_config, "num_diffusion_steps", self.config.num_diffusion_steps)
         diffusion_head_device = next(self.model.diffusion_head.parameters()).device
         if do_sample:
@@ -246,22 +283,16 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             generation_config.max_length - initial_length_per_sample,
             torch.full_like(initial_length_per_sample, generation_config.max_length - initial_length),
         )
+        if monitor_progress:
+            progress_bar = logging.tqdm(total=int(max_step_per_sample.max()), desc="Generating audio", unit=" tokens")
+        else:
+            progress_bar = None
         # ============================================
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # *************** VibeVoice specific ***************
-            if monitor_progress is not None:
-                monitor_progress(
-                    torch.stack(
-                        (
-                            torch.full(
-                                (batch_size,), cur_len - initial_length, dtype=torch.long, device=input_ids.device
-                            ),
-                            max_step_per_sample,
-                        ),
-                        dim=1,
-                    )
-                )
+            if progress_bar is not None:
+                progress_bar.update(1)
             # ============================================
 
             if prefill_consumed:
@@ -425,6 +456,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
             del outputs
+
+        # *************** VibeVoice specific ***************
+        if progress_bar is not None:
+            progress_bar.close()
+        # ============================================
 
         if streamer is not None:
             streamer.end()

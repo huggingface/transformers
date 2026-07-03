@@ -60,7 +60,7 @@ The original VibeVoice-1.5B checkpoint is available under the [Microsoft](https:
 
 ### Setup 
 
-A noise scheduler is needed as audio generation relies on a diffusion process. The easiest approach (and as done by the model developers) is to use a noise scheduler from the `diffusers` library as shown in the examples below.
+A noise scheduler is needed as audio generation relies on a diffusion process. The easiest approach (and as done by the model developers) is to use a noise scheduler from the `diffusers` library. By default, the model will create a noise scheduler with `diffusers` internally.
 ```
 pip install diffusers
 pip install soundfile   # for saving audio
@@ -80,8 +80,7 @@ model = AutoModelForTextToWaveform.from_pretrained(model_id)
 
 ```python
 import os
-import diffusers
-from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
+from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
@@ -93,17 +92,10 @@ model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 # Prepare input
 chat_template = [{"role": "0", "content": [{"type": "text", "text": text}]}]
 inputs = processor.apply_chat_template(
-    chat_template,
-    tokenize=True,
-    return_dict=True,
+    chat_template, return_dict=True, tokenize=True,
 ).to(model.device, model.dtype)
 
 # Generate!
-noise_scheduler = diffusers.DPMSolverMultistepScheduler(
-    beta_schedule="squaredcos_cap_v2",
-    prediction_type="v_prediction",
-)
-model.generation_config.noise_scheduler = noise_scheduler
 audio = model.generate(**inputs)
 
 # Save to file
@@ -118,7 +110,6 @@ A voice can be cloned by providing a reference audio alongside the text within t
 
 ```python
 import os
-import diffusers
 from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
 
 model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
@@ -144,24 +135,16 @@ chat_template = [
     }
 ]
 inputs = processor.apply_chat_template(
-    chat_template,
-    tokenize=True,
-    return_dict=True,
+    chat_template, return_dict=True, tokenize=True,
 ).to(model.device, model.dtype)
 
 # Generate!
-noise_scheduler = diffusers.DPMSolverMultistepScheduler(
-    beta_schedule="squaredcos_cap_v2",
-    prediction_type="v_prediction",
-)
-model.generation_config.noise_scheduler = noise_scheduler
 audio = model.generate(**inputs)
 
 # Save to file
 fn = f"{os.path.basename(model_id)}_tts_clone.wav"
 processor.save_audio(audio, fn)
 print(f"Saved output to {fn}")
-
 ```
 
 ### Generating a podcast from a script
@@ -173,14 +156,10 @@ The example below also used the `monitor_progress` option to track the generatio
 ```python
 import os
 import time
-import diffusers
-import torch
-from tqdm import tqdm
-from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
+from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 max_new_tokens = 400  # `None` to ensure full generation
-set_seed(42)  # for deterministic results
 
 # create conversation with an audio for the first time a speaker appears to clone that particular voice
 chat_template = [
@@ -188,12 +167,10 @@ chat_template = [
         "role": "0",
         "content": [
             {
-                "type": "text",
-                "text": "Hello everyone, and welcome to the VibeVoice podcast. I'm your host, Linda, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Thomas here to talk about it with me.",
+                "type": "text", "text": "Hello everyone, and welcome to the VibeVoice podcast. I'm your host, Linda, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Thomas here to talk about it with me.",
             },
             {
-                "type": "audio",
-                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                "type": "audio", "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
             },
         ],
     },
@@ -201,12 +178,10 @@ chat_template = [
         "role": "1",
         "content": [
             {
-                "type": "text",
-                "text": "Thanks so much for having me, Linda. You're absolutely right—this question always brings out some seriously strong feelings.",
+                "type": "text", "text": "Thanks so much for having me, Linda. You're absolutely right—this question always brings out some seriously strong feelings.",
             },
             {
-                "type": "audio",
-                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+                "type": "audio", "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
             },
         ],
     },
@@ -214,8 +189,7 @@ chat_template = [
         "role": "0",
         "content": [
             {
-                "type": "text",
-                "text": "Okay, so let's get right into it. For me, it has to be Michael Jordan. Six trips to the Finals, six championships. That kind of perfection is just incredible.",
+                "type": "text", "text": "Okay, so let's get right into it. For me, it has to be Michael Jordan. Six trips to the Finals, six championships. That kind of perfection is just incredible.",
             },
         ],
     },
@@ -223,8 +197,7 @@ chat_template = [
         "role": "1",
         "content": [
             {
-                "type": "text",
-                "text": "Oh man, the first thing that always pops into my head is that shot against the Cleveland Cavaliers back in '89. Jordan just rises, hangs in the air forever, and just sinks it",
+                "type": "text", "text": "Oh man, the first thing that always pops into my head is that shot against the Cleveland Cavaliers back in '89. Jordan just rises, hangs in the air forever, and just sinks it",
             },
         ],
     },
@@ -235,39 +208,14 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 # prepare inputs
-inputs = processor.apply_chat_template(chat_template, tokenize=True, return_dict=True).to(
-    model.device, model.dtype
-)
+inputs = processor.apply_chat_template(
+    chat_template, return_dict=True, tokenize=True,
+).to(model.device, model.dtype)
 
-# Generate audio with a callback to track progress
-noise_scheduler = diffusers.DPMSolverMultistepScheduler(
-    beta_schedule="squaredcos_cap_v2",
-    prediction_type="v_prediction",
-)
-model.generation_config.noise_scheduler = noise_scheduler
+# Generate audio with a progress bar to track generation
 model.generation_config.max_new_tokens = max_new_tokens
 start_time = time.time()
-completed_samples = set()
-with tqdm(desc="Generating") as pbar:
-
-    def monitor_progress(p_batch):
-        # p_batch format: [current_step, max_step] for each sample
-        active_samples = p_batch[:, 0] < p_batch[:, 1]
-        if active_samples.any():
-            active_progress = p_batch[active_samples]
-            max_active_idx = torch.argmax(active_progress[:, 0])
-            p = active_progress[max_active_idx].detach().cpu()
-        else:
-            p = p_batch[0].detach().cpu()
-
-        pbar.total = int(p[1])
-        pbar.n = int(p[0])
-        pbar.update()
-
-    audio = model.generate(
-        **inputs,
-        monitor_progress=monitor_progress,
-    )
+audio = model.generate(**inputs, monitor_progress=True)
 generation_time = time.time() - start_time
 print(f"Generation time: {generation_time:.2f} seconds")
 
@@ -284,14 +232,10 @@ For batch processing, a list of conversations can be passed to `processor.apply_
 ```python
 import os
 import time
-import diffusers
-import torch
-from tqdm import tqdm
-from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
+from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 max_new_tokens = 400  # `None` to ensure full generation
-set_seed(42)  # for deterministic results
 
 chat_template = [
     [
@@ -299,8 +243,7 @@ chat_template = [
             "role": "0",
             "content": [
                 {
-                    "type": "text",
-                    "text": "Hello everyone, and welcome to the VibeVoice podcast. I'm your host, Linda, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Thomas here to talk about it with me.",
+                    "type": "text", "text": "Hello everyone, and welcome to the VibeVoice podcast. I'm your host, Linda, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Thomas here to talk about it with me.",
                 },
                 {
                     "type": "audio",
@@ -312,30 +255,10 @@ chat_template = [
             "role": "1",
             "content": [
                 {
-                    "type": "text",
-                    "text": "Thanks so much for having me, Linda. You're absolutely right—this question always brings out some seriously strong feelings.",
+                    "type": "text", "text": "Thanks so much for having me, Linda.",
                 },
                 {
-                    "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
-                },
-            ],
-        },
-        {
-            "role": "0",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "Okay, so let's get right into it. For me, it has to be Michael Jordan. Six trips to the Finals, six championships. That kind of perfection is just incredible.",
-                },
-            ],
-        },
-        {
-            "role": "1",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "Oh man, the first thing that always pops into my head is that shot against the Cleveland Cavaliers back in '89. Jordan just rises, hangs in the air forever, and just sinks it",
+                    "type": "audio", "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
                 },
             ],
         },
@@ -345,12 +268,10 @@ chat_template = [
             "role": "0",
             "content": [
                 {
-                    "type": "text",
-                    "text": "Hello and welcome to Planet in Peril. I'm your host, Alice. We're here today to discuss a really sobering new report that looks back at the last ten years of climate change, from 2015 to 2025. It paints a picture not just of steady warming, but of a dangerous acceleration. And to help us unpack this, I'm joined by our expert panel. Welcome Carter, Frank, and Maya.",
+                    "type": "text", "text": "Hello and welcome to Planet in Peril. I'm your host, Alice. We're here today to discuss a really sobering new report that looks back at the last ten years of climate change. I'm joined by our expert panel. Welcome Carter, Frank, and Maya.",
                 },
                 {
-                    "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                    "type": "audio", "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
                 },
             ],
         },
@@ -359,8 +280,7 @@ chat_template = [
             "content": [
                 {"type": "text", "text": "Hi Alice, it's great to be here. I'm Carter."},
                 {
-                    "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Carter_man.wav",
+                    "type": "audio", "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Carter_man.wav",
                 },
             ],
         },
@@ -369,8 +289,7 @@ chat_template = [
             "content": [
                 {"type": "text", "text": "Hello, uh, I'm Frank. Good to be on."},
                 {
-                    "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+                    "type": "audio", "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
                 },
             ],
         },
@@ -379,8 +298,7 @@ chat_template = [
             "content": [
                 {"type": "text", "text": "And I'm Maya. Thanks for having me."},
                 {
-                    "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Maya_woman.wav",
+                    "type": "audio", "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Maya_woman.wav",
                 },
             ],
         },
@@ -393,41 +311,13 @@ model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 # prepare inputs
 inputs = processor.apply_chat_template(
-    chat_template,
-    return_dict=True,
-    tokenize=True,
+    chat_template, return_dict=True, tokenize=True,
 ).to(model.device, model.dtype)
 
-# Generate audio with a callback to track progress
-noise_scheduler = diffusers.DPMSolverMultistepScheduler(
-    beta_schedule="squaredcos_cap_v2",
-    prediction_type="v_prediction",
-)
-model.generation_config.noise_scheduler = noise_scheduler
-if max_new_tokens is not None:
-    model.generation_config.max_new_tokens = max_new_tokens
+# Generate audio with a progress bar to track generation
+model.generation_config.max_new_tokens = max_new_tokens
 start_time = time.time()
-completed_samples = set()
-with tqdm(desc="Generating") as pbar:
-
-    def monitor_progress(p_batch):
-        # p_batch format: [current_step, max_step] for each sample
-        active_samples = p_batch[:, 0] < p_batch[:, 1]
-        if active_samples.any():
-            active_progress = p_batch[active_samples]
-            max_active_idx = torch.argmax(active_progress[:, 0])
-            p = active_progress[max_active_idx].detach().cpu()
-        else:
-            p = p_batch[0].detach().cpu()
-
-        pbar.total = int(p[1])
-        pbar.n = int(p[0])
-        pbar.update()
-
-    audio = model.generate(
-        **inputs,
-        monitor_progress=monitor_progress,
-    )
+audio = model.generate(**inputs, monitor_progress=True)
 generation_time = time.time() - start_time
 print(f"Generation time: {generation_time:.2f} seconds")
 
@@ -439,24 +329,16 @@ print(f"Saved output to {output_dir}")
 
 ### Pipeline usage
 
-VibeVoice can also be loaded as a pipeline:
+VibeVoice can also be loaded as a pipeline. We also show below how the diffusion parameters can be adjusted.
 
 ```python
 import os
-import diffusers
 import soundfile as sf
-from transformers import pipeline, set_seed
+from transformers import pipeline
 
 model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
-set_seed(42)  # for deterministic results
-
-# Load pipeline with noise scheduler
-noise_scheduler = diffusers.DPMSolverMultistepScheduler(
-    beta_schedule="squaredcos_cap_v2",
-    prediction_type="v_prediction",
-)
-pipe = pipeline("text-to-speech", model=model_id, noise_scheduler=noise_scheduler)
+pipe = pipeline("text-to-speech", model=model_id)
 
 # Generate!
 chat_template = [
@@ -465,8 +347,7 @@ chat_template = [
         "content": [
             {"type": "text", "text": text},
             {
-                "type": "audio",
-                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                "type": "audio", "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
             },
         ],
     }
@@ -486,7 +367,6 @@ print(f"Saved output to {fn}")
 VibeVoice can be trained with the loss outputted by the model.
 
 ```python
-import diffusers
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 
@@ -504,12 +384,10 @@ chat_template = [
             "role": "0",
             "content": [
                 {
-                    "type": "text",
-                    "text": "VibeVoice is this novel framework designed for generating expressive, long-form, multi-speaker, conversational audio.",
+                    "type": "text", "text": "VibeVoice is this novel framework designed for generating expressive, long-form, multi-speaker, conversational audio.",
                 },
                 {
-                    "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
+                    "type": "audio", "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
                 },
             ],
         }
@@ -520,8 +398,7 @@ chat_template = [
             "role": "0",
             "content": [
                 {
-                    "type": "text",
-                    "text": "Hello everyone and welcome to the VibeVoice podcast. I'm your host, Alex, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Sam here to talk about it with me. Thanks so much for having me, Alex. And you're absolutely right. This question always brings out some seriously strong feelings. Okay, so let's get right into it. For me, it has to be Michael Jordan. Six trips to the finals, six championships. That kind of perfection is just incredible. Oh man, the first thing that always pops into my head is that shot against the Cleveland Cavaliers back in '89. Jordan just rises, hangs in the air forever, and just sinks it.",
+                    "type": "text", "text": "Hello everyone and welcome to the VibeVoice podcast. I'm your host, Alex, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Sam here to talk about it with me. Thanks so much for having me, Alex. And you're absolutely right. This question always brings out some seriously strong feelings. Okay, so let's get right into it. For me, it has to be Michael Jordan. Six trips to the finals, six championships. That kind of perfection is just incredible. Oh man, the first thing that always pops into my head is that shot against the Cleveland Cavaliers back in '89. Jordan just rises, hangs in the air forever, and just sinks it.",
                 },
                 {
                     "type": "audio",
@@ -537,15 +414,11 @@ inputs = processor.apply_chat_template(
     chat_template,
     tokenize=True,
     return_dict=True,
-    output_labels=True,
+    processor_kwargs={"output_labels": True},
 ).to(model.device, model.dtype)
 
 # Forward pass
-noise_scheduler = diffusers.DPMSolverMultistepScheduler(
-    beta_schedule="squaredcos_cap_v2",
-    prediction_type="v_prediction",
-)
-outputs = model(**inputs, noise_scheduler=noise_scheduler, ddpm_batch_multiplier=2, num_diffusion_steps=2)
+outputs = model(**inputs, ddpm_batch_multiplier=2, num_diffusion_steps=2)
 
 # Compute losses
 lm_loss = outputs.loss
@@ -568,8 +441,6 @@ On an A100 with batch size 4, we observed a 1.9x speed-up between compiled vs. n
 
 ```python
 import time
-
-import diffusers
 import torch
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
@@ -592,23 +463,15 @@ chat_template = [
             "content": [
                 {"type": "text", "text": "VibeVoice is a novel framework for generating expressive audio."},
                 {
-                    "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
+                    "type": "audio", "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
                 },
             ],
         }
     ],
 ] * 4  # batch size 4
 inputs = processor.apply_chat_template(
-    chat_template,
-    tokenize=True,
-    return_dict=True,
+    chat_template, tokenize=True, return_dict=True,
 ).to(model.device, model.dtype)
-
-noise_scheduler = diffusers.DPMSolverMultistepScheduler(
-    beta_schedule="squaredcos_cap_v2",
-    prediction_type="v_prediction",
-)
 
 # Compile the model
 model = torch.compile(model)
@@ -618,10 +481,10 @@ print("Warming up...")
 warmup_start = time.time()
 with torch.no_grad():
     for _ in range(num_warmup):
-        _ = model(**inputs, noise_scheduler=noise_scheduler)
+        _ = model(**inputs)
 torch.cuda.synchronize()
 print(f"Warmup complete in {time.time() - warmup_start:.2f}s.")
-# Warmup complete in 16.41s.
+# Warmup complete in 46.39s
 ```
 
 ## VibeVoiceConfig

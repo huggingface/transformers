@@ -368,8 +368,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         acoustic_loss_mask (`torch.BoolTensor`, *optional*):
             Mask to compute diffusion loss only on specific acoustic tokens.
         noise_scheduler (*optional*):
-            Needed for training to compute noise targets for the diffusion loss,
-            e.g. `diffusers.DPMSolverMultistepScheduler(beta_schedule='squaredcos_cap_v2', prediction_type='v_prediction')`.
+            Needed for training to compute noise targets for the diffusion loss. By default, uses the noise scheduler
+            configuration specified in the model's `generation_config`.
         ddpm_batch_multiplier (`int`, *optional*, defaults to 4):
             For training, number of noise samples to generate per audio token for diffusion loss computation, which can
             help stabilize training.
@@ -396,10 +396,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         diffusion_loss = None
         if acoustic_loss_mask is not None and outputs.audio_features is not None:
             if noise_scheduler is None:
-                raise ValueError(
-                    "`noise_scheduler` from `diffusers.DPMSolverMultistepScheduler` must be provided for diffusion"
-                    "loss computation."
-                )
+                # use helper from VibeVoiceGenerationMixin
+                noise_scheduler = self._build_default_noise_scheduler(self.generation_config)
 
             audio_features = outputs.audio_features
             condition_features = hidden_states[acoustic_loss_mask.cpu()].to(audio_features.device)

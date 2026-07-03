@@ -396,6 +396,7 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
         "beta_schedule": "squaredcos_cap_v2",
         "prediction_type": "v_prediction",
     }
+    vibevoice_model.generation_config._from_model_config = False
 
     logger.info(f"Saving model to {output_dir}")
     vibevoice_model.save_pretrained(output_dir, max_shard_size=max_shard_size)
