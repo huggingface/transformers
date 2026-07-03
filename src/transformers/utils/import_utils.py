@@ -143,6 +143,7 @@ AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
 KERNELS_MIN_VERSION = "0.15.2"
 KERNELS_MAX_VERSION = "0.16.0"
+MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
 
 @lru_cache
@@ -1399,8 +1400,11 @@ def is_matplotlib_available() -> bool:
 
 
 @lru_cache
-def is_mistral_common_available() -> bool:
-    return is_vision_available() and _is_package_available("mistral_common")[0]
+def is_mistral_common_available(min_version: str = MISTRAL_COMMON_MIN_VERSION) -> bool:
+    is_available, mistral_common_version = _is_package_available("mistral_common", return_version=True)
+    return (
+        is_vision_available() and is_available and version.parse(mistral_common_version) >= version.parse(min_version)
+    )
 
 
 @lru_cache

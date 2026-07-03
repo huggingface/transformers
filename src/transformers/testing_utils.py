@@ -72,6 +72,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    MISTRAL_COMMON_MIN_VERSION,
     SAFE_WEIGHTS_INDEX_NAME,
     TRITON_MIN_VERSION,
     WEIGHTS_INDEX_NAME,
@@ -1612,11 +1613,13 @@ def require_serve(test_case):
     return unittest.skipUnless(is_serve_available(), "test requires serving dependencies")(test_case)
 
 
-def require_mistral_common(test_case):
+def require_mistral_common(test_case, min_version: str = MISTRAL_COMMON_MIN_VERSION):
     """
     Decorator marking a test that requires mistral-common. These tests are skipped when mistral-common isn't available.
     """
-    return unittest.skipUnless(is_mistral_common_available(), "test requires mistral-common")(test_case)
+    return unittest.skipUnless(
+        is_mistral_common_available(min_version), f"test requires mistral-common version >= {min_version}"
+    )(test_case)
 
 
 def get_gpu_count():
