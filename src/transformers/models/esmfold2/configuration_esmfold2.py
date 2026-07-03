@@ -43,6 +43,9 @@ class MSAEncoderConfig(PreTrainedConfig):
     num_hidden_layers: int | None = 4
     num_attention_heads: int | None = 8
     head_width: int | None = 32
+    # SwiGLU transition intermediate size; ESMFold2Config fills it as
+    # transition_expansion_ratio * hidden_size when not set.
+    transition_intermediate_size: int | None = None
 
 
 @strict
@@ -90,6 +93,14 @@ class AtomAttentionConfig(PreTrainedConfig):
     n_spatial_rope_pairs_per_axis: int | None = 2
     n_uid_rope_pairs: int | None = 10
     uid_rope_base_frequency: float | None = 10000.0
+    # SwiGLU FFN intermediate size; if not set, expansion_ratio * (atom_hidden_size // 3) * 2
+    # rounded up to a multiple of 256 (hardware-aligned width).
+    ffn_intermediate_size: int | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.ffn_intermediate_size is None:
+            self.ffn_intermediate_size = (self.expansion_ratio * (self.atom_hidden_size // 3) * 2 + 255) // 256 * 256
+        super().__post_init__(**kwargs)
 
 
 @strict
@@ -139,6 +150,20 @@ class DiffusionModuleConfig(PreTrainedConfig):
     token_num_blocks: int | None = 12
     token_num_heads: int | None = 16
     transition_multiplier: int | None = 2
+    atom_expansion_ratio: int | None = 2
+    # SwiGLU intermediate sizes; if not set, atom_ffn = atom_expansion_ratio * (atom_hidden_size // 3) * 2
+    # rounded up to a multiple of 256, and token_transition = transition_multiplier * token_hidden_size.
+    atom_ffn_intermediate_size: int | None = None
+    token_transition_intermediate_size: int | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.atom_ffn_intermediate_size is None:
+            self.atom_ffn_intermediate_size = (
+                (self.atom_expansion_ratio * (self.atom_hidden_size // 3) * 2 + 255) // 256 * 256
+            )
+        if self.token_transition_intermediate_size is None:
+            self.token_transition_intermediate_size = self.transition_multiplier * self.token_hidden_size
+        super().__post_init__(**kwargs)
 
 
 @strict
@@ -202,6 +227,12 @@ class ESMFold2Config(PreTrainedConfig):
         Dimensionality of single (per-residue) representations.
     pairwise_hidden_size (`int`, *optional*, defaults to 256):
         Dimensionality of pair (residue-residue) representations.
+    transition_expansion_ratio (`int`, *optional*, defaults to 4):
+        Expansion ratio for the pair- and MSA-stream SwiGLU transition FFNs (matches the
+        reference ESMFold2 feed-forward blocks).
+    pair_transition_intermediate_size (`int`, *optional*):
+        Hidden size of the pair-stream SwiGLU transitions (folding trunk, LM encoder, parcae
+        coda and MSA encoder). Derived as `transition_expansion_ratio * pairwise_hidden_size` if not set.
     n_relative_residx_bins (`int`, *optional*, defaults to 32):
         Number of bins for relative residue index encoding.
     n_relative_chain_bins (`int`, *optional*, defaults to 2):
@@ -274,6 +305,8 @@ class ESMFold2Config(PreTrainedConfig):
     type: str | None = "release"
     hidden_size: int | None = 384
     pairwise_hidden_size: int | None = 256
+    transition_expansion_ratio: int | None = 4
+    pair_transition_intermediate_size: int | None = None
     n_relative_residx_bins: int | None = 32
     n_relative_chain_bins: int | None = 2
     num_loops: int | None = 10
@@ -314,6 +347,15 @@ class ESMFold2Config(PreTrainedConfig):
         self.parcae = _init_nested(ParcaeConfig, self.parcae)
         self.lm_encoder = _init_nested(LMEncoderConfig, self.lm_encoder)
         self.esmc_config = _init_nested(ESMCConfig, self.esmc_config)
+
+        # Pair- and MSA-stream SwiGLU transitions size their FFN as transition_expansion_ratio times
+        # the respective stream width (matches the reference ESMFold2 feed-forward blocks).
+        if self.pair_transition_intermediate_size is None:
+            self.pair_transition_intermediate_size = self.transition_expansion_ratio * self.pairwise_hidden_size
+        if self.msa_encoder.transition_intermediate_size is None:
+            self.msa_encoder.transition_intermediate_size = (
+                self.transition_expansion_ratio * self.msa_encoder.hidden_size
+            )
 
         super().__post_init__(**kwargs)
 
