@@ -22,7 +22,6 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -43,7 +42,13 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_position_ids
+from ...vision_utils import (
+    get_vision_bilinear_indices_and_weights,
+    get_vision_cu_seqlens,
+    get_vision_frame_index,
+    get_vision_position_ids,
+    get_vision_temporal_merge_index,
+)
 from ..auto import AutoModel
 from .configuration_kimi_k25 import Kimi_K25Config, Kimi_K25VisionConfig
 
@@ -108,6 +113,9 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(
             torch.zeros(config.pos_emb_height, config.pos_emb_width, config.hidden_size)
         )
+        # Named to match the shared bilinear-interpolation helper's convention (as in paddleocr_vl),
+        # so the exporter's input preparer discovers it and precomputes the bilinear indices.
+        self.num_grid_per_side = config.pos_emb_height
 
         # Time-axis pos_emb are an additive sinusoidal table, i.e. add pos to hiddens rather than rotating
         time_position_embeddings = self.compute_pos_embed()
@@ -120,35 +128,19 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         pos_embed = torch.cat([freqs.sin(), freqs.cos()], dim=1)  # (M, D)
         return pos_embed.unsqueeze(1)
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
-        pos_embs = []
-        for t, h, w in grid_thw.tolist():
-            if t > self.num_frames:
-                raise ValueError(
-                    f"Got an input with {t} frames. Number of frames should be less than config.pos_emb_time=({self.num_frames})"
-                )
-
-            # Apply learned positions on h/w grids with optional interpolation for bigger images
-            if (h, w) == self.position_embeddings.shape[:-1]:
-                position_embeddings = self.position_embeddings.flatten(0, 1)
-            else:
-                position_embeddings = self.position_embeddings.permute(2, 0, 1).unsqueeze(0)
-                position_embeddings = F.interpolate(
-                    position_embeddings,
-                    size=(h, w),
-                    mode="bicubic",
-                )
-                position_embeddings = position_embeddings.squeeze(0).permute(1, 2, 0).flatten(0, 1)
-
-            position_embeddings = position_embeddings.unsqueeze(0)  # Add T axis
-            # Add sinusoidal positions for time grid if processing videos
-            if t > 1:
-                position_embeddings = position_embeddings.repeat(t, 1, 1)
-                position_embeddings = position_embeddings + self.time_position_embeddings[0:t]
-
-            pos_embs.append(position_embeddings.flatten(0, 1))
-        hidden_states = hidden_states + torch.cat(pos_embs, dim=0).to(hidden_states.dtype)
-        return hidden_states
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+        # Spatial: bilinearly resample the learned grid to each image's (h, w) as a table gather.
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1, kwargs=kwargs
+        )
+        pos = (self.position_embeddings.flatten(0, 1)[bilinear_indices] * bilinear_weights[:, :, None]).sum(0)
+        # Temporal: add a per-frame sinusoid. Row 0 of the table is a zero pad, so single-frame
+        # clips (whose frame index is 0) get no temporal term.
+        time_table = torch.cat(
+            [self.time_position_embeddings.new_zeros(1, self.dim), self.time_position_embeddings.squeeze(1)]
+        )
+        pos = pos + time_table[get_vision_frame_index(grid_thw, kwargs=kwargs)]
+        return hidden_states + pos.to(hidden_states.dtype)
 
 
 class Kimi_K25VisionPatchEmbed(nn.Module):
@@ -160,9 +152,9 @@ class Kimi_K25VisionPatchEmbed(nn.Module):
         self.proj = nn.Conv2d(3, config.hidden_size, kernel_size=patch_size, stride=patch_size)
         self.pos_emb = Kimi_K25VisionPositionEmbeddings(config)
 
-    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         hidden_states = self.proj(pixel_values).view(pixel_values.size(0), -1)
-        hidden_states = self.pos_emb(hidden_states, grid_thw)
+        hidden_states = self.pos_emb(hidden_states, grid_thw, **kwargs)
         return hidden_states
 
 
@@ -463,51 +455,6 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=1e-05)
         self.post_init()
 
-    def temporal_patch_merger(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.Tensor,
-    ) -> list[torch.Tensor]:
-        r"""
-        Merges temporal frames by spatially pooling patch embeddings across time.
-
-        For each video clip defined by `grid_thw`, the method reshapes the flat patch sequence
-        into a `(T, H, W)` grid, averages over the temporal dimension, then rearranges spatial
-        patches into groups of `kernel_height * kernel_width` — matching the merged-token layout
-        expected by downstream layers.
-
-        Args:
-            hidden_states (`torch.Tensor` of shape `(total_patches, hidden_dim)`):
-                Concatenated patch embeddings for all clips in the batch. `total_patches` equals
-                the sum of `t * h * w` over all entries in `grid_thw`.
-            grid_thw (`torch.Tensor` of shape `(batch_size, 3)`):
-                Temporal and spatial grid dimensions for each clip, where each row is
-                `(num_frames, grid_height, grid_width)`. `grid_height` and `grid_width` must be
-                divisible by `kernel_height` and `kernel_width` respectively.
-
-        Returns:
-            `torch.Tensor` of shape `(total_merged_patches, kernel_height * kernel_width, hidden_dim)`:
-                Temporally pooled patch embeddings. `total_merged_patches` equals the sum of
-                `(h // kernel_height) * (w // kernel_width)` over all clips.
-        """
-        hidden_dim = hidden_states.size(-1)
-        kernel_height, kernel_width = self.merge_kernel_size
-
-        outputs = []
-        running_length = 0
-        for t, h, w in grid_thw.tolist():
-            # Get the current sequence
-            seq = hidden_states[running_length : running_length + t * h * w]
-            # Reshape along self.merge_kernel_size and concat to the last dimension
-            new_height, new_width = h // kernel_height, w // kernel_width
-            reshaped_seq = seq.view(t, new_height, kernel_height, new_width, kernel_width, hidden_dim)
-            reshaped_seq = reshaped_seq.transpose(2, 3).mean(dim=0)  # temporal pooling
-            padded_seq = reshaped_seq.reshape(new_height * new_width, kernel_height * kernel_width, -1)
-            outputs.append(padded_seq)
-            running_length += t * h * w
-
-        return torch.cat(outputs, dim=0)
-
     @capture_outputs
     @auto_docstring
     def forward(
@@ -520,20 +467,13 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        hidden_states = self.patch_embed(pixel_values, grid_thw=grid_thw)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
+        hidden_states = self.patch_embed(pixel_values, grid_thw=grid_thw, **kwargs)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1, kwargs=kwargs)
         position_ids = position_ids.transpose(0, 1).flip(0)[:, None, :]
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        lengths = torch.cat(
-            (
-                torch.zeros(1, dtype=grid_thw.dtype, device=grid_thw.device),
-                grid_thw[:, 0] * grid_thw[:, 1] * grid_thw[:, 2],
-            )
-        )
-
-        max_seqlen = lengths.max()
-        cu_seqlens = lengths.cumsum(dim=0, dtype=torch.int32)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, merge_temporal=True, kwargs=kwargs)
+        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
 
         for block in self.layers:
             hidden_states = block(
@@ -545,7 +485,8 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             )
 
         hidden_states = self.final_layernorm(hidden_states)
-        pooled_hidden_states = self.temporal_patch_merger(hidden_states, grid_thw)
+        merge_index = get_vision_temporal_merge_index(grid_thw, *self.merge_kernel_size, kwargs=kwargs)
+        pooled_hidden_states = hidden_states[merge_index].mean(dim=1)
 
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,

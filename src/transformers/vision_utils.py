@@ -32,22 +32,94 @@ import torch
 import torch.nn.functional as F
 
 
-def get_vision_cu_seqlens(grid_thw: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+def get_vision_cu_seqlens(
+    grid_thw: torch.Tensor, merge_temporal: bool = False, kwargs: dict | None = None
+) -> torch.Tensor:
     """Get cumulative sequence lengths from vision grid info, or pop from `kwargs` if precomputed.
 
     Args:
         grid_thw: `(num_images_or_videos, 3)` — temporal, height, width per entry.
+        merge_temporal: when `False` (default), each frame is its own attention segment (`h * w`
+            per frame, `t` segments per entry — the qwen2_vl / glm4v convention). When `True`,
+            the whole clip is a single segment (`t * h * w`), i.e. attention spans all frames
+            jointly (the kimi_k25 convention).
         kwargs: optional caller kwargs — if it contains `"cu_seqlens"` it is popped and returned.
 
     Returns:
-        `cu_seqlens`: `(total_patches + 1,)` int32 cumulative sequence boundaries.
+        `cu_seqlens`: `(num_segments + 1,)` int32 cumulative sequence boundaries.
     """
     if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
         return cu_seqlens
-    cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-        dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
-    )
-    return F.pad(cu_seqlens, (1, 0), value=0)
+    dtype = grid_thw.dtype if torch.jit.is_tracing() else torch.int32
+    if merge_temporal:
+        seqlens = grid_thw[:, 0] * grid_thw[:, 1] * grid_thw[:, 2]
+    else:
+        seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0])
+    return F.pad(seqlens.cumsum(dim=0, dtype=dtype), (1, 0), value=0)
+
+
+def get_vision_frame_index(grid_thw: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+    """Per-patch index into a temporal embedding table whose row `0` is a zero pad, or pop
+    `"frame_index"` from `kwargs`.
+
+    Single-frame clips (`t == 1`, i.e. images) map every patch to `0` so they receive no temporal
+    term; frame `f` of a multi-frame clip maps to `f + 1` (→ table row `f + 1`, the real embedding
+    for frame `f`). Gathering the padded table by this index replaces a per-clip `if t > 1` loop.
+
+    Args:
+        grid_thw: `(num_images_or_videos, 3)` — temporal, height, width per entry.
+        kwargs: optional caller kwargs — if it contains `"frame_index"` it is popped and returned.
+
+    Returns:
+        `frame_index`: `(total_patches,)` long — padded-table row for each patch.
+    """
+    if kwargs is not None and (frame_index := kwargs.pop("frame_index", None)) is not None:
+        return frame_index
+    device = grid_thw.device
+    parts = []
+    for t, h, w in grid_thw.tolist():
+        t, h, w = int(t), int(h), int(w)
+        # t == 1 → [0] (padded row 0 = zero, no temporal term); t > 1 → [1..t] → time_emb[0..t-1]
+        frames = torch.arange(t, device=device) + int(t > 1)
+        parts.append(frames.repeat_interleave(h * w))
+    return torch.cat(parts)
+
+
+def get_vision_temporal_merge_index(
+    grid_thw: torch.Tensor, kernel_height: int, kernel_width: int, kwargs: dict | None = None
+) -> torch.Tensor:
+    """Gather index that regroups a flat patch sequence into `(total_merged, t, kernel_height *
+    kernel_width)` for temporal-pooling spatial mergers, or pop `"temporal_merge_index"` from `kwargs`.
+
+    Row `m` collects, for merged token `m`, the `t` frames × `kernel_height*kernel_width` source
+    patches that pool into it; the caller means over the frame axis and keeps the kernel axis as
+    features. Replaces the encoder's per-clip `grid_thw.tolist()` merge loop with a single gather.
+
+    Args:
+        grid_thw: `(num_images_or_videos, 3)`.
+        kernel_height, kernel_width: spatial merge block size.
+        kwargs: optional caller kwargs — if it contains `"temporal_merge_index"` it is popped and returned.
+
+    Returns:
+        `temporal_merge_index`: `(total_merged, t, kernel_height*kernel_width)` long gather index,
+        where `total_merged = sum((h // kernel_height) * (w // kernel_width))` and `t` is the
+        (uniform) frame count.
+    """
+    if kwargs is not None and (index := kwargs.pop("temporal_merge_index", None)) is not None:
+        return index
+    device = grid_thw.device
+    running, rows = 0, []
+    for t, h, w in grid_thw.tolist():
+        t, h, w = int(t), int(h), int(w)
+        new_h, new_w = h // kernel_height, w // kernel_width
+        base = torch.arange(running, running + t * h * w, device=device).view(
+            t, new_h, kernel_height, new_w, kernel_width
+        )
+        # (t, new_h, new_w, kh, kw) → (new_h*new_w, t, kh*kw): frame axis kept for the caller's mean.
+        base = base.permute(1, 3, 0, 2, 4).reshape(new_h * new_w, t, kernel_height * kernel_width)
+        rows.append(base)
+        running += t * h * w
+    return torch.cat(rows, dim=0)
 
 
 def get_vision_position_ids(

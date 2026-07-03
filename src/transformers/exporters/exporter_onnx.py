@@ -927,8 +927,33 @@ def _fix_ir_topk_sorted(graph_like: onnx_ir.Graph) -> None:
             ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
 
 
+def _fix_ir_gathernd_int64_indices(graph_like: onnx_ir.Graph) -> None:
+    """Cast int32 `GatherND` index inputs to int64.
+
+    The ONNX `GatherND` spec requires int64 indices, but int32 index tensors reach it when a model
+    advanced-indexes with a helper that returns int32 (e.g. `get_vision_bilinear_indices_and_weights`'s
+    corner indices — int32 is fine for `nn.Embedding`/`Gather` but ORT rejects the int32 `GatherND`
+    graph as invalid). `Gather` accepts either width, so only `GatherND` needs the cast.
+    """
+    for ir_node in list(graph_like.all_nodes()):
+        if ir_node.op_type != "GatherND":
+            continue
+        indices = ir_node.inputs[1]
+        if indices is None or indices.dtype != onnx_ir.DataType.INT32:
+            continue
+        cast = onnx_ir.Node(
+            "",
+            "Cast",
+            inputs=[indices],
+            attributes=[onnx_ir.Attr("to", onnx_ir.AttributeType.INT, onnx_ir.DataType.INT64)],
+        )
+        graph_like.insert_before(ir_node, cast)
+        ir_node.replace_input_with(1, cast.outputs[0])
+
+
 _IR_FIXES = [
     _fix_ir_topk_sorted,
+    _fix_ir_gathernd_int64_indices,
 ]
 
 
