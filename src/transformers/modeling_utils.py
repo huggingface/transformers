@@ -5105,12 +5105,6 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             continue
         elif device.type == "neuron":
             # Skip warmup on Neuron (AWS Trainium/Inferentia): it provides no benefit and currently OOMs.
-            # Neuron keeps no CUDA-style reuse pool for a single upfront allocation to fill
-            # (torch_neuronx.memory_stats() reports reserved_bytes == 0 even while memory is allocated, and
-            # pre-warming gives no measured speedup), so the warmup's premise does not apply. And torch.neuron
-            # exposes no mem_get_info, so the cuda/xpu clamp above cannot bound the allocation; with the
-            # tp_plan="auto" byte-count over-estimate the unclamped torch.empty tries to allocate ~the whole
-            # model on a single core -> NRT OOM.
             continue
         # We divide by 2 here as we allocate in fp16
         _ = torch.empty(int(byte_count // 2), dtype=torch.float16, device=device, requires_grad=False)
