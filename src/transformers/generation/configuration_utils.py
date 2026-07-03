@@ -18,7 +18,7 @@ import json
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from .. import __version__
@@ -1211,6 +1211,7 @@ class GenerationConfig(PushToHubMixin):
                 # Some of our dataclasses have a custom `to_dict()` method, and we prefer it
                 if hasattr(obj, "to_dict"):
                     return obj.to_dict()
+                return {field.name: convert_dataclass_to_dict(getattr(obj, field.name)) for field in fields(obj)}
             else:
                 return obj
 
@@ -1843,12 +1844,3 @@ class ContinuousBatchingConfig:
     def fallback_max_blocks_per_request(self) -> int:
         """Fallback if no user-hint is given and decode path is available."""
         return 32
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        if self.varlen_compile_config is not None:
-            output["varlen_compile_config"] = self.varlen_compile_config.to_dict()
-        if self.decode_compile_config is not None:
-            output["decode_compile_config"] = self.decode_compile_config.to_dict()
-        return output
