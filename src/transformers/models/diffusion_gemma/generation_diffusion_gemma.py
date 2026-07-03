@@ -218,7 +218,7 @@ class DiffusionGemmaGenerationConfig(GenerationConfig):
     def _get_default_generation_params() -> dict[str, Any]:
         """
         Defaults to be applied when unset by the model OR by the user, such that `model.generate()` works with minimal
-        paremeterization.
+        parameterization.
 
         Pretrained checkpoints should set these as appropriate in their `generation_config.json`, to establish
         a better default baseline. Be mindful that tests may use use these values.
@@ -253,7 +253,7 @@ class DiffusionGemmaGenerationOutput(ModelOutput):
             The generated sequences, including the prompt if `input_ids` was provided to the `generate` method.
         tokens_per_forward (`torch.LongTensor` of shape (`batch_size`)):
             The number of tokens per forward in this `generate` call, for each member in the batch. This is often
-            used as a secundary evaluation metric for text diffusion models.
+            used as a secondary evaluation metric for text diffusion models.
         past_key_values (`Cache`):
             The cache used for generation. It can be passed to subsequent calls to `generate` to speed up generation,
             in multi-turn sessions.
@@ -1146,8 +1146,8 @@ class DiffusionGemmaGenerationMixin:
         need_new_cache = (
             cache_to_check is None
             or cache_to_check.offloading != offload_cache
-            or cache_to_check.max_batch_size != batch_size
-            or cache_to_check.max_cache_len < max_length
+            or cache_to_check.batch_size != batch_size
+            or cache_to_check.get_max_length() < max_length
         )
 
         if need_new_cache:

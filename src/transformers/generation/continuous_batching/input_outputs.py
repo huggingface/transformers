@@ -111,7 +111,7 @@ class ContinuousBatchingIOs:
         # Setup other accumulators
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
-        self.graphs: CudaGraphBuffer = CudaGraphBuffer(continuous_batching_config.max_cached_graphs)
+        self.graphs: CudaGraphBuffer = CudaGraphBuffer()
         self._read_trash_index = cache.read_trash_index
         self._write_trash_index = cache.write_trash_index
         # Setup static tensors and compute stream
@@ -137,7 +137,7 @@ class ContinuousBatchingIOs:
         # Pin memory on CPU only when an accelerator is available, to speed up H2D transfers
         pin_memory = self.device.type == "cpu" and len(get_available_devices()) > 1
 
-        # Small inputs are allocated as slices in a larget tensor aligned to 128 bytes (32 * 4b). This reduces the
+        # Small inputs are allocated as slices in a larger tensor aligned to 128 bytes (32 * 4b). This reduces the
         # reduces fragmentation, so it lowers the number of D2H transfers and speeds up transfers.
         bulk_lines = self.static_inputs + logit_processor.tensors_required
         bulk_columns = aligned_divide(max_batch_tokens + 1, 1, 32)
@@ -546,13 +546,12 @@ class ContinuousBatchingIOs:
         # Keys for varlen path
         return (self.num_q_tokens, self.max_kv_read, *self.max_seqlen_k.values())
 
-    def get_graph(self) -> torch.cuda.CUDAGraph | None:
+    def get_graph(self, prefix: str = "") -> torch.cuda.CUDAGraph | None:
         key = self._get_graph_key()
         graph = self.graphs.get_graph(key)
         # If this point is reached, it means the next step will be a new graph capture
         if graph is None:
-            self.graphs.plan_for_new_graph()
-            logger.info(f"Creating graph for {key = }")
+            logger.info(f"{prefix}Creating graph for {key = }")
         return graph
 
     def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
@@ -614,16 +613,16 @@ class ContinuousBatchingAsyncIOs:
     between the two batches, which means twice as more VRAM is used for static input tensors and CUDA graph. If your GPU
     is large enough or you want to generate long sequences, this is a good trade-off to make.
 
-    Asynchronous batching works by creating two pairs of host - device inputs and ouputs:
+    Asynchronous batching works by creating two pairs of host - device inputs and outputs:
 
                                     inputs
                       ┌──────────┐ ────────► ┌────────────┐
-    IO pair object:   │ Host IOs │           │ Device IOs │       (for a CUDA sytem, Host = CPU and Device = GPU)
+    IO pair object:   │ Host IOs │           │ Device IOs │       (for a CUDA system, Host = CPU and Device = GPU)
                       └──────────┘ ◄──────── └────────────┘
                                     outputs
 
     Each pair is separate from the other. This means that each pairs has its own CUDA graphs set, because CUDA graphs
-    need to have static adresses for input tensors. To have a unique set of CUDA graph, we would need to copy the input
+    need to have static addresses for input tensors. To have a unique set of CUDA graph, we would need to copy the input
     tensors to a third device-side buffer. This could limit the memory cost of CUDA graphs but would slow down the
     forward pass.
     But the CUDA streams orchestrating the transfer from host to device (H2D) and device to host (D2H) are the same for
@@ -781,7 +780,8 @@ class ContinuousBatchingAsyncIOs:
         return self.io_pairs[self.current_pair].device_io.output_ids
 
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
-        return self.io_pairs[self.current_pair].device_io.get_graph()
+        prefix = f"(IO {self.current_pair})"
+        return self.io_pairs[self.current_pair].device_io.get_graph(prefix=prefix)
 
     def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
         self.io_pairs[self.current_pair].device_io.set_graph(graph)
