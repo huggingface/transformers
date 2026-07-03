@@ -71,8 +71,7 @@ pip install soundfile   # for saving audio
 ```python
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
-model_id = "bezzam/VibeVoice-1.5B-hf"
-# model_id = "bezzam/VibeVoice-7B-hf"
+model_id = "bezzam/VibeVoice-1.5B-hf"  # "bezzam/VibeVoice-7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id)
 ```
