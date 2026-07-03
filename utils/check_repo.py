@@ -299,6 +299,8 @@ IGNORE_NON_TESTED = (
         "DiffusionGemmaDecoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
+        "HunYuanVLTextModel",
+        "HunYuanVLVisionTransformer",
     ]
 )
 

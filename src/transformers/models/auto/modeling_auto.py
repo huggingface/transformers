@@ -239,6 +239,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("hunyuan_v1_dense", "HunYuanDenseV1Model"),
         ("hunyuan_v1_moe", "HunYuanMoEV1Model"),
         ("hunyuan_vl", "HunYuanVLModel"),
+        ("hunyuan_vl_text", "HunYuanVLTextModel"),
+        ("hunyuan_vl_vision", "HunYuanVLVisionTransformer"),
         ("hy_v3", "HYV3Model"),
         ("hyperclovax", "HyperCLOVAXModel"),
         ("ibert", "IBertModel"),

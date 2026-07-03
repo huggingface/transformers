@@ -647,12 +647,12 @@ class HunYuanVLVisionPatchMerger(nn.Module):
         begin = (
             self.image_begin.reshape(1, 1, -1)
             .expand(batch_size, 1, hidden_states.shape[-1])
-            .to(dtype, non_blocking=True)
+            .to(device=hidden_states.device, dtype=dtype, non_blocking=True)
         )
         end = (
             self.image_end.reshape(1, 1, -1)
             .expand(batch_size, 1, hidden_states.shape[-1])
-            .to(dtype, non_blocking=True)
+            .to(device=hidden_states.device, dtype=dtype, non_blocking=True)
         )
         hidden_states = torch.cat([begin, hidden_states, end], dim=1)
 
@@ -1451,11 +1451,11 @@ __all__ = [
     "HunYuanVLConfig",
     "HunYuanVLVisionConfig",
     "HunYuanVLTextConfig",
-    "HunYuanVLImageProcessorKwargs",
     "HunYuanVLImageProcessor",
     "HunYuanVLImageProcessorPil",
     "HunYuanVLPreTrainedModel",
     "HunYuanVLModel",
     "HunYuanVLTextModel",
+    "HunYuanVLVisionTransformer",
     "HunYuanVLForConditionalGeneration",
 ]

@@ -241,4 +241,4 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         return resized_height // patch_size, resized_width // patch_size
 
 
-__all__ = ["HunYuanVLImageProcessorKwargs", "HunYuanVLImageProcessor"]
+__all__ = ["HunYuanVLImageProcessor"]

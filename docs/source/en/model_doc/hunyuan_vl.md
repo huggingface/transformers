@@ -97,18 +97,6 @@ output = processor.decode(generated_ids_trimmed, skip_special_tokens=True)
 print(output)
 ```
 
-## HunYuanVLConfig
-
-[[autodoc]] HunYuanVLConfig
-
-## HunYuanVLVisionConfig
-
-[[autodoc]] HunYuanVLVisionConfig
-
-## HunYuanVLTextConfig
-
-[[autodoc]] HunYuanVLTextConfig
-
 ## HunYuanVLProcessor
 
 [[autodoc]] HunYuanVLProcessor
@@ -126,16 +114,32 @@ print(output)
 the multimodal base model without the language modeling head, while `HunYuanVLTextModel` exposes the lower-level text
 backbone.
 
-## HunYuanVLModel
+## HunYuanVLConfig
 
-[[autodoc]] HunYuanVLModel
-    - forward
-    - get_image_features
+[[autodoc]] HunYuanVLConfig
+
+## HunYuanVLVisionConfig
+
+[[autodoc]] HunYuanVLVisionConfig
+
+## HunYuanVLTextConfig
+
+[[autodoc]] HunYuanVLTextConfig
+
+## HunYuanVLVisionTransformer
+
+[[autodoc]] HunYuanVLVisionTransformer
 
 ## HunYuanVLTextModel
 
 [[autodoc]] HunYuanVLTextModel
     - forward
+
+## HunYuanVLModel
+
+[[autodoc]] HunYuanVLModel
+    - forward
+    - get_image_features
 
 ## HunYuanVLForConditionalGeneration
 
