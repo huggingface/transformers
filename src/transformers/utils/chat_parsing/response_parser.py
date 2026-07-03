@@ -59,6 +59,13 @@ class ResponseParser:
 
     def __init__(self, response_template: dict | ResponseTemplate, prefix: str | None = None):
         self._spec = load_response_template(response_template)
+        if prefix is None:
+            raise ValueError(
+                "`ResponseParser`/`parse_response` requires `prefix` (the chat prompt sent to the model before "
+                "generation), because chat templates often pre-write part of the assistant message (e.g. an "
+                "opening `<think>` tag) that the parser must see to parse the output correctly. If the generation "
+                'already contains the complete message, pass `prefix=""` to opt out explicitly.'
+            )
         self._buffer: str = ""
         self._pos: int = 0
         self._output: dict[str, Any] = dict(self._spec.defaults)
