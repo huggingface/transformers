@@ -259,9 +259,9 @@ class Param2MoEModelTest(CausalLMModelTest, unittest.TestCase):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(
-                _test_tp_generation_quantized_param2moe_impl
-            )(tmp_dir, model_class, max_new_tokens)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_param2moe_impl)(
+                tmp_dir, model_class, max_new_tokens
+            )
 
 
 @slow
