@@ -20,37 +20,32 @@
 
 import math
 from collections.abc import Callable
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
+from ...modeling_layers import (
+    GenericForSequenceClassification,
+    GenericForTokenClassification,
+    GradientCheckpointingLayer,
+)
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
-from ...utils.generic import is_flash_attention_requested
-from .configuration_AXK2 import AXK2Config
-from typing import Optional
-
-from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
-from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
-from ...masking_utils import create_causal_mask
-from ...modeling_layers import (
-    GradientCheckpointingLayer)
-from ...modeling_outputs import (
-    BaseModelOutputWithPast, CausalLMOutputWithPast)
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...utils import auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...integrations import (
-    use_experts_implementation)
+from .configuration_AXK2 import AXK2Config
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -647,6 +642,16 @@ class AXK2Attention(nn.Module):
             )
             index_mask.scatter_(-1, topk_indices.clamp(0, total_kv_len - 1), 0.0)
             index_mask = index_mask.unsqueeze(1)
+            if attention_mask is None:
+                # SDPA passes no explicit mask (relies on is_causal), but the forced-eager DSA
+                # path needs one, else short prompts (seq < index_topk -> all-zero index_mask)
+                # attend bidirectionally. The current `seq_length` queries are the LAST
+                # `seq_length` positions of the kv cache, so derive absolute positions from
+                # total_kv_len (correct for prefill AND incremental decode; no cache_position needed).
+                k_pos = torch.arange(total_kv_len, device=hidden_states.device)
+                q_pos = k_pos[total_kv_len - seq_length :]
+                causal = k_pos[None, None, None, :] > q_pos[None, None, :, None]
+                index_mask = index_mask.masked_fill(causal, torch.finfo(query_states.dtype).min)
             attention_mask = index_mask if attention_mask is None else index_mask + attention_mask
 
         use_flash = self.indexer is None and is_flash_attention_requested(self.config)
@@ -936,4 +941,10 @@ class AXK2ForTokenClassification(GenericForTokenClassification, AXK2PreTrainedMo
     pass
 
 
-__all__ = ["AXK2PreTrainedModel", "AXK2Model", "AXK2ForCausalLM", "AXK2ForSequenceClassification", "AXK2ForTokenClassification"]
+__all__ = [
+    "AXK2PreTrainedModel",
+    "AXK2Model",
+    "AXK2ForCausalLM",
+    "AXK2ForSequenceClassification",
+    "AXK2ForTokenClassification",
+]

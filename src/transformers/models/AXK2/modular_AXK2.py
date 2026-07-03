@@ -448,6 +448,16 @@ class AXK2Attention(nn.Module):
             )
             index_mask.scatter_(-1, topk_indices.clamp(0, total_kv_len - 1), 0.0)
             index_mask = index_mask.unsqueeze(1)
+            if attention_mask is None:
+                # SDPA passes no explicit mask (relies on is_causal), but the forced-eager DSA
+                # path needs one, else short prompts (seq < index_topk -> all-zero index_mask)
+                # attend bidirectionally. The current `seq_length` queries are the LAST
+                # `seq_length` positions of the kv cache, so derive absolute positions from
+                # total_kv_len (correct for prefill AND incremental decode; no cache_position needed).
+                k_pos = torch.arange(total_kv_len, device=hidden_states.device)
+                q_pos = k_pos[total_kv_len - seq_length:]
+                causal = k_pos[None, None, None, :] > q_pos[None, None, :, None]
+                index_mask = index_mask.masked_fill(causal, torch.finfo(query_states.dtype).min)
             attention_mask = index_mask if attention_mask is None else index_mask + attention_mask
 
         use_flash = self.indexer is None and is_flash_attention_requested(self.config)
