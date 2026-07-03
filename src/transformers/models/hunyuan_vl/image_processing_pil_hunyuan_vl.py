@@ -29,12 +29,8 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
-
-
-if is_torchvision_available():
-    import torchvision.transforms as transforms
 
 
 # Adapted from transformers.models.hunyuan_vl.image_processing_hunyuan_vl.HunYuanVLImageProcessorKwargs
@@ -185,24 +181,20 @@ class HunYuanVLImageProcessorPil(PilBackend):
                     max_pixels=size.longest_edge,
                 )
                 # Intentionally do not pass `resample`: the baseline implementation
-                # calls `image.resize((width, height))` directly.
+                # calls `image.resize((width, height))` directly. FIXME raushan
                 pil_image = pil_image.resize((resized_width, resized_height))
             else:
                 resized_height, resized_width = height, width
 
+            image = np.array(pil_image)
+            if image.ndim == 3:
+                image = np.transpose(image, (2, 0, 1))
+
+            image = image.astype(np.float32)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
             if do_normalize:
-                image = transforms.Compose(
-                    [
-                        transforms.ToTensor(),
-                        transforms.Normalize(image_mean, image_std),
-                    ]
-                )(pil_image).numpy()
-            else:
-                image = np.array(pil_image)
-                if image.ndim == 3:
-                    image = np.transpose(image, (2, 0, 1))
-                if do_rescale:
-                    image = self.rescale(image, rescale_factor)
+                image = self.normalize(image, image_mean, image_std)
 
             patches = np.expand_dims(image, axis=0)
             if patches.ndim == 4:

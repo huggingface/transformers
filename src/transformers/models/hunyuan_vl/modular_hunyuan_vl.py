@@ -409,24 +409,20 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
                     max_pixels=size.longest_edge,
                 )
                 # Intentionally do not pass `resample`: the baseline implementation
-                # calls `image.resize((width, height))` directly.
+                # calls `image.resize((width, height))` directly. FIXME raushan
                 pil_image = pil_image.resize((resized_width, resized_height))
             else:
                 resized_height, resized_width = height, width
 
+            image = np.array(pil_image)
+            if image.ndim == 3:
+                image = np.transpose(image, (2, 0, 1))
+
+            image = image.astype(np.float32)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
             if do_normalize:
-                image = transforms.Compose(
-                    [
-                        transforms.ToTensor(),
-                        transforms.Normalize(image_mean, image_std),
-                    ]
-                )(pil_image).numpy()
-            else:
-                image = np.array(pil_image)
-                if image.ndim == 3:
-                    image = np.transpose(image, (2, 0, 1))
-                if do_rescale:
-                    image = self.rescale(image, rescale_factor)
+                image = self.normalize(image, image_mean, image_std)
 
             patches = np.expand_dims(image, axis=0)
             if patches.ndim == 4:
