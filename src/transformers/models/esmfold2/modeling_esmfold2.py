@@ -121,42 +121,30 @@ class ESMFold2FourierEmbedding(nn.Module):
 
 
 class ESMFold2SwiGLU(nn.Module):
-    """ESMFold2SwiGLU with packed w12 and output w3."""
+    """SwiGLU feed-forward with a packed w12 (fused gate+up) projection and output w3.
+
+    ``intermediate_size`` is supplied by the caller and registered on the config, so every
+    ESMFold2 SwiGLU feed-forward is this one module regardless of how its width is derived.
+    """
 
     def __init__(
         self,
         in_features: int,
-        hidden_features: int,
+        intermediate_size: int,
         out_features: int | None = None,
-        bias: bool = True,
+        bias: bool = False,
     ) -> None:
         super().__init__()
         out_features = out_features or in_features
-        self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=bias)
-        self.w3 = nn.Linear(hidden_features, out_features, bias=bias)
-        self.hidden_features = hidden_features
+        self.w12 = nn.Linear(in_features, 2 * intermediate_size, bias=bias)
+        self.w3 = nn.Linear(intermediate_size, out_features, bias=bias)
+        self.intermediate_size = intermediate_size
 
     def forward(self, x: Tensor) -> Tensor:
         gate_up = self.w12(x)
-        gate, up = gate_up.split(self.hidden_features, dim=-1)
+        gate, up = gate_up.split(self.intermediate_size, dim=-1)
         hidden = F.silu(gate) * up
         return self.w3(hidden)
-
-
-class ESMFold2SwiGLUMLP(ESMFold2SwiGLU):
-    """ESMFold2SwiGLU MLP with packed weights, no bias."""
-
-    def __init__(self, d_model: int, expansion_ratio: int = 4, bias: bool = False) -> None:
-        hidden = expansion_ratio * d_model
-        super().__init__(in_features=d_model, hidden_features=hidden, out_features=d_model, bias=bias)
-
-
-class ESMFold2SwiGLUFFN(ESMFold2SwiGLU):
-    """ESMFold2SwiGLU FFN with rounded hidden size for hardware alignment."""
-
-    def __init__(self, d_model: int, expansion_ratio: int = 2) -> None:
-        hidden_size = ((expansion_ratio * (d_model // 3) * 2) + 255) // 256 * 256
-        super().__init__(in_features=d_model, hidden_features=hidden_size, out_features=d_model, bias=False)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -228,25 +216,38 @@ def _resolve_atom_config(config: ESMFold2Config, structure_prediction: bool):
 
     The atom transformer is the same architecture in two places: the inputs
     embedder (``structure_prediction=False``) and the diffusion module
-    (``structure_prediction=True``). Its I/O dims and block/head counts come
-    from the call-site sub-config; the window, expansion ratio and 3D-RoPE
-    settings always come from ``config.inputs.atom_encoder`` — the diffusion
-    module reused those (its atom encoder was built with the same window/RoPE and
-    a fixed ``expansion_ratio=2``, which is ``AtomAttentionConfig``'s default).
+    (``structure_prediction=True``). Its I/O dims, block/head counts and FFN width
+    come from the call-site sub-config; the window and 3D-RoPE settings always come
+    from ``config.inputs.atom_encoder`` — the diffusion module reused those (its atom
+    encoder was built with the same window/RoPE).
 
     Every module in the atom stack (attention/block/transformer/encoder/decoder)
     takes only ``(config, structure_prediction)`` and derives its own dims from
     this, so no scalar dims are threaded between them.
 
-    Returns ``(d_atom, d_token, n_blocks, n_heads, swa)`` where ``swa`` is the
-    ``AtomAttentionConfig`` carrying ``swa_window_size`` / ``expansion_ratio`` /
-    the RoPE settings.
+    Returns ``(d_atom, d_token, n_blocks, n_heads, swa, ffn_intermediate_size)`` where ``swa``
+    is the ``AtomAttentionConfig`` carrying ``swa_window_size`` / the RoPE settings and
+    ``ffn_intermediate_size`` is the SwiGLU FFN width for this call site's atom stack.
     """
     swa = config.inputs.atom_encoder
     if structure_prediction:
         dm = config.structure_head.diffusion_module
-        return dm.atom_hidden_size, dm.token_hidden_size, dm.atom_num_blocks, dm.atom_num_heads, swa
-    return swa.atom_hidden_size, swa.token_hidden_size, swa.n_blocks, swa.n_heads, swa
+        return (
+            dm.atom_hidden_size,
+            dm.token_hidden_size,
+            dm.atom_num_blocks,
+            dm.atom_num_heads,
+            swa,
+            dm.atom_ffn_intermediate_size,
+        )
+    return (
+        swa.atom_hidden_size,
+        swa.token_hidden_size,
+        swa.n_blocks,
+        swa.n_heads,
+        swa,
+        swa.ffn_intermediate_size,
+    )
 
 
 def _swa_window_mask_function(rank: Tensor, valid: Tensor, half_window: int) -> Callable:
@@ -278,7 +279,7 @@ class ESMFold2SWA3DRoPEAttention(nn.Module):
 
     def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
-        d_model, _d_token, _n_blocks, n_heads, swa = _resolve_atom_config(config, structure_prediction)
+        d_model, _d_token, _n_blocks, n_heads, swa, _ffn = _resolve_atom_config(config, structure_prediction)
         self.config = config
         self.n_heads = n_heads
         self.head_dim = d_model // n_heads
@@ -362,12 +363,14 @@ class ESMFold2SWAAtomBlock(nn.Module):
 
     def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
-        d_atom, _d_token, _n_blocks, _n_heads, swa = _resolve_atom_config(config, structure_prediction)
+        d_atom, _d_token, _n_blocks, _n_heads, _swa, ffn_intermediate_size = _resolve_atom_config(
+            config, structure_prediction
+        )
         # adaln-Zero gate; zero-init lives in ESMFold2PreTrainedModel._init_weights.
         self.adaln_linear = nn.Linear(d_atom, 6 * d_atom, bias=False)
 
         self.attn = ESMFold2SWA3DRoPEAttention(config, structure_prediction)
-        self.ffn = ESMFold2SwiGLUFFN(d_atom, swa.expansion_ratio)
+        self.ffn = ESMFold2SwiGLU(d_atom, ffn_intermediate_size, d_atom, bias=False)
 
     def forward(self, x: Tensor, atom_cond: Tensor, attention_params: tuple) -> Tensor:
         modulation = self.adaln_linear(F.silu(atom_cond))
@@ -397,7 +400,7 @@ class ESMFold2RotaryEmbedding3D(nn.Module):
 
     def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
-        d_atom, _d_token, _n_blocks, n_heads, swa = _resolve_atom_config(config, structure_prediction)
+        d_atom, _d_token, _n_blocks, n_heads, swa, _ffn = _resolve_atom_config(config, structure_prediction)
         self.head_dim = d_atom // n_heads
         self.n_spatial_per_axis = swa.n_spatial_rope_pairs_per_axis
         self.n_uid_pairs = swa.n_uid_rope_pairs
@@ -437,7 +440,7 @@ class ESMFold2SWAAtomTransformer(nn.Module):
 
     def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
-        _d_atom, _d_token, n_blocks, _n_heads, swa = _resolve_atom_config(config, structure_prediction)
+        _d_atom, _d_token, n_blocks, _n_heads, swa, _ffn = _resolve_atom_config(config, structure_prediction)
         self.swa_window_size = swa.swa_window_size
         self.rotary_emb = ESMFold2RotaryEmbedding3D(config, structure_prediction)
 
@@ -494,7 +497,7 @@ class ESMFold2AtomEncoder(nn.Module):
 
     def __init__(self, config: ESMFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
-        d_atom, d_token, _n_blocks, _n_heads, _swa = _resolve_atom_config(config, structure_prediction)
+        d_atom, d_token, _n_blocks, _n_heads, _swa, _ffn = _resolve_atom_config(config, structure_prediction)
         self.d_atom = d_atom
         self.d_token = d_token
         self.structure_prediction = structure_prediction
@@ -638,7 +641,7 @@ class ESMFold2AtomDecoder(nn.Module):
 
     def __init__(self, config: ESMFold2Config) -> None:
         super().__init__()
-        d_atom, d_token, _n_blocks, _n_heads, _swa = _resolve_atom_config(config, structure_prediction=True)
+        d_atom, d_token, _n_blocks, _n_heads, _swa, _ffn = _resolve_atom_config(config, structure_prediction=True)
         self.token_to_atom_linear = nn.Linear(d_token, d_atom, bias=False)
 
         self.atom_transformer = ESMFold2SWAAtomTransformer(config, structure_prediction=True)
@@ -766,18 +769,17 @@ class ESMFold2ConditionedTransitionBlock(nn.Module):
     def __init__(
         self,
         d_model: int,
+        intermediate_size: int,
         d_cond: int | None = None,
-        transition_multiplier: int = 2,
     ) -> None:
         super().__init__()
         d_cond = d_cond or d_model
-        hidden = transition_multiplier * d_model
 
         self.adaln = ESMFold2AdaptiveLayerNorm(d_model, d_cond, eps=1e-5)
         # adaln-Zero gate (weight 0, bias -2); init in ESMFold2PreTrainedModel._init_weights.
         self.output_gate = nn.Linear(d_cond, d_model, bias=True)
 
-        self.ffn = ESMFold2SwiGLU(d_model, hidden, d_model, bias=False)
+        self.ffn = ESMFold2SwiGLU(d_model, intermediate_size, d_model, bias=False)
 
     def forward(self, token_acts: Tensor, single_repr: Tensor) -> Tensor:
         x = self.adaln(token_acts, single_repr)
@@ -796,7 +798,7 @@ class ESMFold2DiffusionTransformer(nn.Module):
         num_heads = dm.token_num_heads
         num_blocks = dm.token_num_blocks
         d_cond = dm.token_hidden_size
-        transition_multiplier = dm.transition_multiplier
+        transition_intermediate_size = dm.token_transition_intermediate_size
 
         self.attn_blocks = nn.ModuleList(
             [
@@ -813,8 +815,8 @@ class ESMFold2DiffusionTransformer(nn.Module):
             [
                 ESMFold2ConditionedTransitionBlock(
                     d_model=d_model,
+                    intermediate_size=transition_intermediate_size,
                     d_cond=d_cond,
-                    transition_multiplier=transition_multiplier,
                 )
                 for _ in range(num_blocks)
             ]
@@ -1528,10 +1530,10 @@ class ESMFold2TriangleMultiplicativeUpdate(nn.Module):
 class ESMFold2Transition(nn.Module):
     """LayerNorm + ESMFold2SwiGLU feed-forward residual block, chunked along the token axis."""
 
-    def __init__(self, d_model: int, expansion_ratio: int = 4) -> None:
+    def __init__(self, d_model: int, intermediate_size: int) -> None:
         super().__init__()
         self.norm = ESMFold2LayerNorm(d_model)
-        self.ffn = ESMFold2SwiGLUMLP(d_model, expansion_ratio=expansion_ratio, bias=False)
+        self.ffn = ESMFold2SwiGLU(d_model, intermediate_size, d_model, bias=False)
         # Default chunked; set_chunk_size(None) disables.
         self._chunk_size: int | None = _DEFAULT_CHUNK_SIZE
 
@@ -1552,11 +1554,11 @@ class ESMFold2Transition(nn.Module):
 class ESMFold2PairUpdateBlock(nn.Module):
     """tri_mul_out, tri_mul_in, pair_transition."""
 
-    def __init__(self, d_pair: int = 256, expansion_ratio: int = 4) -> None:
+    def __init__(self, d_pair: int, intermediate_size: int) -> None:
         super().__init__()
         self.tri_mul_out = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=True)
         self.tri_mul_in = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=False)
-        self.pair_transition = ESMFold2Transition(d_pair, expansion_ratio=expansion_ratio)
+        self.pair_transition = ESMFold2Transition(d_pair, intermediate_size)
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self.tri_mul_out.set_chunk_size(chunk_size)
@@ -1574,10 +1576,10 @@ class ESMFold2PairUpdateBlock(nn.Module):
 class ESMFold2FoldingTrunk(nn.Module):
     """ModuleList of PairUpdateBlocks."""
 
-    def __init__(self, n_layers: int = 24, d_pair: int = 256, expansion_ratio: int = 4) -> None:
+    def __init__(self, n_layers: int, d_pair: int, intermediate_size: int) -> None:
         super().__init__()
         self.blocks = nn.ModuleList(
-            [ESMFold2PairUpdateBlock(d_pair=d_pair, expansion_ratio=expansion_ratio) for _ in range(n_layers)]
+            [ESMFold2PairUpdateBlock(d_pair=d_pair, intermediate_size=intermediate_size) for _ in range(n_layers)]
         )
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
@@ -1820,7 +1822,9 @@ class ESMFold2ConfidenceHead(nn.Module):
         self.row_attention_pooling = ESMFold2RowAttentionPooling(d_pair=d_pair, d_single=d_single)
 
         pf = ch.folding_trunk
-        self.folding_trunk = ESMFold2FoldingTrunk(n_layers=pf.n_layers, d_pair=d_pair, expansion_ratio=4)
+        self.folding_trunk = ESMFold2FoldingTrunk(
+            n_layers=pf.n_layers, d_pair=d_pair, intermediate_size=config.pair_transition_intermediate_size
+        )
 
         # Heads.
         self.plddt_ln = ESMFold2LayerNorm(d_single)
@@ -2280,10 +2284,14 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         self.esmc = AutoModel.from_config(config.esmc_config)
 
         pf = config.folding_trunk
-        self.folding_trunk = ESMFold2FoldingTrunk(n_layers=pf.n_layers, d_pair=d_pair, expansion_ratio=4)
+        self.folding_trunk = ESMFold2FoldingTrunk(
+            n_layers=pf.n_layers, d_pair=d_pair, intermediate_size=config.pair_transition_intermediate_size
+        )
         if config.lm_encoder.enabled:
             self.lm_encoder: ESMFold2FoldingTrunk | None = ESMFold2FoldingTrunk(
-                n_layers=config.lm_encoder.n_layers, d_pair=d_pair, expansion_ratio=4
+                n_layers=config.lm_encoder.n_layers,
+                d_pair=d_pair,
+                intermediate_size=config.pair_transition_intermediate_size,
             )
         else:
             self.lm_encoder = None
@@ -2296,7 +2304,9 @@ class ESMFold2Model(ESMFold2PreTrainedModel):
         self.parcae_b_cont = nn.Parameter(torch.empty(d_pair, d_pair))
         self.parcae_readout = nn.Linear(d_pair, d_pair, bias=False)
         self.parcae_coda = ESMFold2FoldingTrunk(
-            n_layers=config.parcae.num_coda_layers, d_pair=d_pair, expansion_ratio=4
+            n_layers=config.parcae.num_coda_layers,
+            d_pair=d_pair,
+            intermediate_size=config.pair_transition_intermediate_size,
         )
 
         # Heads --------------------------------------------------------------
@@ -2695,10 +2705,10 @@ class ESMFold2MSAEncoderBlock(nn.Module):
             self.msa_pair_weighted_averaging = ESMFold2MSAPairWeightedAveraging(
                 d_msa, d_pair, n_heads_msa, msa_head_width
             )
-            self.msa_transition = ESMFold2Transition(d_msa, expansion_ratio=4)
+            self.msa_transition = ESMFold2Transition(d_msa, me.transition_intermediate_size)
         self.tri_mul_out = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=True)
         self.tri_mul_in = ESMFold2TriangleMultiplicativeUpdate(dim=d_pair, outgoing=False)
-        self.pair_transition = ESMFold2Transition(d_pair, expansion_ratio=4)
+        self.pair_transition = ESMFold2Transition(d_pair, config.pair_transition_intermediate_size)
 
     def set_chunk_size(self, chunk_size: int | None) -> None:
         self.outer_product_mean.set_chunk_size(chunk_size)
