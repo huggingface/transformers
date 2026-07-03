@@ -243,8 +243,7 @@ def apply_fully_sharded_data_parallel(
     # Used by generation code to detect FSDP and enable synced_gpus.
     model._is_fsdp_managed_module = True
 
-    if tie_word_embeddings and hasattr(model, "tie_weights"):
-        model.tie_weights()
+    #NOTE(3outeille): No need to tie the word embeddings here, it will be done _finalize_model_loading in modeling_utils.py
 
     return model
 
