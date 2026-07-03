@@ -44,7 +44,6 @@ NUM_EPOCHS=1
 MAX_SEQ_LENGTH=1024
 BATCH_SIZE=4
 GRAD_ACCUM_STEPS=8
-export COMPILE=${COMPILE:-1}
 
 LORA_R=32
 LORA_ALPHA=16
@@ -64,7 +63,6 @@ echo "  Effective batch: $(( BATCH_SIZE * GRAD_ACCUM_STEPS * DP_SIZE ))"
 echo "  Max seq len:     $MAX_SEQ_LENGTH"
 echo "  LoRA r:          $LORA_R"
 echo "  LoRA alpha:      $LORA_ALPHA"
-echo "  torch.compile:   $COMPILE"
 echo "  Output dir:      $OUTPUT_DIR"
 echo "=========================================="
 
@@ -80,7 +78,6 @@ torchrun --nproc_per_node="${NUM_PROC}" \
     --pad_to_multiple_of $MAX_SEQ_LENGTH \
     --per_device_train_batch_size $BATCH_SIZE \
     --gradient_accumulation_steps $GRAD_ACCUM_STEPS \
-    --loss_type nll \
     --torch_compile \
     --eos_token '<|im_end|>' \
     --eval_strategy no \
@@ -89,7 +86,6 @@ torchrun --nproc_per_node="${NUM_PROC}" \
     --warmup_steps 100 \
     --weight_decay 0.01 \
     --max_grad_norm 1.0 \
-    --trust_remote_code \
     --use_peft true \
     --lora_r $LORA_R \
     --lora_alpha $LORA_ALPHA \

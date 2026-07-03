@@ -58,25 +58,12 @@ def main(script_args, training_args, model_args):
         config=config,
         revision=model_args.model_revision,
         trust_remote_code=True,
-        # attn_implementation=model_args.attn_implementation,
         torch_dtype=dtype,
         low_cpu_mem_usage=True,
         **kwargs,
     )
 
     peft_config = get_peft_config(model_args)
-    # if peft_config is not None:
-    #     model = get_peft_model(model, peft_config)
-
-    # model.enable_input_require_grads()
-    # model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
-    # model.config.use_cache = False
-
-    # if int(os.environ.get("COMPILE", "0")):
-    #     print("Compiling model")
-    #     model = torch.compile(model, backend="neuron")
-
-    # model.train()
 
     dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
 
@@ -95,7 +82,4 @@ def main(script_args, training_args, model_args):
 if __name__ == "__main__":
     parser = TrlParser((ScriptArguments, SFTConfig, ModelConfig))
     script_args, training_args, model_args, _ = parser.parse_args_and_config(return_remaining_strings=True)
-    if training_args.max_steps < 0:
-        print("max_steps not set, defaulting to 100 for profiling")
-        training_args.max_steps = 100
     main(script_args, training_args, model_args)
