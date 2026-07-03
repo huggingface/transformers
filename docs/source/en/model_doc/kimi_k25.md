@@ -35,10 +35,13 @@ This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanT
 The offical checkpoints are [moonshotai/Kimi-K2.5](https://huggingface.co/moonshotai/Kimi-K2.5), [moonshotai/Kimi-K2.6](https://huggingface.co/moonshotai/Kimi-K2.6) and [moonshotai/Kimi-K2.7-Code](https://huggingface.co/moonshotai/Kimi-K2.7-Code).
 
 
+## Usage examples
+
+<Tip warning={true}>
+
 Note that the repositories don't yet have the correct fast tokenizer uploaded. You can get the converted processor and tokenizer from [RaushanTurganbay/kimi2.7-processor](https://huggingface.co/RaushanTurganbay/kimi2.7-processor)
 
-
-## Usage examples
+</Tip> 
 
 ```python
 import os
