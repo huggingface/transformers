@@ -16,8 +16,6 @@
 import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
-from torch._tensor import Tensor
 
 import numpy as np
 import torch
@@ -26,6 +24,7 @@ from huggingface_hub.dataclasses import strict
 from PIL import Image
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -47,7 +46,6 @@ from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     HunYuanDenseV1Model,
     HunYuanDenseV1PreTrainedModel,
     HunYuanDenseV1RotaryEmbedding,
-    apply_rotary_pos_emb,
     eager_attention_forward,
     repeat_kv,  # noqa: F401  - re-exported for downstream tooling
     rotate_half,
@@ -485,7 +483,7 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
                     merge_size,
                     patch_size,
                 )
-                
+
                 patches = patches.transpose(0, 1, 4, 5, 7, 8, 3, 2, 6, 9)
                 flatten_patches = patches.reshape(
                     batch_size * grid_t * grid_h * grid_w,
@@ -785,6 +783,17 @@ class HunYuanVLPreTrainedModel(HunYuanDenseV1PreTrainedModel):
         "attentions": HunYuanVLDenseV1Attention,
     }
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        if isinstance(module, HunYuanVLVisionPatchMerger):
+            embed_std = module.config.text_hidden_size**-0.5
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
+            init.normal_(module.image_begin, mean=0.0, std=embed_std)
+            init.normal_(module.image_end, mean=0.0, std=embed_std)
+            init.normal_(module.image_sep, mean=0.0, std=embed_std)
+
 
 class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
     """
@@ -813,6 +822,26 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
 
         self.post_init()
 
+    def _build_image_attention_mask(
+        self, grid_thw: torch.LongTensor, seq_len: int, dtype: torch.dtype, device: torch.device
+    ) -> torch.Tensor | None:
+        split_sizes = grid_thw.prod(dim=-1).tolist()
+        if sum(split_sizes) != seq_len:
+            raise ValueError(
+                "Image grid sizes do not match the embedded vision sequence length: "
+                f"sum(grid_thw.prod(-1))={sum(split_sizes)}, seq_len={seq_len}."
+            )
+        if len(split_sizes) <= 1:
+            return None
+
+        attention_mask = torch.full((seq_len, seq_len), torch.finfo(dtype).min, dtype=dtype, device=device)
+        start = 0
+        for split_size in split_sizes:
+            end = start + split_size
+            attention_mask[start:end, start:end] = 0
+            start = end
+        return attention_mask[None, None, :, :]
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -829,8 +858,11 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
             The temporal, height and width dimensions for each image. Each row contains `[t, h, w]` patch counts.
         """
         hidden_states = self.embeddings(pixel_values, grid_thw)
+        attention_mask = self._build_image_attention_mask(
+            grid_thw, hidden_states.shape[1], hidden_states.dtype, hidden_states.device
+        )
         for layer in self.layers:
-            hidden_states = layer(hidden_states, attention_mask=None, **kwargs)
+            hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
 
         split_sizes = grid_thw.prod(dim=-1).tolist()
         split_items = torch.split(hidden_states, split_sizes, dim=1)
@@ -1191,8 +1223,11 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if position_ids is None:
+            rope_input_ids = input_ids
+            if rope_input_ids is None and mm_token_type_ids is not None:
+                rope_input_ids = torch.zeros_like(mm_token_type_ids)
             position_ids = self.compute_mrope_position_ids(
-                input_ids=input_ids,
+                input_ids=rope_input_ids,
                 image_grid_thw=image_grid_thw,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
@@ -1362,6 +1397,23 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
+
+        position_ids = model_inputs.get("position_ids")
+        if position_ids is not None and position_ids.dim() == 3:
+            rope_parameters = self.config.text_config.rope_parameters or {}
+            num_mrope_axes = len(rope_parameters.get("mrope_section", []))
+            if num_mrope_axes and position_ids.shape[0] != num_mrope_axes:
+                batch_size_source = model_inputs.get("input_ids")
+                if batch_size_source is None:
+                    batch_size_source = model_inputs.get("inputs_embeds")
+                if batch_size_source is None:
+                    batch_size_source = attention_mask
+                batch_size = batch_size_source.shape[0]
+                if position_ids.shape[0] % num_mrope_axes == 0 and position_ids.shape[1] != batch_size:
+                    expand_size = position_ids.shape[0] // num_mrope_axes
+                    position_ids = position_ids.view(expand_size, num_mrope_axes, *position_ids.shape[1:])
+                    position_ids = position_ids.permute(1, 0, 2, 3).reshape(num_mrope_axes, -1, position_ids.shape[-1])
+                    model_inputs["position_ids"] = position_ids
 
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
