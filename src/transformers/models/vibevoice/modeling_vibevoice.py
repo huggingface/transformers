@@ -357,7 +357,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         acoustic_loss_mask: torch.BoolTensor | None = None,
         noise_scheduler: object | None = None,
         ddpm_batch_multiplier: int = 4,
-        num_diffusion_steps: int | None = None,
+        num_diffusion_steps: int = 10,
         **kwargs,
     ) -> tuple | VibeVoiceCausalLMOutputWithPast:
         r"""
@@ -373,8 +373,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         ddpm_batch_multiplier (`int`, *optional*, defaults to 4):
             For training, number of noise samples to generate per audio token for diffusion loss computation, which can
             help stabilize training.
-        num_diffusion_steps (`int`, *optional*, defaults to config.num_diffusion_steps):
-            For training, the number of diffusion steps to use.
+        num_diffusion_steps (`int`, *optional*, defaults to 10):
+            For training, the number of diffusion steps to use. Defaults to 10 if not provided.
         """
 
         outputs = self.model(
@@ -411,8 +411,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
                 device=audio_features.device,
                 dtype=audio_features.dtype,
             )
-            if num_diffusion_steps is None:
-                num_diffusion_steps = self.config.num_diffusion_steps
             timesteps = torch.multinomial(
                 torch.ones(num_diffusion_steps),
                 audio_len * ddpm_batch_multiplier,

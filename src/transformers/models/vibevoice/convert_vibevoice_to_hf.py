@@ -391,6 +391,7 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
         vibevoice_model.generation_config.max_new_tokens = 40500
     vibevoice_model.generation_config.do_sample = False
     vibevoice_model.generation_config.guidance_scale = 1.3
+    vibevoice_model.generation_config.num_diffusion_steps = 10
     vibevoice_model.generation_config.noise_scheduler_class = "DPMSolverMultistepScheduler"
     vibevoice_model.generation_config.noise_scheduler_config = {
         "beta_schedule": "squaredcos_cap_v2",

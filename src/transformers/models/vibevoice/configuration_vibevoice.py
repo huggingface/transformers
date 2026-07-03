@@ -39,8 +39,6 @@ class VibeVoiceConfig(PreTrainedConfig):
         Number of layers in the diffusion head.
     frequency_embedding_size (`int`, *optional*, defaults to 256):
         The size of the sinusoidal frequency embedding for timestep encoding in the diffusion head.
-    num_diffusion_steps (`int`, *optional*, defaults to 10):
-        The number of diffusion steps used during inference.
 
     ```python
     >>> from transformers import VibeVoiceForConditionalGeneration, VibeVoiceConfig
@@ -86,7 +84,6 @@ class VibeVoiceConfig(PreTrainedConfig):
     rms_norm_eps: float = 1e-5
     hidden_act: str = "silu"
     frequency_embedding_size: int = 256
-    num_diffusion_steps: int = 10
     mlp_bias: bool = False
 
     def __post_init__(self, **kwargs):
