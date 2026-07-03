@@ -260,6 +260,42 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         expected_shape = (batch_size, seq_length, config.hidden_size)
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
+    def test_train_mode_without_return_last_states(self):
+        # Regression test for #47013: in train mode with `return_last_states=False`, the mLSTM backend
+        # returned a bare tensor that `xLSTMLayer.forward` then unpacked along the batch dimension.
+        config = self.model_tester.get_config()
+        config.mode = "train"
+        config.return_last_states = False
+
+        model = xLSTMModel(config)
+        model.to(torch_device)
+        model.train()
+
+        # batch_size=2 used to trip the internal shape check, every other batch size failed to unpack
+        seq_length = config.chunk_size
+        for batch_size in (2, 3):
+            input_ids = ids_tensor([batch_size, seq_length], config.vocab_size)
+            outputs = model(input_ids)
+            self.assertEqual(outputs.last_hidden_state.shape, (batch_size, seq_length, config.hidden_size))
+
+        outputs.last_hidden_state.sum().backward()
+
+    def test_train_with_padding_mode_forward(self):
+        # The padded chunkwise kernels cannot compute last states, so there is nothing to fill a cache
+        # with; the forward pass must fall back to `use_cache=False` instead of crashing.
+        config = self.model_tester.get_config()
+        config.mode = "train_with_padding"
+        config.return_last_states = False
+
+        model = xLSTMModel(config)
+        model.to(torch_device)
+        model.train()
+
+        input_ids = ids_tensor([2, config.chunk_size], config.vocab_size)
+        outputs = model(input_ids)
+        self.assertEqual(outputs.last_hidden_state.shape, (2, config.chunk_size, config.hidden_size))
+        self.assertIsNone(outputs.cache_params)
+
     @unittest.skip("This model doesn't support beam search with cache, as the cache cannot be reordered")
     def test_beam_search_generate(self):
         pass
