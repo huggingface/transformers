@@ -4112,6 +4112,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             max_memory (`Dict`, *optional*):
                 A dictionary device identifier to maximum memory if using `device_map`. Will default to the maximum memory available for each
                 GPU and the available CPU RAM if unset.
+            distributed_config ([`~transformers.distributed.configuration_utils.DistributedConfig`], *optional*):
+                Configuration for native distributed loading with tensor parallelism or FSDP2. Pass
+                `DistributedConfig(tp_size=N)` for tensor parallelism, or
+                `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
+                process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
             tp_plan (`Optional[Union[dict, str]]`, *optional*):
                 A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Use `tp_plan="auto"` to
                 use the predefined plan based on the model. If it's a dict, then it should match between module names and desired layout.
@@ -4263,7 +4268,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if distributed_config.tp_size > 1:
                 if distributed_config.tp_plan is None:
                     distributed_config.tp_plan = "auto"
-                device_map, device_mesh, tp_size = initialize_tensor_parallelism(
+                device_map, device_mesh = initialize_tensor_parallelism(
                     distributed_config.tp_plan,
                     tp_size=distributed_config.tp_size,
                     device_mesh=device_mesh,

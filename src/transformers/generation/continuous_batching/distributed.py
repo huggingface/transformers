@@ -161,7 +161,8 @@ class DistributedHelper:
         if tp_on and graph_mixing_not_disabled:
             logger.warning(
                 "NCCL_GRAPH_MIXING_SUPPORT was not set to '0' before init_process_group: performance will be harmed. "
-                "Construct your `ContinuousBatchingConfig(...)` BEFORE calling `from_pretrained(tp_plan='auto')`, or "
+                "Construct your `ContinuousBatchingConfig(...)` BEFORE calling "
+                "`from_pretrained(distributed_config=DistributedConfig(tp_size=...))`, or "
                 "set NCCL_GRAPH_MIXING_SUPPORT=0 in the launch environment."
             )
 
