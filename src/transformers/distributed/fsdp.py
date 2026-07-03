@@ -154,26 +154,16 @@ def expand_fsdp_plan(
     fsdp_plan: dict[str, str],
 ) -> tuple[list[tuple[str, nn.Module]], list[tuple[str, nn.Module]]]:
     """Expand plan keys into reshard and no-reshard ``(module_name, module)`` shard targets."""
-    module_lookup = dict(model.named_modules())
     reshard_targets: list[tuple[str, nn.Module]] = []
     no_reshard_targets: list[tuple[str, nn.Module]] = []
 
-    for plan_key, sharding_strategy in fsdp_plan.items():
-        if plan_key in module_lookup:
-            # model.norm, lm_head etc.
-            targets = [(plan_key, module_lookup[plan_key])]
-        else:
-            # model.layers.*
-            targets = [
-                (module_name, module)
-                for module_name, module in module_lookup.items()
-                if replace_layer_number_by_wildcard(module_name) == plan_key
-            ]
-
-        if sharding_strategy == "keep_full_weight":
-            no_reshard_targets.extend(targets)
-        else:
-            reshard_targets.extend(targets)
+    for module_name, module in model.named_modules():
+        plan_key = module_name if module_name in fsdp_plan else replace_layer_number_by_wildcard(module_name)
+        if plan_key in fsdp_plan:
+            if fsdp_plan[plan_key] == "keep_full_weight":
+                no_reshard_targets.append((module_name, module))
+            else:
+                reshard_targets.append((module_name, module))
 
     return reshard_targets, no_reshard_targets
 
