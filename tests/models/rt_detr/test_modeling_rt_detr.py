@@ -784,7 +784,7 @@ class RTDetrHungarianMatcherTest(unittest.TestCase):
             }
         ]
 
-        for saturating_logit in (-30.0, 30.0):
+        for saturating_logit in (-30.0, 30.0, float("nan")):
             # fp16 logits as produced under AMP: sigmoid saturates to exactly 0.0 (or 1.0),
             # making ``pos_cost_class`` (or ``neg_cost_class``) infinite
             logits = torch.full((1, num_queries, config.num_labels), saturating_logit, dtype=torch.float16)
