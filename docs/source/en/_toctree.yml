@@ -122,6 +122,8 @@
       title: Kernels
     - local: perf_torch_compile
       title: torch.compile
+    - local: exporters
+      title: Exporters
     - local: perf_infer_gpu_multi
       title: Tensor parallelism
     - local: expert_parallelism
@@ -476,6 +478,8 @@
       title: Pipelines
     - local: main_classes/processors
       title: Processors
+    - local: main_classes/exporters
+      title: Exporters
     - local: main_classes/quantization
       title: Quantization
     - local: main_classes/tokenizer
@@ -741,6 +745,8 @@
         title: MegatronGPT2
       - local: model_doc/mellum
         title: Mellum
+      - local: model_doc/mimo_v2_flash
+        title: MiMo-V2-Flash
       - local: model_doc/minicpm3
         title: MiniCPM3
       - local: model_doc/minimax
@@ -911,6 +917,8 @@
         title: Zamba
       - local: model_doc/zamba2
         title: Zamba2
+      - local: model_doc/zaya
+        title: ZAYA
       title: Text models
     - sections:
       - local: model_doc/aimv2
@@ -1009,6 +1017,8 @@
         title: Pyramid Vision Transformer (PVT)
       - local: model_doc/pvt_v2
         title: Pyramid Vision Transformer v2 (PVTv2)
+      - local: model_doc/radio
+        title: RADIO
       - local: model_doc/regnet
         title: RegNet
       - local: model_doc/resnet
@@ -1123,8 +1133,10 @@
         title: MusicGen
       - local: model_doc/musicgen_melody
         title: MusicGen Melody
+      - local: model_doc/nemotron3_5_asr
+        title: Nemotron 3.5 ASR
       - local: model_doc/nemotron_asr_streaming
-        title: NemotronAsrStreaming
+        title: Nemotron ASR Streaming
       - local: model_doc/parakeet
         title: Parakeet
       - local: model_doc/pe_audio

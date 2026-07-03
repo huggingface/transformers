@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
-import importlib.metadata
 import json
 import os
 import re
@@ -23,7 +22,6 @@ from unittest.mock import patch
 
 from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
-from packaging import version
 from torch import nn
 
 from transformers import (
@@ -42,6 +40,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     require_bitsandbytes,
     require_peft,
+    require_peft_greater_or_equal,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -212,6 +211,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model_from_pretrained = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(model_from_pretrained))
 
+    @require_peft_greater_or_equal("0.20.0")
     def test_peft_save_reload_preserves_adapter_weights(self):
         """
         Regression test: after save_pretrained + from_pretrained roundtrip, the reloaded model's LoRA
@@ -752,7 +752,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         peft_model_id = "peft-internal-testing/tiny-opt-lora-revision"
 
         # This should not work
-        with self.assertRaises(OSError):
+        # Transformers cannot identify the model and raises a ValueError
+        with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(peft_model_id)
 
         # This should work
@@ -1050,10 +1051,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # should be different
                 assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
 
+    @require_peft_greater_or_equal("0.20.0")
     def test_mixtral_lora_conversion(self):
-        if version.parse(importlib.metadata.version("peft")) < version.parse("0.19.0"):
-            self.skipTest("For this test to pass, PEFT 0.19 is required.")
-
         inputs = torch.arange(10).view(1, -1).to(torch_device)
         model_name = "hf-internal-testing/Mixtral-tiny"
         adapter_name = "peft-internal-testing/mixtral-pre-v5-lora"
