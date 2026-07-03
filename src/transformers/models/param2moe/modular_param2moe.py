@@ -116,6 +116,7 @@ class Param2MoEConfig(PreTrainedConfig):
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
+        "num_experts": "n_routed_experts",
     }
 
     vocab_size: int = 128008
