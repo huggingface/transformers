@@ -797,6 +797,16 @@ def is_librosa_available() -> bool:
 
 
 @lru_cache
+def is_nagisa_available() -> bool:
+    return _is_package_available("nagisa")[0]
+
+
+@lru_cache
+def is_soynlp_available() -> bool:
+    return _is_package_available("soynlp")[0]
+
+
+@lru_cache
 def is_multipart_available() -> bool:
     return _is_package_available("multipart")[0]
 
@@ -874,6 +884,18 @@ def is_peft_available() -> bool:
 
 
 @lru_cache
+def is_peft_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
+    is_available, peft_version = _is_package_available("peft", return_version=True)
+    if not is_available:
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(peft_version).base_version) >= version.parse(library_version)
+    else:
+        return version.parse(peft_version) >= version.parse(library_version)
+
+
+@lru_cache
 def is_bs4_available() -> bool:
     return _is_package_available("bs4")[0]
 
@@ -886,6 +908,21 @@ def is_coloredlogs_available() -> bool:
 @lru_cache
 def is_onnx_available() -> bool:
     return _is_package_available("onnx")[0]
+
+
+@lru_cache
+def is_onnxscript_available() -> bool:
+    return _is_package_available("onnxscript")[0]
+
+
+@lru_cache
+def is_onnxruntime_available() -> bool:
+    return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]
+
+
+@lru_cache
+def is_executorch_available() -> bool:
+    return _is_package_available("executorch")[0]
 
 
 @lru_cache
