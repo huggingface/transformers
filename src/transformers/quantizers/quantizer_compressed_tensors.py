@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..core_model_loading import ConversionOps, WeightConverter
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
@@ -20,6 +19,8 @@ from .base import HfQuantizer
 
 if is_torch_available():
     import torch
+
+    from ..core_model_loading import ConversionOps, WeightConverter
 
 logger = logging.get_logger(__name__)
 
