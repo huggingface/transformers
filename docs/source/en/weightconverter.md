@@ -35,7 +35,7 @@ All models go through the dynamic weight loading system. Conversion mapping is a
 ```
 Checkpoint File → from_pretrained() → convert_and_load_state_dict_in_model()
                                               ↓
-                         ┌───────────────────────────────────────────────────────────┐
+                         ┌ ──────────────┐
                          │  For each weight in checkpoint:                           │
                          │  1. Match renamed/processed source key to model parameter │
                          │  2. Shard the weight and send to device (async)           │
@@ -45,7 +45,7 @@ Checkpoint File → from_pretrained() → convert_and_load_state_dict_in_model()
                          │  5. Apply conversion (if defined)                         │
                          │  6. Apply quantization (if enabled and step 4 not used)   │
                          │  7. Set parameter on model                                │
-                         └───────────────────────────────────────────────────────────┘
+                         └ ──────────────┘
 ```
 
 | Step | When it activates |
