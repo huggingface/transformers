@@ -679,7 +679,7 @@ La un nivel înalt, contractul arată astfel:
    Poți face în principal 3 lucruri:
     - adaugă operații la lista de convertoare: acestea vor fi aplicate pe toate weights, cu excepția celor colectate în oricare din `WeightConverter`. În general, acestea ar trebui să fie operații `WeightRenaming`
     - adaugă operații la lista de operații a fiecărui convertor: aceasta este ceea ce se întâmplă pentru `Quantization`, unde adăugăm o operație de quantization după lista de operații a oricărui `WeightConverter`.
-    - înlocuiește/mapează operații cu operațiile tale personalizate: aceasta este ceea ce se întâmplă cu `peft`. Înlocuim operația `Concatenate` din, să zicem, `mixtral`, cu `PeftConcatenate`. În acest fel, când checkpoint-ul adaptor este citit, weights de concatenat sunt colectate și formatate corespunzător pentru `peft`
+    - înlocuiește/mapează operații cu operațiile tale personalizate: aceasta este ceea ce se întâmplă cu `peft`. Înlocuim operația `Concatenate` din, să zicem, `mixtral`, cu `PeftConcatenate` (care este definită în PEFT). În acest fel, când checkpoint-ul adaptor este citit, weights de concatenat sunt colectate și formatate corespunzător pentru `peft`
 3. **Încarcă + finalizează + raportează.** Folosește loader-ul de bază pentru a efectua conversia și a popula tensorii, apoi finalizează și înregistrează rezultatele. Concret, acest flux este:
    - `LoadStateDictConfig(...)` + `_load_pretrained_model(...)` pentru a încărca și converti.
    - `_finalize_load_state_dict(...)` pentru a muta tensorii lipsă/nepotriviți de pe `meta`, a-i inițializa și a lega weights.

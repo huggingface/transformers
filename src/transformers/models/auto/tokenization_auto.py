@@ -159,6 +159,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("groupvit", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
         ("hubert", "Wav2Vec2CTCTokenizer"),
+        ("hunyuan_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("ibert", "RobertaTokenizer"),
         ("idefics", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("idefics2", "LlamaTokenizer" if is_tokenizers_available() else None),
@@ -192,6 +193,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("megatron-bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("metaclip_2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
+        ("mimo_v2_flash", "TokenizersBackend" if is_tokenizers_available() else None),
         ("minicpmv4_6", "TokenizersBackend" if is_tokenizers_available() else None),
         (
             "ministral",
@@ -354,6 +356,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("xlstm", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("xmod", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("yoso", "AlbertTokenizer" if is_tokenizers_available() else None),
+        ("zaya", "GemmaTokenizer" if is_tokenizers_available() else None),
     ]
 )
 
