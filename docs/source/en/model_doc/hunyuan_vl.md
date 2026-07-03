@@ -15,9 +15,10 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-[HunYuanVL](https://huggingface.co/tencent/HunyuanOCR) is a vision-language model for image-text understanding and generation
-([paper](https://huggingface.co/papers/2511.19575)). The open-source `hunyuan_vl` integration in Transformers is a
-dense-only image-text variant tailored for OCR and document understanding style workloads such as `tencent/HunyuanOCR`.
+HunYuanVL is a vision-language model for image-text understanding and generation
+proposed in [HunyuanOCR Technical Report
+](https://huggingface.co/papers/2511.19575). The open-source `hunyuan_vl` integration in Transformers is a
+dense-only image-text variant tailored for OCR and document understanding style workloads such as [`tencent/HunyuanOCR`]((https://huggingface.co/tencent/HunyuanOCR)).
 
 The abstract from the paper is the following:
 
@@ -63,7 +64,6 @@ checkpoints.
 
 ```python
 import torch
-
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 
@@ -87,20 +87,15 @@ inputs = processor.apply_chat_template(
     messages,
     tokenize=True,
     add_generation_prompt=True,
+    return_tensors="pt",
 ).to(model.device)
 
-with torch.no_grad():
-    generated_ids = model.generate(**inputs, max_new_tokens=1024)
+generated_ids = model.generate(**inputs, max_new_tokens=1024)
 
 generated_ids_trimmed = generated_ids[0][len(inputs["input_ids"][0]) :]
 output = processor.decode(generated_ids_trimmed, skip_special_tokens=True)
 print(output)
 ```
-
-## Limitations
-
-- The current open-source variant is not a drop-in replacement for internal full-capability HunYuanVL stacks.
-- Public checkpoints may still carry legacy configuration keys for compatibility.
 
 ## HunYuanVLConfig
 

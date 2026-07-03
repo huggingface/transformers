@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -237,10 +238,6 @@ class HunYuanVLConfig(PreTrainedConfig):
         Configuration of the text backbone. When `None`, default values are used.
     vision_config (`HunYuanVLVisionConfig` or `dict`, *optional*):
         Configuration of the vision tower. When `None`, default values are used.
-    image_token_id (`int`, *optional*, defaults to 120120):
-        Token id used as the visual placeholder in multimodal prompts.
-    tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-        Whether to tie the input and output word embeddings.
     im_start_id (`int`, *optional*, defaults to 120118):
         Token id marking the beginning of an image span in multimodal prompts.
     im_end_id (`int`, *optional*, defaults to 120119):
@@ -292,20 +289,8 @@ class HunYuanVLConfig(PreTrainedConfig):
         # Keep the vision tower in sync with the consuming text backbone size.
         self.vision_config.text_hidden_size = self.text_config.hidden_size
 
-        # `tie_word_embeddings` is read directly off the top-level config by the generic weight-tying path
-        # (see `modeling_utils.PreTrainedModel._get_tied_criteria`), which does NOT go through
-        # `get_text_config()`, so it must be mirrored here from the text config to stay consistent.
-        # The text-side token ids (pad/bos/eos) are intentionally NOT mirrored: generic generation and
-        # validation utilities always reach them via `config.get_text_config()`, and a top-level copy
-        # would only create a second source of truth that can drift from the text config.
+        # The attr is saved inside `text_config` on most VLMs, use it if available
         kwargs.setdefault("tie_word_embeddings", self.text_config.tie_word_embeddings)
-
-        # Call `PreTrainedConfig.__post_init__` directly rather than `super().__post_init__`. `super()` would
-        # resolve to `Qwen2VLConfig`, whose `__post_init__` re-runs sub-config normalization and flat-field
-        # folding; the modular converter would inline that body here, producing redundant dead code (the
-        # branches are no-ops because we already normalized above) and an `inspect.signature` fold that would
-        # silently drop a top-level `rope_parameters`. We already perform the equivalent work ourselves above,
-        # so go straight to the base class.
         super().__post_init__(**kwargs)
 
 

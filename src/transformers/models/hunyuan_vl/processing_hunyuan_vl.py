@@ -86,20 +86,18 @@ class HunYuanVLProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    def _get_image_token_count(self, grid_h: int, grid_w: int) -> tuple[int, int, int]:
-        spatial_patch_size = getattr(self.image_processor, "spatial_patch_size", 1)
-        patch_h = grid_h // self.image_processor.merge_size // spatial_patch_size
-        patch_w = grid_w // self.image_processor.merge_size // spatial_patch_size
-        num_image_tokens = patch_h * (patch_w + 1) + (2 if self.cat_extra_token else 0)
-        return patch_h, patch_w, num_image_tokens
-
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         _, grid_h, grid_w = (int(value) for value in image_inputs["image_grid_thw"][image_idx])
-        _, _, num_image_tokens = self._get_image_token_count(grid_h, grid_w)
+        spatial_patch_size = self.image_processor.spatial_patch_size
+        merge_size = self.image_processor.merge_size
+        patch_h = grid_h // merge_size // spatial_patch_size
+        patch_w = grid_w // merge_size // spatial_patch_size
+        num_image_tokens = patch_h * (patch_w + 1) + (2 if self.cat_extra_token else 0)
         return self.image_token * num_image_tokens
 
     @staticmethod
     def _has_wrappers(prompt: str, token_start: int, start_token: str, token: str, end_token: str) -> bool:
+        "Used to check and verify that the users applied chat template correctly, otherwise quality will degrade!"
         start_index = token_start - len(start_token)
         end_index = token_start + len(token)
         return (
@@ -112,11 +110,9 @@ class HunYuanVLProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        videos=None,
-        audio=None,
         **kwargs: Unpack[HunYuanVLProcessorKwargs],
     ):
-        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        super().validate_inputs(images=images, text=text, **kwargs)
 
         if images is not None and text is not None:
             if any(not isinstance(prompt, str) for prompt in text):
@@ -165,6 +161,10 @@ class HunYuanVLProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
+
+    @property
+    def model_input_names(self):
+        return super().model_input_names + ["mm_token_type_ids"]
 
 
 __all__ = ["HunYuanVLProcessor"]

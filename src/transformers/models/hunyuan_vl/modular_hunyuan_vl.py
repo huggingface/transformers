@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch HunYuanVL model."""
 
 import itertools
 from collections.abc import Callable
@@ -33,11 +32,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import maybe_autocast
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..hunyuan_v1_dense.configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
@@ -59,17 +58,18 @@ from ..qwen2_vl.image_processing_pil_qwen2_vl import (
     smart_resize,
 )
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..siglip.modeling_siglip import SiglipEncoderLayer, SiglipMLP
 
 
 @dataclass
 class HunYuanVLModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    image_last_hidden_state (`torch.FloatTensor`, *optional*):
+    image_hidden_states (`torch.FloatTensor`, *optional*):
         Last image features produced by the vision tower and scattered into the language-model token stream.
     """
 
-    image_last_hidden_state: torch.FloatTensor | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -264,10 +264,6 @@ class HunYuanVLConfig(Qwen2VLConfig):
         Configuration of the text backbone. When `None`, default values are used.
     vision_config (`HunYuanVLVisionConfig` or `dict`, *optional*):
         Configuration of the vision tower. When `None`, default values are used.
-    image_token_id (`int`, *optional*, defaults to 120120):
-        Token id used as the visual placeholder in multimodal prompts.
-    tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-        Whether to tie the input and output word embeddings.
     im_start_id (`int`, *optional*, defaults to 120118):
         Token id marking the beginning of an image span in multimodal prompts.
     im_end_id (`int`, *optional*, defaults to 120119):
@@ -294,9 +290,6 @@ class HunYuanVLConfig(Qwen2VLConfig):
     im_newline_id: int = 120121
     tie_word_embeddings: bool = True
 
-    # HunYuanVL delimits image spans with `im_start_id` / `im_end_id` instead of the Qwen2VL
-    # `vision_start_token_id` / `vision_end_token_id` markers, and it has no video modality, so drop the
-    # inherited Qwen2VL placeholder token ids that would otherwise leak into the generated config.
     vision_start_token_id = AttributeError()
     vision_end_token_id = AttributeError()
     video_token_id = AttributeError()
@@ -322,20 +315,8 @@ class HunYuanVLConfig(Qwen2VLConfig):
         # Keep the vision tower in sync with the consuming text backbone size.
         self.vision_config.text_hidden_size = self.text_config.hidden_size
 
-        # `tie_word_embeddings` is read directly off the top-level config by the generic weight-tying path
-        # (see `modeling_utils.PreTrainedModel._get_tied_criteria`), which does NOT go through
-        # `get_text_config()`, so it must be mirrored here from the text config to stay consistent.
-        # The text-side token ids (pad/bos/eos) are intentionally NOT mirrored: generic generation and
-        # validation utilities always reach them via `config.get_text_config()`, and a top-level copy
-        # would only create a second source of truth that can drift from the text config.
+        # The attr is saved inside `text_config` on most VLMs, use it if available
         kwargs.setdefault("tie_word_embeddings", self.text_config.tie_word_embeddings)
-
-        # Call `PreTrainedConfig.__post_init__` directly rather than `super().__post_init__`. `super()` would
-        # resolve to `Qwen2VLConfig`, whose `__post_init__` re-runs sub-config normalization and flat-field
-        # folding; the modular converter would inline that body here, producing redundant dead code (the
-        # branches are no-ops because we already normalized above) and an `inspect.signature` fold that would
-        # silently drop a top-level `rope_parameters`. We already perform the equivalent work ourselves above,
-        # so go straight to the base class.
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
@@ -377,6 +358,7 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
         return resized_height // patch_size, resized_width // patch_size
 
 
+@requires(backends=("vision", "torchvision"))
 class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
     size = {"shortest_edge": 512 * 512, "longest_edge": 2048 * 2048}
     patch_size = 16
@@ -407,10 +389,8 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
 
         for image in images:
             height, width = image.shape[-2:]
-            # Match the original HunyuanOCR PIL/torchvision preprocessing path:
-            # PIL.Image.resize(...) -> torchvision.transforms.ToTensor() -> Normalize().
-            # `PilBackend` has already converted incoming PIL images to channels-first
-            # NumPy arrays, so convert back to PIL before applying the legacy path.
+            # Match the original HunyuanOCR preprocessing with PIL.Image.resize
+            # FIXME: raushan, investiagte why the quality degrafes with our np-based transforms
             if image.ndim == 3:
                 pil_image = Image.fromarray(np.transpose(image, (1, 2, 0)).astype(np.uint8))
             else:
@@ -456,41 +436,24 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
             batch_size, grid_t, channel = patches.shape[0], patches.shape[1] // temporal_patch_size, patches.shape[2]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-            if batch_size == 1 and grid_t == 1 and temporal_patch_size == 1:
-                patches = patches.reshape(
-                    batch_size,
-                    channel,
-                    grid_h // merge_size,
-                    merge_size,
-                    patch_size,
-                    grid_w // merge_size,
-                    merge_size,
-                    patch_size,
-                )
-                patches = patches.transpose(0, 2, 3, 5, 6, 1, 4, 7)
-                flatten_patches = patches.reshape(
-                    batch_size * grid_h * grid_w,
-                    channel * patch_size * patch_size,
-                )
-            else:
-                patches = patches.reshape(
-                    batch_size,
-                    grid_t,
-                    temporal_patch_size,
-                    channel,
-                    grid_h // merge_size,
-                    merge_size,
-                    patch_size,
-                    grid_w // merge_size,
-                    merge_size,
-                    patch_size,
-                )
+            patches = patches.reshape(
+                batch_size,
+                grid_t,
+                temporal_patch_size,
+                channel,
+                grid_h // merge_size,
+                merge_size,
+                patch_size,
+                grid_w // merge_size,
+                merge_size,
+                patch_size,
+            )
 
-                patches = patches.transpose(0, 1, 4, 5, 7, 8, 3, 2, 6, 9)
-                flatten_patches = patches.reshape(
-                    batch_size * grid_t * grid_h * grid_w,
-                    channel * temporal_patch_size * patch_size * patch_size,
-                )
+            patches = patches.transpose(0, 1, 4, 5, 7, 8, 3, 2, 6, 9)
+            flatten_patches = patches.reshape(
+                batch_size * grid_t * grid_h * grid_w,
+                channel * temporal_patch_size * patch_size * patch_size,
+            )
 
             all_patches.append(flatten_patches)
             all_grids.append([grid_t, grid_h, grid_w])
@@ -555,26 +518,20 @@ class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
         rope_parameters = getattr(config, "rope_parameters", None) or {}
         self.mrope_section = rope_parameters.get("mrope_section")
 
-    @torch.no_grad()
-    @dynamic_rope_update
     def forward(self, x, position_ids):
-        output_shape = position_ids.shape
-        if position_ids.dim() == 3:
-            position_ids = position_ids.flatten(0, 1)
-
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
+        # In contrast to other models, model has different position ids for the grids
+        # So we expand the inv_freq to shape (3, ...)
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 
-        cos = cos.view(*output_shape, -1).to(dtype=x.dtype)
-        sin = sin.view(*output_shape, -1).to(dtype=x.dtype)
-        return cos, sin
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 class HunYuanVLVisionMLP(SiglipMLP):
@@ -813,7 +770,6 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
     config: HunYuanVLVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["HunYuanVLVisionBlock"]
     _can_record_outputs = {
         "hidden_states": HunYuanVLVisionBlock,
         "attentions": HunYuanVLVisionAttention,
@@ -848,7 +804,6 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
             start = end
         return attention_mask[None, None, :, :]
 
-    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -890,6 +845,7 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel, HunYuanDenseV1Model):
     """Dense text backbone used inside [`HunYuanVLModel`]."""
 
     config: HunYuanVLTextConfig
+    input_modalities = ("text",)
 
     def __init__(self, config: HunYuanVLTextConfig):
         super().__init__(config)
@@ -920,28 +876,21 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel, HunYuanDenseV1Model):
             past_key_values = DynamicCache(config=self.config)
 
         num_mrope_axes = len(self.rotary_emb.mrope_section or [])
-        past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
+
+        # Expand to 3D with `num_mrope_axes` as first dim, if not yet expanded
         if position_ids is None:
-            position_ids = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            ).unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.view(1, 1, -1).expand(num_mrope_axes, inputs_embeds.shape[0], -1)
+        elif position_ids.ndim == 2:
+            position_ids = position_ids[None, ...].expand(num_mrope_axes, position_ids.shape[0], -1)
 
-        if attention_mask is not None:
-            text_position_ids = attention_mask.long().cumsum(-1) - 1
-            text_position_ids = text_position_ids.masked_fill(attention_mask == 0, 0)
-            text_position_ids = text_position_ids[:, -inputs_embeds.shape[1] :]
-        elif position_ids.dim() == 2:
-            text_position_ids = position_ids
+        if position_ids.ndim == 3 and position_ids.shape[0] == num_mrope_axes + 1:
+            text_position_ids = position_ids[0]
         else:
-            text_position_ids = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-            text_position_ids = text_position_ids.unsqueeze(0).expand(inputs_embeds.shape[0], -1)
+            # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
+            text_position_ids = None
 
-        if num_mrope_axes and position_ids.dim() == 2:
-            position_ids = position_ids[None, ...].expand(num_mrope_axes, -1, -1)
-
-        rotary_position_ids = position_ids
         if num_mrope_axes and position_ids.dim() == 3:
             if position_ids.shape[0] != num_mrope_axes:
                 raise ValueError(
@@ -958,7 +907,7 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel, HunYuanDenseV1Model):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, rotary_position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
@@ -983,13 +932,11 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel, HunYuanDenseV1Model):
     The HunYuanVL model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class HunYuanVLModel(HunYuanVLPreTrainedModel):
+class HunYuanVLModel(Qwen2VLModel):
     def __init__(self, config: HunYuanVLConfig):
         super().__init__(config)
-        self.language_model = HunYuanVLTextModel(config.text_config)
         self.vision_tower = HunYuanVLVisionTransformer(config.vision_config)
-        self.rope_deltas = None
-        self.post_init()
+        del self.visual
 
     def get_vision_position_ids(
         self,
@@ -1117,7 +1064,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         rope_deltas = torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, rope_deltas
 
-    def compute_mrope_position_ids(
+    def compute_3d_position_ids(
         self,
         input_ids: torch.LongTensor | None,
         image_grid_thw: torch.LongTensor | None = None,
@@ -1143,7 +1090,9 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         self.rope_deltas = rope_deltas
         return rope_positions
 
-    @can_return_tuple
+    def get_video_features(self, **super_kwargs):
+        raise AttributeError("Model doesn't support videos")
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1189,8 +1138,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             )
         return special_image_mask
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1229,11 +1176,8 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if position_ids is None:
-            rope_input_ids = input_ids
-            if rope_input_ids is None and mm_token_type_ids is not None:
-                rope_input_ids = torch.zeros_like(mm_token_type_ids)
-            position_ids = self.compute_mrope_position_ids(
-                input_ids=rope_input_ids,
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
                 image_grid_thw=image_grid_thw,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
@@ -1255,7 +1199,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_last_hidden_state=image_embeds if pixel_values is not None else None,
+            image_hidden_states=image_embeds if pixel_values is not None else None,
         )
 
 
@@ -1280,14 +1224,6 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
-
-    def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-    ) -> torch.BoolTensor:
-        return self.model.get_placeholder_mask(input_ids, inputs_embeds, image_features)
 
     @can_return_tuple
     @auto_docstring
@@ -1427,6 +1363,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        # Same as qwen-vl with variable `num_mrope_axes` based on config values
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
         rope_parameters = self.config.text_config.rope_parameters or {}

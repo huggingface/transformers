@@ -14,19 +14,27 @@
 
 import unittest
 
-from tokenizers import Tokenizer
-from tokenizers.models import WordLevel
-from tokenizers.pre_tokenizers import Whitespace
+import numpy as np
 
 from transformers import PreTrainedTokenizerFast
-from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
+from transformers.testing_utils import require_tokenizers, require_torch, require_torchvision, require_vision
+from transformers.utils import (
+    is_tokenizers_available,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+)
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
-HunYuanVLImageProcessor = None
-HunYuanVLProcessor = None
+if is_torch_available():
+    import torch
+
+if is_tokenizers_available():
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import Whitespace
 
 if is_vision_available():
     from PIL import Image
@@ -40,6 +48,7 @@ if is_vision_available():
 @require_vision
 @require_torch
 @require_torchvision
+@require_tokenizers
 class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = HunYuanVLProcessor
 
@@ -136,7 +145,7 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertSetEqual(
             set(inputs.keys()),
-            {"input_ids", "attention_mask", "pixel_values", "image_grid_thw"},
+            {"input_ids", "attention_mask", "pixel_values", "image_grid_thw", "mm_token_type_ids"},
         )
         self.assertGreater(inputs["pixel_values"].shape[0], 0)
         self.assertEqual(inputs["image_grid_thw"].shape[-1], 3)
@@ -163,21 +172,6 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.image_end_token_id, processor.tokenizer.image_end_token_id)
         self.assertIn(processor.image_token_id, input_ids)
         self.assertNotIn(processor.tokenizer.convert_tokens_to_ids("<new_tail>"), input_ids)
-
-    def test_processor_expands_wrapped_image_tokens(self):
-        processor = self.get_processor()
-        image = Image.new("RGB", (32, 32), color="white")
-
-        inputs = processor(
-            text=["<image_start><image><image_end> hello"], images=[image], padding=True, return_tensors="pt"
-        )
-        input_ids = inputs["input_ids"][0].tolist()
-        _, grid_h, grid_w = (int(value) for value in inputs["image_grid_thw"][0])
-        _, _, expected_image_tokens = processor._get_image_token_count(grid_h, grid_w)
-
-        self.assertEqual(input_ids.count(processor.image_start_token_id), 1)
-        self.assertEqual(input_ids.count(processor.image_token_id), expected_image_tokens)
-        self.assertEqual(input_ids.count(processor.image_end_token_id), 1)
 
     def test_processor_rejects_bare_image_tokens(self):
         processor = self.get_processor()
@@ -208,15 +202,135 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         input_ids = inputs["input_ids"][0].tolist()
         _, grid_h, grid_w = (int(value) for value in inputs["image_grid_thw"][0])
-        _, _, expected_image_tokens = processor._get_image_token_count(grid_h, grid_w)
+
+        patch_h = grid_h // processor.image_processor.merge_size // processor.image_processor.spatial_patch_size
+        patch_w = grid_w // processor.image_processor.merge_size // processor.image_processor.spatial_patch_size
+        expected_image_tokens = patch_h * (patch_w + 1) + (2 if processor.cat_extra_token else 0)
 
         self.assertEqual(input_ids.count(processor.image_start_token_id), 1)
         self.assertEqual(input_ids.count(processor.image_token_id), expected_image_tokens)
         self.assertEqual(input_ids.count(processor.image_end_token_id), 1)
 
-    def test_model_input_names(self):
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
         processor = self.get_processor()
-        self.assertSetEqual(
-            set(processor.model_input_names),
-            {"input_ids", "attention_mask", "pixel_values", "image_grid_thw"},
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+        image_inputs = []
+        for h, w in image_sizes:
+            image_inputs.append(np.random.randint(255, size=(h, w, 3), dtype=np.uint8))
+
+        image_token = f"{self.image_start_token}{self.image_token}{self.image_end_token}"
+        text = [f"This is an image {image_token}"] * len(image_inputs)
+        inputs = processor(
+            text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
         )
+
+        if "mm_token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `mm_token_type_ids`")
+
+        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+        # Test with two images per single text
+        text = [f"These are two images {image_token}{image_token}"] * len(image_inputs)
+        inputs = processor(
+            text=text,
+            images=image_inputs * 2,
+            padding=True,
+            return_mm_token_type_ids=True,
+            return_tensors="pt",
+        )
+
+        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
+        self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))
+
+    def _test_apply_chat_template(
+        self,
+        modality: str,
+        batch_size: int,
+        return_tensors: str,
+        input_name: str,
+        processor_name: str,
+        input_data: list[str],
+    ):
+        processor = self.get_processor()
+        batch_messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "Describe this."}],
+                },
+            ]
+        ] * batch_size
+
+        # Test that jinja can be applied
+        formatted_prompt = processor.apply_chat_template(batch_messages, add_generation_prompt=True, tokenize=False)
+        self.assertEqual(len(formatted_prompt), batch_size)
+
+        # Test that tokenizing with template and directly with `self.tokenizer` gives same output
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            batch_messages, add_generation_prompt=True, tokenize=True, return_tensors=return_tensors
+        )
+        add_special_tokens = True
+        if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
+            add_special_tokens = False
+        tok_output = processor.tokenizer(
+            formatted_prompt, return_tensors=return_tensors, add_special_tokens=add_special_tokens
+        )
+        expected_output = tok_output.input_ids
+        self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
+
+        # Test that kwargs passed to processor's `__call__` are actually used
+        tokenized_prompt_100 = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            padding="max_length",
+            truncation=True,
+            return_tensors=return_tensors,
+            max_length=100,
+        )
+        self.assertEqual(len(tokenized_prompt_100[0]), 100)
+
+        # Test that `return_dict=True` returns text related inputs in the dict
+        out_dict_text = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors=return_tensors,
+        )
+        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask"]))
+        self.assertEqual(len(out_dict_text["input_ids"]), batch_size)
+        self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
+
+        # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
+        for idx, url in enumerate(input_data[:batch_size]):
+            batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": modality, "url": url}]
+
+        out_dict = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors=return_tensors,
+        )
+        input_name = getattr(self, input_name)
+        self.assertTrue(input_name in out_dict)
+        self.assertEqual(len(out_dict["input_ids"]), batch_size)
+        self.assertEqual(len(out_dict["attention_mask"]), batch_size)
+        self.assertEqual(len(out_dict[input_name]), batch_size * 2)
+
+        return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
+        for k in out_dict:
+            self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
