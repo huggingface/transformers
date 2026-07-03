@@ -55,6 +55,7 @@ class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
     def __init__(self, valid_token_ids: list[int], device: torch.device = None):
         self.valid_token_ids = torch.tensor(valid_token_ids, dtype=torch.long, device=device)
 
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         mask = torch.full_like(scores, float("-inf"))
         mask[:, self.valid_token_ids] = 0
