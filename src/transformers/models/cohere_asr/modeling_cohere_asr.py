@@ -615,13 +615,11 @@ class CohereAsrForConditionalGeneration(CohereAsrPreTrainedModel, GenerationMixi
         'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
         # Main difference: uses `input_features` instead of `input_values`
-        do_shift_labels = False
         if labels is not None:
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
-                do_shift_labels = True
 
         outputs: Seq2SeqModelOutput = self.model(
             input_features,
@@ -639,9 +637,7 @@ class CohereAsrForConditionalGeneration(CohereAsrPreTrainedModel, GenerationMixi
 
         loss = None
         if labels is not None:
-            shift_labels = kwargs.pop("shift_labels", None)
-            if do_shift_labels and shift_labels is None:
-                shift_labels = labels
+            shift_labels = kwargs.pop("shift_labels", labels)
             loss = self.loss_function(
                 logits=logits,
                 labels=labels,
