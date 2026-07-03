@@ -264,6 +264,9 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_data: list[str],
     ):
         processor = self.get_processor()
+        if processor_name not in self.processor_class.get_attributes():
+            self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
+
         batch_messages = [
             [
                 {

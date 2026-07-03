@@ -39,8 +39,14 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import accepts_precomputed_kwargs, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_cu_seqlens
 from .configuration_hunyuan_vl import HunYuanVLConfig, HunYuanVLTextConfig, HunYuanVLVisionConfig
 
 
@@ -141,8 +147,8 @@ class HunYuanVLRotaryEmbedding(nn.Module):
     def forward(self, x, position_ids):
         # In contrast to other models, model has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(len(self.mrope_section), position_ids.shape[1], -1, 1)
+        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (mrope_section, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
@@ -341,38 +347,63 @@ class HunYuanVLVisionAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
+        cu_seqlens: torch.Tensor,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
-        batch_size, q_seq_len, _ = query.shape
-        _, kv_seq_len, _ = key.shape
+        batch_size, seq_len, _ = query.shape
 
-        query = query.view(batch_size, q_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key = key.view(batch_size, kv_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value = value.view(batch_size, kv_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask,
-            dropout=0.0,
-            scaling=self.scaling,
-            **kwargs,
-        )
+        if is_flash_attention_requested(self.config):
+            # Flash Attention: Use cu_seqlens for variable length attention
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                scaling=self.scaling,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
 
-        attn_output = attn_output.reshape(batch_size, q_seq_len, -1).contiguous()
+            attn_outputs = [
+                attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    scaling=self.scaling,
+                    is_causal=False,
+                    **kwargs,
+                )[0]
+                for q, k, v in zip(*splits)
+            ]
+            attn_output = torch.cat(attn_outputs, dim=1)
+            attn_weights = None
+
+        attn_output = attn_output.reshape(batch_size, seq_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
         return attn_output, attn_weights
 
 
@@ -688,26 +719,6 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
 
         self.post_init()
 
-    def _build_image_attention_mask(
-        self, grid_thw: torch.LongTensor, seq_len: int, dtype: torch.dtype, device: torch.device
-    ) -> torch.Tensor | None:
-        split_sizes = grid_thw.prod(dim=-1).tolist()
-        if sum(split_sizes) != seq_len:
-            raise ValueError(
-                "Image grid sizes do not match the embedded vision sequence length: "
-                f"sum(grid_thw.prod(-1))={sum(split_sizes)}, seq_len={seq_len}."
-            )
-        if len(split_sizes) <= 1:
-            return None
-
-        attention_mask = torch.full((seq_len, seq_len), torch.finfo(dtype).min, dtype=dtype, device=device)
-        start = 0
-        for split_size in split_sizes:
-            end = start + split_size
-            attention_mask[start:end, start:end] = 0
-            start = end
-        return attention_mask[None, None, :, :]
-
     @capture_outputs
     @auto_docstring
     def forward(
@@ -723,11 +734,10 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
             The temporal, height and width dimensions for each image. Each row contains `[t, h, w]` patch counts.
         """
         hidden_states = self.embeddings(pixel_values, grid_thw)
-        attention_mask = self._build_image_attention_mask(
-            grid_thw, hidden_states.shape[1], hidden_states.dtype, hidden_states.device
-        )
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+
         for layer in self.layers:
-            hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
+            hidden_states = layer(hidden_states, cu_seqlens=cu_seqlens, attention_mask=None, **kwargs)
 
         split_sizes = grid_thw.prod(dim=-1).tolist()
         split_items = torch.split(hidden_states, split_sizes, dim=1)
