@@ -358,6 +358,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("metaclip_2_vision_model", "MetaClip2VisionConfig"),
         ("mgp-str", "MgpstrConfig"),
         ("mimi", "MimiConfig"),
+        ("mimo_v2_flash", "MiMoV2FlashConfig"),
         ("minicpm3", "MiniCPM3Config"),
         ("minicpmv4_6", "MiniCPMV4_6Config"),
         ("minicpmv4_6_vision", "MiniCPMV4_6VisionConfig"),
@@ -526,6 +527,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("qwen3_vl_moe_vision", "Qwen3VLMoeVisionConfig"),
         ("qwen3_vl_text", "Qwen3VLTextConfig"),
         ("qwen3_vl_vision", "Qwen3VLVisionConfig"),
+        ("radio", "RadioConfig"),
         ("rag", "RagConfig"),
         ("recurrent_gemma", "RecurrentGemmaConfig"),
         ("reformer", "ReformerConfig"),
@@ -682,6 +684,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("youtu", "YoutuConfig"),
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
+        ("zaya", "ZayaConfig"),
         ("zoedepth", "ZoeDepthConfig"),
     ]
 )

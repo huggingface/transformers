@@ -74,6 +74,7 @@ from transformers.testing_utils import (
     require_non_hpu,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -2439,6 +2440,46 @@ class ModelUtilsTest(TestCasePlus):
         with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
         torch.testing.assert_close(reference, with_config_only)
 
+    def test_linear_attention_models_can_use_accelerate_hooks(self):
+        """
+        Test that linear attention models (here only tested on lfm2 as it has small checkpoints) can use device_map and
+        offloading correctly (the conv module inside the Mixer are not used through `forward`, so accelerate hooks have to be
+        forced)
+        """
+        model_id = "LiquidAI/LFM2.5-230M"
+        input_text = "Hello, who are you?"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": input_text}],
+            tokenize=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16)
+        out = model.generate(**inputs.to(model.device), max_new_tokens=20, do_sample=False)
+        output_text1 = tokenizer.batch_decode(out[:, inputs["input_ids"].shape[1] :])[0]
+
+        # This will offload to disk
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, dtype=torch.float16, device_map="auto", max_memory={"cpu": "200MiB", "disk": "12GiB"}
+        )
+        # Make sure it was offloaded
+        self.assertTrue("cpu" in model.hf_device_map.values())
+        self.assertTrue("disk" in model.hf_device_map.values())
+
+        # Make sure we will not crash when reaching a disk offloaded mixer with linear attention
+        out = model.generate(**inputs.to(model.device), max_new_tokens=20, do_sample=False)
+        output_text2 = tokenizer.batch_decode(out[:, inputs["input_ids"].shape[1] :])[0]
+
+        EXPECTED_TEXT = (
+            "I’m an AI language model created to help answer questions, provide information, and assist with a wide"
+        )
+
+        # Make sure they are equal, and equal to the ref
+        self.assertEqual(output_text1, output_text2)
+        self.assertEqual(output_text1, EXPECTED_TEXT)
+
 
 @slow
 @require_torch
@@ -2914,6 +2955,39 @@ class TestAttentionImplementation(unittest.TestCase):
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
             )
         self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
+
+    @parameterized.expand(
+        [
+            # (key head_dim, value head_dim, use_mask, GQA kept, expected backend): GQA is kept only for matched
+            # head_dim <= 256 without a mask, else `repeat_kv` runs so a fused kernel still serves it.
+            (256, 256, False, True, "flash"),  # matched <= 256: GQA kept
+            (512, 512, False, False, "efficient"),  # head_dim > 256: repeat_kv
+            (192, 128, False, False, "efficient"),  # mismatched (MLA): repeat_kv
+            (256, 256, True, False, "efficient"),  # mask disables GQA
+        ]
+    )
+    @require_torch_gpu
+    def test_gqa_in_sdpa_uses_a_fused_kernel(
+        self, key_head_dim, value_head_dim, use_mask, keeps_gqa, expected_backend
+    ):
+        # Restricting SDPA to the expected backend (which excludes `math`) proves each case stays on a fused kernel
+        # rather than silently falling back to math: the call must succeed.
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward, use_gqa_in_sdpa
+
+        backends = {"flash": SDPBackend.FLASH_ATTENTION, "efficient": SDPBackend.EFFICIENT_ATTENTION}
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(1, 8, 16, key_head_dim, device=torch_device, dtype=torch.float16)
+        key = torch.randn(1, 2, 16, key_head_dim, device=torch_device, dtype=torch.float16)
+        value = torch.randn(1, 2, 16, value_head_dim, device=torch_device, dtype=torch.float16)
+        attention_mask = torch.zeros(1, 1, 16, 16, device=torch_device, dtype=torch.float16) if use_mask else None
+
+        self.assertEqual(use_gqa_in_sdpa(attention_mask, key, value), keeps_gqa)
+        with sdpa_kernel([backends[expected_backend]]):
+            attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
+        self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
 
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
