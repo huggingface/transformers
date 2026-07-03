@@ -20,6 +20,10 @@ This page lists all the custom layers used by the library, as well as the utilit
 
 Most of those are only useful if you are studying the code of the models in the library.
 
+## WeightRenaming
+
+[[autodoc]] GroupWeightRename
+
 ## WeightConverter
 
 [[autodoc]] WeightConverter
@@ -37,6 +41,10 @@ Most of those are only useful if you are studying the code of the models in the 
 [[autodoc]] SplitModulelist
 
 [[autodoc]] PermuteForRope
+
+[[autodoc]] VisionFuseAndPermuteForRope
+
+[[autodoc]] VisionUnfuseAndPermuteForRope
 
 ## Layers
 
