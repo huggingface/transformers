@@ -4273,7 +4273,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
 
             distributed_config.validate()
-            config.distributed_config = distributed_config
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
@@ -4316,6 +4315,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config = copy.deepcopy(config)
             model_kwargs = kwargs
             commit_hash = getattr(config, "_commit_hash", commit_hash)
+
+        if distributed_config is not None:
+            config.distributed_config = distributed_config
 
         download_kwargs_with_commit["commit_hash"] = commit_hash
 

@@ -73,6 +73,7 @@ DDP_FSDP_ATOL = 1e-5
 FSDP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "llama",
     "qwen3_moe",
+    "mixtral"
 }
 
 
