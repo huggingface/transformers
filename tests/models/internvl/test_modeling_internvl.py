@@ -20,6 +20,7 @@ import pytest
 import requests
 
 from transformers import (
+    AutoConfig,
     AutoProcessor,
     BitsAndBytesConfig,
     InternVLConfig,
@@ -213,6 +214,39 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
         pass
+
+
+@slow
+@require_torch
+class InternVLOriginalCheckpointTest(unittest.TestCase):
+    """The original `OpenGVLab/InternVL2-*` checkpoints use the bespoke `internvl_chat`
+    remote-code layout. They should load into the native implementation without
+    `trust_remote_code`, on CPU, with every weight mapped."""
+
+    def setUp(self):
+        self.original_v2_checkpoint = "OpenGVLab/InternVL2-1B"
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_original_internvl2_checkpoint_loads_natively(self):
+        config = AutoConfig.from_pretrained(self.original_v2_checkpoint, trust_remote_code=False)
+        self.assertIsInstance(config, InternVLConfig)
+        self.assertEqual(config.text_config.model_type, "qwen2")
+        self.assertGreater(config.text_config.num_attention_heads, 0)
+        self.assertGreater(config.vision_config.num_attention_heads, 0)
+
+        model, loading_info = InternVLForConditionalGeneration.from_pretrained(
+            self.original_v2_checkpoint,
+            dtype=torch.bfloat16,
+            trust_remote_code=False,
+            output_loading_info=True,
+        )
+        self.assertIsInstance(model, InternVLForConditionalGeneration)
+        self.assertEqual(len(loading_info["missing_keys"]), 0)
+        self.assertEqual(len(loading_info["unexpected_keys"]), 0)
+        self.assertEqual(len(loading_info["mismatched_keys"]), 0)
 
 
 @slow
