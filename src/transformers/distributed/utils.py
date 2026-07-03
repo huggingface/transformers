@@ -160,7 +160,7 @@ def distribute_model(
 ) -> nn.Module:
     """Apply TP or FSDP2 to `model` based on ``distributed_config`` (mutually exclusive for now)."""
     model.config.distributed_config = distributed_config
-    model.device_mesh = device_mesh
+    model._device_mesh = device_mesh
 
     if distributed_config.tp_size > 1:
         model = apply_tensor_parallelism(
