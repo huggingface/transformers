@@ -537,6 +537,7 @@ class MT5PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, MT5LayerNorm):
             init.constant_(module.weight, factor * 1.0)
@@ -1372,7 +1373,12 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
             "All examples must have the same number of <eos> tokens.",
         )
         batch_size, _, hidden_size = sequence_output.shape
-        sentence_representation = sequence_output[eos_mask, :].view(batch_size, -1, hidden_size)[:, -1, :]
+        selected = sequence_output[eos_mask, :]
+        torch_compilable_check(
+            selected.shape[0] // batch_size >= 1,
+            "Each example must contain at least one <eos> token.",
+        )
+        sentence_representation = selected.view(batch_size, -1, hidden_size)[:, -1, :]
         logits = self.classification_head(sentence_representation)
 
         loss = None

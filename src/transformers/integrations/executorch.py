@@ -263,7 +263,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             dynamic_shapes (`Optional[dict]`):
                 Dynamic shapes to use for export if specified.
             strict(`Optional[bool]`):
-                Flag to instruct `torch.export` to use `torchdynamo`.
+                Flag to instruct `torch.export` to use `dynamo`.
 
         Returns:
             torch.export.ExportedProgram: The exported program that can be used for inference.
@@ -588,7 +588,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.static_cache.layers:
-            layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0])
 
         past_key_values = self.static_cache
 
@@ -756,7 +756,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.cache.layers:
-            layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0])
 
         # Forward pass with the model
         outputs = self.model(
@@ -787,7 +787,7 @@ def convert_and_export_with_cache(
         example_input_ids (`Optional[torch.Tensor]`): Example input token id used by `torch.export`.
         example_cache_position (`Optional[torch.Tensor]`): Example current cache position used by `torch.export`.
         dynamic_shapes(`Optional[dict]`): Dynamic shapes used by `torch.export`.
-        strict(`Optional[bool]`): Flag to instruct `torch.export` to use `torchdynamo`.
+        strict(`Optional[bool]`): Flag to instruct `torch.export` to use `dynamo`.
 
     Returns:
         Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
@@ -894,7 +894,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.static_cache.layers:
-            layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0])
 
         # Get outputs from decoder
         outputs = self.decoder(

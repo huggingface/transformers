@@ -111,12 +111,14 @@ if is_torch_available():
 
 from unittest.mock import patch
 
+from tests.exporters.test_export import ExportGenerateTesterMixin
+
 
 def is_moe_model(config):
     return getattr(config, "_experts_implementation", None) is not None
 
 
-class GenerationTesterMixin:
+class GenerationTesterMixin(ExportGenerateTesterMixin):
     input_name = "input_ids"
     model_tester = None
     max_new_tokens = 3
@@ -1489,6 +1491,8 @@ class GenerationTesterMixin:
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
                 if is_moe_model(config):
+                    # MoE routing accumulates FP noise across experts (different routing decisions
+                    # at the margin between static and dynamic cache → different expert matmuls).
                     atol = rtol = 1e-3
                 else:
                     atol = rtol = 1e-5
@@ -1606,9 +1610,13 @@ class GenerationTesterMixin:
                             else gen_out.past_key_values
                         )
                         self.assertTrue(isinstance(decoder_cache, DynamicCache))
-                        self.assertFalse(decoder_cache.is_compileable)
-                        # our auto compile should NOT have been called
-                        self.assertFalse(hasattr(model_to_be_compiled, "_compiled_call"))
+                        # Recurrent / hybrid SSM models (mamba2, lfm2, ...) populate the default DynamicCache
+                        # with statically-shaped recurrent layers, so the cache is compileable by default and
+                        # auto-compile kicks in. Skip the "default cache is non-compileable" sanity check for
+                        # those models — they're tested under their compileable path further down.
+                        if not decoder_cache.is_compileable:
+                            # our auto compile should NOT have been called
+                            self.assertFalse(hasattr(model_to_be_compiled, "_compiled_call"))
 
             # 5. get compiled results -- relies on the automatic compilation triggered by specific compilable caches
             if not has_defined_cache_implementation:
@@ -1699,7 +1707,7 @@ class GenerationTesterMixin:
                 num_beams=1,
                 max_new_tokens=self.max_new_tokens,
                 min_new_tokens=self.max_new_tokens,
-                output_attentions=True,
+                output_attentions=self.has_attentions,
                 output_hidden_states=True,
                 output_scores=True,
                 output_logits=True,
@@ -2485,11 +2493,20 @@ class GenerationTesterMixin:
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
-            query_length = (
-                prompt_length + generated_length
-                if not has_static_cache
-                else decoder_past_key_values.get_max_cache_shape()
-            )
+            if has_static_cache:
+                # Hybrid caches (e.g. Bamba: full_attention + linear_attention) have layers with no fixed
+                # max — `get_max_length(i)` returns -1 on those. Pick the first layer that reports a
+                # real length; that's the one whose attention shape we're checking against.
+                query_length = next(
+                    (
+                        decoder_past_key_values.get_max_length(i)
+                        for i in range(len(decoder_past_key_values))
+                        if decoder_past_key_values.get_max_length(i) != -1
+                    ),
+                    prompt_length + generated_length,
+                )
+            else:
+                query_length = prompt_length + generated_length
 
             expected_shape = (
                 batch_size,
