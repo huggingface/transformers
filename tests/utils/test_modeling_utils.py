@@ -74,6 +74,7 @@ from transformers.testing_utils import (
     require_non_hpu,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -2954,6 +2955,39 @@ class TestAttentionImplementation(unittest.TestCase):
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
             )
         self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
+
+    @parameterized.expand(
+        [
+            # (key head_dim, value head_dim, use_mask, GQA kept, expected backend): GQA is kept only for matched
+            # head_dim <= 256 without a mask, else `repeat_kv` runs so a fused kernel still serves it.
+            (256, 256, False, True, "flash"),  # matched <= 256: GQA kept
+            (512, 512, False, False, "efficient"),  # head_dim > 256: repeat_kv
+            (192, 128, False, False, "efficient"),  # mismatched (MLA): repeat_kv
+            (256, 256, True, False, "efficient"),  # mask disables GQA
+        ]
+    )
+    @require_torch_gpu
+    def test_gqa_in_sdpa_uses_a_fused_kernel(
+        self, key_head_dim, value_head_dim, use_mask, keeps_gqa, expected_backend
+    ):
+        # Restricting SDPA to the expected backend (which excludes `math`) proves each case stays on a fused kernel
+        # rather than silently falling back to math: the call must succeed.
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward, use_gqa_in_sdpa
+
+        backends = {"flash": SDPBackend.FLASH_ATTENTION, "efficient": SDPBackend.EFFICIENT_ATTENTION}
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(1, 8, 16, key_head_dim, device=torch_device, dtype=torch.float16)
+        key = torch.randn(1, 2, 16, key_head_dim, device=torch_device, dtype=torch.float16)
+        value = torch.randn(1, 2, 16, value_head_dim, device=torch_device, dtype=torch.float16)
+        attention_mask = torch.zeros(1, 1, 16, 16, device=torch_device, dtype=torch.float16) if use_mask else None
+
+        self.assertEqual(use_gqa_in_sdpa(attention_mask, key, value), keeps_gqa)
+        with sdpa_kernel([backends[expected_backend]]):
+            attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
+        self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
 
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
