@@ -29,17 +29,41 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 
-    # TODO(3outeille): guarding?
-    import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.state_dict import (
-        StateDictOptions,
-        get_model_state_dict,
-        get_optimizer_state_dict,
-        set_optimizer_state_dict,
-    )
+    _torch_distributed_available = torch.distributed.is_available()
 
     if is_torch_greater_or_equal("2.7"):
+        import torch.distributed.checkpoint as dcp
+        from torch.distributed.checkpoint.state_dict import (
+            StateDictOptions,
+            get_model_state_dict,
+            get_optimizer_state_dict,
+            set_optimizer_state_dict,
+        )
         from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
+else:
+    _torch_distributed_available = False
+
+
+def _is_torch_distributed_initialized() -> bool:
+    if not _torch_distributed_available:
+        return False
+    return hasattr(torch.distributed, "is_initialized") and torch.distributed.is_initialized()
+
+
+def _get_torch_distributed_rank() -> int:
+    if not _is_torch_distributed_initialized():
+        return 0
+    return torch.distributed.get_rank()
+
+
+def _get_torch_distributed_world_size() -> int:
+    if not _is_torch_distributed_initialized() or not hasattr(torch.distributed, "get_world_size"):
+        return 1
+    return torch.distributed.get_world_size()
+
+
+def is_local_dist_rank_0() -> bool:
+    return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
 
 
 def _ensure_torch_distributed(device_type: str):
@@ -84,7 +108,7 @@ def _distributed_barrier():
     `device_id`; with it, the call is a no-op compared to plain `barrier()`. Safe to call
     when torch.distributed has not been initialized — returns immediately.
     """
-    if not torch.distributed.is_initialized():
+    if not _is_torch_distributed_initialized():
         return
     device_type = torch._C._get_accelerator().type
     if device_type != "cpu":
@@ -157,9 +181,11 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
 
     Only rank 0 accumulates the result; other ranks return ``{}``.
     """
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed state dict gathering requires `torch>=2.7`.")
     options = StateDictOptions(full_state_dict=True, cpu_offload=True)
     full_state_dict = get_model_state_dict(model, options=options)
-    if torch.distributed.get_rank() == 0:
+    if _get_torch_distributed_rank() == 0:
         return full_state_dict
     return {}
 
@@ -193,12 +219,16 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
 
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Save optimizer state via DCP."""
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed optimizer saving requires `torch>=2.7`.")
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
 
 
 def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Load optimizer state via DCP."""
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed optimizer loading requires `torch>=2.7`.")
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
     dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)

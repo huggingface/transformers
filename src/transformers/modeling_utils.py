@@ -55,9 +55,13 @@ from .distributed import DistributedConfig
 from .distributed.fsdp import is_fsdp_managed_module
 from .distributed.utils import (
     _distributed_barrier,
+    _get_torch_distributed_rank,
+    _get_torch_distributed_world_size,
+    _is_torch_distributed_initialized,
     distribute_model,
     gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
+    is_local_dist_rank_0,
     save_model_checkpoint_distributed,
 )
 from .dynamic_module_utils import custom_object_save
@@ -201,30 +205,6 @@ class LoadStateDictConfig:
     @property
     def is_quantized(self) -> bool:
         return self.hf_quantizer is not None
-
-
-def _is_torch_distributed_initialized() -> bool:
-    return (
-        _torch_distributed_available
-        and hasattr(torch.distributed, "is_initialized")
-        and torch.distributed.is_initialized()
-    )
-
-
-def _get_torch_distributed_world_size() -> int:
-    if not _is_torch_distributed_initialized() or not hasattr(torch.distributed, "get_world_size"):
-        return 1
-    return torch.distributed.get_world_size()
-
-
-def is_local_dist_rank_0():
-    return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
-
-
-def _get_torch_distributed_rank() -> int:
-    if not _is_torch_distributed_initialized():
-        return 0
-    return torch.distributed.get_rank()
 
 
 @contextmanager
