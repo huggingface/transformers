@@ -691,7 +691,7 @@ class ESMFold2AttentionPairBias(nn.Module):
         self.scale = self.head_dim**-0.5
         d_cond = d_cond or d_model
 
-        self.adaln = ESMFold2AdaptiveLayerNorm(d_model, d_cond, eps=1e-5)
+        self.adaln = ESMFold2AdaptiveLayerNorm(d_model, d_cond)
         # adaln-Zero gate (weight 0, bias -2); init in ESMFold2PreTrainedModel._init_weights.
         self.out_gate = nn.Linear(d_cond, d_model, bias=True)
 
@@ -701,7 +701,7 @@ class ESMFold2AttentionPairBias(nn.Module):
         self.out_proj = nn.Linear(d_model, d_model, bias=False)
 
         if d_pair > 0:
-            self.pair_norm = ESMFold2LayerNorm(d_pair, eps=1e-5)
+            self.pair_norm = ESMFold2LayerNorm(d_pair)
             self.pair_bias_proj = nn.Linear(d_pair, num_heads, bias=False)
 
     def compute_pair_bias(self, pair_repr: Tensor, bsz: int, num_diffusion_samples: int = 1) -> Tensor:
@@ -775,7 +775,7 @@ class ESMFold2ConditionedTransitionBlock(nn.Module):
         super().__init__()
         d_cond = d_cond or d_model
 
-        self.adaln = ESMFold2AdaptiveLayerNorm(d_model, d_cond, eps=1e-5)
+        self.adaln = ESMFold2AdaptiveLayerNorm(d_model, d_cond)
         # adaln-Zero gate (weight 0, bias -2); init in ESMFold2PreTrainedModel._init_weights.
         self.output_gate = nn.Linear(d_cond, d_model, bias=True)
 
@@ -1436,8 +1436,6 @@ class ESMFold2LanguageModelShim(nn.Module):
         return lm_z
 
 
-_EPS = 1e-5
-
 _DEFAULT_CHUNK_SIZE = 64
 
 
@@ -1462,8 +1460,8 @@ class ESMFold2TriangleMultiplicativeBlock(nn.Module):
         self.latent_channels = latent_channels
         self.flow = flow
         self._einsum_equation = self._FLOW_TO_EINSUM[flow]
-        self.norm_start = ESMFold2LayerNorm(self.input_channels, eps=_EPS)
-        self.norm_mix = ESMFold2LayerNorm(self.latent_channels, eps=_EPS)
+        self.norm_start = ESMFold2LayerNorm(self.input_channels)
+        self.norm_mix = ESMFold2LayerNorm(self.latent_channels)
         self.proj_bundle = nn.Linear(self.input_channels, 4 * self.latent_channels, bias=False)
         self.proj_emit = nn.Linear(self.latent_channels, self.input_channels, bias=False)
         self.proj_gate = nn.Linear(self.input_channels, self.input_channels, bias=False)
