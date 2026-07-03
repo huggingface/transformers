@@ -59,11 +59,9 @@ if is_torch_available():
     from ..vision_utils import (
         get_vision_bilinear_indices_and_weights,
         get_vision_cu_seqlens,
-        get_vision_frame_index,
         get_vision_merged_shape,
         get_vision_nearest_position_ids,
         get_vision_position_ids,
-        get_vision_temporal_merge_index,
         get_vision_window_index,
     )
 
@@ -434,10 +432,9 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     `window_index`/`cu_window_seqlens` (XNet-style window attn) and
     `bilinear_indices`/`bilinear_weights` (interpolation-based merging).
 
-    Optional helpers are gated by the presence of their attribute on the encoder's submodules
-    (`window_size`+`patch_size` for window attention, `num_grid_per_side` for bilinear,
-    `time_position_embeddings` for a per-frame additive table, `merge_kernel_size` for temporal
-    merging), so a model that doesn't use that feature won't get its kwarg injected.
+    Optional helpers are gated by the presence of their config attribute on the encoder
+    (`window_size`+`patch_size` for window attention, `num_grid_per_side` for bilinear),
+    so a model that doesn't use that feature won't get its kwarg injected.
     """
     grid_thw = inputs["grid_thw"]
     spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
@@ -446,10 +443,7 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
         # none (its encoder hard-codes `1` because spatial merging happens in the projector).
         spatial_merge_size = inputs.get("merge_sizes", 1)
 
-    # kimi_k25-style encoders carry a per-frame additive table and attend over the whole clip, so
-    # `cu_seqlens` is per-clip (matching the encoder's own util call) and a `frame_index` is injected.
-    temporal_encoder = _find_submodule_attr(model, "time_position_embeddings") is not None
-    inputs["cu_seqlens"] = get_vision_cu_seqlens(grid_thw, merge_temporal=temporal_encoder)
+    inputs["cu_seqlens"] = get_vision_cu_seqlens(grid_thw)
     # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
     # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
     include_temporal = _find_submodule_attr(model, "axis_dim") is not None
@@ -467,17 +461,6 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
         inputs["bilinear_indices"], inputs["bilinear_weights"] = get_vision_bilinear_indices_and_weights(
             grid_thw, num_grid_per_side, spatial_merge_size
         )
-
-    if temporal_encoder:
-        inputs["frame_index"] = get_vision_frame_index(grid_thw)
-
-    # Temporal-pooling spatial merger (kimi_k25): one gather index replaces its per-clip merge loop.
-    merge_kernel_size = _find_submodule_attr(model, "merge_kernel_size")
-    if merge_kernel_size is not None:
-        kernel_height, kernel_width = (
-            merge_kernel_size if not isinstance(merge_kernel_size, int) else (merge_kernel_size, merge_kernel_size)
-        )
-        inputs["temporal_merge_index"] = get_vision_temporal_merge_index(grid_thw, kernel_height, kernel_width)
 
 
 @register_export_input_preparer("target_sizes")
