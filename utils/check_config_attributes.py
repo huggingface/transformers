@@ -147,12 +147,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
-    # type: architecture-variant marker (validated, "release"-only), read in
-    # __post_init__ which the checker can't scan.
-    "ESMFold2Config": ["type"],
-    # ESMFold2 sub-configs: their fields are threaded into submodules as explicit
-    # dims (e.g. ESMFold2AtomEncoder(d_atom=cfg.inputs.atom_encoder.d_atom, ...)),
-    # never read as `config.<attr>`, so the checker's heuristic can't trace them.
+    "ESMFold2Config": ["type", "transition_expansion_ratio"],
     "AtomAttentionConfig": True,
     "ConfidenceHeadConfig": True,
     "DiffusionModuleConfig": True,
