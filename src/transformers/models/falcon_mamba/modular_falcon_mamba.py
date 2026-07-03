@@ -19,6 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...integrations.accelerate import force_accelerate_hooks
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_mambapy_available, is_torch_greater_or_equal, is_torchdynamo_compiling, is_tracing
 from ..mamba.configuration_mamba import MambaConfig
@@ -399,6 +400,7 @@ class FalconMambaMixer(MambaMixer):
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
         return contextualized_states
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
