@@ -212,7 +212,6 @@ def apply_fully_sharded_data_parallelism(
 
     distributed_config = getattr(model.config, "distributed_config", None)
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
-    tie_word_embeddings = getattr(model.config, "tie_word_embeddings", False)
 
     adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
@@ -243,8 +242,7 @@ def apply_fully_sharded_data_parallelism(
     # Used by generation code to detect FSDP and enable synced_gpus.
     model._is_fsdp_managed_module = True
 
-    if tie_word_embeddings and hasattr(model, "tie_weights"):
-        model.tie_weights()
+    # NOTE(3outeille): No need to tie the word embeddings here, it will be done _finalize_model_loading in modeling_utils.py
 
     return model
 
