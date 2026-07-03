@@ -27,7 +27,6 @@ class TmlTextConfig(PreTrainedConfig):
     base_config_key = "text_config"
 
     vocab_size: int = 151936
-    padded_vocab_size: int | None = None
     hidden_size: int = 4096
     num_hidden_layers: int = 48
     num_attention_heads: int = 32
@@ -64,7 +63,7 @@ class TmlTextConfig(PreTrainedConfig):
     moe_router_use_bias_correction: bool = False
     moe_norm_topk_prob: bool = True
     inference_moe_w13_interleaved: bool = True
-    logits_mup_width_multiplier: float | None = None
+    logits_mup_width_multiplier: float = 24.0
     rms_norm_eps_moe_gate: float = 1e-6
     attention_dropout: float = 0.0
     initializer_range: float = 0.02
@@ -73,7 +72,6 @@ class TmlTextConfig(PreTrainedConfig):
     eos_token_id: int | None = 2
 
     def __post_init__(self, **kwargs):
-        self.padded_vocab_size = self.padded_vocab_size or self.vocab_size
         self.swa_num_attention_heads = self.swa_num_attention_heads or self.num_attention_heads
         self.swa_num_key_value_heads = self.swa_num_key_value_heads or self.num_key_value_heads
         self.swa_head_dim = self.swa_head_dim or self.head_dim
@@ -89,11 +87,9 @@ class TmlAudioConfig(PreTrainedConfig):
     model_type = "tml_audio"
     base_config_key = "audio_config"
 
-    audio_mode: str = "dmel"
     n_mel_bins: int = 80
     mel_vocab_size: int = 256
-    decoder_dmodel: int | None = None
-    use_audio_norm: bool = True
+    text_hidden_size: int | None = None
     rms_norm_eps: float = 1e-6
 
 
