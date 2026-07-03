@@ -257,7 +257,7 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_video_processor_defaults(self):
         pass
 
-    @unittest.skip("Kimi sampels with FPS by default which is not compatible with this test")
     @parameterized.expand([(1, "pt")])
+    @unittest.skip("Kimi sampels with FPS by default which is not compatible with this test")
     def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
         pass

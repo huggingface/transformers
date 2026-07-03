@@ -101,7 +101,6 @@ class Kimi_K25Config(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     projection_hidden_size: int | None = 1152
-    projection_hidden_act: str = "gelu"
     projection_layer_norm_eps: float = 1e-5
     image_token_id: int = 163605
     video_token_id: int = 163840
