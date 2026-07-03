@@ -77,6 +77,9 @@ class Qwen3ASRConfig(PreTrainedConfig):
     timestamp_token_id (`int`, *optional*, defaults to 151705):
         Token ID of the ``<timestamp>`` marker in the tokenizer vocabulary. These markers
         delimit word boundaries in the forced-alignment input sequence.
+    thinker_config (`dict`, *optional*):
+        Legacy configuration for Qwen3-ASR checkpoints that store the native audio and text
+        configs under a `thinker_config` key.
     token_classification_bias (`bool`, *optional*, defaults to False):
         Whether the token classification head for forced alignment should have a bias term.
 
@@ -100,6 +103,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
+    thinker_config: dict | None = None
     audio_token_id: int = 151676
     timestamp_token_id: int = 151705
     pad_token_id: int = 151645
@@ -109,6 +113,33 @@ class Qwen3ASRConfig(PreTrainedConfig):
     token_classification_bias: bool = False
 
     def __post_init__(self, **kwargs):
+        if isinstance(self.thinker_config, dict) and self.audio_config is None and self.text_config is None:
+            self.audio_config = dict(self.thinker_config.get("audio_config", {}))
+            self.text_config = dict(self.thinker_config.get("text_config", {}))
+
+            if self.audio_config.get("model_type") == "qwen3_asr_audio_encoder":
+                self.audio_config["model_type"] = "qwen3_asr_encoder"
+            if "rope_scaling" in self.text_config and "rope_parameters" not in self.text_config:
+                rope_scaling = self.text_config.pop("rope_scaling")
+                self.text_config["rope_parameters"] = {
+                    "rope_theta": self.text_config.pop("rope_theta", 1000000),
+                    "rope_type": rope_scaling.get("rope_type", rope_scaling.get("type", "default")),
+                }
+
+            for attr in (
+                "audio_token_id",
+                "timestamp_token_id",
+                "pad_token_id",
+                "eos_token_id",
+                "initializer_range",
+                "tie_word_embeddings",
+                "token_classification_bias",
+            ):
+                if attr in self.thinker_config:
+                    setattr(self, attr, self.thinker_config[attr])
+            if "classify_num" in self.thinker_config:
+                self.num_labels = self.thinker_config["classify_num"]
+
         if isinstance(self.audio_config, dict):
             self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_asr_encoder")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)

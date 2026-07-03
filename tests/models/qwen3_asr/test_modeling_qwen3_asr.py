@@ -15,6 +15,9 @@
 import json
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from safetensors.torch import save_file
 
 from transformers import (
     AutoProcessor,
@@ -106,6 +109,115 @@ class Qwen3ASRForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase)
     )
     def test_inputs_embeds_matches_input_ids(self):
         pass
+
+    def test_legacy_thinker_config(self):
+        config = Qwen3ASRConfig(
+            thinker_config={
+                "audio_config": {
+                    "model_type": "qwen3_asr_audio_encoder",
+                    "d_model": 16,
+                    "output_dim": 16,
+                    "encoder_layers": 1,
+                },
+                "text_config": {
+                    "model_type": "qwen3",
+                    "hidden_size": 16,
+                    "num_hidden_layers": 1,
+                    "rope_scaling": {"type": "default", "rope_type": "default"},
+                    "rope_theta": 1000000,
+                },
+                "audio_token_id": 98,
+            }
+        )
+
+        self.assertEqual(config.audio_config.model_type, "qwen3_asr_encoder")
+        self.assertEqual(config.audio_config.d_model, 16)
+        self.assertEqual(config.audio_config.output_dim, 16)
+        self.assertEqual(config.text_config.hidden_size, 16)
+        self.assertEqual(config.text_config.rope_parameters, {"rope_theta": 1000000, "rope_type": "default"})
+        self.assertEqual(config.audio_token_id, 98)
+
+    def test_legacy_thinker_checkpoint_conversion(self):
+        def to_legacy_key(key):
+            if key.startswith("model.multi_modal_projector.linear_1"):
+                return "thinker.audio_tower.proj1" + key[len("model.multi_modal_projector.linear_1") :]
+            if key.startswith("model.multi_modal_projector.linear_2"):
+                return "thinker.audio_tower.proj2" + key[len("model.multi_modal_projector.linear_2") :]
+            if key.startswith("model.language_model"):
+                return "thinker.model" + key[len("model.language_model") :]
+            if key.startswith("model.audio_tower"):
+                return "thinker.audio_tower" + key[len("model.audio_tower") :]
+            if key.startswith("lm_head"):
+                return "thinker.lm_head" + key[len("lm_head") :]
+            if key.startswith("score"):
+                return "thinker.lm_head" + key[len("score") :]
+            return key
+
+        for model_class, head_key, legacy_head_key, num_labels in (
+            (Qwen3ASRForConditionalGeneration, "lm_head.weight", "thinker.lm_head.weight", None),
+            (Qwen3ASRForTokenClassification, "score.weight", "thinker.lm_head.weight", 5),
+        ):
+            with self.subTest(model_class=model_class.__name__):
+                config = self.model_tester.get_config()
+                if num_labels is not None:
+                    config.num_labels = num_labels
+                model = model_class(config).eval()
+                state_dict = model.state_dict()
+                legacy_state_dict = {to_legacy_key(key): value.detach().clone() for key, value in state_dict.items()}
+
+                eos_token_id = config.eos_token_id
+                if not isinstance(eos_token_id, int):
+                    eos_token_id = list(eos_token_id)
+                legacy_config = {
+                    "architectures": [model_class.__name__],
+                    "model_type": "qwen3_asr",
+                    "thinker_config": {
+                        "audio_config": config.audio_config.to_dict(),
+                        "text_config": config.text_config.to_dict(),
+                        "audio_token_id": config.audio_token_id,
+                        "pad_token_id": config.pad_token_id,
+                        "eos_token_id": eos_token_id,
+                        "tie_word_embeddings": config.tie_word_embeddings,
+                        "token_classification_bias": config.token_classification_bias,
+                    },
+                }
+                if num_labels is not None:
+                    legacy_config["thinker_config"]["classify_num"] = num_labels
+                legacy_config["thinker_config"]["audio_config"]["model_type"] = "qwen3_asr_audio_encoder"
+                legacy_config["thinker_config"]["text_config"]["rope_scaling"] = {
+                    "type": "default",
+                    "rope_type": "default",
+                }
+                legacy_config["thinker_config"]["text_config"].pop("rope_parameters", None)
+                legacy_config["thinker_config"]["text_config"]["rope_theta"] = 1000000
+
+                with TemporaryDirectory() as tmp_dir:
+                    with open(Path(tmp_dir) / "config.json", "w", encoding="utf-8") as f:
+                        json.dump(legacy_config, f)
+                    save_file(legacy_state_dict, Path(tmp_dir) / "model.safetensors")
+
+                    loaded_model, loading_info = model_class.from_pretrained(tmp_dir, output_loading_info=True)
+
+                self.assertFalse(loading_info["missing_keys"])
+                self.assertFalse(loading_info["unexpected_keys"])
+                loaded_state_dict = loaded_model.state_dict()
+                torch.testing.assert_close(loaded_state_dict[head_key], legacy_state_dict[legacy_head_key])
+                torch.testing.assert_close(
+                    loaded_state_dict["model.multi_modal_projector.linear_1.weight"],
+                    legacy_state_dict["thinker.audio_tower.proj1.weight"],
+                )
+                torch.testing.assert_close(
+                    loaded_state_dict["model.multi_modal_projector.linear_2.bias"],
+                    legacy_state_dict["thinker.audio_tower.proj2.bias"],
+                )
+                torch.testing.assert_close(
+                    loaded_state_dict["model.language_model.embed_tokens.weight"],
+                    legacy_state_dict["thinker.model.embed_tokens.weight"],
+                )
+                torch.testing.assert_close(
+                    loaded_state_dict["model.audio_tower.conv_out.weight"],
+                    legacy_state_dict["thinker.audio_tower.conv_out.weight"],
+                )
 
 
 @require_torch

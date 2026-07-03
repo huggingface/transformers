@@ -668,6 +668,28 @@ def _build_checkpoint_conversion_mapping():
         "Qwen2AudioModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
+        "Qwen3ASRForConditionalGeneration": [
+            WeightRenaming(source_patterns=r"^thinker.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^thinker.model", target_patterns="model.language_model"),
+            WeightRenaming(
+                source_patterns=r"^thinker.audio_tower.proj1", target_patterns="model.multi_modal_projector.linear_1"
+            ),
+            WeightRenaming(
+                source_patterns=r"^thinker.audio_tower.proj2", target_patterns="model.multi_modal_projector.linear_2"
+            ),
+            WeightRenaming(source_patterns=r"^thinker.audio_tower", target_patterns="model.audio_tower"),
+        ],
+        "Qwen3ASRForTokenClassification": [
+            WeightRenaming(source_patterns=r"^thinker.lm_head", target_patterns="score"),
+            WeightRenaming(source_patterns=r"^thinker.model", target_patterns="model.language_model"),
+            WeightRenaming(
+                source_patterns=r"^thinker.audio_tower.proj1", target_patterns="model.multi_modal_projector.linear_1"
+            ),
+            WeightRenaming(
+                source_patterns=r"^thinker.audio_tower.proj2", target_patterns="model.multi_modal_projector.linear_2"
+            ),
+            WeightRenaming(source_patterns=r"^thinker.audio_tower", target_patterns="model.audio_tower"),
+        ],
         "granite_speech": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
