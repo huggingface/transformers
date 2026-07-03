@@ -728,7 +728,7 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-            causal_mask_mapping = {self.config.layer_types[0]: create_causal_mask(**mask_kwargs)}
+            causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
