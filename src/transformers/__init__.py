@@ -382,12 +382,12 @@ else:
         "Chunk",
         "Concatenate",
         "ConversionOps",
-        "FuseAndPermuteForRope",
         "GroupWeightRename",
         "MergeModulelist",
         "PermuteForRope",
         "SplitModulelist",
-        "UnfuseAndPermuteForRope",
+        "VisionFuseAndPermuteForRope",
+        "VisionUnfuseAndPermuteForRope",
         "WeightConverter",
     ]
     _import_structure["data.datasets"] = [
@@ -509,12 +509,12 @@ if TYPE_CHECKING:
     from .core_model_loading import Chunk as Chunk
     from .core_model_loading import Concatenate as Concatenate
     from .core_model_loading import ConversionOps as ConversionOps
-    from .core_model_loading import FuseAndPermuteForRope as FuseAndPermuteForRope
     from .core_model_loading import GroupWeightRename as GroupWeightRename
     from .core_model_loading import MergeModulelist as MergeModulelist
     from .core_model_loading import PermuteForRope as PermuteForRope
     from .core_model_loading import SplitModulelist as SplitModulelist
-    from .core_model_loading import UnfuseAndPermuteForRope as UnfuseAndPermuteForRope
+    from .core_model_loading import VisionFuseAndPermuteForRope as VisionFuseAndPermuteForRope
+    from .core_model_loading import VisionUnfuseAndPermuteForRope as VisionUnfuseAndPermuteForRope
     from .core_model_loading import WeightConverter as WeightConverter
 
     # Data

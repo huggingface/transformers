@@ -422,7 +422,7 @@ class PermuteForRope(ConversionOps):
         return PermuteForRope()
 
 
-class FuseAndPermuteForRope(ConversionOps):
+class VisionFuseAndPermuteForRope(ConversionOps):
     """
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format on fused QKV.
     Same as calling `PermuteForRope() + Concatenate()` but lets us call `Permute` only on a subset of chunked tensors.
@@ -478,10 +478,10 @@ class FuseAndPermuteForRope(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return UnfuseAndPermuteForRope(self.dim, self.permute_layer_names)
+        return VisionUnfuseAndPermuteForRope(self.dim, self.permute_layer_names)
 
 
-class UnfuseAndPermuteForRope(ConversionOps):
+class VisionUnfuseAndPermuteForRope(ConversionOps):
     """
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format on fused QKV.
     Same as calling `Chunk() + PermuteForRope()` but lets us call `Permute` only on a subset of chunked tensors.
@@ -537,7 +537,7 @@ class UnfuseAndPermuteForRope(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return FuseAndPermuteForRope(self.dim, self.permute_layer_names)
+        return VisionFuseAndPermuteForRope(self.dim, self.permute_layer_names)
 
 
 class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
@@ -996,7 +996,10 @@ class GroupWeightRename(WeightRenaming):
 
     def __init__(self, source_patterns: list[str], target_patterns: list[str]):
         if len(source_patterns) != len(target_patterns):
-            raise ValueError("GroupWeightRename: source_patterns and target_patterns must have the same length")
+            raise ValueError(
+                "GroupWeightRename requires N:N length matching, but found "
+                f"len(source_patterns)={len(source_patterns)} != len(target_patterns)={len(target_patterns)}"
+            )
         super().__init__(source_patterns=source_patterns, target_patterns=target_patterns)
         self._active = None  # None = undecided; True = guard was seen
 

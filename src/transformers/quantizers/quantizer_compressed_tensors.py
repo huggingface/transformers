@@ -197,24 +197,13 @@ class DecompressExperts(ConversionOps):
             scales = input_dict[key.replace("weight_packed", "weight_scale")]
 
             # Pre-allocate the stacked output buffer to reduce cuda mem fragmentation
-            #
-            # Without pre-allocation the loop accumulates N tensors per expert so that
-            # `MergeModulelist` stacks the full list for MoE kernels compatinility.
-            # The N alloc/free cycles for scratch buffers inside decompress_module
-            # scatter memory in a fragmented pattern, so that by the time Concatenate tries
-            # to allocate the final cat output, the allocator has enough total free bytes but
-            # they are spread across many small non-contiguous holes.
+            # Without pre-allocation the loop accumulates N tensors per expert and next
+            # `MergeModulelist` stacks the full list for MoE kernels compatipility, i.e. x2 memory
             output = None
             for i, (quant, scale) in enumerate(zip(quantized, scales)):
-                # The checkpoint's `weight_shape` holds the *full* [out, in] of the unsharded weight.
-                # Under tensor/expert parallelism the loader shards every source sibling mapped to this
-                # target (`weight_packed`/`weight_scale`/`weight_shape`) with the same op, which leaves
-                # the 2-element `weight_shape` empty on most ranks (and stale on rank 0). The packed
-                # tensor is the source of truth for the *shard's* geometry: it is `[rows, cols]` with
-                # `pack_factor` values packed per int32 along the last dim, so the decompressed shard is
-                # `[rows, cols * pack_factor]`. Rebuild the shape from it so decompression is correct for
-                # every shard; in the non-distributed path this equals the stored `weight_shape`, so that
-                # path is unchanged.
+                # The checkpoint's `weight_shape` is a 2D tensor of `(out-dim, in-dim)`
+                # Under TP/EP sharding it leaves the 2-element `weight_shape` empty on most ranks
+                # Packed tensor can be used instead to rebuild `weight_shape`
                 shape = torch.tensor([quant.shape[0], quant.shape[1] * pack_factor])
                 module = DummyModule(quant, scale, shape)
                 module.quantization_scheme = quantization_scheme

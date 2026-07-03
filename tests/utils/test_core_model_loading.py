@@ -29,13 +29,13 @@ from transformers.core_model_loading import (
     Concatenate,
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
-    FuseAndPermuteForRope,
     GroupWeightRename,
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
-    UnfuseAndPermuteForRope,
+    VisionFuseAndPermuteForRope,
+    VisionUnfuseAndPermuteForRope,
     WeightConverter,
     WeightRenaming,
     build_glob_alternation,
@@ -1065,8 +1065,8 @@ class TestConversionMapping(unittest.TestCase):
         )
         k_proj = k_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
 
-        unfuse = UnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
-        fuse = FuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
+        unfuse = VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
+        fuse = VisionFuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
 
         unfused_output = unfuse.convert({"qkv": [qkv_weight]}, ["qkv"], ["q_proj", "k_proj", "v_proj"], config=config)
         fused_output = fuse.convert(

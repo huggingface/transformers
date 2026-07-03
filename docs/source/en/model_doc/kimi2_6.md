@@ -20,7 +20,10 @@ limitations under the License.
 
 *This model was contributed to Hugging Face Transformers on 2026-07-02.*
 
-# Kimi_K25
+# KimiK-2.5, KimiK-2.6, KimiK-2.7
+
+This model class supports all three different releases: KimiK-2.5,KimiK-2.6, KimiK-2.7
+
 
 ## Overview
 
@@ -29,7 +32,10 @@ Kimi K2.5 is an open-source, native multimodal agentic model that advances pract
 Kimi K2.5 achieves significant improvements on complex, end-to-end coding tasks, generalizing robustly across programming languages (Rust, Go, Python) and domains spanning front-end, DevOps, and performance optimization. The model is capable of transforming simple prompts and visual inputs into production-ready interfaces and lightweight full-stack workflows, generating structured layouts, interactive elements, and rich animations with deliberate aesthetic precision.
 
 This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
-The offical checkpoints are [moonshotai/Kimi-K2.5](https://huggingface.co/moonshotai/Kimi-K2.5) and [moonshotai/Kimi-K2.6](https://huggingface.co/moonshotai/Kimi-K2.6).
+The offical checkpoints are [moonshotai/Kimi-K2.5](https://huggingface.co/moonshotai/Kimi-K2.5), [moonshotai/Kimi-K2.6](https://huggingface.co/moonshotai/Kimi-K2.6) and [moonshotai/Kimi-K2.7-Code](https://huggingface.co/moonshotai/Kimi-K2.7-Code).
+
+
+Note that the repositories don't yet have the correct fast tokenizer uploaded. You can get the converted processor and tokenizer from [RaushanTurganbay/kimi2.7-processor](https://huggingface.co/RaushanTurganbay/kimi2.7-processor)
 
 
 ## Usage examples
@@ -65,7 +71,7 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
     return_tensors="pt",
     return_dict=True,
-).to(device=model.device, dtype=torch.bfloat16)
+).to(device=model.device, dtype=model.dtype)
 
 generated_ids = model.generate(**inputs, max_new_tokens=64)
 generated_text = processor.batch_decode(generated_ids[:, inputs["input_ids"].shape[-1]:], skip_special_tokens=True)[0]

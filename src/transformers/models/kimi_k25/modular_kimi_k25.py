@@ -81,7 +81,7 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     intermediate_size: int = 4304
     hidden_act: str = "gelu_pytorch_tanh"
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
-    rope_parameters: dict | None = None
+    rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int | None = None
 
 
@@ -179,9 +179,10 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
                 )
                 position_embeddings = position_embeddings.squeeze(0).permute(1, 2, 0).flatten(0, 1)
 
-            position_embeddings = position_embeddings.unsqueeze(0).repeat(t, 1, 1)
-            # Add RoPE positions for time grid if processing videos
+            position_embeddings = position_embeddings.unsqueeze(0)  # Add T axis
+            # Add sinusoidal positions for time grid if processing videos
             if t > 1:
+                position_embeddings = position_embeddings.repeat(t, 1, 1)
                 position_embeddings = position_embeddings + self.time_position_embeddings[0:t]
 
             pos_embs.append(position_embeddings.flatten(0, 1))
@@ -388,26 +389,12 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             # Reshape along self.merge_kernel_size and concat to the last dimension
             new_height, new_width = h // kernel_height, w // kernel_width
             reshaped_seq = seq.view(t, new_height, kernel_height, new_width, kernel_width, hidden_dim)
-            reshaped_seq = reshaped_seq.transpose(2, 3).contiguous().mean(dim=0)  # temporal pooling
-            padded_seq = reshaped_seq.view(new_height * new_width, kernel_height * kernel_width, -1)
+            reshaped_seq = reshaped_seq.transpose(2, 3).mean(dim=0)  # temporal pooling
+            padded_seq = reshaped_seq.reshape(new_height * new_width, kernel_height * kernel_width, -1)
             outputs.append(padded_seq)
             running_length += t * h * w
 
         return torch.cat(outputs, dim=0)
-
-    def get_position_ids(self, grid_thw: torch.Tensor) -> torch.Tensor:
-        all_position_ids = []
-        for t, h, w in grid_thw.tolist():
-            h_ids = torch.arange(h, device=grid_thw.device)
-            w_ids = torch.arange(w, device=grid_thw.device)
-
-            # (h, w, 2) grid of (row, col) coordinates
-            grid = torch.stack(torch.meshgrid(h_ids, w_ids, indexing="xy"), dim=-1)
-
-            # (h*w, 2) -> repeat for each temporal frame in case of videos -> (t*h*w, 2)
-            all_position_ids.append(grid.reshape(-1, 2).repeat(t, 1))
-        position_ids = torch.cat(all_position_ids, dim=0).unsqueeze(0)
-        return position_ids.permute(2, 0, 1)  # (2, batch, seq_len)
 
     @capture_outputs
     @auto_docstring

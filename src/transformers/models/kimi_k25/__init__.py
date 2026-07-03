@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from .image_processing_kimi_k25 import *
     from .modeling_kimi_k25 import *
     from .processing_kimi_k25 import *
-    from .tokenization_kimi_k25 import *
     from .video_processing_kimi_k25 import *
 else:
     import sys
