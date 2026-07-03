@@ -321,9 +321,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config, input_ids, attention_mask = config_and_inputs
 
-        model = VibeVoiceForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
+        model = VibeVoiceForConditionalGeneration(config=config).to(torch_device)
 
         max_new_tokens = 5
         original_length = input_ids.shape[1]

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import re
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
@@ -44,27 +43,7 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class VibeVoiceProcessor(ProcessorMixin):
-    r"""
-    Constructs a VibeVoice processor which wraps [`VibeVoiceAcousticTokenizerFeatureExtractor`] and
-    [`Qwen2TokenizerFast`] into a single processor that inherits both the audio feature extraction and
-    tokenizer functionalities.
-
-    See the [`~VibeVoiceProcessor.__call__`] for more information.
-
-    Args:
-        feature_extractor (`VibeVoiceAcousticTokenizerFeatureExtractor`):
-            The feature extractor for audio processing.
-        tokenizer (`Qwen2TokenizerFast`):
-            The tokenizer for text processing.
-        chat_template (`str`, *optional*):
-            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
-        audio_bos_token (`str`, *optional*, defaults to `"<|vision_start|>"`):
-            The token used to indicate the beginning of audio generation.
-        audio_eos_token (`str`, *optional*, defaults to `"<|vision_end|>"`):
-            The token used to indicate the end of audio generation.
-        audio_token (`str`, *optional*, defaults to `"<|vision_pad|>"`):
-            The token used to indicate to continue generating audio.
-    """
+    valid_processor_kwargs = VibeVoiceProcessorKwargs
 
     def __init__(
         self,
@@ -75,13 +54,47 @@ class VibeVoiceProcessor(ProcessorMixin):
         audio_eos_token="<|vision_end|>",
         audio_token="<|vision_pad|>",
     ):
+        r"""
+        audio_bos_token (`str`, *optional*, defaults to `"<|vision_start|>"`):
+            The token used to indicate the beginning of audio generation.
+        audio_eos_token (`str`, *optional*, defaults to `"<|vision_end|>"`):
+            The token used to indicate the end of audio generation.
+        audio_token (`str`, *optional*, defaults to `"<|vision_pad|>"`):
+            The token used to indicate to continue generating audio.
+        """
         self.audio_bos_token = audio_bos_token
-        self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
+        self.audio_bos_token_id = (
+            tokenizer.audio_bos_token_id
+            if getattr(tokenizer, "audio_bos_token_id", None)
+            else tokenizer.convert_tokens_to_ids(audio_bos_token)
+        )
         self.audio_eos_token = audio_eos_token
-        self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
+        self.audio_eos_token_id = (
+            tokenizer.audio_eos_token_id
+            if getattr(tokenizer, "audio_eos_token_id", None)
+            else tokenizer.convert_tokens_to_ids(audio_eos_token)
+        )
         self.audio_token = audio_token
-        self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
+        self.audio_token_id = (
+            tokenizer.audio_token_id
+            if getattr(tokenizer, "audio_token_id", None)
+            else tokenizer.convert_tokens_to_ids(audio_token)
+        )
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        pad_to_multiple_of = kwargs.get(
+            "pad_to_multiple_of", VibeVoiceProcessorKwargs._defaults["audio_kwargs"]["pad_to_multiple_of"]
+        )
+        processed_audio = self.feature_extractor(audio, **kwargs)
+        self._num_audio_tokens = (
+            torch.ceil(processed_audio["padding_mask"].sum(dim=-1) / pad_to_multiple_of).int().tolist()
+        )
+        audio_replacements = [self.replace_audio_token(processed_audio, idx) for idx in range(len(audio))]
+        return processed_audio, audio_replacements
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+        return self.audio_token * self._num_audio_tokens[audio_idx]
 
     def __call__(
         self,
@@ -120,57 +133,10 @@ class VibeVoiceProcessor(ProcessorMixin):
             - **acoustic_loss_mask** -- Boolean mask for positions where diffusion loss is computed. True at audio
               diffusion token positions. Returned when `output_labels=True`.
         """
-        output_kwargs = self._merge_kwargs(
-            VibeVoiceProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        text_kwargs = output_kwargs["text_kwargs"]
-        audio_kwargs = output_kwargs["audio_kwargs"]
-        return_tensors = text_kwargs.get("return_tensors", None)
-        if return_tensors != "pt":
+        if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, (list, tuple)):
-            raise ValueError("text input must be a string or list of strings")
-        n_audio_in_text = [sample.count(self.audio_token) for sample in text]
-
-        n_audio = 0
-        if audio is not None:
-            audio = make_list_of_audio(audio)
-            n_audio = len(audio)
-
-        if sum(n_audio_in_text) > 0 and n_audio != sum(n_audio_in_text):
-            if audio is None:
-                raise ValueError("No audio were provided, but there are audio tokens in the prompt")
-            else:
-                raise ValueError(
-                    f"The number of audio tokens in each text ({n_audio_in_text}) should be the same as the "
-                    f"number of provided audios ({n_audio})."
-                )
-
-        data = {}
-        if audio is not None:
-            audio = make_list_of_audio(audio)
-            data = self.feature_extractor(audio, **audio_kwargs)
-
-            # Expand audio tokens in text (note could be multiple audio per text)
-            num_audio_tokens = (
-                torch.ceil(data["padding_mask"].sum(dim=-1) / audio_kwargs["pad_to_multiple_of"]).int().tolist()
-            )
-            audio_token_pattern = re.compile(re.escape(self.audio_token))
-            audio_token_iter = iter(num_audio_tokens)
-            for i, sample in enumerate(text):
-                text[i] = audio_token_pattern.sub(
-                    lambda m: self.audio_token * next(audio_token_iter),
-                    sample,
-                )
-
-        encoding = self.tokenizer(text, **text_kwargs)
-        data.update(encoding)
+        data = super().__call__(text=text, audio=audio, **kwargs)
         if output_labels:
             labels = data["input_ids"].clone()
             labels[labels == self.tokenizer.pad_token_id] = -100
@@ -181,7 +147,7 @@ class VibeVoiceProcessor(ProcessorMixin):
                 acoustic_loss_mask[data["input_ids"] == self.audio_token_id] = True
             data["acoustic_loss_mask"] = acoustic_loss_mask
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return data
 
     def save_audio(
         self,

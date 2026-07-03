@@ -67,8 +67,8 @@ STATE_DICT_MAPPING = {
     r"acoustic_tokenizer\.":                                                       r"audio_tower.",
 
     # Diffusion head renaming
-    r"prediction_head\.t_embedder\.mlp\.0\.":                                      r"diffusion_head.timestep_embedder.layer_1.",
-    r"prediction_head\.t_embedder\.mlp\.2\.":                                      r"diffusion_head.timestep_embedder.layer_2.",
+    r"prediction_head\.t_embedder\.mlp\.0\.":                                      r"diffusion_head.timestep_proj.layer_1.",
+    r"prediction_head\.t_embedder\.mlp\.2\.":                                      r"diffusion_head.timestep_proj.layer_2.",
     r"prediction_head\.layers\.(\d+)\.adaLN_modulation\.1\.":                     r"diffusion_head.layers.\1.linear.",
     r"prediction_head\.final_layer\.adaLN_modulation\.1\.":                       r"diffusion_head.final_layer.linear_1.",
     r"prediction_head\.final_layer\.linear\.":                                     r"diffusion_head.final_layer.linear_2.",

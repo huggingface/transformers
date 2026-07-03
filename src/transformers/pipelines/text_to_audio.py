@@ -50,6 +50,7 @@ class TextToAudioPipeline(Pipeline):
 
     Unless the model you're using explicitly sets generation parameters in `generation_config.json`, the default values
     from `generation.configuration_utils.py._get_default_generation_params()` will be used.
+    - max_new_tokens: 256
 
     Example:
 
@@ -102,7 +103,7 @@ class TextToAudioPipeline(Pipeline):
     _load_tokenizer = True
 
     # Make sure the docstring is updated when the default generation config is changed
-    _default_generation_config = GenerationConfig()
+    _default_generation_config = GenerationConfig(max_new_tokens=256)
 
     def __init__(self, *args, vocoder=None, sampling_rate=None, noise_scheduler=None, **kwargs):
         # Some models (e.g., VibeVoice) require noise_scheduler during initialization because `_prepare_generation_config` is called in super().__init__

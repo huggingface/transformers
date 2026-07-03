@@ -24,6 +24,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -87,22 +88,36 @@ class VibeVoiceRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class VibeVoiceDiffusionHeadTimestepEmbedder(nn.Module):
+class VibeVoiceDiffusionHeadSinusoidalEmbedding(nn.Module):
+    freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.register_buffer("freq", self.compute_default_freq(config), persistent=False)
+
+    @staticmethod
+    def compute_default_freq(config):
+        dim = config.frequency_embedding_size // 2
+        return torch.exp(-math.log(config.diffusion_max_period) * torch.arange(dim, dtype=torch.float32) / dim)
+
+    def forward(self, timesteps):
+        args = timesteps[:, None].float() * self.freq[None].to(timesteps.device)
+        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        if self.config.frequency_embedding_size % 2:
+            embedding = nn.functional.pad(embedding, (0, 1))
+        return embedding
+
+
+class VibeVoiceDiffusionHeadMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
         self.layer_1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
         self.act = ACT2FN[config.hidden_act]
         self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
-    def forward(self, timesteps, max_period=10000):
-        dim = self.config.frequency_embedding_size // 2
-        freq = torch.exp(-math.log(max_period) * torch.arange(dim, dtype=torch.float32) / dim)
-        args = timesteps[:, None].float() * freq[None].to(timesteps.device)
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if self.config.frequency_embedding_size % 2:
-            embedding = nn.functional.pad(embedding, (0, 1))
-        return self.layer_2(self.act(self.layer_1(embedding.to(timesteps.dtype))))
+    def forward(self, hidden_states):
+        return self.layer_2(self.act(self.layer_1(hidden_states)))
 
 
 class VibeVoiceMLP(nn.Module):
@@ -160,7 +175,8 @@ class VibeVoiceDiffusionHead(nn.Module):
         super().__init__()
         self.noisy_images_proj = nn.Linear(config.audio_config.hidden_size, config.hidden_size, bias=False)
         self.cond_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.timestep_embedder = VibeVoiceDiffusionHeadTimestepEmbedder(config)
+        self.timestep_embedding = VibeVoiceDiffusionHeadSinusoidalEmbedding(config)
+        self.timestep_proj = VibeVoiceDiffusionHeadMLP(config)
         self.layers = nn.ModuleList(
             [VibeVoiceDiffusionHeadAdaLayerNorm(config) for _ in range(config.num_head_layers)]
         )
@@ -171,7 +187,8 @@ class VibeVoiceDiffusionHead(nn.Module):
         Forward pass of the prediction head. Returns the predicted noise/velocity.
         """
         hidden_states = self.noisy_images_proj(noisy_images)
-        embedded_timesteps = self.timestep_embedder(timesteps)
+        embedded_timesteps = self.timestep_embedding(timesteps).to(timesteps.dtype)
+        embedded_timesteps = self.timestep_proj(embedded_timesteps)
         condition = self.cond_proj(condition)
         condition = condition + embedded_timesteps
         for layer in self.layers:
@@ -212,9 +229,11 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if hasattr(module, "latent_scaling_factor"):
-            nn.init.constant_(module.latent_scaling_factor, 1.0)
+            init.constant_(module.latent_scaling_factor, 1.0)
         if hasattr(module, "latent_bias_factor"):
-            nn.init.constant_(module.latent_bias_factor, 0.0)
+            init.constant_(module.latent_bias_factor, 0.0)
+        if isinstance(module, VibeVoiceDiffusionHeadSinusoidalEmbedding):
+            init.copy_(module.freq, module.compute_default_freq(module.config))
 
 
 @auto_docstring(
@@ -304,7 +323,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
         padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
@@ -343,6 +362,50 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         self.model = VibeVoiceModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
+
+    def _compute_diffusion_loss(
+        self,
+        audio_features: torch.FloatTensor,
+        condition_features: torch.FloatTensor,
+        noise_scheduler: object,
+        ddpm_batch_multiplier: int,
+        num_diffusion_steps: int,
+    ) -> torch.FloatTensor:
+        audio_len, latent_size = audio_features.shape
+        audio_features_repeated = audio_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
+        condition_features_repeated = condition_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
+
+        # Random noise and timesteps for diffusion training
+        noise = torch.randn(
+            (audio_len * ddpm_batch_multiplier, latent_size),
+            device=audio_features.device,
+            dtype=audio_features.dtype,
+        )
+        timesteps = torch.multinomial(
+            torch.ones(num_diffusion_steps),
+            audio_len * ddpm_batch_multiplier,
+            replacement=True,
+        ).to(audio_features.device)
+        noisy_audio_features = noise_scheduler.add_noise(audio_features_repeated, noise, timesteps)
+
+        # Predict noise/velocity using diffusion head
+        model_output = self.model.diffusion_head(
+            noisy_audio_features, timesteps.type_as(audio_features), condition_features_repeated
+        )
+
+        # Compute target (v_prediction parameterization)
+        alpha_t = noise_scheduler.alpha_t.to(device=audio_features.device, dtype=audio_features.dtype)
+        sigma_t = noise_scheduler.sigma_t.to(device=audio_features.device, dtype=audio_features.dtype)
+        alpha_t = alpha_t[timesteps].flatten().unsqueeze(-1)
+        sigma_t = sigma_t[timesteps].flatten().unsqueeze(-1)
+        target = (alpha_t * noise - sigma_t * audio_features_repeated).to(model_output.device)
+
+        diffusion_loss = torch.nn.functional.mse_loss(model_output.float(), target.float(), reduction="sum")
+        if latent_size > 0 and ddpm_batch_multiplier > 0 and audio_len > 0:
+            diffusion_loss = diffusion_loss / (latent_size * ddpm_batch_multiplier * audio_len)
+        else:
+            diffusion_loss = torch.tensor(0.0, device=diffusion_loss.device)
+        return diffusion_loss
 
     @can_return_tuple
     @auto_docstring
@@ -401,40 +464,9 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
 
             audio_features = outputs.audio_features
             condition_features = hidden_states[acoustic_loss_mask.cpu()].to(audio_features.device)
-            audio_len, latent_size = audio_features.shape
-            audio_features_repeated = audio_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
-            condition_features_repeated = condition_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
-
-            # Random noise and timesteps for diffusion training
-            noise = torch.randn(
-                (audio_len * ddpm_batch_multiplier, latent_size),
-                device=audio_features.device,
-                dtype=audio_features.dtype,
+            diffusion_loss = self._compute_diffusion_loss(
+                audio_features, condition_features, noise_scheduler, ddpm_batch_multiplier, num_diffusion_steps
             )
-            timesteps = torch.multinomial(
-                torch.ones(num_diffusion_steps),
-                audio_len * ddpm_batch_multiplier,
-                replacement=True,
-            ).to(audio_features.device)
-            noisy_audio_features = noise_scheduler.add_noise(audio_features_repeated, noise, timesteps)
-
-            # Predict noise/velocity using diffusion head
-            model_output = self.model.diffusion_head(
-                noisy_audio_features, timesteps.type_as(audio_features), condition_features_repeated
-            )
-
-            # Compute target (v_prediction parameterization)
-            alpha_t = noise_scheduler.alpha_t.to(device=audio_features.device, dtype=audio_features.dtype)
-            sigma_t = noise_scheduler.sigma_t.to(device=audio_features.device, dtype=audio_features.dtype)
-            alpha_t = alpha_t[timesteps].flatten().unsqueeze(-1)
-            sigma_t = sigma_t[timesteps].flatten().unsqueeze(-1)
-            target = (alpha_t * noise - sigma_t * audio_features_repeated).to(model_output.device)
-
-            diffusion_loss = torch.nn.functional.mse_loss(model_output.float(), target.float(), reduction="sum")
-            if latent_size > 0 and ddpm_batch_multiplier > 0 and audio_len > 0:
-                diffusion_loss = diffusion_loss / (latent_size * ddpm_batch_multiplier * audio_len)
-            else:
-                diffusion_loss = torch.tensor(0.0, device=diffusion_loss.device)
 
         return VibeVoiceCausalLMOutputWithPast(loss=loss, diffusion_loss=diffusion_loss, logits=logits, **outputs)
 

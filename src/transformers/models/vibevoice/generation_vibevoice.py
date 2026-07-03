@@ -98,10 +98,13 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         - `noise_scheduler`: A custom noise scheduler instance. Optional: if not provided, a default one is built
             from `noise_scheduler_class`/`noise_scheduler_config` on the generation config (requires `diffusers`).
         - `monitor_progress`: Whether to display a progress bar tracking audio generation. Defaults to `False`.
+        - `num_diffusion_steps`: Number of diffusion steps for audio latent sampling. Defaults to `10`.
         """
 
-        # Pop argument that isn't part of generation config or for the model's forward pass
+        # Pop arguments that aren't part of standard GenerationConfig() or for the model's forward pass
         monitor_progress = kwargs.pop("monitor_progress", False)
+        num_diffusion_steps = kwargs.pop("num_diffusion_steps", None)
+        noise_scheduler_kwarg = kwargs.pop("noise_scheduler", None)
 
         generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
 
@@ -110,7 +113,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         #   2. an instance already cached on the generation config (e.g. from a previous call),
         #   3. a default built from `noise_scheduler_class` + `noise_scheduler_config` on the generation config
         #      (this is what the released checkpoints ship with, and requires `diffusers`).
-        noise_scheduler = getattr(generation_config, "noise_scheduler", None)
+        noise_scheduler = noise_scheduler_kwarg or getattr(generation_config, "noise_scheduler", None)
         if noise_scheduler is None:
             noise_scheduler = self._build_default_noise_scheduler(generation_config)
         if noise_scheduler is None:
@@ -130,6 +133,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             )
         generation_config.noise_scheduler = noise_scheduler
         generation_config.monitor_progress = monitor_progress
+        if num_diffusion_steps is not None:
+            generation_config.num_diffusion_steps = num_diffusion_steps
+        elif not hasattr(generation_config, "num_diffusion_steps"):
+            generation_config.num_diffusion_steps = 10
         return generation_config, model_kwargs
 
     @staticmethod
