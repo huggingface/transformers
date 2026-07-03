@@ -40,7 +40,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     model_id = "adept/fuyu-8b"
     # Fuyu uses a tokenizer with a very large vocabulary (~262K tokens), making tests slow and
     # memory-intensive. tiny_model_id points to a trimmed tokenizer repo to keep tests lightweight.
-    tiny_model_id = "hf-internal-testing/fuyu-tiny-tokenizer"
+    tiny_model_id = "hf-internal-testing/tiny-processor-fuyu"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
