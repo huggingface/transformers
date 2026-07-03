@@ -70,9 +70,10 @@ def _split_into_blocks(x: torch.Tensor, block_len: int, dim: int) -> torch.Tenso
     """Split an input tensor into blocks of a given `block_len` along the given `dim`. If the dimension length
     is not a multiple of `block_len`, it will be padded first with selected `pad_value`.
     """
-    # pad tensor to multiple of block_len
-    if x.shape[dim] % block_len != 0:
-        x = _pad_to_multiple(x, block_len, dim, pad_value=0)
+    # Pad tensor to multiple of block_len — a no-op when the length is already a multiple.
+    # Padding unconditionally keeps the shape arithmetic branch-free, so ``torch.export``
+    # traces a single graph that holds for every sequence length.
+    x = _pad_to_multiple(x, block_len, dim, pad_value=0)
     num_blocks = x.shape[dim] // block_len
     output_shape = x.shape[:dim] + (num_blocks, block_len) + x.shape[(dim + 1) :]
     # If 0 is in output_shape, we cannot apply reshape because of incompatibility with ONNX conversion
@@ -106,9 +107,9 @@ def _concatenate_3_blocks(x: torch.Tensor, block_dim: int, sequence_dim: int, pa
     return torch.cat(blocks_list, dim=sequence_dim)
 
 
-def _make_3block_relative_position_ids(block_len: int) -> torch.Tensor:
+def _make_3block_relative_position_ids(block_len: int, device: torch.device | None = None) -> torch.Tensor:
     """Makes 3-blocked relative position ids for local attention."""
-    position_ids = torch.arange(3 * block_len, dtype=torch.int32)
+    position_ids = torch.arange(3 * block_len, dtype=torch.int32, device=device)
     center_position_ids = position_ids[block_len:-block_len]
     # [block_len, 3 * block_len]
     relative_position_ids = position_ids.unsqueeze(0) - center_position_ids.unsqueeze(1)
@@ -117,10 +118,9 @@ def _make_3block_relative_position_ids(block_len: int) -> torch.Tensor:
 
 def _mask_local_attention_mask(local_attention_mask: torch.Tensor, block_len: int) -> torch.Tensor:
     """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius."""
-    relative_position_ids = _make_3block_relative_position_ids(block_len)
+    relative_position_ids = _make_3block_relative_position_ids(block_len, device=local_attention_mask.device)
     locality_mask = torch.abs(relative_position_ids) < block_len
     locality_mask = locality_mask[None, None, :, :]
-    locality_mask = locality_mask.to(local_attention_mask.device)
     return torch.logical_and(local_attention_mask, locality_mask)
 
 
@@ -156,8 +156,7 @@ def _make_global_fixed_block_ids(
     batch_size, seq_len = attention_mask.shape[:2]
 
     def handle_orphan_tokens(block_ids: torch.Tensor) -> torch.Tensor:
-        block_ends = (torch.arange(seq_len) % global_block_size) == global_block_size - 1
-        block_ends = block_ends.to(block_ids.device)
+        block_ends = (torch.arange(seq_len, device=block_ids.device) % global_block_size) == global_block_size - 1
         true_block_ends = torch.logical_and(block_ends, block_ids >= 0)
         full_blocks = true_block_ends.sum(-1).unsqueeze(-1).type(block_ids.dtype) - 1
         block_ids = torch.where(block_ids < full_blocks, block_ids, full_blocks)
@@ -183,8 +182,12 @@ def _make_global_fixed_block_ids(
         _sequence_block_ids_max = torch.zeros(
             batch_size, 0, dtype=global_block_ids.dtype, device=global_block_ids.device
         )
-    global_segment_ids = torch.cumsum(torch.ones(batch_size, num_globals), dim=-1) - 1
-    global_segment_ids = global_segment_ids.to(attention_mask.device)
+    # Equivalent to ``cumsum(ones(...), dim=-1) - 1``: [0, 1, …, num_globals-1] per batch.
+    global_segment_ids = (
+        torch.arange(num_globals, dtype=attention_mask.dtype, device=attention_mask.device)
+        .unsqueeze(0)
+        .expand(batch_size, -1)
+    )
     global_segment_ids = torch.where(global_segment_ids <= _sequence_block_ids_max, 1, 0)
     return global_block_ids.type(torch.int), global_segment_ids.type(torch.int)
 
@@ -808,7 +811,7 @@ class LongT5TransientGlobalAttention(nn.Module):
         # global_seq_len := seq_len // self.global_block_size
         # shapes: (batch_size, seq_len) & (batch_size, global_seq_len)
         block_ids, global_segment_ids = _make_global_fixed_block_ids(
-            mask if mask is not None else torch.ones(hidden_states.shape[:-1]),
+            mask if mask is not None else torch.ones(hidden_states.shape[:-1], device=hidden_states.device),
             self.global_block_size,
         )
         # Create global inputs

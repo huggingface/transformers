@@ -24,6 +24,7 @@ from transformers import set_seed
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
+from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
 from transformers.exporters.utils import (
     decompose_for_generation,
     decompose_multimodal,
@@ -34,6 +35,7 @@ from transformers.testing_utils import (
     require_executorch,
     require_onnxruntime,
     require_onnxscript,
+    require_openvino,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -57,53 +59,16 @@ from transformers.testing_utils import (
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
     "all": {
-        "VideoMAEForPreTraining": (
-            "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
-            "`mse_loss`. TODO: skip loss when labels aren't provided."
-        ),
-        "OpenAIPrivacyFilterModel": (
-            "`get_correct_experts_implementation` defaults to `eager` because the model is "
-            "sensitive to accumulation order. Eager experts forward iterates over "
-            "`expert_hit.nonzero()` (data-dependent shape). Users can opt into "
-            "`set_experts_implementation('batched_mm')` to export."
-        ),
-        "OpenAIPrivacyFilterForTokenClassification": (
-            "Same root cause as `OpenAIPrivacyFilterModel` — eager experts implementation."
-        ),
     },
     # Every backend, generate path only.
     "generate": {
-        "Blip2ForConditionalGeneration": (
-            "`generate()` delegates to the inner language model without calling top-level "
-            "`forward()`, so `decompose_prefill_decode` can't capture inputs. "
-            "TODO: route generate through top-level `forward()`."
-        ),
-        "InstructBlipForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
-        "InstructBlipVideoForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
-        "Kosmos2ForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
         "RecurrentGemmaForCausalLM": (
-            "Stores recurrent/conv state as module attributes (not a `Cache` object); "
-            "`torch.export` can't carry that state between calls. "
-            "TODO: refactor to a cache-based SSM pattern (like Mamba/Mamba2)."
-        ),
-        "MoshiForConditionalGeneration": (
-            "`generate()` creates `blank_user_audio_codes` outside the traced forward and "
-            "passes it as a kwarg; the resulting ONNX input has mismatched rank (scalar vs 3D). "
-            "TODO: make `blank_user_audio_codes` part of the model state."
-        ),
-        "UdopForConditionalGeneration": (
-            "Exported decoder output is missing `attention_mask` vs eager — encoder-decoder "
-            "cross-attention mask doesn't flow through the generate decomposition correctly."
-        ),
-        "VoxtralRealtimeForConditionalGeneration": (
-            "Exported prefill drops `past_key_values.*.{keys,values,_sliding_window_tensor}` "
-            "tensors that eager returns. Plain forward exports work. "
-            "TODO: align generate-decomposition path with the realtime KV-cache shape."
-        ),
-        "Gemma3nForConditionalGeneration": (
-            "KV-shared layers (`num_kv_shared_layers`) reuse cache entries from earlier layers; "
-            "exported prefill returns only `logits` while eager surfaces the populated KV cache. "
-            "Same shape as Voxtral. TODO: align the generate-decomposition path."
+            "Keeps RG-LRU/conv state as plain module attributes (not a `Cache` passed via "
+            "`past_key_values`), so the state cannot be a graph input/output — the exported "
+            "decode step computes from zero-initialized state and its logits diverge from eager "
+            "(prefill exports and matches). "
+            "TODO: migrate the state to `LinearAttentionLayer` entries in `past_key_values` "
+            "(the qwen3_next / Mamba pattern)."
         ),
     },
     # ONNX, every variant.
@@ -116,12 +81,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
     # ONNX, generate path only.
     "onnx.generate": {
-        "ReformerModelWithLMHead": (
-            "Chunked local attention exports a Constant idx that exceeds the cached-keys axis "
-            "length under static decode (prefill+1 token, seq=17 vs chunked axis of 16). The same "
-            "computation stays symbolic under dynamic so ORT can't pre-validate it. The other "
-            "three Reformer-local-attn ONNX variants pass."
-        ),
     },
     # ONNX, dynamic-shape only.
     "onnx.dynamic": {
@@ -143,69 +102,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # ExecuTorch — lowering failures grouped by root cause; see the first entry of each
     # `Same ... as` chain for the full description.
     "executorch": {
-        "BarkFineModel": (
-            "ExecuTorch memory planning miscomputes the tensor spec (`buffer of size N, expected nbytes of M`) — a dtype-size mismatch in the lowered program."
-        ),
-        "ClvpModelForConditionalGeneration": (
-            "A pass-through output aliases an input (`Output node is already in the inputs`)."
-        ),
-        "ColQwen2ForRetrieval": (
-            "ExecuTorch dim-order lowering requires a copying view (`Cannot view a tensor ... with shape/strides`)."
-        ),
-        "DabDetrModel": ("XNNPACK partitioner: `Attempting to convert non-NHWC compatible node to NHWC`."),
-        "DabDetrForObjectDetection": "Same `nhwc` failure as `DabDetrModel`.",
-        "Ernie4_5_VLMoeModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Ernie4_5_VLMoeForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "FlavaForPreTraining": ("XNNPACK partitioner: `Invalid partition, found dependency cycles`."),
-        "GPT2Model": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2LMHeadModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2DoubleHeadsModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2ForQuestionAnswering": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2ForSequenceClassification": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2ForTokenClassification": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Gemma3nModel": "Same `spec` failure as `BarkFineModel`.",
-        "Gemma3nForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Glm46VModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm46VForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vMoeModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vMoeForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmImageModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmImageForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmOcrModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmOcrForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
         "GroundingDinoModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
-        "InstructBlipModel": "Same `spec` failure as `BarkFineModel`.",
-        "InstructBlipForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "InstructBlipVideoForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "InstructBlipVideoModel": "Same `spec` failure as `BarkFineModel`.",
         "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
-        "MiniMaxM3VLModel": ("Serialization rejects an i64 constant (`bad number for type int32`)."),
-        "MiniMaxM3SparseForConditionalGeneration": "Same `int32` failure as `MiniMaxM3VLModel`.",
-        "PPDocLayoutV3ForObjectDetection": ("Delegation drops a referenced weight (`KeyError` on a state-dict key)."),
-        "PaddleOCRVLForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "PerceptionLMModel": "Same `passthrough` failure as `ClvpModelForConditionalGeneration`.",
-        "PerceptionLMForConditionalGeneration": "Same `passthrough` failure as `ClvpModelForConditionalGeneration`.",
-        "Qwen2VLModel": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen2VLForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen2_5OmniThinkerForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Qwen2_5_VLModel": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen2_5_VLForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3OmniMoeThinkerForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Qwen3_5Model": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5ForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5ForSequenceClassification": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5ForTokenClassification": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5MoeModel": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5MoeForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
     },
     "executorch.generate": {
-        "PPFormulaNetForConditionalGeneration": (
-            "ExecuTorch memory planning miscomputes the tensor spec (`buffer of size N, expected nbytes of M`) — a dtype-size mismatch in the lowered program."
-        ),
     },
     "executorch.dynamic": {
         "BigBirdModel": ("Lowering exceeds the test timeout under dynamic shapes."),
@@ -216,25 +118,21 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "DepthProModel": (
-            "`_ViewSpec is incompatible with its base` — mixed shape dynamism between a view and its base."
-        ),
-        "DepthProForDepthEstimation": "Same `viewspec` failure as `DepthProModel`.",
         "DonutSwinModel": (
             "ExecuTorch memory planning overflows under unbounded dynamic shapes (`mem_offset does not fit in 64 bits`)."
         ),
         "DonutSwinForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
-        "Mask2FormerModel": "Same `timeout` failure as `BigBirdModel`.",
-        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `BigBirdModel`.",
         "MaskFormerModel": "Same `timeout` failure as `BigBirdModel`.",
         "MaskFormerForInstanceSegmentation": "Same `timeout` failure as `BigBirdModel`.",
         "MaskFormerSwinModel": "Same `overflow` failure as `DonutSwinModel`.",
         "MaskFormerSwinBackbone": "Same `overflow` failure as `DonutSwinModel`.",
         "MllamaModel": "Same `overflow` failure as `DonutSwinModel`.",
         "MllamaForConditionalGeneration": "Same `overflow` failure as `DonutSwinModel`.",
-        "PvtModel": "Same `viewspec` failure as `DepthProModel`.",
-        "PvtForImageClassification": "Same `viewspec` failure as `DepthProModel`.",
-        "Sam2Model": ("Delegation drops a referenced weight (`KeyError` on a state-dict key)."),
+        "Sam2Model": (
+            "The dropped-weight `KeyError` is fixed, but `torch.export` of the Hiera vision "
+            "backbone under dynamic shapes then exceeds the 1000s test timeout (same "
+            "Hiera-backbone dynamic-shape overrun as `Sam2VisionModel`)."
+        ),
         "Sam2VisionModel": "Same `timeout` failure as `BigBirdModel`.",
         "Swin2SRModel": "Same `overflow` failure as `DonutSwinModel`.",
         "Swin2SRForImageSuperResolution": "Same `overflow` failure as `DonutSwinModel`.",
@@ -246,14 +144,16 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "Swinv2ForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
         "Swinv2ForMaskedImageModeling": "Same `overflow` failure as `DonutSwinModel`.",
         "Swinv2Backbone": "Same `overflow` failure as `DonutSwinModel`.",
-        "VitDetModel": "Same `viewspec` failure as `DepthProModel`.",
-        "VitDetBackbone": "Same `viewspec` failure as `DepthProModel`.",
         "Wav2Vec2BertForCTC": ("`flatc` schema compilation fails when serializing the program."),
         "Wav2Vec2BertModel": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
         "Wav2Vec2BertForSequenceClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
         "Wav2Vec2BertForAudioFrameClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
         "Wav2Vec2BertForXVector": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
     },
+    # OpenVINO, every variant (currently empty — populated as we sweep).
+    "openvino": {},
+    # OpenVINO, dynamic-shape only.
+    "openvino.dynamic": {},
 }
 
 
@@ -263,36 +163,8 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
 
 
 ONNX_DISABLE_OPTIMIZE: dict[str, dict[str, str]] = {
-    # Disable for every variant.
-    "all": {
-        "LayoutLMv2Model": (
-            "Detectron2 FPN backbone — onnxscript optimizer drops initializers still referenced "
-            "by nodes, producing an invalid graph for ORT."
-        ),
-        "LayoutLMv2ForSequenceClassification": "Same as `LayoutLMv2Model`.",
-        "LayoutLMv2ForTokenClassification": "Same as `LayoutLMv2Model`.",
-        "LayoutLMv2ForQuestionAnswering": "Same as `LayoutLMv2Model`.",
-        "YolosModel": (
-            "Optimizer takes >6 min on the YOLOS detection graph (many small Concat/Slice nodes). "
-            "`optimize=False` exports in 2s. TODO: revisit when onnxscript's optimizer improves."
-        ),
-        "YolosForObjectDetection": "Same as `YolosModel`.",
-        "PixioModel": "Same dense-small-node optimizer slowdown as YOLOS (~100–290s).",
-        "SegGptModel": "Same dense-small-node optimizer slowdown as YOLOS.",
-        "SegGptForImageSegmentation": "Same dense-small-node optimizer slowdown as YOLOS.",
-    },
     # Disable for dynamic-shape only — static benefits from optimisation.
-    "dynamic": {
-        "ProphetNetModel": (
-            "Onnxscript's `SplitToSequence` constant-folding trips `'NoneType' object has no "
-            "attribute 'ndim'` under dynamic shapes. Static works after the vectorized "
-            "`ngram_attention_bias` rewrite."
-        ),
-        "ProphetNetForConditionalGeneration": "Same `SplitToSequence` issue as `ProphetNetModel`.",
-        "ProphetNetDecoder": "Same `SplitToSequence` issue as `ProphetNetModel`.",
-        "ProphetNetForCausalLM": "Same `SplitToSequence` issue as `ProphetNetModel`.",
-        "ZoeDepthForDepthEstimation": "Same `SplitToSequence` issue as `ProphetNetModel`.",
-    },
+    "dynamic": {},
 }
 
 
@@ -336,6 +208,66 @@ def _run_onnx_program(onnx_program, inputs) -> dict:
     onnx_outputs = onnx_program(**onnx_inputs)
     onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
     return dict(zip(onnx_names, onnx_outputs))
+
+
+def _run_openvino_model(ov_model, inputs) -> dict:
+    """Compile an OpenVINO model and run it, returning outputs as a `{name: array}` dict.
+
+    Feeds the tensor leaves that survived as input ports (stateful folding removes cache
+    inputs), seeds folded state variables from the sample cache leaves so outputs correspond
+    to the same inputs eager saw, supplies the identity `beam_idx`, and passes scalar kwargs
+    through under their FX placeholder names.
+    """
+    import numpy as np
+    import openvino
+
+    set_seed(1234)
+    compiled = openvino.compile_model(ov_model, "AUTO")
+    request = compiled.create_infer_request()
+    leaves = {path: tensor.cpu() for path, tensor in get_leaf_tensors(inputs).items()}
+    batch = next(iter(leaves.values())).shape[0] if leaves else 1
+
+    feed = {}
+    for port in compiled.inputs:
+        # Passthrough tensors carry both an input and an output name — check every alias.
+        for name in port.get_names():
+            path = re.sub(r"^input\.", "", name)
+            if path in leaves:
+                feed[name] = leaves[path]
+            elif name == "beam_idx":
+                feed[name] = np.arange(batch, dtype=np.int32)
+            elif name in inputs:
+                feed[name] = np.array(inputs[name])
+            else:
+                continue
+            break
+
+    # Folded state variables read zeros on the first infer — seed them from the sample leaves
+    # (cast to the variable's dtype: the exporter may retype state, e.g. i64 lengths to i32).
+    # The variable id is ``input.<path>output.<path>``.
+    def _state_path(state):
+        return state.name[len("input.") : (len(state.name) - len("input.output.")) // 2 + len("input.")]
+
+    for state in request.query_state():
+        path = _state_path(state)
+        if path in leaves:
+            state.state = openvino.Tensor(leaves[path].numpy().astype(state.state.data.dtype, copy=False))
+
+    results = request.infer(feed)
+    outputs = {}
+    for port in compiled.outputs:
+        # Compilation may merge a named output tensor with an intermediate that kept its
+        # numeric id — prefer the human-readable alias over ``get_any_name``'s sorted-first.
+        names = sorted(port.get_names())
+        name = next((n for n in names if not n.isdigit()), names[0])
+        outputs[re.sub(r"^output\.", "", name)] = results[port]
+
+    # Folded state tensors are outputs too — read them back so the returned dict covers the
+    # same leaves eager returns.
+    for state in request.query_state():
+        outputs[_state_path(state)] = state.state.data.copy()
+
+    return outputs
 
 
 def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
@@ -512,6 +444,33 @@ class ExportTesterMixin:
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
 
+    # ──────────────────── OpenVINO tests ─────────────────────────
+
+    @slow
+    @DYNAMIC_EXPORT_PARAMS
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    def test_openvino_export(self, dynamic):
+        """Export each model class to OpenVINO IR and verify output names match eager."""
+        self._skip_if_not_exportable()
+        exporter = OpenVINOExporter()
+        config = OpenVINOConfig(dynamic=dynamic)
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, dynamic=dynamic, backend="openvino"):
+                continue
+
+            components = self._prepare_export_model_and_inputs(model_class)
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    ov_model = exporter.export(model, inputs, config=config)
+                    ov_outputs = _run_openvino_model(ov_model, inputs)
+                    self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
+                    self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
+
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @slow
@@ -632,6 +591,33 @@ class ExportGenerateTesterMixin:
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
+
+    # ──────────────────── OpenVINO tests ─────────────────────────
+
+    @slow
+    @DYNAMIC_EXPORT_PARAMS
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    def test_openvino_export_generate(self, dynamic):
+        """Export prefill and decode stages to OpenVINO IR and verify output names match eager."""
+        self._skip_if_not_exportable()
+        exporter = OpenVINOExporter()
+        config = OpenVINOConfig(dynamic=dynamic)
+
+        for model_class in self.all_generative_model_classes:
+            if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="openvino"):
+                continue
+
+            components = self._prepare_export_generate_model_and_inputs(model_class)
+            eager_outputs = self._collect_eager_outputs(components)
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    ov_model = exporter.export(model, inputs, config=config)
+                    ov_outputs = _run_openvino_model(ov_model, inputs)
+                    self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
+                    self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 

@@ -613,12 +613,24 @@ def decompose_prefill_decode(
     Reuses the full generation machinery so every architecture (decoder-only, SSM,
     encoder-decoder, multi-modal, …) gets correct inputs without reimplementing the loop.
 
+    Some multi-modal models (Blip2, Kosmos-2, …) override `generate()` to run their encoders
+    inline and delegate the generation loop to an inner language model, so the top-level
+    `forward()` never runs. To cover those, the decoder returned by `model.get_decoder()` is
+    hooked as well, and whichever module the generation loop actually called is captured
+    (top-level `forward()` preferred when both ran).
+
     Returns:
         `dict[str, tuple[torch.nn.Module, dict]]`:
-        `{"prefill": (model, prefill_inputs), "decode": (model, decode_inputs)}`
+        `{"prefill": (module, prefill_inputs), "decode": (module, decode_inputs)}` where
+        `module` is `model` itself, or its decoder when `generate()` delegates to it.
     """
+    decoder = model.get_decoder()
     try:
-        with _capture_forward(model) as calls:
+        with contextlib.ExitStack() as stack:
+            calls = stack.enter_context(_capture_forward(model))
+            decoder_calls = (
+                stack.enter_context(_capture_forward(decoder)) if decoder is not None and decoder is not model else []
+            )
             model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2)
     except Exception as e:
         raise RuntimeError(
@@ -627,17 +639,17 @@ def decompose_prefill_decode(
             f"Make sure the inputs are compatible with model.generate()."
         ) from e
 
-    if len(calls) < 2:
+    module, module_calls = (model, calls) if len(calls) >= 2 else (decoder, decoder_calls)
+    if len(module_calls) < 2:
         raise RuntimeError(
-            f"decompose_prefill_decode expected at least 2 calls to {type(model).__name__}.forward() "
-            f"during generate(max_new_tokens=2), but captured {len(calls)}. This likely means "
-            "generate() bypasses the top-level forward() (e.g. delegates to an inner model), "
-            "so prefill/decode decomposition is not supported for this architecture."
+            f"decompose_prefill_decode expected at least 2 forward() calls on {type(model).__name__} "
+            f"or its decoder during generate(max_new_tokens=2), but captured {len(calls)} on the "
+            f"top-level model and {len(decoder_calls)} on the decoder."
         )
 
     return {
-        "prefill": (copy.copy(model), calls[0]),
-        "decode": (copy.copy(model), calls[1]),
+        "prefill": (copy.copy(module), module_calls[0]),
+        "decode": (copy.copy(module), module_calls[1]),
     }
 
 
@@ -741,7 +753,8 @@ def decompose_for_generation(
     Runs `decompose_prefill_decode` to capture prefill and decode forward kwargs from a real
     `model.generate(**inputs, max_new_tokens=2)`. If the prefill is multi-modal (per `is_multimodal`),
     further splits it into one entry per submodule (vision/audio encoder, projector, language model,
-    `lm_head`) via `decompose_multimodal`.
+    `lm_head`) via `decompose_multimodal`. Models whose `generate()` delegates the loop to an inner
+    language model (Blip2, Kosmos-2, …) get prefill/decode captured at that inner model instead.
 
     Args:
         model: Generative model. Must support `model.generate(**inputs)`.

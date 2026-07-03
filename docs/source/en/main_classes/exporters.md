@@ -47,3 +47,7 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 ## ExecutorchConfig
 
 [[autodoc]] exporters.configs.ExecutorchConfig
+
+## OpenVINOConfig
+
+[[autodoc]] exporters.configs.OpenVINOConfig

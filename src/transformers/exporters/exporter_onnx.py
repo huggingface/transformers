@@ -245,6 +245,41 @@ def _patch_rms_norm_forward(original):
     return patch
 
 
+@register_patch("onnx", "torch.split", "torch.Tensor.split")
+def _patch_split(original):
+    """Expand a symbolic split size into statically-counted `narrow`s. A SymInt split size
+    otherwise lowers to `SplitToSequence` with a symbolic scalar `split` input, which
+    onnxscript's constant folder crashes on (`'NoneType' object has no attribute 'ndim'`).
+    """
+
+    def patch(input, split_size_or_sections, dim=0):
+        if not isinstance(split_size_or_sections, torch.SymInt):
+            return original(input, split_size_or_sections, dim)
+        split_size = split_size_or_sections
+        total = input.size(dim)
+        # `int()` specializes the chunk count at trace time, exactly like enumerating the
+        # list `aten.split.Tensor` returns (its meta guards on the same ceil division).
+        count = int((total + split_size - 1) // split_size)
+        return tuple(
+            input.narrow(dim, i * split_size, torch.sym_min(split_size, total - i * split_size)) for i in range(count)
+        )
+
+    return patch
+
+
+@register_patch("onnx", "torch.chunk", "torch.Tensor.chunk")
+def _patch_chunk(original):
+    """Route a symbolic chunk size through the `torch.split` patch (see `_patch_split`)."""
+
+    def patch(input, chunks, dim=0):
+        chunk_size = (input.size(dim) + chunks - 1) // chunks
+        if not isinstance(chunk_size, torch.SymInt):
+            return original(input, chunks, dim)
+        return torch.split(input, chunk_size, dim)
+
+    return patch
+
+
 @register_patch("onnx", "torch.randperm")
 def _patch_randperm(original):
     """Implement randperm via argsort(rand(n)) — no ONNX decomposition for aten.randperm."""
@@ -301,6 +336,26 @@ def _patch_opset13_constant(original):
             kwargs.pop("value_ints")
             kwargs["value"] = onnx_ir.tensor(np.array([], dtype=np.int64))
         return original(self, *args, **kwargs)
+
+    return patch
+
+
+@register_patch("onnx", "onnxscript.optimizer.optimize_ir")
+def _patch_optimize_ir(original):
+    """Skip constant-folding `Resize` nodes during onnxscript optimization.
+
+    The optimizer's constant folder evaluates foldable nodes with onnx's pure-Python
+    reference implementation. For `Resize` — e.g. the bicubic position-embedding
+    interpolation in YOLOS/SegGPT-style vision models, whose inputs are constant
+    initializers — that evaluation recurses per output element and takes minutes even
+    on tiny graphs (~4.5 min per Resize node on the YOLOS test model, vs <1 s for the
+    whole rest of the optimization). Keeping the Resize node in the graph costs one
+    native ORT kernel launch at inference instead.
+    """
+
+    def patch(model, *args, **kwargs):
+        kwargs.setdefault("should_fold", lambda node: False if node.op_type == "Resize" else None)
+        return original(model, *args, **kwargs)
 
     return patch
 

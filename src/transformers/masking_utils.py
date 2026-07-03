@@ -533,8 +533,11 @@ def sdpa_mask(
 
     batch_arange = torch.arange(batch_size, device=device)
     head_arange = torch.arange(1, device=device)
-    q_arange = torch.arange(q_length, device=device) + q_offset
-    kv_arange = torch.arange(kv_length, device=device) + kv_offset
+    # Fold the offsets into the arange bounds rather than adding them afterwards — a python
+    # scalar in `aten.add` gets materialized as an int64 constant by ExecuTorch's edge passes,
+    # whose buffer the XNNPACK lowering then downcasts without updating the spec.
+    q_arange = torch.arange(q_offset, q_offset + q_length, device=device)
+    kv_arange = torch.arange(kv_offset, kv_offset + kv_length, device=device)
 
     # Actual mask creation
     # Option 1: Fast non-vmap mask creation (default)
@@ -632,7 +635,9 @@ def eager_mask(
     )
     # only bidirectional masks can be skipped, otherwise we convert bool -> float
     if mask is not None:
-        min_dtype = torch.finfo(dtype).min
+        # A python-float `other` would be lifted as a float64 constant by `torch.export`,
+        # whose serialized buffer then mismatches the spec — keep both branches in `dtype`.
+        min_dtype = torch.tensor(torch.finfo(dtype).min, device=mask.device, dtype=dtype)
         # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
         mask = torch.where(mask, torch.tensor(0.0, device=mask.device, dtype=dtype), min_dtype)
     return mask

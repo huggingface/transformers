@@ -641,7 +641,10 @@ class T5Gemma2TextScaledWordEmbedding(nn.Embedding):
 
     def forward(self, input_ids: torch.Tensor):
         input_embeddings = super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
-        input_embeddings[input_ids == self.eoi_token_index] = self.eoi_embedding.to(input_embeddings.dtype)
+        # ``embeddings[bool_mask] = vector`` traces as ``aten.index_put`` with a mask list,
+        # which several export backends can't lower — ``torch.where`` is equivalent.
+        eoi_mask = (input_ids == self.eoi_token_index).unsqueeze(-1)
+        input_embeddings = torch.where(eoi_mask, self.eoi_embedding.to(input_embeddings.dtype), input_embeddings)
         return input_embeddings
 
 

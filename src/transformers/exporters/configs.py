@@ -28,6 +28,7 @@ class ExportFormat(Enum):
     """Identifies the export backend. Stored in [`ExportConfigMixin`] for serialisation round-trips."""
 
     EXECUTORCH = "executorch"
+    OPENVINO = "openvino"
     DYNAMO = "dynamo"
     ONNX = "onnx"
 
@@ -168,3 +169,33 @@ class ExecutorchConfig(DynamoConfig):
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
+
+
+@dataclass
+class OpenVINOConfig(DynamoConfig):
+    """
+    Configuration class for exporting models to OpenVINO IR via ``openvino.convert_model``.
+
+    Inherits all fields from [`DynamoConfig`] (`dynamic`, `strict`, `dynamic_shapes`,
+    `prefer_deferred_runtime_asserts_over_guards`).
+
+    Args:
+        output_path (`str` or `PathLike`, *optional*):
+            Output path for the `.xml` file (the matching `.bin` is written alongside). When
+            `None` (default) the converted model is kept in memory as an ``openvino.Model``.
+        compress_to_fp16 (`bool`, *optional*, defaults to `True`):
+            Compress floating-point weights to FP16 when saving — halves on-disk size with
+            negligible accuracy impact on most models. Only applied when ``output_path`` is set.
+        stateful (`bool`, *optional*, defaults to `True`):
+            Fold round-tripped state tensors (KV cache, SSM states, …) into internal OV
+            variables (``ReadValue``/``Assign``). The runtime then carries state across
+            ``infer()`` calls instead of marshalling cache tensors through inputs/outputs on
+            every step, and a fused ``beam_idx`` input reorders state in-graph for beam search.
+            No-op for models without round-tripped state (encoders, prefill-only exports).
+    """
+
+    export_format: ExportFormat = ExportFormat.OPENVINO
+
+    output_path: str | PathLike | None = None
+    compress_to_fp16: bool = True
+    stateful: bool = True

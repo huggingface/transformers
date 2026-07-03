@@ -43,16 +43,15 @@ import copy
 import importlib
 import inspect
 import sys
-import types
 from collections.abc import MutableMapping
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from typing import Any
 
 from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
 from .configs import DynamoConfig
-from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
+from .utils import apply_patches, prepare_for_export, register_patch
 
 
 if is_torch_available():
@@ -127,6 +126,23 @@ class DynamoExporter(HfExporter):
 # and applies them onto `model.config` for the duration of the trace.
 
 
+_MISSING = object()
+
+
+@contextmanager
+def _set_config_attribute(config: Any, name: str, value: Any):
+    """Set `config.<name> = value` for the block; restore the original (or delete) on exit."""
+    original = getattr(config, name, _MISSING)
+    setattr(config, name, value)
+    try:
+        yield
+    finally:
+        if original is _MISSING:
+            delattr(config, name)
+        else:
+            setattr(config, name, original)
+
+
 # Output flags stripped from inputs and applied onto `model.config` for the trace.
 @contextmanager
 def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
@@ -134,22 +150,24 @@ def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
 
     - Applies `output_flags` (popped from inputs by `prepare_for_export`) onto
       `model.config.<flag>` so the model picks them up via its usual `<flag> if <flag> is
-      not None else self.config.<flag>` fallback.
+      not None else self.config.<flag>` fallback. Flags the config doesn't declare are set
+      anyway (and deleted on exit) — submodels of a decomposed model may not declare a flag
+      their forward still reads via `getattr(self.config, flag, None)` (e.g. `use_cache` on
+      an audio-encoder config), and a flag the model never reads is a harmless no-op.
     - Disables `use_mamba_kernels` on every submodel's config that declares it (mamba/jamba
       kernels are not exportable).
 
-    Originals are restored on exit. Flags whose value is `None`, or that the config doesn't
-    declare, are silently skipped — useful for submodels that don't accept every parent flag.
+    Originals are restored on exit. Flags whose value is `None` are skipped.
     """
-    config_patches = []
-    for flag, value in output_flags.items():
-        if value is None or not hasattr(model, "config") or not hasattr(model.config, flag):
-            continue
-        config_patches.append((model.config, flag, lambda _original, v=value: v))
-    for module in model.modules():
-        if hasattr(module, "config") and hasattr(module.config, "use_mamba_kernels"):
-            config_patches.append((module.config, "use_mamba_kernels", lambda _original: False))
-    with patch_attributes(config_patches):
+    with ExitStack() as stack:
+        if hasattr(model, "config"):
+            for flag, value in output_flags.items():
+                if value is None:
+                    continue
+                stack.enter_context(_set_config_attribute(model.config, flag, value))
+        for module in model.modules():
+            if hasattr(module, "config") and hasattr(module.config, "use_mamba_kernels"):
+                stack.enter_context(_set_config_attribute(module.config, "use_mamba_kernels", False))
         yield
 
 
@@ -471,21 +489,12 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
             "p": _class_to_path(cls),
             "v": [_flatten_to_context(i, tensors) for i in obj],
         }
-    if isinstance(obj, types.MethodType):
-        # Self-bound methods are handled by the `"obj"` branch below (rebound to the
-        # reconstructed instance); a bare bound method has no instance to rebind to.
-        raise TypeError("Cannot flatten a bound method not stored on its own instance for pytree context")
     if hasattr(obj, "__dict__"):
-        state = {}
-        for k, v in vars(obj).items():
-            if isinstance(v, types.MethodType) and v.__self__ is obj:
-                # Methods bound onto the instance itself (e.g. recurrent_gemma binds
-                # `get_seq_length` onto its `DynamicCache`) — store the underlying
-                # function's import path; unflatten rebinds it to the new instance.
-                state[k] = {"_t": "method", "f": f"{v.__func__.__module__}:{v.__func__.__qualname__}"}
-            else:
-                state[k] = _flatten_to_context(v, tensors)
-        return {"_t": "obj", "p": _class_to_path(cls), "s": state}
+        return {
+            "_t": "obj",
+            "p": _class_to_path(cls),
+            "s": {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()},
+        }
 
     raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
 
@@ -532,12 +541,9 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
             return cls(*items)  # NamedTuple (requires positional args)
     if t == "obj":
         cls = _path_to_class(ctx["p"])
+        state = {k: _unflatten_from_context(v, tensors) for k, v in ctx["s"].items()}
         instance = cls.__new__(cls)
-        for k, v in ctx["s"].items():
-            if type(v) is dict and v.get("_t") == "method":
-                instance.__dict__[k] = _path_to_class(v["f"]).__get__(instance)
-            else:
-                instance.__dict__[k] = _unflatten_from_context(v, tensors)
+        instance.__dict__.update(state)
         return instance
 
     raise TypeError(f"Unknown tag {t!r} in pytree context")
@@ -659,8 +665,6 @@ _STATEFUL_CACHE_ATTRS = (
     "_prefill_len",  # glm_image (m-rope prefill length)
     "cached_rotary_positional_embedding",  # wav2vec2_bert, seamless_m4t, clvp
     "cached_sequence_length",  # wav2vec2_bert, seamless_m4t, clvp
-    "conv1d_state",  # recurrent_gemma (conv state on RecurrentGemmaRecurrentBlock)
-    "recurrent_states",  # recurrent_gemma (RG-LRU state on RecurrentGemmaRglru)
 )
 
 

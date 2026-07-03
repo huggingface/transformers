@@ -585,30 +585,26 @@ def mask_to_box_coordinate(mask, dtype):
     x_coords = x_coords.to(dtype)
     y_coords = y_coords.to(dtype)
 
+    finfo_max = torch.tensor(torch.finfo(dtype).max, device=mask.device)
     x_coords_masked = x_coords * mask
     x_max = x_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
-    x_min = (
-        torch.where(mask, x_coords_masked, torch.tensor(torch.finfo(dtype).max))
-        .flatten(start_dim=-2)
-        .min(dim=-1)
-        .values
-    )
+    x_min = torch.where(mask, x_coords_masked, finfo_max).flatten(start_dim=-2).min(dim=-1).values
 
     y_coords_masked = y_coords * mask
     y_max = y_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
-    y_min = (
-        torch.where(mask, y_coords_masked, torch.tensor(torch.finfo(dtype).max))
-        .flatten(start_dim=-2)
-        .min(dim=-1)
-        .values
-    )
+    y_min = torch.where(mask, y_coords_masked, finfo_max).flatten(start_dim=-2).min(dim=-1).values
 
     unnormalized_bbox = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
 
     is_mask_non_empty = torch.any(mask, dim=(-2, -1)).unsqueeze(-1)
     unnormalized_bbox = unnormalized_bbox * is_mask_non_empty
 
-    norm_tensor = torch.tensor([width, height, width, height], device=mask.device, dtype=dtype)
+    # ``torch.tensor([w, h, w, h])`` where ``w`` / ``h`` are SymInts materialises on CPU and
+    # then transfers, tripping FakeTensor device propagation during export. Build via
+    # ``torch.stack`` on already-device-side scalars instead.
+    width_t = torch.as_tensor(width, device=mask.device, dtype=dtype)
+    height_t = torch.as_tensor(height, device=mask.device, dtype=dtype)
+    norm_tensor = torch.stack([width_t, height_t, width_t, height_t])
     normalized_bbox_xyxy = unnormalized_bbox / norm_tensor
 
     x_min_norm, y_min_norm, x_max_norm, y_max_norm = normalized_bbox_xyxy.unbind(dim=-1)

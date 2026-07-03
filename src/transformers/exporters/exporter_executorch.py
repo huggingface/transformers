@@ -347,6 +347,15 @@ def _patch_scaled_dot_product_attention(original):
     - enable_gqa=True
     - D_q != D_v (asymmetric head dims, e.g. MLA attention)
     - attn_mask is float (ExecuTorch CUDA SDPA only accepts bool masks)
+
+    The MATH-path output gets an explicit ``clone(memory_format=contiguous_format)`` so
+    downstream strides don't depend on which SDPA layout torch picks: the pre-dispatch trace
+    sees a contiguous ``(N, H, L, E)`` fake output (so ``.contiguous()`` would trace to
+    nothing) and records downstream ``reshape``s as bare ``view`` nodes, but decomposition
+    re-traces SDPA via ``scaled_dot_product_flash_attention_for_cpu``, which materializes an
+    ``(L, N, H, E)`` buffer — invalidating those recorded views (``Cannot view a tensor with
+    shape/strides``). ``clone`` records unconditionally and re-executes correctly under either
+    layout, normalizing the strides the rest of the graph was recorded against.
     """
 
     def patch(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs):
@@ -373,7 +382,7 @@ def _patch_scaled_dot_product_attention(original):
         with sdpa_kernel(SDPBackend.MATH):
             return original(
                 query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kwargs
-            )
+            ).clone(memory_format=torch.contiguous_format)
 
     return patch
 
@@ -584,6 +593,129 @@ def _patch_update_placeholder_tensor_specs(_original):
     return patch
 
 
+@register_patch("executorch", "executorch.exir.program._program.lift_constant_tensor_pass")
+def _patch_lift_constant_tensor_pass(original):
+    """Realign ``input_specs`` with the graph placeholder order after constant lifting.
+
+    The upstream pass picks the graph insertion point for newly lifted constant
+    placeholders by matching node names against ``graph_signature.user_inputs`` —
+    but for user inputs exported as ``ConstantArgument`` (e.g. ``input_ids=None``
+    in a prefill component that runs from ``inputs_embeds``), ``user_inputs``
+    holds the argument's *value* (``None``), not its name, so the match fails and
+    the new placeholders land *after* that input while their signature specs land
+    *before* it. Later positional signature rebuilds then shift every buffer arg
+    name by one slot, and the emitter serializes the wrong tensor for each lifted
+    constant (``Tensor spec has buffer of size 4, but expected nbytes of 8``).
+    Reordering ``input_specs`` to match the placeholders restores the invariant
+    the rest of the pipeline assumes.
+    """
+
+    def patch(exported_program):
+        exported_program = original(exported_program)
+        signature = exported_program.graph_signature
+        placeholder_names = [node.name for node in exported_program.graph.nodes if node.op == "placeholder"]
+        specs_by_name = {getattr(spec.arg, "name", None): spec for spec in signature.input_specs}
+        if (
+            None not in specs_by_name
+            and len(specs_by_name) == len(signature.input_specs)
+            and sorted(specs_by_name) == sorted(placeholder_names)
+        ):
+            signature.input_specs = [specs_by_name[name] for name in placeholder_names]
+        return exported_program
+
+    return patch
+
+
+def _view_replaceable_nodes(graph_module):
+    """Yield ``(node, shape)`` for non-output ``view_copy`` nodes whose view shape has the same
+    shape dynamism as their base — the nodes ``ReplaceViewCopyWithViewPass`` may safely replace.
+
+    ``view`` nodes share storage with their base during memory planning, so ``_ViewSpec``
+    requires both to have the same ``shape_dynamism``. Models that reshape a static parameter
+    with input-derived dynamic dims (the ``pos_embed.reshape(1, height, width, -1)`` position-
+    embedding interpolation in Pvt / DepthPro / VitDet) produce a dynamic-shaped view of a
+    static const base, and ``_ViewSpec.__init__`` raises ``_ViewSpec is incompatible with its
+    base``. Those nodes must stay ``view_copy`` (an out-variant copy op, always correct) —
+    only the storage-sharing optimisation is skipped for them.
+    """
+    from executorch.exir.passes.replace_view_copy_with_view_pass import _is_view_copy
+    from executorch.exir.tensor import determine_tensor_dynanism
+
+    for node in graph_module.graph.nodes:
+        if _is_view_copy(node) and all(user.op != "output" for user in node.users):
+            # The view shape is node.meta["val"].shape, not node.args[1], which can contain
+            # an inferred -1 (same as the original pass).
+            shape = node.meta["val"].shape
+            base = node.args[0]
+            if determine_tensor_dynanism(shape) == base.meta["spec"].shape_dynamism:
+                yield node, shape
+
+
+@register_patch(
+    "executorch", "executorch.exir.passes.replace_view_copy_with_view_pass.ReplaceViewCopyWithViewPass.call"
+)
+def _patch_replace_view_copy_with_view_call(_original):
+    """Replacement for ``ReplaceViewCopyWithViewPass.call`` that only replaces ``view_copy``
+    nodes whose shape dynamism matches their base's — see ``_view_replaceable_nodes``."""
+    from executorch.exir.passes.replace_view_copy_with_view_pass import _VIEW_OP, _ViewSpec
+    from torch.fx.passes.infra.pass_base import PassResult
+
+    def patch(self, graph_module):
+        n_replaced = 0
+        for module in graph_module.modules():
+            if not isinstance(module, torch.fx.GraphModule):
+                continue
+            for node, shape in _view_replaceable_nodes(module):
+                node.target = _VIEW_OP
+                node.meta["spec"] = _ViewSpec(node.args[0].meta["spec"], shape)
+                n_replaced += 1
+            module.recompile()
+        return PassResult(graph_module, n_replaced > 0)
+
+    return patch
+
+
+@register_patch(
+    "executorch", "executorch.exir.passes.replace_view_copy_with_view_pass.ReplaceViewCopyWithViewPass.ensures"
+)
+def _patch_replace_view_copy_with_view_ensures(_original):
+    """Companion to ``_patch_replace_view_copy_with_view_call``: the original ``ensures`` asserts
+    that no non-output ``view_copy`` node remains, but the patched ``call`` deliberately keeps
+    the ones whose shape dynamism differs from their base's."""
+
+    def patch(self, graph_module):
+        for module in graph_module.modules():
+            if not isinstance(module, torch.fx.GraphModule):
+                continue
+            remaining = [node for node, _ in _view_replaceable_nodes(module)]
+            assert not remaining, f"view_copy nodes were not replaced with views: {remaining}"
+
+    return patch
+
+
+@register_patch("executorch", "torch.export.exported_program._convert_guards_to_code")
+def _patch_convert_guards_to_code(_original):
+    """Skip stringifying ShapeEnv guards on every ``ExportedProgram`` construction.
+
+    ``ExportedProgram.__init__`` unconditionally pretty-prints every ShapeEnv guard
+    into ``_guards_code``. ExecuTorch lowering constructs hundreds of intermediate
+    ``ExportedProgram``s (every ``_transform`` / decomposition / partition), each
+    re-printing the full guard set. For dynamic-shape guards with deeply nested
+    ``FloorDiv``/``Add`` expressions (Swin/Hiera window partitioning, BigBird
+    block-sparse indexing) the printer walks the *unshared* expression tree —
+    minutes of sympy printing per export, and on Mask2Former/Sam2 a recursion deep
+    enough to overflow the C stack (segfault). The strings are only consumed when
+    ``ExportedProgram.module()`` builds a guards fn, which torch itself force-disables
+    for ExecuTorch callers (``torch.export._unlift._ok_to_generate_guards_fn``), so
+    they are pure waste during lowering.
+    """
+
+    def patch(graph_module):
+        return []
+
+    return patch
+
+
 @register_patch(
     "executorch",
     "executorch.exir.passes.executorch_prim_ops_registry._EXECUTORCH_SYM_OPS",
@@ -633,6 +765,312 @@ def _make_squeeze_define_node(original):
                 debug_handle=debug_handle,
             )
         )
+
+    return patch
+
+
+@register_patch(
+    "executorch", "executorch.backends.transforms.remove_clone_ops.RemoveCloneOpsTransform._is_non_identity_clone"
+)
+def _patch_is_non_identity_clone(original):
+    """Keep identity clones that feed the graph output.
+
+    XNNPACK's delegate preprocess runs ``RemoveCloneOpsTransform``, which folds identity
+    clones (same dim order — including ``_clone_dim_order`` of a ``permute_copy``, identity
+    only *after* the view-to-copy pass) onto their input. When both the clone and its input
+    are outputs of the delegated submodule (a value and its ``.contiguous()`` copy both
+    crossing the partition boundary — Clvp's mel-attention residual, PerceptionLM's
+    eval-mode dropout of a returned hidden state), the fold leaves
+    the same node twice in the output list and ``generate_node_to_external_map`` rejects the
+    submodule with ``Output node ... is already in the inputs``. Report output-feeding clones
+    as non-identity so they are kept — the partitioner only admits dim-order-preserving
+    clones, which XNNPACK serializes as ``XNNCopy``.
+    """
+
+    def patch(self, node):
+        if any(user.op == "output" for user in node.users):
+            return True
+        return original(self, node)
+
+    return patch
+
+
+@register_patch(
+    "executorch", "executorch.backends.xnnpack.partition.config.node_configs.PreluConfig.check_constraints"
+)
+def _patch_prelu_check_constraints(original):
+    """Only delegate ``prelu`` to XNNPACK when its input is 4-D.
+
+    ``PreluConfig.check_constraints`` only verifies the weight is a parameter, but
+    XNNPACK's ``ChannelsLastTaggedReshapePass`` lists ``prelu`` among the ops that
+    require NHWC input and asserts the input can be converted (i.e. is 4-D) —
+    ``Attempting to convert non-NHWC compatible node to NHWC`` otherwise. Models
+    that apply ``nn.PReLU`` to 3-D transformer activations (dab_detr) crash there.
+    Rejecting the node keeps it on the portable CPU ops instead.
+    """
+
+    def patch(self, node, ep):
+        input_node = node.all_input_nodes[0]
+        val = input_node.meta.get("val")
+        if not (isinstance(val, torch.Tensor) and val.dim() == 4):
+            return False
+        return original(self, node, ep)
+
+    return patch
+
+
+@register_patch(
+    "executorch",
+    "executorch.exir.backend.canonical_partitioners.group_partitioner.GroupBasedPartitioner.propose_partitions",
+)
+def _patch_group_partitioner_break_quotient_cycles(original):
+    """Split delegated partitions that would form a dependency cycle once fused.
+
+    ``to_backend`` fuses each partition into a single ``call_module`` node, one at a time. A
+    fused node conservatively depends on *all* of the partition's inputs and feeds *all* of its
+    outputs — even when the partition internally holds independent sub-computations. The XNNPACK
+    config partitioner does create such partitions: its disjoint-set grouping
+    (``get_matched_nodes_from_configs``) unions nodes that merely share a constant, so a single
+    tag can cover two independent chains. When one such partition ``A`` collapses to one node, it
+    introduces an edge from every ``A``-input to every ``A``-output, which can make a *previously
+    convex* partition ``B`` non-convex if ``B`` has nodes on both sides of ``A`` — i.e. the
+    quotient graph (each partition contracted to a node) has a cycle ``B -> A -> B``.
+    ``create_submodule_from_nodes`` then raises ``Invalid partition, found dependency cycles``
+    (seen on FLAVA, where the text/image encoder streams and the multimodal encoder interleave).
+
+    ``GroupBasedPartitioner`` only checks *pairwise merges* (``_can_merge_partitions``) against
+    the original graph, so it misses this fusion-induced cycle. Enforce the real fuseability
+    condition here: the quotient graph over the proposed partitions must be a DAG. While it isn't,
+    pick a multi-node partition on a detected cycle (only a multi-node partition can create the
+    false all-inputs-to-all-outputs edge) and split it around the other cycle members: nodes
+    upstream of that barrier form one partition, the rest form another, ordering the halves as
+    ``upstream -> barrier -> downstream``. Both halves stay delegated to XNNPACK, so nodes the
+    partitioner marked "do not decompose" (e.g. ``linear``) aren't left orphaned and un-lowered.
+    Prefer the straddling partition (whose split lands nodes on both sides); each split strictly
+    increases the partition count while shrinking the straddler, so this converges. Cycle-free
+    partitionings (every currently-passing model) are returned untouched.
+    """
+    from torch.fx.passes.infra.partitioner import Partition
+
+    def find_cycle(adjacency):
+        # Iterative DFS returning the node ids on one cycle, or None if the graph is a DAG.
+        color = dict.fromkeys(adjacency, 0)  # 0 = unvisited, 1 = on stack, 2 = done
+        for root in adjacency:
+            if color[root] != 0:
+                continue
+            path = [root]
+            stack = [(root, iter(adjacency[root]))]
+            color[root] = 1
+            while stack:
+                _, neighbors = stack[-1]
+                advanced = False
+                for nxt in neighbors:
+                    if color[nxt] == 1:  # back-edge into the current DFS path
+                        return path[path.index(nxt) :]
+                    if color[nxt] == 0:
+                        color[nxt] = 1
+                        path.append(nxt)
+                        stack.append((nxt, iter(adjacency[nxt])))
+                        advanced = True
+                        break
+                if not advanced:
+                    color[stack.pop()[0]] = 2
+                    path.pop()
+        return None
+
+    def ancestors_of(barrier):
+        # All nodes with a path *into* the barrier set (barrier included), via reverse BFS.
+        seen, worklist = set(barrier), list(barrier)
+        while worklist:
+            for inp in worklist.pop().all_input_nodes:
+                if inp not in seen:
+                    seen.add(inp)
+                    worklist.append(inp)
+        return seen
+
+    def split_around(cycle, victim_id, by_id):
+        # Split victim's nodes into (before, after) around the other cycle members: `before` =
+        # victim nodes upstream of the barrier, `after` = the rest. Ordered before -> barrier ->
+        # after, this breaks the victim's participation in the cycle. Returns None if one side
+        # is empty (this victim doesn't straddle the barrier).
+        barrier = set()
+        for member in cycle:
+            if member == victim_id:
+                continue
+            barrier.update(by_id[member].nodes if isinstance(member, int) else {member})
+        ancestors = ancestors_of(barrier)
+        victim_nodes = list(by_id[victim_id].nodes)
+        before = [n for n in victim_nodes if n in ancestors]
+        after = [n for n in victim_nodes if n not in ancestors]
+        return (before, after) if before and after else None
+
+    def patch(self):
+        partitions = original(self)
+        by_id = {p.id: p for p in partitions}
+        while by_id:
+            # Build the quotient graph: every partition contracts to its (integer) id, every
+            # un-delegated node stays as itself. A cycle here is exactly a fusion cycle. The
+            # `tag66 -> tag95` return edge can run through an un-delegated node (e.g. FLAVA's
+            # multimodal layer_norm), so those nodes must be vertices too — a partition-only
+            # quotient misses the cycle.
+            node_to_pid = {node: pid for pid, p in by_id.items() for node in p.nodes}
+            adjacency: dict = {}
+            for node in self.graph_module.graph.nodes:
+                src = node_to_pid.get(node, node)
+                adjacency.setdefault(src, set())
+                for user in node.users:
+                    dst = node_to_pid.get(user, user)
+                    adjacency.setdefault(dst, set())
+                    if dst != src:
+                        adjacency[src].add(dst)
+            cycle = find_cycle(adjacency)
+            if cycle is None:
+                break
+
+            # Only a multi-node partition can introduce the false fusion edge (a one-node
+            # partition contracts to a single graph vertex, which the DAG can't put on a cycle),
+            # so the victim must be one of these. Prefer the straddler — the partition whose split
+            # lands nodes on both sides of the barrier — smallest first to minimise churn.
+            candidates = sorted(
+                (v for v in cycle if isinstance(v, int) and v in by_id and len(by_id[v].nodes) > 1),
+                key=lambda pid: len(by_id[pid].nodes),
+            )
+            if not candidates:
+                break
+            chosen_id, halves = None, None
+            for victim_id in candidates:
+                halves = split_around(cycle, victim_id, by_id)
+                if halves is not None:
+                    chosen_id = victim_id
+                    break
+
+            next_id = max(by_id) + 1
+            if chosen_id is not None:
+                del by_id[chosen_id]
+                for nodes in halves:
+                    by_id[next_id] = Partition(id=next_id, nodes=set(nodes))
+                    next_id += 1
+            else:
+                # No straddler splits cleanly — dissolve the smallest candidate into single-node
+                # partitions, which cannot sit on a fusion cycle. Rare; keeps the loop converging.
+                victim = by_id.pop(candidates[0])
+                for node in victim.nodes:
+                    by_id[next_id] = Partition(id=next_id, nodes={node})
+                    next_id += 1
+        return list(by_id.values())
+
+    return patch
+
+
+@register_patch(
+    "executorch",
+    "executorch.exir.lowered_backend_module._unsafe_adjust_original_program",
+    "executorch.exir.backend.backend_api._unsafe_adjust_original_program",
+)
+def _patch_unsafe_adjust_original_program(original):
+    """Delete each consumed parameter/constant target at most once when adjusting the
+    original program after delegation.
+
+    After a partition is lowered, ``_unsafe_adjust_original_program`` strips the params/buffers
+    the delegate absorbed from the top-level graph signature and state dict. Its dedup guard
+    (``currently_used_targets``) only skips targets still referenced by a *remaining* input spec —
+    it does not dedup *within* the batch being deleted. When one delegate consumes several
+    duplicated copies of the same shared parameter (the constant-dedup pass emits ``..._copy_1``,
+    ``..._copy_2`` … all keeping the original FQN as their ``target``), the loop deletes that
+    target on the first copy and then raises ``KeyError`` on the next. Transformers detection
+    models hit this because a single head is applied at every decoder layer and tied to the
+    encoder head — e.g. PPDocLayoutV3's ``model.decoder.class_embed.weight`` / ``bbox_embed``.
+
+    Track the targets already removed and delete each only once (and tolerate an already-absent
+    key). Removing a target once is correct: its data is baked into the delegate blob, so the
+    repeated deletes are no-ops. The rest of the routine (graph-node erasure, output-spec and
+    getitem-index fixups) is unchanged, so all duplicate placeholders are still erased.
+    """
+    from torch.export.graph_signature import InputKind
+
+    def patch(original_program, call_delegate_node, input_specs_to_delete, output_specs_to_delete):
+        original_program._graph_signature.input_specs = [
+            input_spec
+            for input_spec in original_program.graph_signature.input_specs
+            if input_spec.arg.name not in input_specs_to_delete
+        ]
+
+        currently_used_targets = {
+            input_spec.target
+            for input_spec in original_program._graph_signature.input_specs
+            if input_spec.target is not None
+        }
+
+        original_program._graph_signature.output_specs = [
+            output_spec
+            for output_spec in original_program.graph_signature.output_specs
+            if output_spec.arg.name not in output_specs_to_delete
+        ]
+
+        for node in original_program.graph.nodes:
+            if node.op == "placeholder":
+                if node.name in input_specs_to_delete:
+                    assert len(node.users) == 0
+                    original_program.graph.erase_node(node)
+            else:
+                break
+
+        deleted_targets: set = set()
+        for input_spec in input_specs_to_delete.values():
+            input_target = input_spec.target
+            assert input_target is not None
+            # Skip targets still referenced elsewhere, and targets already removed by an earlier
+            # duplicate copy in this same batch (the fix: the stock routine omits this second case).
+            if input_target in currently_used_targets or input_target in deleted_targets:
+                continue
+            deleted_targets.add(input_target)
+
+            if input_spec.kind == InputKind.PARAMETER:
+                original_program._state_dict.pop(input_target, None)
+            elif input_spec.kind == InputKind.BUFFER:
+                if input_spec.persistent:
+                    original_program._state_dict.pop(input_target, None)
+                else:
+                    original_program._constants.pop(input_target, None)
+            elif input_spec.kind == InputKind.CONSTANT_TENSOR:
+                original_program._constants.pop(input_target, None)
+            else:
+                raise RuntimeError(f"Invalid input spec {input_spec} received")
+
+        toplevel_output_node = original_program.graph.output_node()
+        assert toplevel_output_node is not None
+        assert len(toplevel_output_node.args) == 1, (
+            f"Invalid output node: {toplevel_output_node} with args {toplevel_output_node.args}"
+        )
+
+        new_output_args = [
+            arg
+            for arg in toplevel_output_node.args[0]
+            if not isinstance(arg, torch.fx.Node) or arg.name not in output_specs_to_delete
+        ]
+        toplevel_output_node.args = (tuple(new_output_args),)
+
+        getitem_idxs: list = []
+        user_nodes = list(call_delegate_node.users.keys())
+        for user in user_nodes:
+            if user.name in output_specs_to_delete:
+                assert user.op == "call_function" and user.target == operator.getitem
+                user_idx = user.args[1]
+                assert isinstance(user_idx, int), f"Invalid getitem type: {type(user_idx)}"
+                getitem_idxs.append(user_idx)
+                original_program.graph.erase_node(user)
+
+        getitem_idxs.sort(reverse=True)
+
+        user_nodes = list(call_delegate_node.users.keys())
+        for user in user_nodes:
+            assert user.op == "call_function" and user.target == operator.getitem
+            user_idx = user.args[1]
+            assert isinstance(user_idx, int)
+            for i, idx in enumerate(getitem_idxs):
+                if user_idx > idx:
+                    user.args = (user.args[0], user_idx - (len(getitem_idxs) - i))
+                    break
 
     return patch
 

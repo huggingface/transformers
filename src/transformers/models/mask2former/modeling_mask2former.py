@@ -978,10 +978,19 @@ class Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         )
         # batch_size, num_queries, n_heads, n_levels, n_points, 2
         if reference_points.shape[-1] == 2:
-            offset_normalizer = torch.tensor(
-                [[shape[1], shape[0]] for shape in spatial_shapes_list],
-                dtype=torch.long,
-                device=reference_points.device,
+            # ``torch.tensor([[w, h], ...], device=cuda)`` where dims are SymInts materialises
+            # on CPU and moves — trips FakeTensor device propagation during ``torch.export``.
+            # Build via ``torch.stack`` on device-side scalars instead.
+            offset_normalizer = torch.stack(
+                [
+                    torch.stack(
+                        [
+                            torch.as_tensor(shape[1], dtype=torch.long, device=reference_points.device),
+                            torch.as_tensor(shape[0], dtype=torch.long, device=reference_points.device),
+                        ]
+                    )
+                    for shape in spatial_shapes_list
+                ]
             )
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]

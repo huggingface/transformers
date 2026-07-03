@@ -1090,7 +1090,9 @@ class XLNetModel(XLNetPreTrainedModel):
         if data_mask is not None:
             # all mems can be attended to
             if mlen > 0:
-                mems_mask = torch.zeros([data_mask.shape[0], mlen, bsz]).to(data_mask)
+                mems_mask = torch.zeros(
+                    [data_mask.shape[0], mlen, bsz], device=data_mask.device, dtype=data_mask.dtype
+                )
                 data_mask = torch.cat([mems_mask, data_mask], dim=1)
             if attn_mask is None:
                 attn_mask = data_mask[:, :, :, None]
@@ -1101,9 +1103,11 @@ class XLNetModel(XLNetPreTrainedModel):
             attn_mask = (attn_mask > 0).to(dtype_float)
 
         if attn_mask is not None:
-            non_tgt_mask = -torch.eye(qlen).to(attn_mask)
+            non_tgt_mask = -torch.eye(qlen, device=attn_mask.device, dtype=attn_mask.dtype)
             if mlen > 0:
-                non_tgt_mask = torch.cat([torch.zeros([qlen, mlen]).to(attn_mask), non_tgt_mask], dim=-1)
+                non_tgt_mask = torch.cat(
+                    [torch.zeros([qlen, mlen], device=attn_mask.device, dtype=attn_mask.dtype), non_tgt_mask], dim=-1
+                )
             non_tgt_mask = ((attn_mask + non_tgt_mask[:, :, None, None]) > 0).to(attn_mask)
         else:
             non_tgt_mask = None
