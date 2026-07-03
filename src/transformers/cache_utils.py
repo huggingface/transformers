@@ -930,17 +930,20 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
     def lazy_initialization(
         self, conv_states: torch.Tensor | None = None, recurrent_states: torch.Tensor | None = None
     ) -> None:
-        # Here, we will lazy init both states separately, each in their own update function
+        # Callers (`update_conv_state` / `update_recurrent_state`) already gate on the
+        # `is_..._initialized` flags, so each branch here runs at most once per layer.
         if conv_states is not None:
             self.dtype, self.device = conv_states.dtype, conv_states.device
-            # Even if prefill is larfer/shorter than the conv_size, the tensor is always either padded or truncated
-            self.batch_size, self.conv_kernel_size = conv_states.shape[0], conv_states.shape[-1]
+            self.batch_size = conv_states.shape[0]
+            # Even if prefill is larger/shorter than the conv_size, the tensor is always either padded or truncated
+            self.conv_kernel_size = conv_states.shape[-1]
             # The shape is always static, so we init as such
             self.conv_states = torch.zeros_like(conv_states, dtype=self.dtype, device=self.device)
             # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling():
                 torch._dynamo.mark_static_address(self.conv_states)
             self.is_conv_states_initialized = True
+
         if recurrent_states is not None:
             # The shape is always static, so we init as such
             self.recurrent_states = torch.zeros_like(recurrent_states, dtype=self.dtype, device=self.device)
@@ -1045,12 +1048,11 @@ LAYER_TYPE_CACHE_MAPPING.update(
         # only the mask differs.
         "sliding_attention": DynamicSlidingWindowLayer,
         "chunked_attention": DynamicSlidingWindowLayer,
-        # Linear-attention-shaped layers (mamba / conv / pure linear-attention / moe placeholders)
-        # don't grow per-token KV; they're tracked just so position bookkeeping stays consistent.
-        "mamba": LinearAttentionLayer,
+        # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
+        # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state.
         "conv": LinearAttentionLayer,
-        "linear_attention": LinearAttentionLayer,
         "moe": LinearAttentionLayer,
+        "linear_attention": LinearAttentionLayer,
         # Hybrid layers (e.g. zamba / zamba2) carry both a linear-attention state and a dynamic-attention state.
         "hybrid": LinearAttentionAndFullAttentionLayer,
     }
@@ -1399,8 +1401,13 @@ class Cache:
 
     @property
     def batch_size(self) -> int:
-        """Return the batch size of the cache"""
-        values = [layer.batch_size for layer in self.layers]
+        """Return the batch size of the cache, or ``-1`` if no layer has been initialized yet
+        (e.g. an all-linear-attention cache queried before the first forward)."""
+        # ``LinearAttentionLayer`` sets ``batch_size`` lazily — skip layers that haven't been
+        # initialized yet (``generate`` queries this on a fresh cache during cache-reuse checks).
+        values = [layer.batch_size for layer in self.layers if hasattr(layer, "batch_size")]
+        if not values:
+            return -1
         if len(set(values)) > 1:
             raise ValueError(f"The batch size is not consistent across layers: {values}")
         return values[0]
@@ -1640,8 +1647,8 @@ class StaticCache(Cache):
                 )
             elif layer_type in sliding_layer_types:
                 layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
-            # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
-            elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
+            # Recurrent-state-only layers — linear-attention, conv, MoE — share the same static cache class.
+            elif layer_type in ("linear_attention", "conv", "moe"):
                 layer = LinearAttentionLayer()
             # Custom layer types (e.g. M3's sparse-attention indexer cache) that registered a static variant.
             elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:

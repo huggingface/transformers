@@ -219,6 +219,8 @@ class Mamba2Mixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
+        self.layer_type = config.layer_types[layer_idx]
+
     @torch.no_grad()
     def init_mamba2_weights(self):
         A = torch.arange(1, self.num_heads + 1, device=self.A_log.device, dtype=torch.float32)
@@ -672,6 +674,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["Mamba2Block"]
     supports_gradient_checkpointing = True
+    _can_compile_fullgraph = True
     _is_stateful = True
 
     @torch.no_grad()

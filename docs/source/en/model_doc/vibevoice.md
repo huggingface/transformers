@@ -71,8 +71,7 @@ pip install soundfile   # for saving audio
 ```python
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
-model_id = "bezzam/VibeVoice-1.5B-hf"
-# model_id = "bezzam/VibeVoice-7B-hf"
+model_id = "bezzam/VibeVoice-1.5B-hf"  # "bezzam/VibeVoice-7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id)
 ```
@@ -86,7 +85,6 @@ from transformers import AutoProcessor, AutoModelForTextToWaveform, set_seed
 
 model_id = "bezzam/VibeVoice-1.5B-hf"   # "bezzam/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
-set_seed(42)  # for deterministic results
 
 # Load model
 processor = AutoProcessor.from_pretrained(model_id)
@@ -109,9 +107,9 @@ model.generation_config.noise_scheduler = noise_scheduler
 audio = model.generate(**inputs)
 
 # Save to file
-fn = f"{os.path.basename(model_id)}_tts.wav"
-processor.save_audio(audio, fn)
-print(f"Saved output to {fn}")
+file_name = f"{os.path.basename(model_id)}_tts.wav"
+processor.save_audio(audio, file_name)
+print(f"Saved output to {file_name}")
 ```
 
 ### TTS voice cloning
@@ -247,8 +245,7 @@ noise_scheduler = diffusers.DPMSolverMultistepScheduler(
     prediction_type="v_prediction",
 )
 model.generation_config.noise_scheduler = noise_scheduler
-if max_new_tokens is not None:
-    model.generation_config.max_new_tokens = max_new_tokens
+model.generation_config.max_new_tokens = max_new_tokens
 start_time = time.time()
 completed_samples = set()
 with tqdm(desc="Generating") as pbar:
