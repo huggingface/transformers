@@ -12,16 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 
-from ...audio_utils import AudioInput
-from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_vision_available, logging
-from ...utils.import_utils import requires
-from ...video_utils import VideoInput
-
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -29,6 +22,7 @@ logger = logging.get_logger(__name__)
 
 class TmlProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
+
 
 @auto_docstring
 class TmlProcessor(ProcessorMixin):
@@ -46,7 +40,7 @@ class TmlProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.image_token_id
         self.audio_token = tokenizer.audio_token
         self.audio_token_id = tokenizer.audio_token_id
-        self.eoa_token_id = tokenizer.eoa_token_id # where is it used???
+        self.eoa_token_id = tokenizer.eoa_token_id  # where is it used???
 
         super().__init__(
             feature_extractor=feature_extractor,
