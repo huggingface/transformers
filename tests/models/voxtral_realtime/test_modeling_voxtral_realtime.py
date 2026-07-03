@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch VoxtralRealtime model."""
 
 import functools
+import queue
 import unittest
 from threading import Thread
 
@@ -399,7 +400,7 @@ class VoxtralRealtimeForConditionalGenerationIntegrationTest(unittest.TestCase):
                 start_idx = mel_frame_idx * hop_length - win_length // 2
 
         streamer = TextIteratorStreamer(
-            processor.tokenizer, skip_special_tokens=True, clean_up_tokenization_spaces=True
+            processor.tokenizer, skip_special_tokens=True, clean_up_tokenization_spaces=True, timeout=60
         )
         generate_kwargs = {
             "input_ids": first_chunk_inputs.input_ids,
@@ -407,10 +408,25 @@ class VoxtralRealtimeForConditionalGenerationIntegrationTest(unittest.TestCase):
             "num_delay_tokens": first_chunk_inputs.num_delay_tokens,
             "streamer": streamer,
         }
-        thread = Thread(target=model.generate, kwargs=generate_kwargs)
+        thread_exception = []
+
+        def generate_and_capture_exception():
+            try:
+                model.generate(**generate_kwargs)
+            except BaseException as e:
+                thread_exception.append(e)
+
+        thread = Thread(target=generate_and_capture_exception)
         thread.start()
-        streamed_text = "".join(streamer)
+        try:
+            streamed_text = "".join(streamer)
+        except queue.Empty:
+            # `generate` died before signalling the end of the stream; fall through to re-raise below.
+            streamed_text = None
         thread.join()
+
+        if thread_exception:
+            raise thread_exception[0]
 
         # Reference from the vLLM streaming path
         EXPECTED_TRANSCRIPTION = " This week, I traveled to Chicago to deliver my final farewell address to the nation. Following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, My conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the"
