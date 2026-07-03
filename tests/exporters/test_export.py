@@ -58,8 +58,7 @@ from transformers.testing_utils import (
 
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
-    "all": {
-    },
+    "all": {},
     # Every backend, generate path only.
     "generate": {
         "RecurrentGemmaForCausalLM": (
@@ -80,8 +79,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         ),
     },
     # ONNX, generate path only.
-    "onnx.generate": {
-    },
+    "onnx.generate": {},
     # ONNX, dynamic-shape only.
     "onnx.dynamic": {
         "GroundingDinoModel": (
@@ -107,8 +105,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
     },
-    "executorch.generate": {
-    },
+    "executorch.generate": {},
     "executorch.dynamic": {
         "BigBirdModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
@@ -118,32 +115,26 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "DonutSwinModel": (
-            "ExecuTorch memory planning overflows under unbounded dynamic shapes (`mem_offset does not fit in 64 bits`)."
-        ),
-        "DonutSwinForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
         "MaskFormerModel": "Same `timeout` failure as `BigBirdModel`.",
         "MaskFormerForInstanceSegmentation": "Same `timeout` failure as `BigBirdModel`.",
-        "MaskFormerSwinModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "MaskFormerSwinBackbone": "Same `overflow` failure as `DonutSwinModel`.",
-        "MllamaModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "MllamaForConditionalGeneration": "Same `overflow` failure as `DonutSwinModel`.",
+        "MaskFormerSwinModel": (
+            "ExecuTorch memory planning overflows under unbounded dynamic shapes (`mem_offset does not fit in 64 bits`)."
+        ),
+        "MaskFormerSwinBackbone": "Same `overflow` failure as `MaskFormerSwinModel`.",
+        "MllamaModel": "Same `overflow` failure as `MaskFormerSwinModel`.",
+        "MllamaForConditionalGeneration": "Same `overflow` failure as `MaskFormerSwinModel`.",
         "Sam2Model": (
             "The dropped-weight `KeyError` is fixed, but `torch.export` of the Hiera vision "
             "backbone under dynamic shapes then exceeds the 1000s test timeout (same "
             "Hiera-backbone dynamic-shape overrun as `Sam2VisionModel`)."
         ),
         "Sam2VisionModel": "Same `timeout` failure as `BigBirdModel`.",
-        "Swin2SRModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swin2SRForImageSuperResolution": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinBackbone": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinForMaskedImageModeling": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swinv2Model": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swinv2ForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swinv2ForMaskedImageModeling": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swinv2Backbone": "Same `overflow` failure as `DonutSwinModel`.",
+        "Swin2SRModel": "Same `overflow` failure as `MaskFormerSwinModel`.",
+        "Swin2SRForImageSuperResolution": "Same `overflow` failure as `MaskFormerSwinModel`.",
+        "Swinv2Model": "Same `overflow` failure as `MaskFormerSwinModel`.",
+        "Swinv2ForImageClassification": "Same `overflow` failure as `MaskFormerSwinModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `overflow` failure as `MaskFormerSwinModel`.",
+        "Swinv2Backbone": "Same `overflow` failure as `MaskFormerSwinModel`.",
         "Wav2Vec2BertForCTC": ("`flatc` schema compilation fails when serializing the program."),
         "Wav2Vec2BertModel": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
         "Wav2Vec2BertForSequenceClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",

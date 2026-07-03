@@ -442,22 +442,33 @@ def _patch_expand(original):
     "executorch.exir.passes.sym_shape_eval_pass.eval_upper_bound",
 )
 def _patch_eval_upper_bound(original):
-    """Constraint-based bound, then trace hint, then ``_MAX_DIM_FLOOR``.
+    """Constraint-based bound, clamped to a trace-hint-proportional cap.
 
-    Constraint propagation returns ``int_oo`` for compound expressions whose
-    constraints don't compose (e.g. ``((s43*s53)//s70)``) or for sums of
-    unbacked symbols (e.g. MoE per-expert cats ``u320+u321+...``); the
-    fallbacks guarantee an ``int`` so ``ConstraintBasedSymShapeEvalPass``
-    doesn't raise.
+    Constraint propagation misbehaves on compound expressions in two ways, and
+    ``ConstraintBasedSymShapeEvalPass`` needs an ``int`` in both cases:
+
+    - It returns ``int_oo`` when constraints don't compose (e.g. ``((s43*s53)//s70)``)
+      or for sums of unbacked symbols (e.g. MoE per-expert cats ``u320+u321+...``).
+    - It returns absurdly large *finite* bounds for floordiv ratios: interval
+      arithmetic evaluates ``x // (x // 2)`` (window-count ratios in the Swin family,
+      true value 2) as ``upper(x) // lower(x // 2)``, e.g. ``513 // 1``. These
+      ratios appear squared in window-partition reshapes and compound across
+      stages, so worst-case tensor sizes reach ~2^63 bytes and ExecuTorch's memory
+      planner overflows (``mem_offset does not fit in 64 bits``).
+
+    Clamp every symbolic bound to ``max(hint * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR)``
+    — the same trace-proportional heuristic ``_fix_range_constraints`` applies to the
+    per-symbol ranges — so planned buffers stay proportional to the sampled inputs.
     """
     from executorch.exir.sym_util import eval_expr
 
     def patch(maybe_symint):
+        if isinstance(maybe_symint, int):
+            return maybe_symint
         result = original(maybe_symint)
-        if isinstance(result, int):
-            return result
         hint = eval_expr(maybe_symint)
-        return hint if isinstance(hint, int) else _MAX_DIM_FLOOR
+        cap = max(hint * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR) if isinstance(hint, int) else _MAX_DIM_FLOOR
+        return min(result, cap) if isinstance(result, int) else cap
 
     return patch
 
