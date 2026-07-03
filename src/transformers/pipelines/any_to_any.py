@@ -44,6 +44,8 @@ if is_vision_available():
 
 logger = logging.get_logger(__name__)
 
+_GENERATION_CONFIG_KWARGS = set(GenerationConfig().to_dict())
+
 
 class ReturnType(enum.Enum):
     TENSORS = 0
@@ -168,7 +170,12 @@ class AnyToAnyPipeline(Pipeline):
         postprocess_params = {}
 
         # Preprocess params
-        preprocess_params.update(kwargs)
+        direct_generate_kwargs = {}
+        for key, value in kwargs.items():
+            if key in _GENERATION_CONFIG_KWARGS:
+                direct_generate_kwargs[key] = value
+            else:
+                preprocess_params[key] = value
         if timeout is not None:
             preprocess_params["timeout"] = timeout
         if continue_final_message is not None:
@@ -177,7 +184,16 @@ class AnyToAnyPipeline(Pipeline):
             preprocess_params["processor_kwargs"] = processor_kwargs
 
         # Forward kwargs
-        forward_kwargs["generate_kwargs"] = generate_kwargs or {}
+        forward_kwargs["generate_kwargs"] = dict(generate_kwargs) if generate_kwargs is not None else {}
+        if direct_generate_kwargs:
+            duplicate_kwargs = set(forward_kwargs["generate_kwargs"]).intersection(direct_generate_kwargs)
+            if duplicate_kwargs:
+                duplicate_kwargs = ", ".join(sorted(duplicate_kwargs))
+                raise ValueError(
+                    f"The following generation kwargs are defined twice: {duplicate_kwargs}. "
+                    "Please use either direct keyword arguments or `generate_kwargs`, not both."
+                )
+            forward_kwargs["generate_kwargs"].update(direct_generate_kwargs)
         if generation_mode is not None and generation_mode != "text":
             forward_kwargs["generate_kwargs"]["generation_mode"] = generation_mode
         # Qwen-Omni models need to know the origin of audio, to align mm position ids

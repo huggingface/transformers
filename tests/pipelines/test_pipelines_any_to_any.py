@@ -39,6 +39,24 @@ if is_vision_available():
     import PIL
 
 
+class AnyToAnyPipelineSanitizeParametersTests(unittest.TestCase):
+    def test_direct_generation_kwargs_are_forwarded(self):
+        pipe = object.__new__(AnyToAnyPipeline)
+
+        preprocess_params, forward_params, _ = pipe._sanitize_parameters(
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.8,
+            padding=True,
+        )
+
+        self.assertEqual({"padding": True}, preprocess_params)
+        self.assertEqual(
+            {"do_sample": True, "temperature": 0.7, "top_p": 0.8},
+            forward_params["generate_kwargs"],
+        )
+
+
 @is_pipeline_test
 @require_vision
 @require_librosa

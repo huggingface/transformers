@@ -237,6 +237,22 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         outputs_batched = pipe([image, image], text=[prompt, prompt], batch_size=2, max_new_tokens=10)
         self.assertEqual(outputs, outputs_batched)
 
+    def test_direct_generation_kwargs_are_forwarded(self):
+        pipe = object.__new__(ImageTextToTextPipeline)
+
+        preprocess_params, forward_params, _ = pipe._sanitize_parameters(
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.8,
+            padding=True,
+        )
+
+        self.assertEqual({"padding": True}, preprocess_params)
+        self.assertEqual(
+            {"do_sample": True, "temperature": 0.7, "top_p": 0.8},
+            forward_params["generate_kwargs"],
+        )
+
     @slow
     @require_torch
     def test_model_pt_chat_template_with_response_parsing(self):

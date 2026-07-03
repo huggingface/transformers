@@ -41,6 +41,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 IMAGE_TOKEN = "<image>"
+_GENERATION_CONFIG_KWARGS = set(GenerationConfig().to_dict())
 
 
 class ReturnType(enum.Enum):
@@ -148,7 +149,12 @@ class ImageTextToTextPipeline(Pipeline):
         postprocess_params = {}
 
         # Preprocess params
-        preprocess_params.update(kwargs)
+        direct_generate_kwargs = {}
+        for key, value in kwargs.items():
+            if key in _GENERATION_CONFIG_KWARGS:
+                direct_generate_kwargs[key] = value
+            else:
+                preprocess_params[key] = value
         if timeout is not None:
             preprocess_params["timeout"] = timeout
         if continue_final_message is not None:
@@ -157,6 +163,16 @@ class ImageTextToTextPipeline(Pipeline):
             preprocess_params["processor_kwargs"] = processor_kwargs
 
         # Forward kwargs
+        if direct_generate_kwargs:
+            generate_kwargs = dict(generate_kwargs) if generate_kwargs is not None else {}
+            duplicate_kwargs = set(generate_kwargs).intersection(direct_generate_kwargs)
+            if duplicate_kwargs:
+                duplicate_kwargs = ", ".join(sorted(duplicate_kwargs))
+                raise ValueError(
+                    f"The following generation kwargs are defined twice: {duplicate_kwargs}. "
+                    "Please use either direct keyword arguments or `generate_kwargs`, not both."
+                )
+            generate_kwargs.update(direct_generate_kwargs)
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if stop_sequence is not None:
