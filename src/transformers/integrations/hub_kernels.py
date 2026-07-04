@@ -745,10 +745,8 @@ def register_kernel_replacements_and_fusions(
             raise ValueError(f"Invalid kernel repo string {repo_str!r} for layer {layer_name!r}")
 
         if kernel_config.use_local_kernel:
-            package_name = repo_id.rstrip("/").split("/")[-1]
             repo = LocalLayerRepository(
                 repo_path=Path(repo_id),
-                package_name=package_name,
                 layer_name=layer_name_in_repo,
             )
         else:
