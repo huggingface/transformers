@@ -21,6 +21,7 @@ from functools import cached_property
 
 from transformers import DeformableDetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
+    require_scipy,
     require_timm,
     require_torch,
     require_torch_accelerator,
@@ -741,3 +742,54 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
             [[-9.9160, -4.2876, -6.4985], [-9.6945, -4.0855, -6.8031], [-10.0665, -5.8471, -7.7001]]
         )
         assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=2e-4)
+
+
+@require_torch
+@require_scipy
+class DeformableDetrHungarianMatcherInfeasibleCostTest(unittest.TestCase):
+    def test_non_finite_costs_do_not_crash_matcher(self):
+        """
+        Regression test for the Deformable DETR Hungarian matcher. Its sigmoid focal classification
+        cost can overflow to inf/NaN (e.g. fp16 saturation under AMP, see #47000), which used to make
+        ``scipy.optimize.linear_sum_assignment`` raise ``ValueError: cost matrix is infeasible``. The
+        matcher now replaces non-finite costs with a large finite value before matching.
+        """
+        from transformers.loss.loss_deformable_detr import DeformableDetrHungarianMatcher
+
+        torch.manual_seed(0)
+        matcher = DeformableDetrHungarianMatcher(class_cost=1, bbox_cost=5, giou_cost=2)
+
+        num_queries, num_classes, num_targets = 5, 4, 3
+        # Boxes in normalized center format (cx, cy, w, h) with strictly positive width/height.
+        targets = [
+            {
+                "class_labels": torch.arange(num_targets),
+                "boxes": torch.rand(num_targets, 4) * 0.5 + 0.25,
+            }
+        ]
+
+        def base_inputs():
+            return (
+                torch.randn(1, num_queries, num_classes),
+                torch.rand(1, num_queries, 4) * 0.5 + 0.25,
+            )
+
+        # NaN in the logits poisons the classification cost; +inf on a box width poisons the L1/GIoU
+        # cost. Either leaves a non-finite cost matrix that used to make scipy raise.
+        cases = []
+        logits, pred_boxes = base_inputs()
+        logits[0, 0, 0] = float("nan")
+        cases.append((logits, pred_boxes))
+        logits, pred_boxes = base_inputs()
+        pred_boxes[0, 0, 2] = float("inf")
+        cases.append((logits, pred_boxes))
+
+        for logits, pred_boxes in cases:
+            outputs = {"logits": logits, "pred_boxes": pred_boxes}
+
+            indices = matcher(outputs, targets)
+
+            self.assertEqual(len(indices), 1)
+            row_indices, col_indices = indices[0]
+            self.assertEqual(len(row_indices), num_targets)
+            self.assertEqual(len(col_indices), num_targets)

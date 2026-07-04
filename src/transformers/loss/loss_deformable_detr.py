@@ -50,6 +50,10 @@ class DeformableDetrHungarianMatcher(HungarianMatcher):
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
+        # Guard against non-finite costs (e.g. inf/NaN from fp16 overflow under AMP), which would
+        # otherwise make scipy's linear_sum_assignment raise "ValueError: cost matrix is infeasible".
+        max_value = torch.finfo(cost_matrix.dtype).max
+        cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
 
         sizes = [len(v["boxes"]) for v in targets]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]

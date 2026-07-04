@@ -23,6 +23,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    require_scipy,
     require_torch,
     require_vision,
     slow,
@@ -813,3 +814,55 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)
+
+
+@require_torch
+@require_scipy
+@require_vision
+class LwDetrHungarianMatcherInfeasibleCostTest(unittest.TestCase):
+    def test_non_finite_costs_do_not_crash_matcher(self):
+        """
+        Regression test for the LW-DETR Hungarian matcher. Its sigmoid focal classification cost can
+        overflow to inf/NaN (e.g. fp16 saturation under AMP, see #47000), which used to make
+        ``scipy.optimize.linear_sum_assignment`` raise ``ValueError: cost matrix is infeasible``. The
+        matcher now replaces non-finite costs with a large finite value before matching.
+        """
+        from transformers.loss.loss_lw_detr import LwDetrHungarianMatcher
+
+        torch.manual_seed(0)
+        matcher = LwDetrHungarianMatcher(class_cost=1, bbox_cost=5, giou_cost=2)
+
+        num_queries, num_classes, num_targets = 5, 4, 3
+        # Boxes in normalized center format (cx, cy, w, h) with strictly positive width/height.
+        targets = [
+            {
+                "class_labels": torch.arange(num_targets),
+                "boxes": torch.rand(num_targets, 4) * 0.5 + 0.25,
+            }
+        ]
+
+        def base_inputs():
+            return (
+                torch.randn(1, num_queries, num_classes),
+                torch.rand(1, num_queries, 4) * 0.5 + 0.25,
+            )
+
+        # NaN in the logits poisons the classification cost; +inf on a box width poisons the L1/GIoU
+        # cost. Either leaves a non-finite cost matrix that used to make scipy raise.
+        cases = []
+        logits, pred_boxes = base_inputs()
+        logits[0, 0, 0] = float("nan")
+        cases.append((logits, pred_boxes))
+        logits, pred_boxes = base_inputs()
+        pred_boxes[0, 0, 2] = float("inf")
+        cases.append((logits, pred_boxes))
+
+        for logits, pred_boxes in cases:
+            outputs = {"logits": logits, "pred_boxes": pred_boxes}
+
+            indices = matcher(outputs, targets, group_detr=1)
+
+            self.assertEqual(len(indices), 1)
+            row_indices, col_indices = indices[0]
+            self.assertEqual(len(row_indices), num_targets)
+            self.assertEqual(len(col_indices), num_targets)
