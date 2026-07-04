@@ -353,6 +353,8 @@ class GgufModelTests(unittest.TestCase):
     q4_k_m_lfm2_model_id = "LFM2-1.2B-Q4_K_M.gguf"
     gpt_oss_model_id = "unsloth/gpt-oss-20b-GGUF"
     gpt_oss_gguf_file = "gpt-oss-20b-Q5_K_M.gguf"
+    cohere2_model_id = "bartowski/c4ai-command-r7b-12-2024-GGUF"
+    q2_k_cohere2_model_id = "c4ai-command-r7b-12-2024-Q2_K.gguf"
 
     example_text = "Hello"
 
@@ -1145,3 +1147,30 @@ class GgufModelTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello Atari 2600! es un videoj"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_cohere2_q2_k(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.cohere2_model_id, gguf_file=self.q2_k_cohere2_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.cohere2_model_id,
+            gguf_file=self.q2_k_cohere2_model_id,
+            device_map="auto",
+            dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, I am looking for someone to create a logo"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_cohere2_q2_k_tokenizer(self):
+        # Cohere2 prepends a BOS token and registers control tokens (e.g. turn delimiters) as special tokens
+        tokenizer = AutoTokenizer.from_pretrained(self.cohere2_model_id, gguf_file=self.q2_k_cohere2_model_id)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tokenizer.save_pretrained(tmpdirname)
+            tokenizer = AutoTokenizer.from_pretrained(tmpdirname)
+            special_sentence = "<|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello<|END_OF_TURN_TOKEN|>"
+            input_ids = tokenizer.encode(special_sentence, return_tensors="pt")[0].tolist()
+            self.assertEqual(input_ids, [5, 255000, 255006, 28339, 255001])
+            predicted_text = tokenizer.decode(input_ids)
+            self.assertEqual(predicted_text, "<BOS_TOKEN>" + special_sentence)
