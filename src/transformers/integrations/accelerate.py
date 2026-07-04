@@ -302,21 +302,22 @@ def get_balanced_memory(
     elif not isinstance(no_split_module_classes, (list, tuple, set)):
         no_split_module_classes = [no_split_module_classes]
 
-    # Identify the size of the no_split_block modules
-    buffer = 0
-    if len(no_split_module_classes) > 0:
-        no_split_children = {}
-        for name, size in module_sizes.items():
-            if name == "":
-                continue
-            submodule = model.get_submodule(name)
-            class_name = submodule.__class__.__name__
-            if class_name in no_split_module_classes and class_name not in no_split_children:
-                no_split_children[class_name] = size
-
-            if set(no_split_children.keys()) == set(no_split_module_classes):
-                break
-        buffer = max(no_split_children.values()) if len(no_split_children) > 0 else 0
+    # Identify the size of the biggest module that the packing step in `infer_auto_device_map` treats as an
+    # atom: either a block whose class is in `no_split_module_classes`, or a childless module (e.g. a big
+    # embedding). It must be measured with the same helper used there for the largest-layer reservation: if
+    # the per-device caps were smaller than an atom, every capped device would be skipped when treating it,
+    # and since the packing never goes back to a previous device, the whole model would collapse onto the
+    # last device (which keeps the full user budget) and spill on cpu/disk despite an ample total budget.
+    modules_to_treat = (
+        list(model.named_parameters(recurse=False))
+        + list(model.named_children())
+        + list(model.named_buffers(recurse=False))
+    )
+    buffer, _ = get_max_layer_size(
+        [(name, submodule) for name, submodule in modules_to_treat if isinstance(submodule, nn.Module)],
+        module_sizes,
+        list(no_split_module_classes),
+    )
 
     mean_leaves = int(sum(leave_modules_sizes.values()) / max(len(leave_modules_sizes), 1))
     buffer = int(1.25 * max(buffer, mean_leaves))
@@ -369,6 +370,20 @@ def _get_device_map(
             no_split_module_classes=no_split_modules,
             hf_quantizer=hf_quantizer,
         )
+
+        # Quantizers only reject maps mixing accelerators and cpu/disk: a map placing everything on
+        # cpu/disk while accelerators were requested passes silently, so at least warn about it.
+        requested_accelerators = [
+            device
+            for device in inferred_max_memory
+            if device not in ("cpu", "disk") and inferred_max_memory[device] > 0
+        ]
+        if requested_accelerators and all(device in ("cpu", "disk") for device in device_map.values()):
+            logger.warning(
+                f"device_map='auto' could not fit any model block within the `max_memory` of the requested "
+                f"device(s) {requested_accelerators}, so the whole model was assigned to the cpu/disk. Increase "
+                f"the per-device `max_memory` if this is unwanted."
+            )
 
         if hf_quantizer is not None:
             hf_quantizer.validate_environment(device_map=device_map)
