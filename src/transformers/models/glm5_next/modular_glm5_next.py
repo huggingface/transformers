@@ -43,7 +43,11 @@ from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
 from ..mixtral.modeling_mixtral import MixtralForCausalLM
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNormGated
-from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
+from ..qwen3_next.modeling_qwen3_next import (
+    apply_mask_to_padding_states,
+    torch_causal_conv1d_fn,
+    torch_causal_conv1d_update,
+)
 from .configuration_glm5_next import Glm5NextConfig
 
 
@@ -334,45 +338,6 @@ def torch_chunk_kimi_delta_attention(
     return core_attn_out, last_recurrent_state
 
 
-def torch_causal_conv1d_update(
-    hidden_states,
-    conv_state,
-    weight,
-    bias=None,
-    activation=None,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    state_len = conv_state.shape[-1]
-
-    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
-    conv_state.copy_(hidden_states_new[:, :, -state_len:])
-    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = ACT2FN[activation](out[:, :, -seq_len:])
-    out = out.to(hidden_states.dtype)
-    return out
-
-
-def torch_causal_conv1d_fn(
-    hidden_states,
-    weight,
-    bias=None,
-    activation=None,
-    **kwargs,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
-
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
-
-    return ACT2FN[activation](out).to(hidden_states.dtype)
-
-
 class Glm5NextForgetGate(nn.Module):
     def __init__(self, config: Glm5NextConfig):
         super().__init__()
@@ -451,7 +416,8 @@ class Glm5NextLinearAttention(nn.Module):
         global causal_conv1d_update, causal_conv1d_fn, chunk_kda, recurrent_kda
         fla = lazy_load_kernel("fla")
         causal_conv1d_update, causal_conv1d_fn, chunk_kda, recurrent_kda = (
-            resolve_internal_import(fla, chained_path=path) for path in [
+            resolve_internal_import(fla, chained_path=path)
+            for path in [
                 "modules.convolution.causal_conv1d_update",
                 "modules.convolution.causal_conv1d",
                 "ops.kda.chunk.chunk_kda",
@@ -469,7 +435,6 @@ class Glm5NextLinearAttention(nn.Module):
         self.causal_conv1d_update = torch_causal_conv1d_update
         self.chunk_kimi_delta_attention = torch_chunk_kimi_delta_attention
         self.recurrent_kimi_delta_attention = torch_recurrent_kimi_delta_attention
-
 
     def forward(
         self,
@@ -1069,7 +1034,11 @@ class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
         self.block_type = config.layer_types[layer_idx]
 
         super().__init__(config, layer_idx)
-        self.self_attn = Glm5NextLinearAttention(config, layer_idx) if self.block_type == "linear_attention" else Glm5NextAttention(config, layer_idx)
+        self.self_attn = (
+            Glm5NextLinearAttention(config, layer_idx)
+            if self.block_type == "linear_attention"
+            else Glm5NextAttention(config, layer_idx)
+        )
 
         self.uses_mhc = config.mhc
         self.attn_hc = Glm5NextHyperConnection(config) if config.mhc else None

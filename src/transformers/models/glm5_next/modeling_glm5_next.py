@@ -40,23 +40,13 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import (
-    is_causal_conv1d_available,
     resolve_internal_import,
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_glm5_next import Glm5NextConfig
-
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
-
-
-logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -80,7 +70,6 @@ class Glm5NextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-# TODO: Wrap with FLA layer kernel
 class Glm5NextRMSNormGated(nn.Module):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         super().__init__()
@@ -432,6 +421,45 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
+def torch_causal_conv1d_update(
+    hidden_states,
+    conv_state,
+    weight,
+    bias=None,
+    activation=None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = ACT2FN[activation](out[:, :, -seq_len:])
+    out = out.to(hidden_states.dtype)
+    return out
+
+
+def torch_causal_conv1d_fn(
+    hidden_states,
+    weight,
+    bias=None,
+    activation=None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+
+    return ACT2FN[activation](out).to(hidden_states.dtype)
+
+
 # =============================================================================
 # KDA Linear Attention
 # =============================================================================
@@ -590,45 +618,6 @@ def torch_chunk_kimi_delta_attention(
     core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
 
     return core_attn_out, last_recurrent_state
-
-
-def torch_causal_conv1d_update(
-    hidden_states,
-    conv_state,
-    weight,
-    bias=None,
-    activation=None,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    state_len = conv_state.shape[-1]
-
-    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
-    conv_state.copy_(hidden_states_new[:, :, -state_len:])
-    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = ACT2FN[activation](out[:, :, -seq_len:])
-    out = out.to(hidden_states.dtype)
-    return out
-
-
-def torch_causal_conv1d_fn(
-    hidden_states,
-    weight,
-    bias=None,
-    activation=None,
-    **kwargs,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
-
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
-
-    return ACT2FN[activation](out).to(hidden_states.dtype)
 
 
 class Glm5NextLinearAttention(nn.Module):

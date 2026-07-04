@@ -260,19 +260,18 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 # sees the correct left-context rather than zero-padding. Dropped from the output
                 # at the end of this branch.
                 mixed_qkv = torch.cat([conv_state, mixed_qkv], dim=-1)
+
             if cache_params is not None:
                 new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
                 cache_params.update_conv_state(new_conv_state, self.layer_idx)
-            if self.causal_conv1d_fn is not None:
-                mixed_qkv = self.causal_conv1d_fn(
-                    x=mixed_qkv,
-                    weight=self.conv1d.weight.squeeze(1),
-                    bias=self.conv1d.bias,
-                    activation=self.activation,
-                    seq_idx=kwargs.get("seq_idx"),
-                )
-            else:
-                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
+
+            mixed_qkv = self.causal_conv1d_fn(
+                mixed_qkv,
+                weight=self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
+                activation=self.activation,
+            )
+
             if use_precomputed_states:
                 mixed_qkv = mixed_qkv[:, :, -seq_len:]
 

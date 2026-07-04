@@ -514,7 +514,9 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
                 version = 1
 
             # TODO: remove remote kernels, need it tmp for fla
-            kernel = get_kernel(repo_id, revision=revision, version=version, allow_all_kernels=ALLOW_ALL_KERNELS or True)
+            kernel = get_kernel(
+                repo_id, revision=revision, version=version, allow_all_kernels=ALLOW_ALL_KERNELS or True
+            )
             mapping[kernel_name] = kernel
         except FileNotFoundError as e:
             mapping[kernel_name] = None

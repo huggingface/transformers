@@ -200,9 +200,30 @@ def torch_causal_conv1d_update(
     hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
     conv_state.copy_(hidden_states_new[:, :, -state_len:])
     out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = F.silu(out[:, :, -seq_len:])
+    out = ACT2FN[activation](out[:, :, -seq_len:])
     out = out.to(hidden_states.dtype)
     return out
+
+
+def torch_causal_conv1d_fn(
+    hidden_states,
+    weight,
+    bias=None,
+    activation=None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+
+    return ACT2FN[activation](out).to(hidden_states.dtype)
 
 
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
@@ -389,7 +410,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
 
         self.out_proj = nn.Linear(self.value_dim, self.hidden_size, bias=False)
 
-        self.causal_conv1d_fn = causal_conv1d_fn
+        self.causal_conv1d_fn = causal_conv1d_fn or torch_causal_conv1d_fn
         self.causal_conv1d_update = causal_conv1d_update or torch_causal_conv1d_update
         self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
         self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
@@ -479,19 +500,18 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 # sees the correct left-context rather than zero-padding. Dropped from the output
                 # at the end of this branch.
                 mixed_qkv = torch.cat([conv_state, mixed_qkv], dim=-1)
+
             if cache_params is not None:
                 new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
                 cache_params.update_conv_state(new_conv_state, self.layer_idx)
-            if self.causal_conv1d_fn is not None:
-                mixed_qkv = self.causal_conv1d_fn(
-                    x=mixed_qkv,
-                    weight=self.conv1d.weight.squeeze(1),
-                    bias=self.conv1d.bias,
-                    activation=self.activation,
-                    seq_idx=kwargs.get("seq_idx"),
-                )
-            else:
-                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
+
+            mixed_qkv = self.causal_conv1d_fn(
+                mixed_qkv,
+                weight=self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
+                activation=self.activation,
+            )
+
             if use_precomputed_states:
                 mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
