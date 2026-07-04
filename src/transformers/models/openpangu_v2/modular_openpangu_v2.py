@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (c) 2026 Huawei Technologies Co., Ltd. All Rights Reserved.
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -14,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Tuple
+from collections.abc import Callable
 
 import torch
 from packaging import version
@@ -25,34 +24,34 @@ from transformers.cache_utils import Cache
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from transformers.processing_utils import Unpack
-from transformers.utils import logging
-from transformers.models.llama.modeling_llama import (
-    LlamaDecoderLayer,
-    LlamaForCausalLM,
-    LlamaPreTrainedModel,
-    LlamaMLP,
-    LlamaModel,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
-    repeat_kv
-)
 from transformers.models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
     apply_rotary_pos_emb_interleave,
     yarn_get_mscale,
 )
+from transformers.models.llama.modeling_llama import (
+    LlamaDecoderLayer,
+    LlamaForCausalLM,
+    LlamaMLP,
+    LlamaModel,
+    LlamaPreTrainedModel,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+    repeat_kv,
+)
 from transformers.models.mixtral.modeling_mixtral import MixtralExperts
 from transformers.models.phi.modeling_phi import PhiRotaryEmbedding
+from transformers.processing_utils import Unpack
+from transformers.utils import logging
 
-from ...cache_utils import Cache, DynamicCache
 from ... import initialization as init
+from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import get_torch_version
-from ...utils.generic import check_model_inputs, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import capture_outputs
 from .configuration_openpangu_v2 import OpenPanguV2Config
 
 
@@ -77,13 +76,12 @@ def eager_attention_forward(
     attn_output_list = []
     num_heads = query.shape[1]
 
-
     for i in range(num_heads):
-        query = query_multi_head[:, i:i+1, :, :]
-        key_states = key_multi_head[:, i:i+1, :, :]
-        value_states = value_multi_head[:, i:i+1, :, :]
+        query = query_multi_head[:, i : i + 1, :, :]
+        key_states = key_multi_head[:, i : i + 1, :, :]
+        value_states = value_multi_head[:, i : i + 1, :, :]
         attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    
+
         if attention_mask is not None:
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
@@ -93,9 +91,9 @@ def eager_attention_forward(
         attn_output = torch.matmul(attn_weights, value_states)
         del attn_weights
         attn_output_list.append(attn_output)
-        
+
     attn_output = torch.cat(attn_output_list, dim=1)
-    
+
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
@@ -177,12 +175,12 @@ class DsaIndexer(nn.Module):
         q = self.wq_b(q_resid)  # [B, S, H*D]
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
         q_pe, q_nope = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-       
+
         k = self.k_norm(self.wk(hidden_states))  # [B, S, D]
         k_pe, k_nope = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
         q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2)
         k_pe = k_pe.squeeze(2)
-        
+
         q = torch.cat([q_pe, q_nope], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_pe, k_nope], dim=-1)  # [B, S, D]
 
@@ -215,17 +213,17 @@ class DsaIndexer(nn.Module):
 
         # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
         num_heads = q.shape[2]
-        q_multi_heads = q # [B, S, H, D]
-        weights_multi_heads = weights # [B, S, H]
+        q_multi_heads = q  # [B, S, H, D]
+        weights_multi_heads = weights  # [B, S, H]
         index_scores_list = []
         for i in range(num_heads):
-            q = q_multi_heads[:,:,i:i+1,:] # [B, S, 1, D]
-            weights = weights_multi_heads[:,:,i:i+1] # [B, S, 1]
-            scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale # [B, S, 1, t]
-        
-            scores = torch.nn.functional.relu(scores) # [B, S, 1, t]
+            q = q_multi_heads[:, :, i : i + 1, :]  # [B, S, 1, D]
+            weights = weights_multi_heads[:, :, i : i + 1]  # [B, S, 1]
+            scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale  # [B, S, 1, t]
+
+            scores = torch.nn.functional.relu(scores)  # [B, S, 1, t]
             # Weight per head and sum across heads → [B, S, T]
-            index_scores = torch.einsum("bsht,bsh->bst", scores, weights) # [B, S, T]
+            index_scores = torch.einsum("bsht,bsh->bst", scores, weights)  # [B, S, T]
             index_scores_list.append(index_scores)
             del scores
         index_scores = sum(index_scores_list)
@@ -236,7 +234,7 @@ class DsaIndexer(nn.Module):
         total_len = index_scores.shape[-1]
         topk = min(self.index_topk, total_len)
         topk_indices = index_scores.topk(topk, dim=-1).indices  # [B, S, topk]
-       
+
         return topk_indices
 
 
@@ -244,6 +242,7 @@ class FastGELU(nn.Module):
     """
     Applies GELU approximation
     """
+
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         abs_value = torch.abs(input)
         return input * torch.sigmoid(1.702 * abs_value) * torch.exp(0.851 * (input - abs_value))
@@ -259,11 +258,11 @@ class mHCModule(nn.Module):
         self.num_stream = config.mhc_num_stream
         self.hidden_size = config.hidden_size
         self.merge_layer_only_pre = merge_layer_only_pre
-        
+
         if not self.merge_layer_only_pre:
             phi_output_hidden_size = (self.num_stream + 2) * self.num_stream
             self.branch_alpha = nn.Parameter(torch.empty(3, dtype=torch.bfloat16))
-            self.branch_beta = nn.Parameter(torch.empty(self.num_stream*(self.num_stream+2), dtype=torch.bfloat16))
+            self.branch_beta = nn.Parameter(torch.empty(self.num_stream * (self.num_stream + 2), dtype=torch.bfloat16))
             # self.branch_alpha_post = nn.Parameter(torch.empty(1, dtype=torch.bfloat16))
             # self.branch_alpha_res = nn.Parameter(torch.empty(1, dtype=torch.bfloat16))
             # self.branch_beta_post = nn.Parameter(torch.empty(self.num_stream, dtype=torch.bfloat16))
@@ -284,7 +283,7 @@ class mHCModule(nn.Module):
         self.mhc_recur_norm = config.mhc_recur_norm
         if self.mhc_use_gamma:
             self.norm_gamma = nn.Parameter(torch.empty(self.hidden_size * self.num_stream, dtype=torch.bfloat16))
-            
+
     def hc_pre(self, x: torch.Tensor):
         """
         x: (B, S, n * H)
@@ -303,7 +302,7 @@ class mHCModule(nn.Module):
         # (B,S,H)
         y = torch.sum(h_pre.unsqueeze(-1) * x.unflatten(dim=-1, sizes=(self.num_stream, -1)), dim=-2)
         return y.to(dtype), h_post, h_res
-    
+
     def hc_post(self, x: torch.Tensor, residual: torch.Tensor, h_post: torch.Tensor, h_res: torch.Tensor):
         """
         x: (B, S, H)
@@ -330,11 +329,11 @@ class mHCModule(nn.Module):
             h_pre, h_post, h_res = weight.split(
                 [self.num_stream, self.num_stream, self.num_stream * self.num_stream], dim=-1
             )
-            alpha_pre, alpha_post, alpha_res = self.branch_alpha.view(-1).split([1,1,1])
+            alpha_pre, alpha_post, alpha_res = self.branch_alpha.view(-1).split([1, 1, 1])
             beta_pre, beta_post, beta_res = self.branch_beta.view(-1).split(
                 [self.num_stream, self.num_stream, self.num_stream * self.num_stream]
             )
-            
+
             h_post = 2 * torch.sigmoid(h_post * alpha_post + beta_post)
             h_res = h_res.unflatten(-1, (self.num_stream, self.num_stream))
             h_res = h_res * alpha_res + beta_res.view(self.num_stream, self.num_stream)
@@ -370,7 +369,7 @@ class WindowBuffer:
     def _update_cache(self, hidden_states):
         if self.cache_len <= 0:
             return None
-        
+
         cache_invalid = (
             self.cache is None
             or self.cache.shape[0] != hidden_states.shape[0]
@@ -378,17 +377,17 @@ class WindowBuffer:
         )
         if cache_invalid:
             B, S, H = hidden_states.shape
-            if S < self.cache_len:
-                padding = torch.zeros((B, self.cache_len - S, H), 
-                                      device=hidden_states.device, 
-                                      dtype=hidden_states.dtype)
+            if self.cache_len > S:
+                padding = torch.zeros(
+                    (B, self.cache_len - S, H), device=hidden_states.device, dtype=hidden_states.dtype
+                )
                 self.cache = torch.cat([padding, hidden_states], dim=1)
             else:
-                self.cache = hidden_states[:, -self.cache_len:, :]
+                self.cache = hidden_states[:, -self.cache_len :, :]
         else:
             combined = torch.cat([self.cache, hidden_states], dim=1)
-            self.cache = combined[:, -self.cache_len:, :]
-        
+            self.cache = combined[:, -self.cache_len :, :]
+
         return self.cache
 
     def reset(self):
@@ -399,27 +398,22 @@ class WindowBuffer:
         hidden_states: (B, S, H)
         """
         B, S, H = hidden_states.shape
-        
+
         if not use_cache:
-            padding = torch.zeros((B, self.cache_len, H), 
-                                  device=hidden_states.device, 
-                                  dtype=hidden_states.dtype)
+            padding = torch.zeros((B, self.cache_len, H), device=hidden_states.device, dtype=hidden_states.dtype)
             conv_input = torch.cat([padding, hidden_states], dim=1)
         else:
             if S > 1:
                 self.reset()
             cache_valid = (
-                self.cache is not None
-                and self.cache.shape[0] == B
-                and self.cache.device == hidden_states.device
+                self.cache is not None and self.cache.shape[0] == B and self.cache.device == hidden_states.device
             )
             current_cache = (
-                self.cache if cache_valid
-                else torch.zeros((B, self.cache_len, H),
-                                 device=hidden_states.device,
-                                 dtype=hidden_states.dtype)
+                self.cache
+                if cache_valid
+                else torch.zeros((B, self.cache_len, H), device=hidden_states.device, dtype=hidden_states.dtype)
             )
-            
+
             conv_input = torch.cat([current_cache, hidden_states], dim=1)
             self._update_cache(hidden_states)
 
@@ -428,7 +422,7 @@ class WindowBuffer:
         output = self.aggregate_fn(x)
         if conv_mask is not None:
             output = output * conv_mask.unsqueeze(-1).permute(0, 2, 1)
-        
+
         # (B, H, S) -> (B, S, H)
         return output.permute(0, 2, 1)
 
@@ -440,6 +434,7 @@ if version.parse(get_torch_version()) >= version.parse("2.3.0"):
             super().__init__(normalized_shape=hidden_size, eps=eps, elementwise_affine=True)
 
 else:
+
     @use_kernel_forward_from_hub("RMSNorm")
     class OpenPanguV2RMSNorm(nn.Module):
         def __init__(self, hidden_size, eps: float = 1e-6) -> None:
@@ -567,7 +562,7 @@ class OpenPanguV2Attention(nn.Module):
             self.compresskv_buffer = WindowBuffer(config.router_sliding_window, self.compresskv_conv.forward)
             self.o_buffer = WindowBuffer(config.router_sliding_window, self.o_conv.forward)
             self.router_sliding_window = config.router_sliding_window
-        
+
         self.use_dsa = config.index_topk is not None and config.index_topk > 0 and layer_idx in config.dsa_layers
         if self.use_dsa:
             self.indexer = DsaIndexer(config, layer_idx)
@@ -592,8 +587,10 @@ class OpenPanguV2Attention(nn.Module):
             if self.use_mome:
                 if seq_length >= 2:
                     conv_mask = (attention_mask == 0).any(dim=1).any(dim=1)
-                    zeros_prefix = torch.zeros((batch_size, self.router_sliding_window - 1), dtype=torch.bool, device=attention_mask.device)
-                    conv_mask = torch.cat([zeros_prefix, conv_mask[:, :-self.router_sliding_window + 1]], dim=1)
+                    zeros_prefix = torch.zeros(
+                        (batch_size, self.router_sliding_window - 1), dtype=torch.bool, device=attention_mask.device
+                    )
+                    conv_mask = torch.cat([zeros_prefix, conv_mask[:, : -self.router_sliding_window + 1]], dim=1)
                 else:
                     conv_mask = None
                 q_states = self.qa_buffer(q_states, conv_mask) + q_states
@@ -660,18 +657,24 @@ class OpenPanguV2Attention(nn.Module):
                     else index_mask
                 )
             attention_mask = combined_mask
-        
+
         if self.param_sink_number > 0:
             # [b, n, s, d]
             batch_size, kv_seq_len = key_states.shape[0], key_states.shape[2]
             param_sink_kv_c_normed = self.kv_a_layernorm(self.param_sink_compressed_kv)
-            param_sink_kv = self.kv_b_proj(param_sink_kv_c_normed).view(-1, self.num_heads, self.qk_nope_head_dim + self.v_head_dim)
+            param_sink_kv = self.kv_b_proj(param_sink_kv_c_normed).view(
+                -1, self.num_heads, self.qk_nope_head_dim + self.v_head_dim
+            )
             param_sink_k_nope, param_sink_value = param_sink_kv.split([self.qk_nope_head_dim, self.v_head_dim], dim=-1)
             param_sink_k_pe = self.param_sink_k_pe.unsqueeze(1).expand(-1, self.num_heads, -1)
             param_sink_key = torch.cat((param_sink_k_nope, param_sink_k_pe), dim=-1)
 
-            param_sink_key = param_sink_key.permute(1, 0, 2).unsqueeze(0).expand(batch_size, -1, -1, -1).to(key_states.device)
-            param_sink_value = param_sink_value.permute(1, 0, 2).unsqueeze(0).expand(batch_size, -1, -1, -1).to(value_states.device)
+            param_sink_key = (
+                param_sink_key.permute(1, 0, 2).unsqueeze(0).expand(batch_size, -1, -1, -1).to(key_states.device)
+            )
+            param_sink_value = (
+                param_sink_value.permute(1, 0, 2).unsqueeze(0).expand(batch_size, -1, -1, -1).to(value_states.device)
+            )
             key_states = torch.cat([param_sink_key, key_states], dim=2)
             value_states = torch.cat([param_sink_value, value_states], dim=2)
             kv_seq_len += self.param_sink_number
@@ -700,7 +703,6 @@ class OpenPanguV2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-
 class OpenPanguV2Experts(MixtralExperts):
     def __init__(self, config):
         super().__init__(config)
@@ -715,7 +717,7 @@ class OpenPanguV2TopkRouter(nn.Module):
         self.n_routed_experts = config.n_routed_experts
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        
+
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
@@ -793,12 +795,8 @@ class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
 
         self.sandwich_norm = getattr(config, "sandwich_norm", False)
         if self.sandwich_norm:
-            self.pre_mlp_layernorm = OpenPanguV2RMSNorm(
-                config.hidden_size, eps=config.rms_norm_eps
-            )
-            self.post_mlp_layernorm = OpenPanguV2RMSNorm(
-                config.hidden_size, eps=config.rms_norm_eps
-            )
+            self.pre_mlp_layernorm = OpenPanguV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.post_mlp_layernorm = OpenPanguV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # self.use_mome = (layer_idx == 0 or layer_idx == config.num_hidden_layers - 1) and config.router_sliding_window > 0
         # if self.use_mome:
@@ -819,26 +817,28 @@ class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
             self.attn_mhc_module = mHCModule(config)
             self.mlp_mhc_module = mHCModule(config)
             block_post_layernorm_hidden_size *= config.mhc_num_stream
-        
-        self.has_block_post_layernorm = config.block_post_layernorm_idx is not None and layer_idx in config.block_post_layernorm_idx
+
+        self.has_block_post_layernorm = (
+            config.block_post_layernorm_idx is not None and layer_idx in config.block_post_layernorm_idx
+        )
         if self.has_block_post_layernorm:
             self.block_post_layernorm = OpenPanguV2RMSNorm(block_post_layernorm_hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,  # necessary, but kept here for BC
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
 
         if self.use_mhc:
             hidden_states, h_post, h_res = self.attn_mhc_module.hc_pre(hidden_states)
-        
+
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
         hidden_states, _ = self.self_attn(
@@ -892,40 +892,38 @@ class OpenPanguV2PreTrainedModel(LlamaPreTrainedModel):
     _supports_flex_attn = False
     # MLA does not output attention weights
     # Override parent's _can_record_outputs to remove "attentions"
-    _can_record_outputs = {
-        "hidden_states": OpenPanguV2DecoderLayer
-    }
+    _can_record_outputs = {"hidden_states": OpenPanguV2DecoderLayer}
 
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = 0.02
-        
+
         if isinstance(module, mHCModule):
             # Initialize MHC bfloat16 parameters
-            if hasattr(module, 'norm_gamma'):
+            if hasattr(module, "norm_gamma"):
                 init.normal_(module.norm_gamma, mean=0.0, std=std)
-            if hasattr(module, 'branch_alpha'):
+            if hasattr(module, "branch_alpha"):
                 init.normal_(module.branch_alpha, mean=0.0, std=std)
-            if hasattr(module, 'branch_beta'):
+            if hasattr(module, "branch_beta"):
                 init.normal_(module.branch_beta, mean=0.0, std=std)
-            if hasattr(module, 'branch_alpha_pre'):
+            if hasattr(module, "branch_alpha_pre"):
                 init.normal_(module.branch_alpha_pre, mean=0.0, std=std)
-            if hasattr(module, 'branch_beta_pre'):
+            if hasattr(module, "branch_beta_pre"):
                 init.normal_(module.branch_beta_pre, mean=0.0, std=std)
-        
+
         elif isinstance(module, DsaIndexer):
             init.normal_(module.wq_b, mean=0.0, std=std)
             init.normal_(module.wk, mean=0.0, std=std)
             init.normal_(module.weights_proj.weight, mean=0.0, std=std)
-        
+
         elif isinstance(module, OpenPanguV2Attention):
             # Initialize sink token parameters
-            if hasattr(module, 'param_sink_k_pe'):
+            if hasattr(module, "param_sink_k_pe"):
                 init.normal_(module.param_sink_k_pe, mean=0.0, std=std)
-            if hasattr(module, 'param_sink_compressed_kv'):
+            if hasattr(module, "param_sink_compressed_kv"):
                 init.normal_(module.param_sink_compressed_kv, mean=0.0, std=std)
-        
+
         elif isinstance(module, OpenPanguV2Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)

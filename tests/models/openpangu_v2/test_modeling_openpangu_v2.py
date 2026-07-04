@@ -27,18 +27,19 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+
 if is_torch_available():
     import torch
+
     from transformers import AutoTokenizer, OpenPanguV2ForCausalLM, OpenPanguV2Model
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class OpenPanguV2ModelTester(CausalLMModelTester):
-    
     if is_torch_available():
         base_model_class = OpenPanguV2Model
-    
+
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
         # Standard CausalLMModelTester knobs — override the parent's defaults.
@@ -90,14 +91,14 @@ class OpenPanguV2ModelTester(CausalLMModelTester):
         self.attention_dropout = 0.0
         self.rms_norm_eps = 1e-5
         self.block_post_layernorm_idx = None
-    
+
     def get_config(self):
         """
         Override: Explicitly create config with _attn_implementation='eager' for MHC compatibility.
         Reference: DeepseekV3 test_modeling_deepseek_v3.py:160-189
         """
         from transformers.models.openpangu_v2.configuration_openpangu_v2 import OpenPanguV2Config
-        
+
         return OpenPanguV2Config(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
@@ -150,14 +151,13 @@ class OpenPanguV2ModelTester(CausalLMModelTester):
 
 @require_torch
 class OpenPanguV2ModelTest(CausalLMModelTest, unittest.TestCase):
-    
     # MoE routing and DSA indexer have non-differentiable components
     test_all_params_have_gradient = False
 
     has_attentions = False
-    
+
     model_tester_class = OpenPanguV2ModelTester
-    
+
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
@@ -169,15 +169,15 @@ class OpenPanguV2ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-    
-    
+
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """
         Override: MLA has special KV cache format.
         """
         from transformers import Cache
+
         self.assertIsInstance(past_key_values, Cache)
-        
+
         # MLA cache format:
         # keys: (batch, num_kv_heads, seq_length, qk_nope_head_dim + qk_rope_head_dim)
         # values: (batch, num_kv_heads, seq_length, v_head_dim)
@@ -188,78 +188,74 @@ class OpenPanguV2ModelTest(CausalLMModelTest, unittest.TestCase):
         )
         expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
         expected_value_shape = expected_common_shape + (config.v_head_dim,)
-        
+
         for layer in past_key_values.layers:
             self.assertEqual(layer.keys.shape, expected_key_shape)
             self.assertEqual(layer.values.shape, expected_value_shape)
-    
+
     def test_hidden_states_output(self):
         """
         Override: MHC expands hidden_states dimension to hidden_size * num_stream.
         """
         import torch
-        
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
-        
+
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
             with torch.no_grad():
                 outputs = model(**inputs_dict)
-            
+
             hidden_states = outputs.hidden_states if hasattr(outputs, "hidden_states") else outputs[-1]
             self.assertIsNotNone(hidden_states)
             self.assertEqual(len(hidden_states), config.num_hidden_layers + 1)
-            
+
             seq_len = inputs_dict["input_ids"].shape[1]
-            
+
             for layer_idx, layer_h in enumerate(hidden_states):
                 # MHC causes two possible shapes:
                 # 1. Collapsed (3D): (B, S, hidden_size) - final merged output
                 # 2. Multi-stream (4D): (B, S, num_stream, hidden_size) - intermediate
-                
+
                 if layer_h.ndim == 3:
                     # Standard collapsed shape OR MHC expanded shape
-                    expected_shape_3d = (
-                        inputs_dict["input_ids"].shape[0], 
-                        seq_len, 
-                        config.hidden_size
-                    )
+                    expected_shape_3d = (inputs_dict["input_ids"].shape[0], seq_len, config.hidden_size)
                     # MHC expands hidden_size: (B, S, num_stream * hidden_size)
                     expected_shape_mhc = (
-                        inputs_dict["input_ids"].shape[0], 
-                        seq_len, 
-                        config.hidden_size * getattr(config, 'mhc_num_stream', 1)
+                        inputs_dict["input_ids"].shape[0],
+                        seq_len,
+                        config.hidden_size * getattr(config, "mhc_num_stream", 1),
                     )
                     self.assertTrue(
                         layer_h.shape == expected_shape_3d or layer_h.shape == expected_shape_mhc,
-                        f"Expected shape {expected_shape_3d} or {expected_shape_mhc}, got {layer_h.shape}"
+                        f"Expected shape {expected_shape_3d} or {expected_shape_mhc}, got {layer_h.shape}",
                     )
                 elif layer_h.ndim == 4:
                     # MHC multi-stream shape (should not happen with current MHC design)
                     expected_shape = (
-                        inputs_dict["input_ids"].shape[0], 
-                        seq_len, 
-                        config.mhc_num_stream, 
-                        config.hidden_size
+                        inputs_dict["input_ids"].shape[0],
+                        seq_len,
+                        config.mhc_num_stream,
+                        config.hidden_size,
                     )
                     self.assertEqual(layer_h.shape, expected_shape)
                 else:
                     self.fail(f"Unexpected hidden state dimensions: {layer_h.ndim}D at layer {layer_idx}")
-    
+
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
         """
         Override: MHC multi-stream dimension affects hidden states during generation.
-        
+
         We check batch and hidden_size dimensions, allowing seq_length variations.
         """
         import torch
-        
+
         self.assertIsInstance(hidden_states, tuple)
         self.assertEqual(len(hidden_states), (output_length - prompt_length))
-        
+
         for iter_hidden_states in hidden_states:
             self.assertIsInstance(iter_hidden_states, tuple)
             for layer_hidden in iter_hidden_states:
@@ -268,54 +264,54 @@ class OpenPanguV2ModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertEqual(layer_hidden.shape[0], batch_size)
                 # hidden_size can be original or expanded (num_stream * hidden_size)
                 self.assertTrue(
-                    layer_hidden.shape[-1] == config.hidden_size or 
-                    layer_hidden.shape[-1] == config.hidden_size * getattr(config, 'mhc_num_stream', 1)
+                    layer_hidden.shape[-1] == config.hidden_size
+                    or layer_hidden.shape[-1] == config.hidden_size * getattr(config, "mhc_num_stream", 1)
                 )
-    
+
     def test_tp_plan_matches_params(self):
         """
         Override: MLA architecture doesn't have standard q_proj/k_proj/v_proj layers.
-        
+
         MLA uses q_a_proj/q_b_proj instead of q_proj when q_lora_rank is set.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        
+
         # MLA architecture: remove non-existent TP plan keys
         if config.q_lora_rank is not None:
             # MLA uses q_a_proj/q_b_proj, not standard q_proj
             config.base_model_tp_plan.pop("layers.*.self_attn.q_proj", None)
-        
+
         super().test_tp_plan_matches_params()
-    
+
     @unittest.skip("OpenPanguV2 MLA attention is not compatible with assisted decoding")
     @parameterized.expand([("random",), ("same",)])
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
-    
+
     @unittest.skip("OpenPanguV2 MLA attention is not compatible with assisted decoding")
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
-    
+
     @unittest.skip("OpenPanguV2 MLA attention is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass
-    
+
     @unittest.skip("OpenPanguV2 MLA uses custom cache format incompatible with standard cache")
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
-    
+
     @unittest.skip("OpenPanguV2 MLA uses custom cache format incompatible with standard cache")
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
-    
+
     @unittest.skip("OpenPanguV2 MLA compressor is not compatible with QuantizedCache")
     def test_generate_with_quant_cache(self):
         pass
-    
+
     @unittest.skip("SDPA can't dispatch on flash due to unsupported custom head dims in MLA")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
-    
+
     @unittest.skip(
         reason=(
             "DSA/MHC compression mechanism pools windows before attention mask is applied "
@@ -324,21 +320,21 @@ class OpenPanguV2ModelTest(CausalLMModelTest, unittest.TestCase):
     )
     def test_left_padding_compatibility(self):
         pass
-    
+
     @unittest.skip("OpenPanguV2 uses custom rope_parameters that may not support standard scaling")
     def test_model_rope_scaling_frequencies(self):
         pass
-    
+
     @unittest.skip("OpenPanguV2 uses custom rope_parameters that may not support standard scaling")
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
-    
+
     @unittest.skip("OpenPanguV2 MLA/MHC components not fully compatible with torch.compile")
     @pytest.mark.torch_compile_test
     def test_generate_compilation_all_outputs(self):
         pass
-    
+
     @unittest.skip("OpenPanguV2 MLA/MHC components not fully compatible with torch.compile")
     @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward(self):
@@ -348,7 +344,7 @@ class OpenPanguV2ModelTest(CausalLMModelTest, unittest.TestCase):
     @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward_fullgraph(self):
         pass
-    
+
     @unittest.skip(
         "mHCModule implementation does not currently support offload: parameters are accessed "
         "via hc_pre/hc_post methods instead of forward, preventing accelerate hooks from "
@@ -383,7 +379,7 @@ class OpenPanguV2ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("OpenPanguV2 MLA uses custom cache format incompatible with static cache")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
-    
+
     @unittest.skip("OpenPanguV2 MLA uses custom cache format incompatible with static cache")
     def test_generate_with_static_cache(self):
         pass
@@ -393,21 +389,21 @@ class OpenPanguV2ModelTest(CausalLMModelTest, unittest.TestCase):
 class OpenPanguV2FlashIntegrationTest(unittest.TestCase):
     """
     Integration test with real OpenPangu2-Flash checkpoint.
-    
+
     Tests real model functionality:
     - Greedy generation
     - Different attention implementations (eager/sdpa)
     - Batch generation
     """
-    
+
     model_id = "openpangu/openPangu-2.0-Flash"
-    
+
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
-    
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
-    
+
     @slow
     def test_model_generation(self):
         """
@@ -415,10 +411,10 @@ class OpenPanguV2FlashIntegrationTest(unittest.TestCase):
         """
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        model = OpenPanguV2ForCausalLM.from_pretrained(
-            self.model_id, device_map="auto", torch_dtype=torch.bfloat16
+        model = OpenPanguV2ForCausalLM.from_pretrained(self.model_id, device_map="auto", torch_dtype=torch.bfloat16)
+        EXPECTED_TEXT = (
+            "Write a short story of cat and dog friendship.  The cat is named Mochi.  The dog is named Taro"
         )
-        EXPECTED_TEXT="Write a short story of cat and dog friendship.  The cat is named Mochi.  The dog is named Taro"
         # Test prompt
         prompt = "Write a short story of cat"
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)

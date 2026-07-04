@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (c) 2026 Huawei Technologies Co., Ltd. All Rights Reserved.
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -14,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-from typing import Any, Dict, Optional, Tuple, List
 
 from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -23,11 +20,13 @@ from tokenizers.models import BPE
 from transformers.tokenization_utils_tokenizers import TokenizersBackend
 from transformers.utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 PRETOKENIZE_REGEX = r"'(?i:[sdmt]|ll|ve|re)| (?=\p{Han}|[＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［＼］＾＿｀｛｜｝～｟｠｢｣､　、〃〈〉《》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟〰〾〿–—‘’‛“”„‟…‧﹏﹑﹔·．！？｡。])|[＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［＼］＾＿｀｛｜｝～｟｠｢｣､　、〃〈〉《》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟〰〾〿–—‘’‛“”„‟…‧﹏﹑﹔·．！？｡。]+[\r\n]*|[^\r\n\p{L}\p{N}]?+[\p{L}\p{M}]+|\p{N}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+"
+
 
 class OpenPanguV2Tokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
@@ -37,9 +36,9 @@ class OpenPanguV2Tokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Dict[str, int]] = None,
-        merges: Optional[List[str]] = None,
-        tokenizer_file: Optional[str] = None,
+        vocab: dict[str, int] | None = None,
+        merges: list[str] | None = None,
+        tokenizer_file: str | None = None,
         bos_token: str = "<|pangu_text_start|>",
         eos_token: str = "<|pangu_text_end|>",
         unk_token: str = None,
@@ -65,16 +64,18 @@ class OpenPanguV2Tokenizer(TokenizersBackend):
                     byte_fallback=True,
                 )
             )
-            self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence([
-                pre_tokenizers.Split(
-                    Regex(PRETOKENIZE_REGEX),
-                    behavior="isolated",
-                ),
-                pre_tokenizers.ByteLevel(
-                    add_prefix_space=add_prefix_space,
-                    use_regex=False,
-                ),
-            ])
+            self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+                [
+                    pre_tokenizers.Split(
+                        Regex(PRETOKENIZE_REGEX),
+                        behavior="isolated",
+                    ),
+                    pre_tokenizers.ByteLevel(
+                        add_prefix_space=add_prefix_space,
+                        use_regex=False,
+                    ),
+                ]
+            )
             self._tokenizer.decoder = decoders.ByteLevel()
 
         super().__init__(
@@ -136,5 +137,6 @@ class OpenPanguV2Tokenizer(TokenizersBackend):
     @property
     def vocab_size(self):
         return self._tokenizer.get_vocab_size(with_added_tokens=True)
+
 
 __all__ = ["OpenPanguV2Tokenizer"]
