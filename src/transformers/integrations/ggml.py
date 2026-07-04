@@ -337,6 +337,22 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
         "expert_gating_func": "scoring_func",
     },
+    "cohere2": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        # NOTE: Cohere2 derives head_dim as hidden_size // num_attention_heads
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        # NOTE: Cohere2 uses LayerNorm, not RMSNorm
+        "attention.layer_norm_epsilon": "layer_norm_eps",
+        "attention.sliding_window": "sliding_window",
+        "logit_scale": "logit_scale",
+        "vocab_size": "vocab_size",
+    },
 }
 
 GGUF_TOKENIZER_MAPPING = {
@@ -674,6 +690,45 @@ class GGUFGPTConverter(GPT2Converter):
         return tokenizer
 
 
+class GGUFCohere2Converter(GPT2Converter):
+    def __init__(self, tokenizer_dict):
+        self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.additional_kwargs = {}
+
+    def converted(self) -> Tokenizer:
+        proto = self.original_tokenizer
+        vocab = {word: i for i, word in enumerate(proto.tokens)}
+        merges = proto.merges
+        tokenizer = super().converted(vocab, merges)
+
+        # Register control tokens (token_type == 3, e.g. <|START_OF_TURN_TOKEN|>) so they are never split by BPE
+        if hasattr(proto, "token_type"):
+            special_tokens_idx = np.where(np.array(proto.token_type) == 3)[0]
+            tokenizer.add_special_tokens(
+                [AddedToken(proto.tokens[idx], normalized=False, special=True) for idx in special_tokens_idx]
+            )
+
+        # Cohere2 prepends a BOS token (`tokenizer.ggml.add_bos_token=True` in GGUF) and appends no EOS
+        bos_token = proto.tokens[proto.bos_token_id]
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{bos_token}:0 $A:0",
+            pair=f"{bos_token}:0 $A:0 $B:1",
+            special_tokens=[(bos_token, proto.bos_token_id)],
+        )
+
+        self.additional_kwargs["unk_token"] = (
+            proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
+        )
+        self.additional_kwargs["bos_token"] = bos_token
+        self.additional_kwargs["eos_token"] = (
+            proto.tokens[proto.eos_token_id] if getattr(proto, "eos_token_id", None) is not None else None
+        )
+        self.additional_kwargs["pad_token"] = (
+            proto.tokens[proto.pad_token_id] if getattr(proto, "pad_token_id", None) is not None else None
+        )
+        return tokenizer
+
+
 class GGUFT5Converter(T5Converter):
     def __init__(self, tokenizer_dict):
         # set dummy data to avoid unnecessary merges calculation
@@ -824,6 +879,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "deci": GGUFLlamaConverter,
     "decilm": GGUFLlamaConverter,
     "minimax_m2": GGUFQwen2Converter,
+    "cohere2": GGUFCohere2Converter,
 }
 
 
