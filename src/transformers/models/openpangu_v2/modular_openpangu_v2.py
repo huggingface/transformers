@@ -764,6 +764,16 @@ class OpenPanguV2SparseMoeBlock(DeepseekV3MoE):
         topk_weights = topk_weights * self.routed_scaling_factor
         return topk_indices, topk_weights
 
+    def forward(self, hidden_states):
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        router_logits = self.gate(hidden_states)
+        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
+
 
 class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: OpenPanguV2Config, layer_idx: int):
@@ -991,10 +1001,10 @@ class OpenPanguV2Model(LlamaModel):
         if self.use_mhc:
             hidden_states = hidden_states.repeat(1, 1, self.num_stream)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

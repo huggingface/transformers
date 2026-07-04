@@ -16,17 +16,23 @@
 
 """ OpenPangu_v2 model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from transformers.configuration_utils import PreTrainedConfig
 from transformers.modeling_rope_utils import RopeParameters
-from transformers.utils import logging
+from transformers.utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="openpangu/openPangu-2.0-Flash")
+@strict
+
 class OpenPanguV2Config(PreTrainedConfig):
     model_type = "openpangu_v2"
     keys_to_ignore_at_inference = ["past_key_values"]
+    tie_word_embeddings: bool = True
 
     # Default tensor parallel plan for base model `OpenPangu_v2`
     base_model_tp_plan = {
