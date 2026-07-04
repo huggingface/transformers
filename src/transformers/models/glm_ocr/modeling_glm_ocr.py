@@ -551,7 +551,6 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
 
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = GlmOcrVisionRotaryEmbedding(head_dim // 2)
-
         self.blocks = nn.ModuleList([GlmOcrVisionBlock(config) for _ in range(config.depth)])
         self.merger = GlmOcrVisionPatchMerger(
             dim=config.out_hidden_size,

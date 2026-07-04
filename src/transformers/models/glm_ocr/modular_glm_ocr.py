@@ -231,6 +231,7 @@ class GlmOcrVisionAttention(Glm4vVisionAttention):
 class GlmOcrVisionBlock(Glm4vVisionBlock):
     def __init__(self, config) -> None:
         super().__init__()
+        self.attn = GlmOcrVisionAttention(config)
         self.mlp = GlmOcrVisionMlp(config, bias=config.attention_bias)
 
 
@@ -243,6 +244,7 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         super().__init__(config)
         del self.embeddings
         del self.post_conv_layernorm
+        self.blocks = nn.ModuleList([GlmOcrVisionBlock(config) for _ in range(config.depth)])
         self.merger = GlmOcrVisionPatchMerger(
             dim=config.out_hidden_size,
             context_dim=config.out_hidden_size * config.in_channels,
