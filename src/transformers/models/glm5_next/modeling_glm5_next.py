@@ -741,6 +741,7 @@ class Glm5NextLinearAttention(nn.Module):
                 weight=self.conv1d.weight.squeeze(1),
                 bias=self.conv1d.bias,
                 activation=self.activation,
+                seq_idx=kwargs.get("seq_idx"),
             )
 
             # Cut out any tail

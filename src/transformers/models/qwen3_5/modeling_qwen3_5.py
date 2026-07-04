@@ -515,6 +515,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 weight=self.conv1d.weight.squeeze(1),
                 bias=self.conv1d.bias,
                 activation=self.activation,
+                seq_idx=kwargs.get("seq_idx"),
             )
 
             if use_precomputed_states:
