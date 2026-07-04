@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sys
 import unittest
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -1262,6 +1264,37 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer([audio_tiled], batch_size=2)
         self.assertEqual(output, [{"text": ANY(str)}])
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
+
+    @require_torch
+    def test_torchcodec_import_failure_is_ignored(self):
+        """A torchcodec install that cannot be imported (e.g. built against a mismatched torch or
+        FFmpeg) should not break inputs that never needed torchcodec."""
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 10)
+
+        class RaisingFinder:
+            def find_spec(self, name, path=None, target=None):
+                if name == "torchcodec" or name.startswith("torchcodec."):
+                    raise OSError("Could not load this library: libtorchcodec_core7.so")
+                return None
+
+        finder = RaisingFinder()
+        previously_imported = sys.modules.pop("torchcodec", None)
+        sys.meta_path.insert(0, finder)
+        try:
+            with mock.patch(
+                "transformers.pipelines.automatic_speech_recognition.is_torchcodec_available", return_value=True
+            ):
+                output = speech_recognizer(waveform)
+        finally:
+            sys.meta_path.remove(finder)
+            if previously_imported is not None:
+                sys.modules["torchcodec"] = previously_imported
+
+        self.assertIn("text", output)
 
     @require_torch
     def test_input_parameter_passthrough(self):

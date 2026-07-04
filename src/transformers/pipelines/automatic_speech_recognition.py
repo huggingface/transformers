@@ -365,9 +365,19 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 inputs = inputs.cpu().numpy()
 
         if is_torchcodec_available():
-            import torchcodec
+            try:
+                import torchcodec
+            except (ImportError, OSError):
+                # torchcodec wheels are built against a specific torch and FFmpeg, and a mismatched
+                # install fails at import time. It is only needed for AudioDecoder inputs, so a broken
+                # install should not fail inputs that never use it.
+                torchcodec = None
+                logger.warning_once(
+                    "torchcodec is installed but could not be imported. "
+                    "torchcodec.decoders.AudioDecoder inputs will not be supported."
+                )
 
-            if isinstance(inputs, torchcodec.decoders.AudioDecoder):
+            if torchcodec is not None and isinstance(inputs, torchcodec.decoders.AudioDecoder):
                 _audio_samples = inputs.get_all_samples()
 
                 # torchcodec always returns (num_channels, num_samples)
