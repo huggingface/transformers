@@ -37,7 +37,12 @@ from ...masking_utils import (
     sliding_window_overlay,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -62,7 +67,6 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3TextScaledWordEmbedding,
 )
 from ..gemma3n.modeling_gemma3n import (
-    Gemma3nCausalLMOutputWithPast,
     Gemma3nForConditionalGeneration,
     Gemma3nModel,
     Gemma3nModelOutputWithPast,
@@ -161,7 +165,8 @@ class Gemma4ModelOutputWithPast(Gemma3nModelOutputWithPast):
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
-class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
+@dataclass
+class Gemma4CausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -188,13 +193,13 @@ class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
         i.e. the raw router logits used to compute the load balancing loss.
     """
 
-    aux_loss: torch.FloatTensor | None = None
+    image_hidden_states: torch.FloatTensor | None = None
+    audio_hidden_states: torch.FloatTensor | None = None
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
-class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
+class Gemma4TextModelOutputWithPast(MoeModelOutputWithPast):
     """
     BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
 
@@ -208,7 +213,6 @@ class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring

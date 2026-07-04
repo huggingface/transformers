@@ -43,7 +43,8 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1441,7 +1442,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
 
 @auto_docstring
 @dataclass
-class DiffusionGemmaModelOutputWithPast(BaseModelOutputWithPast):
+class DiffusionGemmaModelOutputWithPast(MoeModelOutputWithPast):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden states at the output of the last layer of the encoder. Only set when `input_ids` is
@@ -1452,12 +1453,11 @@ class DiffusionGemmaModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     encoder_last_hidden_state: torch.FloatTensor | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
 @dataclass
-class DiffusionGemmaBlockDiffusionOutputWithPast(CausalLMOutputWithPast):
+class DiffusionGemmaBlockDiffusionOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Language modeling loss.
@@ -1474,9 +1474,7 @@ class DiffusionGemmaBlockDiffusionOutputWithPast(CausalLMOutputWithPast):
         num_experts)`, i.e. the raw router logits used to compute the load balancing loss.
     """
 
-    aux_loss: torch.FloatTensor | None = None
     encoder_last_hidden_state: torch.FloatTensor | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring

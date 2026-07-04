@@ -41,7 +41,7 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -88,7 +88,7 @@ class Gemma4UnifiedVisionModelOutput(ModelOutput):
 
 
 @dataclass
-class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
+class Gemma4UnifiedTextModelOutputWithPast(MoeModelOutputWithPast):
     """
     BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
 
@@ -102,16 +102,10 @@ class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma4Unified causal language model (or autoregressive) outputs.
-    """
-)
 @dataclass
-class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
+class Gemma4UnifiedCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -138,18 +132,9 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
         i.e. the raw router logits used to compute the load balancing loss.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
-
     audio_hidden_states: torch.FloatTensor | None = None
-
-    aux_loss: torch.FloatTensor | None = None
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(

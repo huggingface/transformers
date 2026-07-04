@@ -47,12 +47,16 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
@@ -100,13 +104,8 @@ class Gemma4ModelOutputWithPast(BaseModelOutputWithPast):
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma4 causal language model (or autoregressive) outputs.
-    """
-)
 @dataclass
-class Gemma4CausalLMOutputWithPast(ModelOutput):
+class Gemma4CausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -133,22 +132,13 @@ class Gemma4CausalLMOutputWithPast(ModelOutput):
         i.e. the raw router logits used to compute the load balancing loss.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
-
     audio_hidden_states: torch.FloatTensor | None = None
-
-    aux_loss: torch.FloatTensor | None = None
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
-class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
+class Gemma4TextModelOutputWithPast(MoeModelOutputWithPast):
     """
     BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
 
@@ -162,7 +152,6 @@ class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
