@@ -612,7 +612,10 @@ class DefaultFlowCallback(TrainerCallback):
 
         # Evaluate
         if args.eval_strategy == IntervalStrategy.EPOCH and args.eval_delay <= state.epoch:
-            control.should_evaluate = True
+            is_eval_epoch = round(state.epoch) % args.eval_epochs == 0
+            is_last_epoch = round(state.epoch) >= state.num_train_epochs
+            if is_eval_epoch or is_last_epoch:
+                control.should_evaluate = True
 
         # Save
         if args.save_strategy == SaveStrategy.EPOCH:

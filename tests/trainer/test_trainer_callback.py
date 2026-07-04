@@ -1341,3 +1341,73 @@ class NotebookProgressCallbackTest(unittest.TestCase):
         self.assertIn("eval_loss", metrics1)
         self.assertIn("eval_loss", metrics2)
         self.assertIn("eval_loss", metrics3)
+
+
+class DefaultFlowCallbackEvalEpochsTest(unittest.TestCase):
+    """Tests for the eval_epochs argument used by DefaultFlowCallback.on_epoch_end."""
+
+    def _run_epochs(self, num_train_epochs, eval_epochs, eval_delay=0):
+        args = TrainingArguments(
+            output_dir=tempfile.mkdtemp(),
+            eval_strategy="epoch",
+            eval_epochs=eval_epochs,
+            eval_delay=eval_delay,
+        )
+        state = TrainerState()
+        state.num_train_epochs = num_train_epochs
+        callback = DefaultFlowCallback()
+
+        evaluated_epochs = []
+        for epoch in range(1, num_train_epochs + 1):
+            state.epoch = float(epoch)
+            control = TrainerControl()
+            callback.on_epoch_end(args, state, control)
+            if control.should_evaluate:
+                evaluated_epochs.append(epoch)
+        return evaluated_epochs
+
+    def test_default_eval_epochs_evaluates_every_epoch(self):
+        """eval_epochs defaults to 1, so evaluation should fire after every epoch."""
+        evaluated_epochs = self._run_epochs(num_train_epochs=4, eval_epochs=1)
+
+        self.assertEqual(evaluated_epochs, [1, 2, 3, 4])
+
+    def test_eval_epochs_skips_intermediate_epochs(self):
+        """With eval_epochs=3, only epochs 3, 6, 9 should trigger evaluation."""
+        evaluated_epochs = self._run_epochs(num_train_epochs=9, eval_epochs=3)
+
+        self.assertEqual(evaluated_epochs, [3, 6, 9])
+
+    def test_eval_epochs_always_evaluates_final_epoch(self):
+        """The last epoch should always be evaluated, even if it isn't a multiple of eval_epochs."""
+        evaluated_epochs = self._run_epochs(num_train_epochs=10, eval_epochs=3)
+
+        self.assertEqual(evaluated_epochs, [3, 6, 9, 10])
+
+    def test_eval_epochs_respects_eval_delay(self):
+        """No evaluation should happen before eval_delay, even on a multiple of eval_epochs."""
+        evaluated_epochs = self._run_epochs(num_train_epochs=6, eval_epochs=2, eval_delay=3)
+
+        self.assertEqual(evaluated_epochs, [4, 6])
+
+    def test_eval_epochs_zero_or_negative_raises(self):
+        """eval_epochs must be a positive integer."""
+        with self.assertRaises(ValueError):
+            TrainingArguments(output_dir=tempfile.mkdtemp(), eval_strategy="epoch", eval_epochs=0)
+
+    def test_eval_epochs_ignored_when_strategy_is_not_epoch(self):
+        """eval_epochs should have no effect when eval_strategy is 'steps' or 'no'."""
+        args = TrainingArguments(
+            output_dir=tempfile.mkdtemp(),
+            eval_strategy="steps",
+            eval_steps=10,
+            eval_epochs=5,
+        )
+        state = TrainerState()
+        state.num_train_epochs = 3
+        state.epoch = 1.0
+        control = TrainerControl()
+
+        DefaultFlowCallback().on_epoch_end(args, state, control)
+
+        self.assertFalse(control.should_evaluate)

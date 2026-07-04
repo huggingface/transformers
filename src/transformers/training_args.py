@@ -420,6 +420,10 @@ class TrainingArguments:
             Number of update steps between two evaluations if `eval_strategy="steps"`. Will default to the same
             value as `logging_steps` if not set. Should be an integer or a float in range `[0,1)`. If smaller than 1,
             will be interpreted as ratio of total training steps.
+        eval_epochs (`int`, *optional*, defaults to 1):
+            Number of epochs between two evaluations if `eval_strategy="epoch"`. Has no effect for any other
+            `eval_strategy`. Useful when evaluation is expensive and running it after every single epoch would slow
+            training down. For example, `eval_epochs=5` only evaluates at the end of epochs 5, 10, 15, and so on.
         eval_delay (`float`, *optional*):
             Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
             eval_strategy.
@@ -1071,6 +1075,14 @@ class TrainingArguments:
             )
         },
     )
+    eval_epochs: int = field(
+        default=1,
+        metadata={
+            "help": (
+                "Number of epochs between evaluations if `eval_strategy='epoch'`. Ignored for any other eval_strategy."
+            )
+        },
+    )
     eval_delay: float = field(
         default=0,
         metadata={
@@ -1521,6 +1533,14 @@ class TrainingArguments:
                     f"evaluation strategy {self.eval_strategy} requires either non-zero --eval_steps or"
                     " --logging_steps"
                 )
+
+        if self.eval_epochs is not None and self.eval_epochs < 1:
+            raise ValueError(f"eval_epochs must be a positive integer, got {self.eval_epochs}")
+        if self.eval_strategy != IntervalStrategy.EPOCH and self.eval_epochs != 1:
+            logger.warning(
+                f"eval_epochs={self.eval_epochs} was set but eval_strategy is '{self.eval_strategy.value}', so"
+                " eval_epochs has no effect. Set eval_strategy='epoch' to use it."
+            )
 
         if (
             self.load_best_model_at_end
