@@ -16,7 +16,7 @@
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
-from ...tokenization_utils_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend, _normalize_unigram_vocab
 from ...utils import logging
 
 
@@ -61,7 +61,7 @@ class XGLMTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: str | list[tuple[str, float]] | None = None,
+        vocab: str | dict[str, int] | dict[str, float] | list[tuple[str, float]] | None = None,
         bos_token: str = "<s>",
         eos_token: str = "</s>",
         sep_token: str = "</s>",
@@ -89,6 +89,9 @@ class XGLMTokenizer(TokenizersBackend):
                 (str(eos_token), 0.0),
                 (str(unk_token), 0.0),
             ]
+
+        if isinstance(self._vocab, dict):
+            self._vocab = _normalize_unigram_vocab(self._vocab)
 
         self._tokenizer = Tokenizer(Unigram(vocab=self._vocab, unk_id=3, byte_fallback=False))
 
