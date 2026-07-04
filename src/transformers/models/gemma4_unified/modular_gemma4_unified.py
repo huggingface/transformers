@@ -865,7 +865,9 @@ class Gemma4UnifiedVisionEmbedder(nn.Module):
             (batch, num_patches, mm_embed_dim) — embedded features (including padding positions).
         """
         # Step 1: Patch embedding (LN → Dense → LN)
-        hidden_states = self.patch_ln1(pixel_values.to(self.patch_dense.weight.dtype))
+        if (target_dtype := self.patch_dense.weight.dtype).is_floating_point:
+            pixel_values = pixel_values.to(target_dtype)
+        hidden_states = self.patch_ln1(pixel_values)
         hidden_states = self.patch_dense(hidden_states)
         hidden_states = self.patch_ln2(hidden_states)
 
@@ -896,7 +898,8 @@ class Gemma4UnifiedMultimodalEmbedder(Gemma4MultimodalEmbedder):
 
     def forward(self, inputs_embeds: torch.Tensor) -> torch.Tensor:
         # Additional dtype casting
-        inputs_embeds = inputs_embeds.to(self.embedding_projection.weight.dtype)
+        if (target_dtype := self.embedding_projection.weight.dtype).is_floating_point:
+            inputs_embeds = inputs_embeds.to(target_dtype)
         embs_normed = self.embedding_pre_projection_norm(inputs_embeds)
         return self.embedding_projection(embs_normed)
 
@@ -1063,9 +1066,7 @@ class Gemma4UnifiedModel(Gemma4Model):
                 f" {image_features.shape[0]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(
-                image_mask.to(inputs_embeds.device), image_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_features)
 
         if pixel_values_videos is not None:
             video_features = self.get_video_features(
@@ -1082,14 +1083,12 @@ class Gemma4UnifiedModel(Gemma4Model):
                 f" {video_features.shape[0]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(
-                video_mask.to(inputs_embeds.device), video_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_features)
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
-            audio_features = audio_output.pooler_output
+            audio_features = audio_output.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             audio_mask_from_encoder = audio_output.attention_mask  # True = valid
 
             # Strip padding tokens: only keep real (non-padding) audio soft tokens.
@@ -1105,9 +1104,7 @@ class Gemma4UnifiedModel(Gemma4Model):
                 f" {audio_features.shape[0] * audio_features.shape[1]}",
             )
 
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(audio_mask.to(inputs_embeds.device), audio_features)
 
         # It may already have been prepared by, e.g., `generate`
         if position_ids is None:

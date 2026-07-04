@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.13.0.dev0"
+__version__ = "5.14.0.dev0"
 
 import importlib
 import sys
@@ -104,7 +104,9 @@ _import_structure = {
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
+    "distributed": [],
     "dynamic_module_utils": [],
+    "exporters": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
@@ -360,24 +362,34 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
-    _import_structure["model_debugging_utils"] = [
-        "model_addition_debugger_context",
-    ]
     _import_structure["activations"] = []
+    _import_structure["backbone_utils"] = ["BackboneConfigMixin", "BackboneMixin"]
     _import_structure["cache_utils"] = [
-        "CacheLayerMixin",
-        "DynamicLayer",
-        "DynamicIndexedLayer",
-        "StaticLayer",
-        "StaticIndexedLayer",
-        "StaticSlidingWindowLayer",
-        "QuantoQuantizedLayer",
-        "HQQQuantizedLayer",
         "Cache",
+        "CacheLayerMixin",
         "DynamicCache",
+        "DynamicIndexedLayer",
+        "DynamicLayer",
         "EncoderDecoderCache",
+        "HQQQuantizedLayer",
         "QuantizedCache",
+        "QuantoQuantizedLayer",
         "StaticCache",
+        "StaticIndexedLayer",
+        "StaticLayer",
+        "StaticSlidingWindowLayer",
+    ]
+    _import_structure["core_model_loading"] = [
+        "Chunk",
+        "Concatenate",
+        "ConversionOps",
+        "GroupWeightRename",
+        "MergeModulelist",
+        "PermuteForRope",
+        "SplitModulelist",
+        "VisionFuseAndPermuteForRope",
+        "VisionUnfuseAndPermuteForRope",
+        "WeightConverter",
     ]
     _import_structure["data.datasets"] = [
         "GlueDataset",
@@ -397,7 +409,6 @@ else:
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
             "EpsilonLogitsWarper",
-            "MinPLogitsWarper",
             "EtaLogitsWarper",
             "ExponentialDecayLengthPenalty",
             "ForcedBOSTokenLogitsProcessor",
@@ -411,6 +422,7 @@ else:
             "MaxTimeCriteria",
             "MinLengthLogitsProcessor",
             "MinNewTokensLengthLogitsProcessor",
+            "MinPLogitsWarper",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
             "PrefixConstrainedLogitsProcessor",
@@ -442,24 +454,17 @@ else:
         "convert_and_export_with_cache",
     ]
 
-    _import_structure["core_model_loading"] = [
-        "Chunk",
-        "Concatenate",
-        "ConversionOps",
-        "MergeModulelist",
-        "PermuteForRope",
-        "SplitModulelist",
-        "WeightConverter",
-    ]
+    _import_structure["integrations.hub_kernels"] = ["kernelize"]
+    _import_structure["masking_utils"] = ["AttentionMaskInterface"]
+    _import_structure["model_debugging_utils"] = ["model_addition_debugger_context"]
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
-    _import_structure["backbone_utils"] = ["BackboneConfigMixin", "BackboneMixin"]
-    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update", "RopeParameters"]
-    _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
-    _import_structure["masking_utils"] = ["AttentionMaskInterface"]
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "RopeParameters", "dynamic_rope_update"]
+    _import_structure["modeling_utils"] = ["AttentionInterface", "PreTrainedModel"]
     _import_structure["optimization"] = [
         "Adafactor",
+        "GreedyLR",
         "get_constant_schedule",
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
@@ -473,7 +478,6 @@ else:
         "get_reduce_on_plateau_schedule",
         "get_scheduler",
         "get_wsd_schedule",
-        "GreedyLR",
     ]
     _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward"]
     _import_structure["time_series_utils"] = []
@@ -506,9 +510,12 @@ if TYPE_CHECKING:
     from .core_model_loading import Chunk as Chunk
     from .core_model_loading import Concatenate as Concatenate
     from .core_model_loading import ConversionOps as ConversionOps
+    from .core_model_loading import GroupWeightRename as GroupWeightRename
     from .core_model_loading import MergeModulelist as MergeModulelist
     from .core_model_loading import PermuteForRope as PermuteForRope
     from .core_model_loading import SplitModulelist as SplitModulelist
+    from .core_model_loading import VisionFuseAndPermuteForRope as VisionFuseAndPermuteForRope
+    from .core_model_loading import VisionUnfuseAndPermuteForRope as VisionUnfuseAndPermuteForRope
     from .core_model_loading import WeightConverter as WeightConverter
 
     # Data
@@ -632,6 +639,7 @@ if TYPE_CHECKING:
     from .integrations import is_wandb_available as is_wandb_available
     from .integrations.executorch import TorchExportableModuleWithStaticCache as TorchExportableModuleWithStaticCache
     from .integrations.executorch import convert_and_export_with_cache as convert_and_export_with_cache
+    from .integrations.hub_kernels import kernelize as kernelize
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer

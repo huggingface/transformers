@@ -266,6 +266,8 @@ class ZambaMambaMixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d. If you want to use the naive implementation, set `use_mamba_kernels=False` in the model config"
             )
 
+        self.layer_type = config.layer_types[layer_idx]
+
     def cuda_kernels_forward(
         self, hidden_states: torch.Tensor, cache_params: Cache | None = None, attention_mask=None
     ):

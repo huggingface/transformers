@@ -533,6 +533,10 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
     # training is not supported yet for Moshi
     test_resize_embeddings = False
+    # ``MoshiForConditionalGeneration.forward`` requires audio codes alongside ``input_ids``;
+    # ``test_flex_attention_with_grads`` (and any other test that builds inputs via
+    # ``main_input_name`` + ``additional_model_inputs``) needs these to be listed here.
+    additional_model_inputs = ["moshi_audio_codes", "user_audio_codes", "attention_mask"]
 
     def setUp(self):
         self.model_tester = MoshiTester(self)
@@ -666,20 +670,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 ).to(torch_device)
 
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-                for name, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa:
-                    raise ValueError("The SDPA model should have SDPA attention layers")
+                # Moshi now uses ``ALL_ATTENTION_FUNCTIONS`` dispatch — a single ``MoshiAttention`` class
+                # handles every backend, so we check ``config._attn_implementation`` instead of class names.
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
                 # Just test that a large cache works as expected
                 res_eager = model_eager.generate(
