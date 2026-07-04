@@ -23,22 +23,8 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaProcessor
-
-    @classmethod
-    def _setup_image_processor(cls):
-        image_processor_class = cls._get_component_class_from_processor("image_processor")
-        return image_processor_class()
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("huggyllama/llama-7b")
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[PAD]"
-            if tokenizer.pad_token_id is None:
-                tokenizer.pad_token_id = 0
-        return tokenizer
+    tiny_model_id = "hf-internal-testing/tiny-processor-llava"
+    model_id = "llava-hf/llava-1.5-7b-hf"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -49,7 +35,8 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return {
             "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
             "patch_size": 128,
-            "vision_feature_select_strategy": "default"
+            "vision_feature_select_strategy": "default",
+            "num_additional_image_tokens": 1  # must match processor_config.json from the Hub repo
         }  # fmt: skip
 
     def test_get_num_vision_tokens(self):
