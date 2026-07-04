@@ -30,9 +30,39 @@ OpenPanguV2 brings several major architectural improvements:
   memory footprint, and memory access costs for long-context inference while preserving accuracy.
 * **Residual topology**: TThe conventional residual path is replaced with a 4-stream mHC design, improving representation
   diversity and generalization.
-* **Multi-token prediction (MTP)**: The model uses three MTP heads to draft 3 additional tokens per step, enabling faster
-  inference through self-speculative decoding.
 * **Optimizer**: Training uses the Muon optimizer for faster convergence.
+
+## Usage examples
+
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
+
+```python
+from transformers import pipeline
+
+
+pipe = pipeline(
+    task="text-generation",
+    model="openpangu/openPangu-2.0-Flash",
+    device_map="auto"
+)
+pipe("Give me a short introduction to large language model.")
+```
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_name = "openpangu/openPangu-2.0-Flash"
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    device_map="auto",
+)
+input_ids = tokenizer("Give me a short introduction to large language model.", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
 
 ## OpenPanguV2Config
 
