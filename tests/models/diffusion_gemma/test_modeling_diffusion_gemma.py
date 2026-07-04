@@ -307,18 +307,19 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         self.assertTrue(model.lm_head.weight is model.model.decoder.embed_tokens.weight)
         self.assertTrue(model.lm_head.weight is model.model.encoder.language_model.embed_tokens.weight)
 
-    def test_use_cache_raises_exception(self):
+    def test_use_cache_is_ignored(self):
         """
-        DiffusionGemma always use cache. Therefore, the common kwarg `use_cache` isn't used -- and we raise an
-        exception
+        DiffusionGemma's decoder never writes a cache, so the common kwarg `use_cache` is silently ignored instead
+        of raising. This keeps the model usable with gradient checkpointing, which forces `use_cache=False`.
         """
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
-        with self.assertRaises(ValueError):
-            model(**model_inputs, use_cache=False)
-        with self.assertRaises(ValueError):
-            model(**model_inputs, use_cache=True)
+        # Either value is accepted and has no effect: no exception, and the output matches omitting the kwarg.
+        expected = model(**model_inputs).logits
+        for use_cache in (False, True):
+            logits = model(**model_inputs, use_cache=use_cache).logits
+            torch.testing.assert_close(logits, expected)
 
     def test_diffusion_decoder_mask_no_cache_raises_exception(self):
         """
