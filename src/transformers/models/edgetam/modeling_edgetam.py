@@ -464,6 +464,9 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        # Remove keys that are meant for post-processing, not the backbone.
+        kwargs.pop("original_sizes", None)
+        kwargs.pop("reshaped_input_sizes", None)
         # Forward through backbone
         backbone_output = self.backbone(pixel_values, **kwargs)
         intermediate_hidden_states = backbone_output.last_hidden_state
