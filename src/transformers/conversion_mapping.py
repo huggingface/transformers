@@ -462,11 +462,17 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns="hc_ffn_base", target_patterns="ffn_hc.base"),
             WeightRenaming(source_patterns="hc_ffn_scale", target_patterns="ffn_hc.scale"),
             WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_fn$", target_patterns=r"layers.\1.attn_hc.fn"),
-            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_base$", target_patterns=r"layers.\1.attn_hc.base"),
-            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_attn_scale$", target_patterns=r"layers.\1.attn_hc.scale"),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.hc_attn_base$", target_patterns=r"layers.\1.attn_hc.base"
+            ),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.hc_attn_scale$", target_patterns=r"layers.\1.attn_hc.scale"
+            ),
             WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_fn$", target_patterns=r"layers.\1.ffn_hc.fn"),
             WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_base$", target_patterns=r"layers.\1.ffn_hc.base"),
-            WeightRenaming(source_patterns=r"^layers\.(\d+)\.hc_ffn_scale$", target_patterns=r"layers.\1.ffn_hc.scale"),
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.hc_ffn_scale$", target_patterns=r"layers.\1.ffn_hc.scale"
+            ),
             WeightRenaming(
                 source_patterns=r"^model\.layers\.(\d+)\.self_attn\.f_a_proj\.",
                 target_patterns=r"model.layers.\1.self_attn.forget_gate.f_a_proj.",

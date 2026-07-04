@@ -20,6 +20,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, LinearAttentionLayer
+from ...integrations import lazy_load_kernel
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
@@ -27,6 +28,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import is_flash_attention_requested
+from ...utils.import_utils import resolve_internal_import
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4Model
@@ -57,6 +59,7 @@ class Glm5NextRMSNorm(LlamaRMSNorm):
     pass
 
 
+# TODO: Wrap with FLA layer kernel
 class Glm5NextRMSNormGated(Qwen3_5RMSNormGated):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         super().__init__(hidden_size, eps, kwargs)
@@ -439,22 +442,42 @@ class Glm5NextLinearAttention(nn.Module):
 
         self.g_a_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
         self.g_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
-        # Check whether we can use fla's fused one with sigmoid instead
         self.o_norm = Glm5NextRMSNormGated(self.head_dim, eps=self.layer_norm_epsilon)
         self.o_proj = nn.Linear(self.qkv_dim, self.hidden_size, bias=False)
+
+        self.layer_type = config.layer_types[layer_idx]
+
+        # Check kernels or torch availability
+        global causal_conv1d_update, causal_conv1d_fn, chunk_kda, recurrent_kda
+        fla = lazy_load_kernel("fla")
+        causal_conv1d_update, causal_conv1d_fn, chunk_kda, recurrent_kda = (
+            resolve_internal_import(fla, chained_path=path) for path in [
+                "modules.convolution.causal_conv1d_update",
+                "modules.convolution.causal_conv1d",
+                "ops.kda.chunk.chunk_kda",
+                "ops.kda.fused_recurrent.fused_recurrent_kda",
+            ]
+        )
+
+        # TODO: fixup causal conv
+        # self.causal_conv1d_fn = causal_conv1d_fn or torch_causal_conv1d_fn
+        # self.causal_conv1d_update = causal_conv1d_update or torch_causal_conv1d_update
+        # TODO: kernels drift a bit which is expected, keeping torch for easier comparisons
+        # self.chunk_kimi_delta_attention = chunk_kda or torch_chunk_kimi_delta_attention
+        # self.recurrent_kimi_delta_attention = recurrent_kda or torch_recurrent_kimi_delta_attention
+        self.causal_conv1d_fn = torch_causal_conv1d_fn
+        self.causal_conv1d_update = torch_causal_conv1d_update
+        self.chunk_kimi_delta_attention = torch_chunk_kimi_delta_attention
+        self.recurrent_kimi_delta_attention = torch_recurrent_kimi_delta_attention
+
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = None,
-        prev_topk_indices: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, None, None]:
-        cache_params = past_key_values
-
+        **kwargs: Unpack[TransformersKwargs],
+    ):
         # Zero out padding
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
@@ -479,12 +502,12 @@ class Glm5NextLinearAttention(nn.Module):
 
         # Single token decode path
         if use_precomputed_states and seq_len == 1:
-            mixed_qkv = torch_causal_conv1d_update(
+            mixed_qkv = self.causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                self.activation,
+                weight=self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
+                activation=self.activation,
             )
         # Multi token prefill or simple "full" prefill
         else:
@@ -496,9 +519,9 @@ class Glm5NextLinearAttention(nn.Module):
                 new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
                 cache_params.update_conv_state(new_conv_state, self.layer_idx)
 
-            mixed_qkv = torch_causal_conv1d_fn(
+            mixed_qkv = self.causal_conv1d_fn(
                 mixed_qkv,
-                self.conv1d.weight.squeeze(1),
+                weight=self.conv1d.weight.squeeze(1),
                 bias=self.conv1d.bias,
                 activation=self.activation,
             )
@@ -523,7 +546,7 @@ class Glm5NextLinearAttention(nn.Module):
 
         # KDA
         if use_precomputed_states and seq_len == 1:
-            core_attn_out, last_recurrent_state = torch_recurrent_kimi_delta_attention(
+            core_attn_out, last_recurrent_state = self.recurrent_kimi_delta_attention(
                 query,
                 key,
                 value,
@@ -534,7 +557,7 @@ class Glm5NextLinearAttention(nn.Module):
                 use_qk_l2norm_in_kernel=True,
             )
         else:
-            core_attn_out, last_recurrent_state = torch_chunk_kimi_delta_attention(
+            core_attn_out, last_recurrent_state = self.chunk_kimi_delta_attention(
                 query,
                 key,
                 value,
@@ -548,14 +571,14 @@ class Glm5NextLinearAttention(nn.Module):
             )
 
         if cache_params is not None:
-            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
+            cache_params.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
 
         # Final gated norm and proj
         gate = self.g_b_proj(self.g_a_proj(hidden_states)).view(hidden_shape)
         output = self.o_norm(core_attn_out, gate).reshape(batch_size, seq_len, -1)
         output = self.o_proj(output)
 
-        return output, None, None
+        return output
 
 
 # =============================================================================
@@ -1043,13 +1066,12 @@ class Glm5NextAttention(nn.Module):
 
 class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
     def __init__(self, config: Glm5NextConfig, layer_idx: int):
-        attention_class = Glm5NextLinearAttention if config.layer_types[layer_idx] == "linear_attention" else Glm5NextAttention
+        self.block_type = config.layer_types[layer_idx]
 
         super().__init__(config, layer_idx)
-        self.self_attn = attention_class(config, layer_idx)
+        self.self_attn = Glm5NextLinearAttention(config, layer_idx) if self.block_type == "linear_attention" else Glm5NextAttention(config, layer_idx)
 
-        self.mhc = config.mhc
-        self.hc_mult = config.hc_mult
+        self.uses_mhc = config.mhc
         self.attn_hc = Glm5NextHyperConnection(config) if config.mhc else None
         self.ffn_hc = Glm5NextHyperConnection(config) if config.mhc else None
 
@@ -1076,22 +1098,30 @@ class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
         dtype = hidden_states.dtype
 
         residual = hidden_states
-        post, comb, hidden_states = self.attn_hc(hidden_states) if self.mhc else (None, None, hidden_states)
+        post, comb, hidden_states = self.attn_hc(hidden_states) if self.uses_mhc else (None, None, hidden_states)
         # Self attn
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
+        if self.block_type == "linear_attention":
+            hidden_states = self.self_attn(
+                hidden_states=hidden_states,
+                cache_params=past_key_values,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+        else:
+            hidden_states, _, _ = self.self_attn(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
         hidden_states = self.apply_residual(post, comb, hidden_states, residual, dtype=dtype)
 
         residual = hidden_states
-        post, comb, hidden_states = self.ffn_hc(hidden_states) if self.mhc else (None, None, hidden_states)
+        post, comb, hidden_states = self.ffn_hc(hidden_states) if self.uses_mhc else (None, None, hidden_states)
         # Feed forward
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
@@ -1131,15 +1161,15 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        #if isinstance(module, Glm5NextTopkRouter):
+        # if isinstance(module, Glm5NextTopkRouter):
         #    nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         #    nn.init.zeros_(module.e_score_correction_bias)
-        #elif isinstance(module, Glm5NextForgetGate):
+        # elif isinstance(module, Glm5NextForgetGate):
         #    nn.init.normal_(module.A_log, mean=0.0, std=0.02)
         #    nn.init.zeros_(module.dt_bias)
-        #elif isinstance(module, Glm5NextLinearAttention):
+        # elif isinstance(module, Glm5NextLinearAttention):
         #    nn.init.ones_(module.o_norm.weight)
-        #elif isinstance(module, Glm5NextHyperConnection):
+        # elif isinstance(module, Glm5NextHyperConnection):
         #    nn.init.normal_(module.fn, mean=0.0, std=0.02)
         #    nn.init.zeros_(module.base)
         #    nn.init.ones_(module.scale)
@@ -1193,6 +1223,7 @@ class Glm5NextModel(DeepseekV4Model):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
+        # TODO: in glm moe dsa but not here
         topk_indices = None
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states, _ = decoder_layer(
@@ -1202,7 +1233,7 @@ class Glm5NextModel(DeepseekV4Model):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                #prev_topk_indices=topk_indices,
+                # prev_topk_indices=topk_indices,
                 **kwargs,
             )
 
