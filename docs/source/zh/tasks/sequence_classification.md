@@ -54,7 +54,7 @@ pip install transformers datasets evaluate accelerate
 ```py
 >>> from datasets import load_dataset
 
->>> imdb = load_dataset("imdb")
+>>> imdb = load_dataset("stanfordnlp/imdb")
 ```
 
 然后查看一个示例：

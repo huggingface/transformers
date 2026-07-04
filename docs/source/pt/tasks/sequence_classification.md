@@ -35,7 +35,7 @@ Carregue o conjunto de dados IMDb utilizando a biblioteca 🤗 Datasets:
 ```py
 >>> from datasets import load_dataset
 
->>> imdb = load_dataset("imdb")
+>>> imdb = load_dataset("stanfordnlp/imdb")
 ```
 
 Em seguida, dê uma olhada em um exemplo:

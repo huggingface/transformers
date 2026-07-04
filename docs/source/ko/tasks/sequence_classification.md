@@ -54,7 +54,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ```py
 >>> from datasets import load_dataset
 
->>> imdb = load_dataset("imdb")
+>>> imdb = load_dataset("stanfordnlp/imdb")
 ```
 
 그런 다음 예시를 살펴봅시다:
