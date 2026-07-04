@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch DeepSeekV3.2 model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -247,11 +248,13 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scaled Dot-Product Attention" (Figure (left']  # fmt: skip
 
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
-        model = DeepseekV32ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V3.2-Exp",
-            device_map="auto",
-            dtype=torch.bfloat16,
-        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = DeepseekV32ForCausalLM.from_pretrained(
+                "deepseek-ai/DeepSeek-V3.2-Exp",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                offload_folder=tmp_dir,
+            )
 
         input_text = [
             "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors."  # fmt: skip
@@ -265,12 +268,14 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
     def test_logits_eager(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = DeepseekV32ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V3.2-Exp",
-            device_map="auto",
-            dtype=torch.bfloat16,
-            attn_implementation="eager",
-        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = DeepseekV32ForCausalLM.from_pretrained(
+                "deepseek-ai/DeepSeek-V3.2-Exp",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                attn_implementation="eager",
+                offload_folder=tmp_dir,
+            )
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(model.device))
@@ -285,12 +290,14 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
         prompt = LONG_CONTEXT_PROMPT
 
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
-        model = DeepseekV32ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V3.2-Exp",
-            device_map="auto",
-            dtype=torch.bfloat16,
-            attn_implementation="eager",
-        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = DeepseekV32ForCausalLM.from_pretrained(
+                "deepseek-ai/DeepSeek-V3.2-Exp",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                attn_implementation="eager",
+                offload_folder=tmp_dir,
+            )
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
         self.assertGreater(inputs["input_ids"].shape[1], model.config.index_topk)
@@ -325,12 +332,14 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
             'An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scal',  # fmt: skip
         ]
 
-        model = DeepseekV32ForCausalLM.from_pretrained(
-            "deepseek-ai/DeepSeek-V3.2-Exp",
-            device_map="auto",
-            dtype=torch.bfloat16,
-            attn_implementation="eager",
-        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = DeepseekV32ForCausalLM.from_pretrained(
+                "deepseek-ai/DeepSeek-V3.2-Exp",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                attn_implementation="eager",
+                offload_folder=tmp_dir,
+            )
 
         # Left padding: the whole batch is correct.
         tok_left = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp", padding_side="left")
