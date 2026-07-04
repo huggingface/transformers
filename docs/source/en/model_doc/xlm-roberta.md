@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-11-05 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-11-05 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -84,7 +83,7 @@ print(f"The predicted token is: {predicted_token}")
 </hfoption>
 </hfoptions>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [quantization guide](../quantization) overview for more available quantization backends.
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [quantization guide](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) the quantive the weights to 4 bits
 

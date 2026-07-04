@@ -113,6 +113,7 @@ PRIVATE_MODELS = [
     "SmolVLMVisionTransformer",
     "MiniCPMV4_6VisionPreTrainedModel",
     "MiniCPMV4_6VisionModel",
+    "MiniMaxM3VLVisionModel",
     "AriaTextForCausalLM",
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
@@ -211,6 +212,11 @@ IGNORE_NON_TESTED = (
         "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
         "PPOCRV5ServerRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
+        "PPOCRV6MediumDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6MediumDetForObjectDetection.
+        "PPOCRV6SmallDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallDetForObjectDetection.
+        "PPOCRV6SmallRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
+        "PPOCRV6SmallRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
+        "PPOCRV6TinyRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6TinyRecForTextRecognition.
         "PPLCNetModel",  # Building part of bigger (tested) model. Tested implicitly through PPLCNetForImageClassification.
         "PaddleOCRVLModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
@@ -218,19 +224,22 @@ IGNORE_NON_TESTED = (
         "PaddleOCRTextModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
+        "MiniMaxM3VLForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
+        "MiniMaxM3VLTextModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
+        "MiniMaxM3VLVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
         "Qwen3VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLForConditionalGeneration.
         "Qwen3VLMoeModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLMoeForConditionalGeneration.
         "Qwen3VLTextModel",  # Building part of bigger (tested) model.
         "Qwen3VLMoeTextModel",  # Building part of bigger (tested) model.
         "Qwen3_5TextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5ForConditionalGeneration.
         "Qwen3_5MoeTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5MoeForConditionalGeneration.
-        "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Testted in Qwen2_5OmniModelIntergrationTest
-        "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
-        "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
-        "Qwen2_5OmniThinkerTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
-        "Qwen2_5OmniToken2WavModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
-        "Qwen2_5OmniToken2WavDiTModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
-        "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Tested in Qwen2_5OmniModelIntegrationTest
+        "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
+        "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
+        "Qwen2_5OmniThinkerTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
+        "Qwen2_5OmniToken2WavModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
+        "Qwen2_5OmniToken2WavDiTModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
+        "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
         "Qwen3OmniMoeCode2Wav",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
         "Qwen3OmniMoeCode2WavDecoderBlock",
         "Qwen3OmniMoeText2Wav",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
@@ -256,6 +265,8 @@ IGNORE_NON_TESTED = (
         "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
         "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
         "InternVLVisionModel",  # Building part of bigger (tested) model
+        "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
+        "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
         "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
@@ -285,6 +296,12 @@ IGNORE_NON_TESTED = (
         "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
         "Exaone4_5_VisionModel",  # Building part of a bigger model
         "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
+        "DiffusionGemmaDecoderModel",  # TODO(joaogante)
+        "DiffusionGemmaEncoderModel",  # TODO(joaogante)
+        "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
+        "Kimi_K25VisionModel",
+        "HunYuanVLTextModel",
+        "HunYuanVLVisionTransformer",
     ]
 )
 
@@ -308,6 +325,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/sam3_video/test_modeling_sam3_video.py",
     "models/edgetam_video/test_modeling_edgetam_video.py",
     "models/gemma4_assistant/test_modeling_gemma4_assistant.py",
+    "models/gemma4_unified_assistant/test_modeling_gemma4_unified_assistant.py",
+    "models/hunyuan_vl/test_modeling_hunyuan_vl.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -460,7 +479,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Siglip2VisionModel",
     "Siglip2TextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
-    "VitPoseForPoseEstimation",
     "CLIPTextModel",
     "MetaClip2TextModel",
     "MetaClip2TextModelWithProjection",
@@ -471,6 +489,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Emu3TextModel",  # Building part of bigger (tested) model
     "JanusVQVAE",  # no autoclass for VQ-VAE models
     "JanusVisionModel",  # Building part of bigger (tested) model
+    "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
+    "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
     "SLANetSLAHead",  # Building part of bigger (tested) model
     "SLANetBackbone",  # Building part of bigger (tested) model
     "SLANeXtSLAHead",  # Building part of bigger (tested) model
@@ -506,8 +526,11 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
+    "HunYuanVLTextModel",  # Building part of bigger (tested) model.
     "Ernie4_5_VLMoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
+    "VideoPrismTextModel",  # Building part of a bigger model
+    "VideoPrismVideoModel",  # Building part of a bigger model
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
@@ -830,6 +853,24 @@ def find_tested_models(test_file: str) -> set[str]:
             else:
                 continue
             model_tested.add(tested_class)
+
+    # Same as above, but for ALMModelTester. Audio-LMs typically only set `conditional_generation_class`
+    # (no base_model_class). `GraniteSpeechModelTester` is listed because `GraniteSpeechPlusForConditionalGenerationModelTester`
+    # uses `ALMModelTester` indirectly through it; in the future we may want to resolve inheritance properly.
+    audio_class_match = re.search(r"class \w+\((?:ALMModelTester|GraniteSpeechModelTester)\)", content)
+    if audio_class_match is not None:
+        audio_content = content[audio_class_match.start() :]
+        for test_class_type in [
+            "config_class",
+            "conditional_generation_class",
+            "base_model_class",
+            "sequence_classification_class",
+        ]:
+            tested_class = re.findall(rf"{test_class_type}\s+=.*", audio_content)
+            if tested_class:
+                tested_class = tested_class[0].split("=")[1].strip()
+                if tested_class != "None":
+                    model_tested.add(tested_class)
 
     return model_tested
 
@@ -1190,6 +1231,8 @@ UNDOCUMENTED_OBJECTS = [
     "Ernie4_5_VL_MoeVariableResolutionResamplerModel",  # BC Alias
     "Ernie4_5_VL_MoeVisionConfig",  # BC Alias
     "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",  # BC Alias
+    # FIXME(SunMarc)
+    "GemmaQuantizationConfig",  # No docs, going for release
 ]
 
 # This list should be empty. Objects in it should get their own doc page.

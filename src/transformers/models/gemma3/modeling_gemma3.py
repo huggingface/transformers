@@ -31,7 +31,15 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
+from ...masking_utils import (
+    _preprocess_mask_arguments,
+    blockwise_overlay,
+    create_causal_mask,
+    create_masks_for_generate,
+    create_sliding_window_causal_mask,
+    maybe_pad_block_sequence_ids,
+    sliding_window_overlay,
+)
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -42,15 +50,11 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @auto_docstring(
@@ -713,6 +717,58 @@ def get_block_sequence_ids_for_mask(token_type_ids: torch.Tensor, device: torch.
     return block_sequence_ids
 
 
+def create_masks_for_vision_model(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    past_key_values: Cache | None,
+    position_ids: torch.Tensor | None,
+    block_sequence_ids: torch.Tensor,
+) -> dict:
+    """Create full_attention and sliding_attention masks with correct composition.
+
+    For global (full attention) layers:  OR(causal, blockwise)
+    For local (sliding window) layers:  AND(sliding_window, OR(causal, blockwise))
+    """
+    mask_kwargs = {
+        "config": config,
+        "inputs_embeds": inputs_embeds,
+        "attention_mask": attention_mask,
+        "past_key_values": past_key_values,
+        "position_ids": position_ids,
+    }
+
+    # Full attention: OR(causal, blockwise) — use block_sequence_ids directly
+    full_mask = create_causal_mask(**mask_kwargs, block_sequence_ids=block_sequence_ids)
+
+    # We need to manually pad the sequence IDs for the sliding mask
+    # as it's passed as an `or_mask_function` which bypasses internal padding.
+    early_exit, _, _, _, kv_length, _, kv_offset = _preprocess_mask_arguments(
+        **mask_kwargs,
+        layer_idx=0,
+    )
+    if early_exit:
+        padded_block_sequence_ids = block_sequence_ids
+    else:
+        padded_block_sequence_ids = maybe_pad_block_sequence_ids(
+            block_sequence_ids, attention_mask, kv_length, kv_offset
+        )
+
+    # Sliding attention: AND(sliding_window, OR(causal, blockwise))
+    # Pass blockwise as or_mask_function (applied as step 2 in create_causal_mask)
+    # Pass sliding_window as and_mask_function (applied as step 3, after OR)
+    sliding_mask = create_causal_mask(
+        **mask_kwargs,
+        or_mask_function=blockwise_overlay(padded_block_sequence_ids),
+        and_mask_function=sliding_window_overlay(config.sliding_window),
+    )
+
+    return {
+        "full_attention": full_mask,
+        "sliding_attention": sliding_mask,
+    }
+
+
 @auto_docstring(
     custom_intro="""
     The Base Gemma3 model which consists of a vision backbone and a language model without language modeling head.,
@@ -731,12 +787,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
         language_model = AutoModel.from_config(config=config.text_config)
         self.language_model = language_model
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
@@ -766,9 +816,9 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -851,16 +901,13 @@ class Gemma3Model(Gemma3PreTrainedModel):
             }
 
             if token_type_ids is not None:
-                mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
-                    token_type_ids, device=inputs_embeds.device
+                block_sequence_ids = get_block_sequence_ids_for_mask(token_type_ids, device=inputs_embeds.device)
+                causal_mask_mapping = create_masks_for_vision_model(
+                    block_sequence_ids=block_sequence_ids,
+                    **mask_kwargs,
                 )
-
-            # Create the masks
-            sliding_mask_kwargs = mask_kwargs.copy()
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
-            }
+            else:
+                causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
 
         outputs = self.language_model(
             attention_mask=causal_mask_mapping,
@@ -1055,7 +1102,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         return model_inputs
 
     @staticmethod
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def create_masks_for_generate(
         config: PreTrainedConfig,
         inputs_embeds: torch.Tensor,
@@ -1075,31 +1121,26 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         }
 
         if token_type_ids is not None:
-            mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
-                token_type_ids, device=inputs_embeds.device
+            block_sequence_ids = get_block_sequence_ids_for_mask(token_type_ids, device=inputs_embeds.device)
+            return create_masks_for_vision_model(
+                block_sequence_ids=block_sequence_ids,
+                **mask_kwargs,
             )
 
         return create_masks_for_generate(**mask_kwargs)
 
 
-class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.model = Gemma3Model(config)
-        self.score = nn.Linear(config.text_config.hidden_size, self.num_labels, bias=False)
+@auto_docstring(
+    custom_intro="""
+Gemma3TextForSequenceClassification is a text-only sequence classification model that works with Gemma3TextConfig.
+It uses the generic sequence classification implementation for efficiency and consistency."""
+)
+class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemma3PreTrainedModel):
+    config: Gemma3TextConfig
+    input_modalities = ("text",)
 
-        # Initialize weights and apply final processing
-        self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    @can_return_tuple
-    @auto_docstring
+class Gemma3ForSequenceClassification(GenericForSequenceClassification, Gemma3PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1107,78 +1148,22 @@ class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-
-        transformer_outputs = self.model(
-            input_ids,
+        return super().forward(
+            input_ids=input_ids,
             attention_mask=attention_mask,
-            pixel_values=pixel_values,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
             token_type_ids=token_type_ids,
-            use_cache=use_cache,
-            return_dict=True,
+            labels=labels,
             **kwargs,
         )
-        hidden_states = transformer_outputs.last_hidden_state
-        logits = self.score(hidden_states)
-
-        if input_ids is not None:
-            batch_size = input_ids.shape[0]
-        else:
-            batch_size = inputs_embeds.shape[0]
-
-        if self.config.text_config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.text_config.pad_token_id is None:
-            last_non_pad_token = -1
-        elif input_ids is not None:
-            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.text_config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
-            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
-        else:
-            last_non_pad_token = -1
-            logger.warning_once(
-                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
-            )
-
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
-
-        return SequenceClassifierOutputWithPast(
-            loss=loss,
-            logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
-        )
-
-
-class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemma3PreTrainedModel):
-    """
-    Gemma3TextForSequenceClassification is a text-only sequence classification model that works with Gemma3TextConfig.
-    It uses the generic sequence classification implementation for efficiency and consistency.
-    """
-
-    config: Gemma3TextConfig
-    input_modalities = ("text",)
 
 
 __all__ = [

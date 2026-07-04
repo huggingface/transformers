@@ -28,6 +28,7 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -111,7 +112,6 @@ class Granite4VisionModelTest(VLMModelTest, unittest.TestCase):
 
     model_tester_class = Granite4VisionModelTester
     skip_test_image_features_output_shape = True
-    test_torch_exportable = False
     # Custom layer-by-layer forward doesn't support output_attentions
     # (GraniteDecoderLayer discards attention weights internally)
     test_attention_outputs = False
@@ -155,6 +155,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     @slow
     def test_small_model_integration_test(self):
         model = Granite4VisionForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(
@@ -169,10 +170,12 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
         EXPECTED_RESPONSE = Expectations({
             ("cuda", None): "The image depicts two cats resting on a pink couch. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
             ("cuda", (8, 6)): "The image depicts two cats resting on a pink blanket. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
+            ("xpu", None): "The image depicts two cats resting on a pink blanket. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
         }).get_expectation()  # fmt: skip
 
         self.assertEqual(self.processor.decode(new_tokens[0], skip_special_tokens=True), EXPECTED_RESPONSE)
 
+    @require_deterministic_for_xpu
     @slow
     def test_small_model_integration_test_batch(self):
         model = Granite4VisionForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(
@@ -197,6 +200,10 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
             ("cuda", (8, 6)): [
                 'i see two cats lying on a pink blanket. one cat is on the left side, and the other is on the right side. there are two',
                 'in the image, i see a group of people, including children and adults, standing on a tennis court. they appear to be posing for a group',
+            ],
+            ("xpu", None): [
+                'i see two cats lying on a pink blanket. one cat is on the left side, and the other is on the right side. there are two',
+                'in the image, i see a group of people, including children and adults, standing on a tennis court. they appear to be posing for a group',
             ]
         }).get_expectation()  # fmt: skip
 
@@ -205,9 +212,13 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_matches_single(self):
-        model = Granite4VisionForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Granite4VisionForConditionalGeneration.from_pretrained(
+            self.model_id,
+            torch_dtype=torch.bfloat16,
+            attn_implementation={
+                "qformer_config": "eager",
+            },
+        ).to(torch_device)
 
         prompt = self.make_prompt("What do you see in this image?")
 

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-02-15.*
+*This model was contributed to Hugging Face Transformers on 2026-02-16.*
 
 # VoxtralRealtime
 
@@ -180,6 +180,11 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 ## VoxtralRealtimeEncoder
 
 [[autodoc]] VoxtralRealtimeEncoder
+    - forward
+
+## VoxtralRealtimeModel
+
+[[autodoc]] VoxtralRealtimeModel
     - forward
 
 ## VoxtralRealtimeForConditionalGeneration

@@ -27,7 +27,7 @@ import torch.nn as nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
@@ -297,7 +297,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return (q_ * freqs_cis).sum(5).flatten(3), (k_ * freqs_cis).sum(5).flatten(3)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class PeAudioVideoEncoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -796,6 +795,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -851,6 +851,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -873,6 +874,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -893,7 +895,10 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         **kwargs,
     ) -> PeAudioVideoOutput:
         if sum([input_ids is not None, pixel_values_videos is not None, input_values is not None]) < 2:
-            raise ValueError("At least two of input_ids, pixel_values_videos, or input_values must be provided")
+            raise ValueError(
+                "At least two of input_ids, pixel_values_videos, or input_values must be provided. "
+                "For encoding individual modalities, get_*_embeds methods are available."
+            )
 
         if pixel_values_videos is None:
             outputs = self.audio_model(

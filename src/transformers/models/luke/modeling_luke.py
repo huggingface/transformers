@@ -22,6 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN, gelu
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -768,11 +769,8 @@ class LukePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
+        super()._init_weights(module)
+        if isinstance(module, nn.Embedding):
             if module.embedding_dim == 1:  # embedding for bias parameters
                 init.zeros_(module.weight)
             else:
@@ -780,9 +778,6 @@ class LukePreTrainedModel(PreTrainedModel):
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 @auto_docstring(
@@ -931,8 +926,15 @@ class LukeModel(LukePreTrainedModel):
             inputs_embeds=inputs_embeds,
         )
 
-        # Second, compute extended attention mask
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, entity_attention_mask)
+        if entity_attention_mask is not None:
+            attention_mask = torch.cat([attention_mask, entity_attention_mask], dim=-1)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            # Simulating fused embeddings which is done later downstream
+            inputs_embeds=attention_mask[..., None].to(word_embedding_output.dtype),
+            attention_mask=attention_mask,
+        )
 
         # Third, compute entity embeddings and concatenate with word embeddings
         if entity_ids is None:
@@ -944,7 +946,7 @@ class LukeModel(LukePreTrainedModel):
         encoder_outputs = self.encoder(
             word_embedding_output,
             entity_embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -967,36 +969,6 @@ class LukeModel(LukePreTrainedModel):
             entity_last_hidden_state=encoder_outputs.entity_last_hidden_state,
             entity_hidden_states=encoder_outputs.entity_hidden_states,
         )
-
-    def get_extended_attention_mask(
-        self, word_attention_mask: torch.LongTensor, entity_attention_mask: torch.LongTensor | None
-    ):
-        """
-        Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
-
-        Arguments:
-            word_attention_mask (`torch.LongTensor`):
-                Attention mask for word tokens with ones indicating tokens to attend to, zeros for tokens to ignore.
-            entity_attention_mask (`torch.LongTensor`, *optional*):
-                Attention mask for entity tokens with ones indicating tokens to attend to, zeros for tokens to ignore.
-
-        Returns:
-            `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
-        """
-        attention_mask = word_attention_mask
-        if entity_attention_mask is not None:
-            attention_mask = torch.cat([attention_mask, entity_attention_mask], dim=-1)
-
-        if attention_mask.dim() == 3:
-            extended_attention_mask = attention_mask[:, None, :, :]
-        elif attention_mask.dim() == 2:
-            extended_attention_mask = attention_mask[:, None, None, :]
-        else:
-            raise ValueError(f"Wrong shape for attention_mask (shape {attention_mask.shape})")
-
-        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
-        return extended_attention_mask
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):

@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-16 and added to Hugging Face Transformers on 2025-04-11.*
+*This model was published in HF papers on 2025-05-13 and contributed to Hugging Face Transformers on 2025-04-11.*
 
 # Granite Speech
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -165,6 +162,11 @@ for i, transcription in enumerate(transcriptions):
 ## GraniteSpeechFeatureExtractor
 
 [[autodoc]] GraniteSpeechFeatureExtractor
+
+## GraniteSpeechModel
+
+[[autodoc]] GraniteSpeechModel
+    - forward
 
 ## GraniteSpeechForConditionalGeneration
 

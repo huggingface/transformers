@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
+from contextlib import contextmanager
 from typing import Any
 
 
@@ -39,3 +40,29 @@ def should_convert_module(full_name, patterns: list[str] | None = None):
         for key in patterns
     )
     return not should_not_convert
+
+
+@contextmanager
+def on_device(device):
+    """Align the current accelerator device with a tensor or device-like object."""
+    from ..utils import is_torch_available
+
+    if is_torch_available():
+        import torch
+
+        if isinstance(device, torch.Tensor):
+            device = device.device
+        elif isinstance(device, str):
+            device = torch.device(device)
+
+        device_type = getattr(device, "type", None)
+        if device_type == "cuda":
+            with torch.cuda.device(device):
+                yield
+                return
+        if device_type == "xpu" and hasattr(torch, "xpu"):
+            with torch.xpu.device(device):
+                yield
+                return
+
+    yield

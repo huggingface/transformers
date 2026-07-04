@@ -145,18 +145,15 @@ class BarkProcessor(ProcessorMixin):
 
             embeddings_dict["repo_or_path"] = save_directory
 
+            embeddings_subdir = os.path.join(save_directory, speaker_embeddings_directory)
             for prompt_key in self.available_voice_presets:
                 voice_preset = self._load_voice_preset(prompt_key)
 
                 tmp_dict = {}
                 for key in self.speaker_embeddings[prompt_key]:
-                    np.save(
-                        os.path.join(
-                            embeddings_dict["repo_or_path"], speaker_embeddings_directory, f"{prompt_key}_{key}"
-                        ),
-                        voice_preset[key],
-                        allow_pickle=False,
-                    )
+                    target_filepath = os.path.join(embeddings_subdir, f"{prompt_key}_{key}")
+                    self._reject_path_traversal(embeddings_subdir, target_filepath, prompt_key)
+                    np.save(target_filepath, voice_preset[key], allow_pickle=False)
                     tmp_dict[key] = os.path.join(speaker_embeddings_directory, f"{prompt_key}_{key}.npy")
 
                 embeddings_dict[prompt_key] = tmp_dict
@@ -166,17 +163,40 @@ class BarkProcessor(ProcessorMixin):
 
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
+    @staticmethod
+    def _reject_path_traversal(base_dir: str, target_path: str, offending_value: str):
+        # base_dir/target_path derive from the untrusted speaker_embeddings json; allow nested
+        # subdirectories but reject any value that escapes base_dir (path traversal, CWE-22).
+        # The only untrusted input is the relative path string, so this is a purely lexical check:
+        # we use os.path.abspath (not realpath/Path.resolve) and must NOT follow symlinks here.
+        # When repo_or_path points at a populated HF cache, the referenced snapshot files are
+        # symlinks into a sibling blobs/ directory that sits outside base_dir, so a resolve()-based
+        # containment check would wrongly reject perfectly legitimate loads.
+        base = os.path.abspath(base_dir)
+        target = os.path.abspath(target_path)
+        try:
+            contained = os.path.commonpath([base, target]) == base
+        except ValueError:
+            # e.g. different Windows drives: definitely an escape.
+            contained = False
+        if not contained:
+            raise ValueError(f"Invalid voice preset path: {offending_value!r}")
+
     def _load_voice_preset(self, voice_preset: str | None = None, **kwargs):
         voice_preset_paths = self.speaker_embeddings[voice_preset]
 
         voice_preset_dict = {}
         token = kwargs.get("token")
+        repo_or_path = self.speaker_embeddings.get("repo_or_path", "/")
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
             if key not in voice_preset_paths:
                 raise ValueError(
                     f"Voice preset unrecognized, missing {key} as a key in self.speaker_embeddings[{voice_preset}]."
                 )
 
+            self._reject_path_traversal(
+                repo_or_path, os.path.join(repo_or_path, voice_preset_paths[key]), voice_preset_paths[key]
+            )
             path = cached_file(
                 self.speaker_embeddings.get("repo_or_path", "/"),
                 voice_preset_paths[key],

@@ -40,11 +40,11 @@ Checkpoint File → from_pretrained() → convert_and_load_state_dict_in_model()
                          │  1. Match renamed/processed source key to model parameter │
                          │  2. Shard the weight and send to device (async)           │
                          │  3. Collect tensors with the same source_pattern together │
-                         │     (e.g. MoE experts, gate_up_proj)                     │
+                         │     (e.g. MoE experts, gate_up_proj)                      │
                          │  4. Apply dequantization/deserialization (if pre-quant)   │
-                         │  5. Apply conversion (if defined)                        │
-                         │  6. Apply quantization (if enabled and step 4 not used)  │
-                         │  7. Set parameter on model                               │
+                         │  5. Apply conversion (if defined)                         │
+                         │  6. Apply quantization (if enabled and step 4 not used)   │
+                         │  7. Set parameter on model                                │
                          └───────────────────────────────────────────────────────────┘
 ```
 
@@ -134,7 +134,7 @@ The base class that handles pattern matching and tensor collection:
 
 ### WeightRenaming
 
-[`WeightRenaming`] is a specialized [`WeightTransform`] for pure key renames without tensor operations. Unlike [`WeightConverter`], a `WeightRenaming` does not **claim** the key (it does not occupy the "at most one converter per key" slot), so multiple renames may chain freely both before and after a [`WeightConverter`] has fired.
+[`WeightRenaming`] is a specialized [`WeightTransform`] for pure key renames without tensor operations. Unlike [`WeightConverter`], a `WeightRenaming` does not **claim** the key, so multiple renames may chain freely. On the load path all renames run before the converter; on the save path (inverted list) all inverted renames run after the inverted converter — see ordering rule above.
 
 ```py
 # Legacy checkpoint compatibility
@@ -681,7 +681,7 @@ At a high level, the contract looks like this:
    You can do mostly 3 things:
     - add operations to the list of converters: these will be applied on all weights except for the ones collected in any of the `WeightConverter`. These in general should be `WeightRenaming` operations
     - add operations to the list of operations of each converter: this is what happens for `Quantization`, where we just add a quantization operation after the list of operations of any `WeightConverter`.
-    - replace / map operations to your custom operations: this is what happens with `peft`. We replace the `Concatenate` operation of say `mixtral`, to be `PeftConcatenate`. This way, when the adapter checkpoint is read, the weights to be concatenated are collected, and are properly formatted for `peft`
+    - replace / map operations to your custom operations: this is what happens with `peft`. We replace the `Concatenate` operation of say `mixtral`, to be `PeftConcatenate` (which is defined in PEFT). This way, when the adapter checkpoint is read, the weights to be concatenated are collected, and are properly formatted for `peft`
 3. **Load + finalize + report.** Use the core loader to perform the conversion and populate tensors, then finalize and
    log results. Concretely, this flow is:
    - `LoadStateDictConfig(...)` + `_load_pretrained_model(...)` to load and convert.

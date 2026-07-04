@@ -22,6 +22,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput, QuestionAnsweringModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -378,19 +379,22 @@ class SplinterModel(SplinterPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             **kwargs,
         )
         sequence_output = encoder_outputs[0]
@@ -718,17 +722,19 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
     def _prepare_question_positions(self, input_ids: torch.Tensor) -> torch.Tensor:
         rows, flat_positions = torch.where(input_ids == self.config.question_token_id)
         num_questions = torch.bincount(rows)
+        torch_compilable_check(
+            num_questions.size(0) == input_ids.size(0),
+            "All samples in the batch must have at least one question token.",
+        )
+        # rows is sorted: col[i] = i - first_occurrence(rows[i])
+        first_idx = torch.searchsorted(rows, rows, side="left")
+        cols = torch.arange(rows.size(0), device=rows.device) - first_idx
         positions = torch.full(
             (input_ids.size(0), num_questions.max()),
             self.config.pad_token_id,
             dtype=torch.long,
             device=input_ids.device,
         )
-        torch_compilable_check(
-            num_questions.size(0) == input_ids.size(0),
-            "All samples in the batch must have at least one question token.",
-        )
-        cols = torch.cat([torch.arange(n) for n in num_questions])
         positions[rows, cols] = flat_positions
         return positions
 

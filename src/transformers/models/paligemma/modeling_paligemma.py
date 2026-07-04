@@ -34,7 +34,6 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_paligemma import PaliGemmaConfig
 
@@ -106,7 +105,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _can_compile_fullgraph = False
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -134,14 +133,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         self.text_config_dtype = self.config.get_text_config().dtype or self.dtype
         self.post_init()
-
-    # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_input_embeddings with Llava->PaliGemma
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    # Copied from transformers.models.llava.modeling_llava.LlavaModel.set_input_embeddings with Llava->PaliGemma
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(
@@ -174,9 +165,9 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -434,7 +425,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         return model_inputs
 
     @staticmethod
-    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def create_masks_for_generate(
         config: PreTrainedConfig,
         inputs_embeds: torch.Tensor,

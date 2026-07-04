@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import torch
 import torch.nn as nn
 
-from transformers import PretrainedConfig
+from transformers import PreTrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
     get_checkpoint_conversion_mapping,
     get_model_conversion_mapping,
@@ -29,10 +29,13 @@ from transformers.core_model_loading import (
     Concatenate,
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
+    GroupWeightRename,
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    VisionFuseAndPermuteForRope,
+    VisionUnfuseAndPermuteForRope,
     WeightConverter,
     WeightRenaming,
     build_glob_alternation,
@@ -151,14 +154,14 @@ class TestWeightGlobMatching(unittest.TestCase):
         ]
 
         self.assertEqual(
-            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings)[0],
+            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings, [])[0],
             "foo.mlp.experts.gate_up_proj",
         )
         self.assertEqual(
-            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings)[0],
+            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings, [])[0],
             "foo.mlp.experts.down_proj",
         )
-        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings)[0], "language_model")
+        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings, [])[0], "language_model")
 
     def test_sub_key_no_match_returns_original(self):
         renamings = [
@@ -166,7 +169,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         ]
 
         key = "unrelated.key"
-        renamed_key, _ = rename_source_key(key, renamings)
+        renamed_key, _ = rename_source_key(key, renamings, [])
         self.assertEqual(renamed_key, key)
 
 
@@ -212,25 +215,33 @@ class DummyMLP(nn.Module):
         self.down_proj = DummyParamModule((2, 2))
 
 
-class DummyRoot(nn.Module):
+class DummyModelWithNorm(PreTrainedModel):
     base_model_prefix = "model"
-    config: PretrainedConfig
+    config: PreTrainedConfig
 
-    def __init__(self, add_extra_moe=False, with_mlp=True):
-        super().__init__()
+    def __init__(self, config, add_extra_moe=False):
+        super().__init__(config)
+        self.model = DummyTopModel(add_extra_moe)
+        self.norm1 = nn.LayerNorm(16)
+        self.norm2 = nn.LayerNorm(16)
+        self.post_init()
+
+
+class DummyRoot(PreTrainedModel):
+    base_model_prefix = "model"
+    config: PreTrainedConfig
+
+    def __init__(self, config, add_extra_moe=False, with_mlp=True):
+        super().__init__(config)
         self.model = DummyTopModel(add_extra_moe)
         if with_mlp:
             self.mlp = DummyMLP()
-        self.config = PretrainedConfig()
-        # Mirror what PreTrainedModel.post_init() does so that
-        # get_model_conversion_mapping() can be called on DummyRoot.
-        self._named_pretrained_submodules = [("", self)]
+        self.post_init()
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_moe_and_qkv_conversion(self):
-        model = DummyRoot()
-        model.config = PretrainedConfig()
+        model = DummyRoot(PreTrainedConfig())
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -346,8 +357,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         torch.testing.assert_close(model_state["mlp.down_proj.weight"], raw_tensors["mlp.w2.weight"])
 
     def test_moe_and_qkv_conversion_reversed(self):
-        model = DummyRoot()
-        model.config = PretrainedConfig()
+        model = DummyRoot(PreTrainedConfig())
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -443,16 +453,17 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 super().__init__()
                 self.self_attn = RopeSelfAttn()
 
-        class RopeModel(nn.Module):
+        class RopeModel(PreTrainedModel):
             base_model_prefix = "model"
 
-            def __init__(self):
-                super().__init__()
+            def __init__(self, config):
+                super().__init__(config)
                 self.layers = nn.ModuleList([RopeLayer()])
+                self.post_init()
 
-        model = RopeModel()
-        model.config = PretrainedConfig()
-        model.config.num_attention_heads = n_heads
+        config = PreTrainedConfig()
+        config.num_attention_heads = n_heads
+        model = RopeModel(config)
 
         raw_q = torch.tensor(
             [
@@ -535,6 +546,49 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
 
+    def test_fp8_ue8m0_quantize_dequantize_round_trip(self):
+        # ``scale_fmt="ue8m0"`` rounds weight_scale_inv to a power of two; the weight has to be
+        # quantized with that same rounded scale, or ``weight * weight_scale_inv`` at dequant
+        # disagrees with the scale the weight was divided by (a silent per-block error up to an octave).
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
+
+        if not hasattr(torch, "float8_e8m0fnu"):
+            self.skipTest("ue8m0 storage requires torch.float8_e8m0fnu")
+
+        quantizer = SimpleNamespace(
+            quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="ue8m0")
+        )
+        torch.manual_seed(0)
+        weight = torch.randn(128, 128, dtype=torch.float32)
+
+        quantized = Fp8Quantize(quantizer)._quantize_one("layer.weight", weight)
+        recovered = Fp8Dequantize(quantizer)._dequantize_one(
+            quantized["layer.weight"], quantized["layer.weight_scale_inv"], output_dtype=torch.float32
+        )
+        rel_err = ((recovered - weight).abs().sum() / weight.abs().sum()).item()
+        self.assertLess(rel_err, 5e-2)  # fp8 round-trip is ~2e-2; a scale mismatch inflates it past 0.2
+
+    def test_fp8_float_scale_fmt_quantization_unchanged(self):
+        # The ue8m0 reordering must leave the default scale_fmt="float" path bit-identical to the
+        # original single-division formula (scales = _FP8_MAX / max_abs). Any divergence only shows
+        # on rare fp32-ULP block maxima, so scan many random 128x128 blocks rather than one.
+        from transformers.integrations.finegrained_fp8 import _FP8_DTYPE, _FP8_MAX, _FP8_MIN, Fp8Quantize
+
+        quantizer = Fp8Quantize(
+            SimpleNamespace(quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="float"))
+        )
+        for seed in range(100):
+            torch.manual_seed(seed)
+            weight = torch.randn(128, 128, dtype=torch.float32)
+            out = quantizer._quantize_one("layer.weight", weight)
+            scales = _FP8_MAX / weight.abs().amax()
+            ref_q = torch.clamp(weight * scales, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+            ref_inv = (1.0 / scales).to(torch.float32).reshape(1, 1)
+            self.assertTrue(torch.equal(out["layer.weight"], ref_q), f"float weight diverged at seed {seed}")
+            self.assertTrue(
+                torch.equal(out["layer.weight_scale_inv"], ref_inv), f"float scale diverged at seed {seed}"
+            )
+
     def test_scoped_renaming_does_not_leak_to_sibling_or_parent(self):
         """scope_prefix gates a WeightRenaming to keys under one submodel only —
         neither the sibling submodel nor the parent's own keys must be affected.
@@ -550,17 +604,17 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 super().__init__()
                 self.q = DummyParamModule((1, 2))
 
-        class _CompositeModel(nn.Module):
+        class _CompositeModel(PreTrainedModel):
             base_model_prefix = ""
 
-            def __init__(self):
-                super().__init__()
+            def __init__(self, config):
+                super().__init__(config)
                 self.vision_model = _Submodel()
                 self.language_model = _Submodel()
                 self.q = DummyParamModule((1, 2))  # root-level weight with the same name
+                self.post_init()
 
-        model = _CompositeModel()
-        model.config = PretrainedConfig()
+        model = _CompositeModel(PreTrainedConfig())
 
         vision_val = torch.tensor([[1.0, 2.0]])
         checkpoint = {
@@ -588,6 +642,135 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         torch.testing.assert_close(model.vision_model.q.weight, vision_val)
         torch.testing.assert_close(model.language_model.q.weight, torch.zeros(1, 2))
         torch.testing.assert_close(model.q.weight, torch.zeros(1, 2))
+
+    def test_scoped_match_falls_back_when_checkpoint_omits_base_prefix(self):
+        """``scope_prefix == base_model_prefix`` and the checkpoint key omits the prefix
+        (raw submodule checkpoint, ``old_q.weight``): the rename must still land at
+        ``model.q.weight`` via ``base_model_prefix``-adjusted matching.
+        """
+
+        class _Sub(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.q = DummyParamModule((1, 2))
+                self.post_init()
+
+        class _Root(PreTrainedModel):
+            base_model_prefix = "model"
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.model = _Sub(config)
+                self.post_init()
+
+        model = _Root(PreTrainedConfig())
+        val = torch.tensor([[1.0, 2.0]])
+        checkpoint = {"old_q.weight": val.clone()}
+
+        scoped_rename = WeightRenaming("^old_q", "q")
+        scoped_rename.scope_prefix = ""
+        scoped_rename.base_model_prefix = "model"
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            checkpoint,
+            LoadStateDictConfig(weight_mapping=[scoped_rename]),
+            tp_plan=None,
+        )
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+        torch.testing.assert_close(model.model.q.weight, val)
+
+    def test_scoped_match_strips_one_base_prefix_level_for_nested_scope(self):
+        """``scope_prefix`` is nested under ``base_model_prefix`` (``'model.sub'`` with
+        ``base_model_prefix='model'``) and the checkpoint omits the outer ``'model.'``
+        (``sub.old_q.weight``): the rename must still land at ``model.sub.q.weight``.
+        """
+
+        class _Inner(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q = DummyParamModule((1, 2))
+
+        class _Middle(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.sub = _Inner()
+                self.post_init()
+
+        class _Root(PreTrainedModel):
+            base_model_prefix = "model"
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.model = _Middle(config)
+                self.post_init()
+
+        model = _Root(PreTrainedConfig())
+        val = torch.tensor([[1.0, 2.0]])
+        checkpoint = {"sub.old_q.weight": val.clone()}
+
+        scoped_rename = WeightRenaming("^old_q", "q")
+        scoped_rename.scope_prefix = "sub"
+        scoped_rename.base_model_prefix = "model"
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            checkpoint,
+            LoadStateDictConfig(weight_mapping=[scoped_rename]),
+            tp_plan=None,
+        )
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+        torch.testing.assert_close(model.model.sub.q.weight, val)
+
+    def test_scoped_match_round_trips_when_scope_equals_base_model_prefix(self):
+        """``scope_prefix == base_model_prefix``: loading a checkpoint and then saving via
+        ``revert_weight_conversion`` must reconstruct the same checkpoint keys (forward and
+        reverse renames are symmetric).
+        """
+
+        class _Sub(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.q = DummyParamModule((1, 2))
+                self.post_init()
+
+        class _Root(PreTrainedModel):
+            base_model_prefix = "model"
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.model = _Sub(config)
+                self.post_init()
+
+        model = _Root(PreTrainedConfig())
+        val = torch.tensor([[1.0, 2.0]])
+        checkpoint = {"model.old_q.weight": val.clone()}
+
+        scoped_rename = WeightRenaming("^old_q", "q")
+        scoped_rename.scope_prefix = ""
+        scoped_rename.base_model_prefix = "model"
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            checkpoint,
+            LoadStateDictConfig(weight_mapping=[scoped_rename]),
+            tp_plan=None,
+        )
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        saved = revert_weight_conversion(model, model.state_dict())
+        self.assertTrue(compare_state_dicts(saved, checkpoint))
 
     def test_interleaved_renaming_and_converter_round_trip(self):
         """A WeightRenaming preceding a WeightConverter must also fire on the save path
@@ -620,16 +803,16 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 super().__init__()
                 self.attn = _Attn()
 
-        class _InterleavedModel(nn.Module):
+        class _InterleavedModel(PreTrainedModel):
             base_model_prefix = ""
 
-            def __init__(self):
-                super().__init__()
+            def __init__(self, config):
+                super().__init__(config)
                 self.encoder = _Encoder()
+                self.post_init()
 
         qkv = torch.arange(24, dtype=torch.float32).reshape(6, 4)
-        model = _InterleavedModel()
-        model.config = PretrainedConfig()
+        model = _InterleavedModel(PreTrainedConfig())
 
         # Checkpoint uses a "decoder" prefix and stores QKV packed together.
         checkpoint = {"decoder.attn.qkv_proj.weight": qkv.clone()}
@@ -671,8 +854,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         self.assertTrue(compare_state_dicts(saved, checkpoint))
 
     def test_ernie4_5_vl_moe_conversion(self):
-        model = DummyRoot(add_extra_moe=True)
-        model.config = PretrainedConfig()
+        model = DummyRoot(PreTrainedConfig(), add_extra_moe=True)
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -793,8 +975,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         torch.testing.assert_close(model_state["model.layers.1.extra_experts.down_proj.weight"], moe_2)
 
     def test_ernie4_5_vl_moe_conversion_reversed(self):
-        model = DummyRoot(add_extra_moe=True)
-        model.config = PretrainedConfig()
+        model = DummyRoot(PreTrainedConfig(), add_extra_moe=True)
 
         raw_tensors = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
@@ -867,6 +1048,90 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
 
 class TestConversionMapping(unittest.TestCase):
+    def test_unfuse_and_permute_rope(self):
+        vision_config = PreTrainedConfig(hidden_size=16, head_dim=8, num_attention_heads=2)
+        config = PreTrainedConfig(vision_config=vision_config)
+        qkv_weight = torch.randn(3 * vision_config.hidden_size, vision_config.hidden_size, dtype=torch.float32)
+
+        q_proj, k_proj, v_proj = torch.chunk(qkv_weight, 3, dim=0)
+
+        q_proj = q_proj.view(
+            vision_config.num_attention_heads, vision_config.head_dim // 2, 2, vision_config.hidden_size
+        )
+        q_proj = q_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
+
+        k_proj = k_proj.view(
+            vision_config.num_attention_heads, vision_config.head_dim // 2, 2, vision_config.hidden_size
+        )
+        k_proj = k_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
+
+        unfuse = VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
+        fuse = VisionFuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
+
+        unfused_output = unfuse.convert({"qkv": [qkv_weight]}, ["qkv"], ["q_proj", "k_proj", "v_proj"], config=config)
+        fused_output = fuse.convert(
+            {k: [v] for k, v in unfused_output.items()}, ["q_proj", "k_proj", "v_proj"], ["qkv"], config=config
+        )
+
+        torch.testing.assert_close(unfused_output["v_proj"], v_proj)
+        torch.testing.assert_close(unfused_output["q_proj"], q_proj)
+        torch.testing.assert_close(unfused_output["k_proj"], k_proj)
+        torch.testing.assert_close(fused_output["qkv"], qkv_weight)
+
+    def test_group_weight_rename(self):
+        model = DummyModelWithNorm(PreTrainedConfig())
+
+        bad_serialized_checkpoints = {
+            k.replace("norm1", "norm0").replace("norm2", "norm1"): v.clone() for k, v in model.state_dict().items()
+        }
+        weight_mapping = [
+            GroupWeightRename(
+                source_patterns=[r"norm0", r"norm1"],
+                target_patterns=[r"norm1", r"norm2"],
+            )
+        ]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
     def test_conv3d_linear_conversion_ops(self):
         weight_name = "patch_embed.proj.weight"
         kernel_size = (2, 2, 2)
@@ -926,8 +1191,7 @@ class TestConversionMapping(unittest.TestCase):
         self.assertEqual(len(get_checkpoint_conversion_mapping("foobarbaz")), 2)
 
     def test_can_remove_prefix(self):
-        model = DummyRoot()
-        model.config = PretrainedConfig()
+        model = DummyRoot(PreTrainedConfig())
 
         bad_serialized_checkpoints = {f"bad_name.{k}": v.clone() for k, v in model.state_dict().items()}
         weight_mapping = [PrefixChange(prefix_to_remove="bad_name")]
@@ -976,7 +1240,7 @@ class TestConversionMapping(unittest.TestCase):
 
         # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
         # and the prefix should not be added when saving directly (i.e. the conversion should be dropped)
-        model = DummyRoot()
+        model = DummyRoot(PreTrainedConfig())
         saved_state_dict = revert_weight_conversion(model, model.state_dict())
         model_state_dict = model.state_dict()
         self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
@@ -986,8 +1250,7 @@ class TestConversionMapping(unittest.TestCase):
     def test_can_add_prefix(self):
         # we cannot have another param next to the model, otherwise the prefix adding will already be added even with correct
         # checkpoints starting with the prefix
-        model = DummyRoot(with_mlp=False)
-        model.config = PretrainedConfig()
+        model = DummyRoot(PreTrainedConfig(), with_mlp=False)
 
         bad_serialized_checkpoints = {k.removeprefix("model."): v.clone() for k, v in model.state_dict().items()}
         weight_mapping = [PrefixChange(prefix_to_add="model")]
@@ -1036,7 +1299,7 @@ class TestConversionMapping(unittest.TestCase):
 
         # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
         # and the prefix should not be removed when saving directly (i.e. the conversion should be dropped)
-        model = DummyRoot()
+        model = DummyRoot(PreTrainedConfig())
         saved_state_dict = revert_weight_conversion(model, model.state_dict())
         model_state_dict = model.state_dict()
         self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
@@ -1044,8 +1307,7 @@ class TestConversionMapping(unittest.TestCase):
             self.assertTrue((v == model_state_dict[k]).all())
 
     def test_can_remove_prefix_submodule(self):
-        model = DummyRoot()
-        model.config = PretrainedConfig()
+        model = DummyRoot(PreTrainedConfig())
 
         bad_serialized_checkpoints = {
             f"model.layers.bad_name.{k.replace('model.layers.', '')}" if "model.layers." in k else k: v.clone()
@@ -1097,7 +1359,7 @@ class TestConversionMapping(unittest.TestCase):
 
         # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
         # and the prefix should not be added when saving directly (i.e. the conversion should be dropped)
-        model = DummyRoot()
+        model = DummyRoot(PreTrainedConfig())
         saved_state_dict = revert_weight_conversion(model, model.state_dict())
         model_state_dict = model.state_dict()
         self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
@@ -1107,8 +1369,7 @@ class TestConversionMapping(unittest.TestCase):
     def test_can_add_prefix_submodule(self):
         # we cannot have another param next to the model, otherwise the prefix adding will already be added even with correct
         # checkpoints starting with the prefix
-        model = DummyRoot(with_mlp=False)
-        model.config = PretrainedConfig()
+        model = DummyRoot(PreTrainedConfig(), with_mlp=False)
 
         bad_serialized_checkpoints = {k.replace(".layers.", "."): v.clone() for k, v in model.state_dict().items()}
         weight_mapping = [PrefixChange(prefix_to_add="layers", model_prefix="model")]
@@ -1157,7 +1418,7 @@ class TestConversionMapping(unittest.TestCase):
 
         # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
         # and the prefix should not be removed when saving directly (i.e. the conversion should be dropped)
-        model = DummyRoot()
+        model = DummyRoot(PreTrainedConfig())
         saved_state_dict = revert_weight_conversion(model, model.state_dict())
         model_state_dict = model.state_dict()
         self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
@@ -1171,20 +1432,20 @@ class TestConversionMapping(unittest.TestCase):
             "_tst_mtype", [WeightRenaming(r"^type_key", "type_renamed")], overwrite=True
         )
 
-        def make_mock(class_name):
-            m = type(class_name, (), {})()
-            m.config = SimpleNamespace(model_type="_tst_mtype")
-            m._named_pretrained_submodules = [("", m)]
-            return m
+        class _TstCls(PreTrainedModel): ...
+
+        class _TstOther(PreTrainedModel): ...
 
         # A module whose class name has a registry entry → class entry wins.
-        transforms = get_model_conversion_mapping(make_mock("_TstCls"), add_legacy=False)
+        transforms = get_model_conversion_mapping(_TstCls(PreTrainedConfig(model_type="_tst_mtype")), add_legacy=False)
         patterns = [t.source_patterns for t in transforms]
         self.assertIn(["^cls_key"], patterns)
         self.assertNotIn(["^type_key"], patterns)
 
         # A module with no class entry falls through to the model_type entry.
-        transforms = get_model_conversion_mapping(make_mock("_TstOther"), add_legacy=False)
+        transforms = get_model_conversion_mapping(
+            _TstOther(PreTrainedConfig(model_type="_tst_mtype")), add_legacy=False
+        )
         patterns = [t.source_patterns for t in transforms]
         self.assertIn(["^type_key"], patterns)
         self.assertNotIn(["^cls_key"], patterns)
@@ -1200,22 +1461,19 @@ class TestConversionMapping(unittest.TestCase):
             "_tst_shared_type", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
         )
 
-        def make_root_with_siblings(cls_a, cls_b):
-            """Root model with two children of different classes but the same model_type."""
-            child_a = type(cls_a, (), {})()
-            child_a.config = SimpleNamespace(model_type="_tst_shared_type")
+        class _TstEncCls(PreTrainedModel): ...
 
-            child_b = type(cls_b, (), {})()
-            child_b.config = SimpleNamespace(model_type="_tst_shared_type")
+        class _TstDecCls(PreTrainedModel): ...
 
-            root = type("_TstRoot", (), {})()
-            root.config = SimpleNamespace(model_type="_tst_root_only")
-            root._named_pretrained_submodules = [("encoder", child_a), ("decoder", child_b)]
-            return root
+        class _TstRoot(PreTrainedModel): ...
 
-        transforms = get_model_conversion_mapping(
-            make_root_with_siblings("_TstEncCls", "_TstDecCls"), add_legacy=False
-        )
+        child_a = _TstEncCls(PreTrainedConfig(model_type="_tst_shared_type"))
+        child_b = _TstDecCls(PreTrainedConfig(model_type="_tst_shared_type"))
+        root = _TstRoot(PreTrainedConfig(model_type="_tst_root_only"))
+        root.encoder = child_a
+        root.decoder = child_b
+
+        transforms = get_model_conversion_mapping(root, add_legacy=False)
         scope_prefixes = [t.scope_prefix for t in transforms]
 
         # Both siblings must be represented with their own scoped transforms.
@@ -1226,15 +1484,15 @@ class TestConversionMapping(unittest.TestCase):
         """Two sibling sub-models of the *same* class must each get their own scoped transforms."""
         register_checkpoint_conversion_mapping("_TstSharedCls", [WeightRenaming(r"^w", "renamed_w")], overwrite=True)
 
-        child_a = type("_TstSharedCls", (), {})()
-        child_a.config = SimpleNamespace(model_type="_tst_shared_cls_mtype")
+        class _TstSharedCls(PreTrainedModel): ...
 
-        child_b = type("_TstSharedCls", (), {})()
-        child_b.config = SimpleNamespace(model_type="_tst_shared_cls_mtype")
+        class _TstRootSharedCls(PreTrainedModel): ...
 
-        root = type("_TstRootSharedCls", (), {})()
-        root.config = SimpleNamespace(model_type="_tst_root_only2")
-        root._named_pretrained_submodules = [("encoder", child_a), ("decoder", child_b)]
+        child_a = _TstSharedCls(PreTrainedConfig(model_type="_tst_shared_cls_mtype"))
+        child_b = _TstSharedCls(PreTrainedConfig(model_type="_tst_shared_cls_mtype"))
+        root = _TstRootSharedCls(PreTrainedConfig(model_type="_tst_root_only2"))
+        root.encoder = child_a
+        root.decoder = child_b
 
         transforms = get_model_conversion_mapping(root, add_legacy=False)
         scope_prefixes = [t.scope_prefix for t in transforms]
@@ -1246,17 +1504,18 @@ class TestConversionMapping(unittest.TestCase):
         """When the root model claims a model_type unscoped, a nested child with the
         same model_type must NOT produce a second (incorrectly scoped) copy of those
         transforms — the root's unscoped transforms already cover all keys."""
+
+        class _TstChildSame(PreTrainedModel): ...
+
+        class _TstRootSame(PreTrainedModel): ...
+
         register_checkpoint_conversion_mapping(
             "_tst_root_child_shared", [WeightRenaming(r"^w", "renamed_w")], overwrite=True
         )
 
-        child = type("_TstChildSame", (), {})()
-        child.config = SimpleNamespace(model_type="_tst_root_child_shared")
-
-        root = type("_TstRootSame", (), {})()
-        root.config = SimpleNamespace(model_type="_tst_root_child_shared")
-        # Root ("") appears before child ("submodel") — mirrors DFS order.
-        root._named_pretrained_submodules = [("", root), ("submodel", child)]
+        child = _TstChildSame(PreTrainedConfig(model_type="_tst_root_child_shared"))
+        root = _TstRootSame(PreTrainedConfig(model_type="_tst_root_child_shared"))
+        root.submodel = child
 
         transforms = get_model_conversion_mapping(root, add_legacy=False)
         # Only one unscoped transform (from the root); child must be suppressed.

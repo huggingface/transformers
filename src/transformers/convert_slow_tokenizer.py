@@ -1367,6 +1367,11 @@ class UdopConverter(SpmConverter):
         )
 
 
+class VideoPrismConverter(T5Converter):
+    def post_processor(self):
+        return None
+
+
 class WhisperConverter(Converter):
     def converted(self) -> Tokenizer:
         vocab = self.original_tokenizer.encoder
@@ -1838,8 +1843,8 @@ class ParakeetConverter(SpmConverter):
     def tokenizer(self, proto):
         vocab_scores = self.vocab(proto)
 
-        _, merges = self.SpmExtractor(self.vocab_file).extract(vocab_scores)
         bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
+        merges = generate_merges(bpe_vocab, vocab_scores)
         tokenizer = Tokenizer(
             BPE(
                 bpe_vocab,
@@ -2096,6 +2101,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
     "UdopTokenizer": UdopConverter,
+    "VideoPrismTokenizer": VideoPrismConverter,
     "WhisperTokenizer": WhisperConverter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,

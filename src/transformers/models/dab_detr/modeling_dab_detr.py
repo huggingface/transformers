@@ -37,6 +37,43 @@ from .configuration_dab_detr import DabDetrConfig
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.conditional_detr.modeling_conditional_detr.encode_sinusoidal_position_embedding
+def encode_sinusoidal_position_embedding(
+    pos_tensor: torch.Tensor,
+    num_pos_feats: int = 128,
+    temperature: int = 10000,
+) -> torch.Tensor:
+    """Sinusoidal position embeddings from normalized anchor coordinates.
+
+    Each coordinate in `pos_tensor` is independently encoded with ``num_pos_feats``
+    interleaved sin/cos components; per-coordinate embeddings are concatenated.
+    Handles 2-D ``(x, y)`` and N-D ``(x, y, w, h)`` inputs. For 2-D+ inputs the
+    x and y embeddings are swapped to follow the DETR ``[pos_y, pos_x, ...]`` convention.
+
+    Args:
+        pos_tensor: Normalized coordinates in ``[0, 1]``, shape ``(..., n_coords)``.
+        num_pos_feats: Embedding dimension per coordinate.
+        temperature: Base for the frequency decay.
+
+    Returns:
+        Tensor of shape ``(..., n_coords * num_pos_feats)``, same dtype as input.
+    """
+    scale = 2 * math.pi
+    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
+
+    coords = pos_tensor.unbind(-1)  # list of (...,) tensors
+    embeddings = [coord[..., None] * scale / dim_t for coord in coords]  # each (..., num_pos_feats)
+    embeddings = [
+        torch.stack((e[..., 0::2].sin(), e[..., 1::2].cos()), dim=-1).flatten(-2) for e in embeddings
+    ]  # each (..., num_pos_feats)
+
+    if len(embeddings) >= 2:
+        embeddings[0], embeddings[1] = embeddings[1], embeddings[0]
+
+    return torch.cat(embeddings, dim=-1).to(pos_tensor.dtype)
+
+
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Conditional DETR decoder. This class adds one attribute to
@@ -49,10 +86,6 @@ logger = logging.get_logger(__name__)
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderOutput with ConditionalDetr->DabDetr,Conditional DETR->DAB-DETR,2 (anchor points)->4 (anchor points)
 class DabDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -76,8 +109,6 @@ class DabDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrModelOutput with ConditionalDetr->DabDetr,Conditional DETR->DAB-DETR,2 (anchor points)->4 (anchor points)
 class DabDetrModelOutput(Seq2SeqModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, sequence_length, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -99,7 +130,7 @@ class DabDetrModelOutput(Seq2SeqModelOutput):
 class DabDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -299,45 +330,6 @@ class DabDetrSinePositionEmbedding(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
-
-
-# function to generate sine positional embedding for 4d coordinates
-def gen_sine_position_embeddings(pos_tensor, hidden_size=256):
-    """
-    This function computes position embeddings using sine and cosine functions from the input positional tensor,
-    which has a shape of (batch_size, num_queries, 4).
-    The last dimension of `pos_tensor` represents the following coordinates:
-    - 0: x-coord
-    - 1: y-coord
-    - 2: width
-    - 3: height
-
-    The output shape is (batch_size, num_queries, 512), where final dim (hidden_size*2 = 512) is the total embedding dimension
-    achieved by concatenating the sine and cosine values for each coordinate.
-    """
-    scale = 2 * math.pi
-    dim = hidden_size // 2
-    dim_t = torch.arange(dim, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = 10000 ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / dim)
-    x_embed = pos_tensor[:, :, 0] * scale
-    y_embed = pos_tensor[:, :, 1] * scale
-    pos_x = x_embed[:, :, None] / dim_t
-    pos_y = y_embed[:, :, None] / dim_t
-    pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
-    pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
-    if pos_tensor.size(-1) == 4:
-        w_embed = pos_tensor[:, :, 2] * scale
-        pos_w = w_embed[:, :, None] / dim_t
-        pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
-
-        h_embed = pos_tensor[:, :, 3] * scale
-        pos_h = h_embed[:, :, None] / dim_t
-        pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
-
-        pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
-    else:
-        raise ValueError(f"Unknown pos_tensor shape(-1):{pos_tensor.size(-1)}")
-    return pos.to(pos_tensor.dtype)
 
 
 def inverse_sigmoid(x, eps=1e-5):
@@ -816,7 +808,7 @@ class DabDetrPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.init_std
+        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
 
         if isinstance(module, DabDetrMHAttentionMap):
@@ -824,19 +816,7 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             init.zeros_(module.q_linear.bias)
             init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
             init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, DabDetrForObjectDetection):
+        if isinstance(module, DabDetrForObjectDetection):
             init.constant_(module.bbox_predictor.layers[-1].weight, 0)
             init.constant_(module.bbox_predictor.layers[-1].bias, 0)
 
@@ -1073,7 +1053,7 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             obj_center = reference_points[..., : self.config.query_dim]
-            query_sine_embed = gen_sine_position_embeddings(obj_center, self.hidden_size)
+            query_sine_embed = encode_sinusoidal_position_embedding(obj_center, num_pos_feats=self.hidden_size // 2)
             query_pos = self.ref_point_head(query_sine_embed)
 
             # For the first decoder layer, we do not apply transformation over p_s
@@ -1293,8 +1273,8 @@ class DabDetrModel(DabDetrPreTrainedModel):
 
         # Third, flatten the feature map + object_queries of shape NxCxHxW to HWxNxC, and permute it to NxHWxC
         # In other words, turn their shape into ( sequence_length, batch_size, hidden_size)
-        flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        object_queries = object_queries_list[-1].flatten(2).permute(0, 2, 1)
+        flattened_features = projected_feature_map.flatten(2).transpose(1, 2)
+        object_queries = object_queries_list[-1].flatten(2).transpose(1, 2)
         reference_position_embeddings = self.query_refpoint_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
 
         # Fourth, sent flattened_features + flattened_mask + object_queries through encoder

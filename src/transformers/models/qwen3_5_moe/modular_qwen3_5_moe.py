@@ -17,10 +17,11 @@ import torch
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, no_inherit_decorator
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
@@ -98,6 +99,11 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
+        "layers.*.linear_attn.in_proj_qkv": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_z": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_b": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_a": "colwise_gather_output",
+        "layers.*.linear_attn.out_proj": "colwise_gather_output",
     }
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
 
@@ -155,10 +161,13 @@ class Qwen3_5MoeTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
     pass
 
 
+# Same GDN core as the dense variant, so it reuses the dense Hub kernel name.
+@use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
 class Qwen3_5MoeGatedDeltaNet(Qwen3_5GatedDeltaNet):
     pass
 
 
+@no_inherit_decorator
 class Qwen3_5MoeAttention(Qwen3NextAttention):
     pass
 
@@ -187,10 +196,10 @@ class Qwen3_5MoeDecoderLayer(Qwen3NextDecoderLayer):
     def __init__(self, config: Qwen3_5MoeTextConfig, layer_idx: int):
         GradientCheckpointingLayer.__init__(self)
         self.hidden_size = config.hidden_size
-        self.layer_type = config.layer_types[layer_idx]
-        if self.layer_type == "linear_attention":
+        self.block_type = config.layer_types[layer_idx]
+        if self.block_type == "linear_attention":
             self.linear_attn = Qwen3_5MoeGatedDeltaNet(config, layer_idx)
-        elif self.layer_type == "full_attention":
+        elif self.block_type == "full_attention":
             self.self_attn = Qwen3_5MoeAttention(config, layer_idx)
         self.mlp = Qwen3_5MoeSparseMoeBlock(config)
         self.input_layernorm = Qwen3_5MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -263,8 +272,6 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
 
         Example:
         ```python
-        >>> from PIL import Image
-        >>> import requests
         >>> from transformers import AutoProcessor, Qwen3_5MoeForConditionalGeneration
 
         >>> model = Qwen3_5MoeForConditionalGeneration.from_pretrained("Qwen/Qwen3.5-35B-A3B-Instruct", dtype="auto", device_map="auto")
