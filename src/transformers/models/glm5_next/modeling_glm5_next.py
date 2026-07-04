@@ -41,6 +41,241 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_glm5_next import Glm5NextConfig
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class Glm5NextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Glm5NextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class Glm5NextRMSNormGated(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6, **kwargs):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+        self.activation = "sigmoid"  # TODO: config value?
+
+    def forward(self, hidden_states, gate=None):
+        input_dtype = hidden_states.dtype
+
+        # Strict FP32 norm (do not downcast on the weights)
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = self.weight.to(torch.float32) * hidden_states
+
+        # Apply gating
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
+
+        return hidden_states.to(input_dtype)
+
+
+class Glm5NextMLP(nn.Module):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.swiglu_limit = config.swiglu_limit
+
+    def forward(self, x):
+        gate = self.gate_proj(x)
+        up = self.up_proj(x)
+        # Optional clamping
+        if self.swiglu_limit is not None:
+            gate = gate.clamp(min=None, max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        return self.down_proj(self.act_fn(gate) * up)
+
+
+@use_experts_implementation
+class Glm5NextExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.moe_intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.swiglu_limit = config.swiglu_limit
+
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
+        final = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(mask[expert_idx])
+            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
+            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
+            final.index_add_(0, token_idx, current.to(final.dtype))
+        return final
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        # Optional clamping
+        if self.swiglu_limit is not None:
+            gate = gate.clamp(min=None, max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Simple swiglu instead of alpha
+        return F.silu(gate) * up
+
+
+class Glm5NextTopkRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.num_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        scores = router_logits.sigmoid()
+        scores_for_choice = scores + self.e_score_correction_bias
+        group_scores = (
+            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
+            .reshape(-1, self.num_experts)
+        )
+        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        topk_weights = scores.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return router_logits, topk_weights, topk_indices
+
+
+class Glm5NextMoE(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+    """
+
+    def __init__(self, config: Glm5NextConfig):
+        super().__init__()
+        self.config = config
+        self.experts = Glm5NextExperts(config)
+        self.gate = Glm5NextTopkRouter(config)
+        self.shared_experts = Glm5NextMLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, topk_weights, topk_indices = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
+
+
+class Glm5NextRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: Glm5NextConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Glm5NextConfig | None = None,
+        device: torch.device | None = None,
+        seq_len: int | None = None,
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        head_dim = config.qk_rope_head_dim
+        attention_factor = 1.0
+        if head_dim == 0:
+            return torch.empty(0, device=device), attention_factor
+
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
 class Glm5NextUnweightedRMSNorm(nn.Module):
     def __init__(self, eps: float = 1.0e-6):
         super().__init__()
@@ -136,62 +371,6 @@ class Glm5NextHyperHead(nn.Module):
         return hidden_streams.mean(dim=2)
 
 
-# =============================================================================
-# Cache
-# =============================================================================
-
-
-class Glm5NextAttentionCacheLayer(DynamicLayer):
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        super().reorder_cache(beam_idx)
-        for attribute_name in ("indexer_keys", "indexer_gate_scores"):
-            state = getattr(self, attribute_name, None)
-            if state is not None:
-                setattr(
-                    self,
-                    attribute_name,
-                    state.index_select(0, beam_idx.to(state.device)),
-                )
-
-    def crop(self, max_length: int) -> None:
-        if max_length < 0:
-            max_length = self.get_seq_length() - abs(max_length)
-        super().crop(max_length)
-        for attribute_name in ("indexer_keys", "indexer_gate_scores"):
-            state = getattr(self, attribute_name, None)
-            if state is not None:
-                setattr(self, attribute_name, state[:, :max_length])
-
-
-class Glm5NextDynamicCache(DynamicCache):
-    def __init__(self, *args, config: Glm5NextConfig | None = None, **kwargs):
-        super().__init__(*args, config=config, **kwargs)
-        if config is not None:
-            for layer_idx, layer_type in enumerate(config.layer_types):
-                if layer_type == "linear_attention":
-                    self.layers[layer_idx] = LinearAttentionLayer(config)
-                else:
-                    self.layers[layer_idx] = Glm5NextAttentionCacheLayer(config)
-
-
-class Glm5NextRMSNormGated(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6, **kwargs):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states, gate=None):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        # Norm before gate
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = self.weight * hidden_states.to(input_dtype)
-        # Key difference recast on mul (not after) and use sigmoid instead of silu
-        hidden_states = hidden_states.to(input_dtype) * torch.sigmoid(gate.float()).to(input_dtype)
-        return hidden_states
-
-
 class Glm5NextForgetGate(nn.Module):
     def __init__(self, config: Glm5NextConfig):
         super().__init__()
@@ -222,14 +401,35 @@ class Glm5NextForgetGate(nn.Module):
         return -torch.exp(A_log) * sp
 
 
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
+
+
+# =============================================================================
+# KDA Linear Attention
+# =============================================================================
+
+
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
-    """This function is intended to align with the l2norm implementation in the FLA library."""
+    """
+    This function is intended to align with the l2norm implementation in the FLA library.
+
     # NOTE: FLA compares against `F.normalize` but does + eps instead of max(..., eps) leading to a slight differences
-    norm = torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)
-    return x / norm
+    """
+    # main difference to qwen's gdn variation: intentionally use sqrt and / to match original triton
+    inv_norm = torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)
+    return x / inv_norm
 
 
-def torch_recurrent_kimi_delta_rule(
+def torch_recurrent_kimi_delta_attention(
     query, key, value, g, beta, initial_state, output_final_state, use_qk_l2norm_in_kernel=False
 ):
     # calculations happen in float as states are more susceptible to rounding errors
@@ -274,7 +474,7 @@ def torch_recurrent_kimi_delta_rule(
     return core_attn_out.to(initial_dtype), last_recurrent_state if output_final_state else None
 
 
-def torch_chunk_kimi_delta_rule(
+def torch_chunk_kimi_delta_attention(
     query,
     key,
     value,
@@ -412,18 +612,6 @@ def torch_causal_conv1d_fn(
     return ACT2FN[activation](out).to(hidden_states.dtype)
 
 
-def apply_mask_to_padding_states(hidden_states, attention_mask):
-    """
-    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
-    """
-    # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
-        dtype = hidden_states.dtype
-        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-
-    return hidden_states
-
-
 class Glm5NextLinearAttention(nn.Module):
     """Kimi-style KDA (Kimi Linear Attention) for GLM-5-Next."""
 
@@ -547,7 +735,7 @@ class Glm5NextLinearAttention(nn.Module):
 
         # KDA
         if use_precomputed_states and seq_len == 1:
-            core_attn_out, last_recurrent_state = torch_recurrent_kimi_delta_rule(
+            core_attn_out, last_recurrent_state = torch_recurrent_kimi_delta_attention(
                 query,
                 key,
                 value,
@@ -558,7 +746,7 @@ class Glm5NextLinearAttention(nn.Module):
                 use_qk_l2norm_in_kernel=True,
             )
         else:
-            core_attn_out, last_recurrent_state = torch_chunk_kimi_delta_rule(
+            core_attn_out, last_recurrent_state = torch_chunk_kimi_delta_attention(
                 query,
                 key,
                 value,
@@ -580,6 +768,44 @@ class Glm5NextLinearAttention(nn.Module):
         output = self.o_proj(output)
 
         return output, None, None
+
+
+# =============================================================================
+# Cache
+# =============================================================================
+
+
+class Glm5NextAttentionCacheLayer(DynamicLayer):
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for attribute_name in ("indexer_keys", "indexer_gate_scores"):
+            state = getattr(self, attribute_name, None)
+            if state is not None:
+                setattr(
+                    self,
+                    attribute_name,
+                    state.index_select(0, beam_idx.to(state.device)),
+                )
+
+    def crop(self, max_length: int) -> None:
+        if max_length < 0:
+            max_length = self.get_seq_length() - abs(max_length)
+        super().crop(max_length)
+        for attribute_name in ("indexer_keys", "indexer_gate_scores"):
+            state = getattr(self, attribute_name, None)
+            if state is not None:
+                setattr(self, attribute_name, state[:, :max_length])
+
+
+class Glm5NextDynamicCache(DynamicCache):
+    def __init__(self, *args, config: Glm5NextConfig | None = None, **kwargs):
+        super().__init__(*args, config=config, **kwargs)
+        if config is not None:
+            for layer_idx, layer_type in enumerate(config.layer_types):
+                if layer_type == "linear_attention":
+                    self.layers[layer_idx] = LinearAttentionLayer(config)
+                else:
+                    self.layers[layer_idx] = Glm5NextAttentionCacheLayer(config)
 
 
 def rotate_half(x):
@@ -1113,154 +1339,6 @@ class Glm5NextAttention(nn.Module):
         return attn_output, attn_weights, topk_indices if self.next_skip_topk else None
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class Glm5NextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        Glm5NextRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class Glm5NextMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-        self.swiglu_limit = config.swiglu_limit
-
-    def forward(self, x):
-        gate = self.gate_proj(x)
-        up = self.up_proj(x)
-        # Optional clamping
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        return self.down_proj(self.act_fn(gate) * up)
-
-
-@use_experts_implementation
-class Glm5NextExperts(nn.Module):
-    """Collection of expert weights stored as 3D tensors."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.moe_intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.swiglu_limit = config.swiglu_limit
-
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
-            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(mask[expert_idx])
-            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
-            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
-
-    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up.chunk(2, dim=-1)
-        # Optional clamping
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        # Simple swiglu instead of alpha
-        return F.silu(gate) * up
-
-
-class Glm5NextTopkRouter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.num_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.sigmoid()
-        scores_for_choice = scores + self.e_score_correction_bias
-        group_scores = (
-            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
-        )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(-1, self.num_group, self.num_experts // self.num_group)
-            .reshape(-1, self.num_experts)
-        )
-        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
-
-
-class Glm5NextMoE(nn.Module):
-    """
-    A mixed expert module containing shared experts.
-    """
-
-    def __init__(self, config: Glm5NextConfig):
-        super().__init__()
-        self.config = config
-        self.experts = Glm5NextExperts(config)
-        self.gate = Glm5NextTopkRouter(config)
-        self.shared_experts = Glm5NextMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-        )
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
-
-
 class Glm5NextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Glm5NextConfig, layer_idx: int):
         super().__init__()
@@ -1331,7 +1409,7 @@ class Glm5NextDecoderLayer(GradientCheckpointingLayer):
 
 
 # =============================================================================
-# PreTrainedModel, RotaryEmbedding, Model, CausalLM
+# PreTrainedModel, Model, CausalLM
 # =============================================================================
 
 
@@ -1373,71 +1451,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         #    nn.init.normal_(module.fn, mean=0.0, std=0.02)
         #    nn.init.zeros_(module.base)
         #    nn.init.ones_(module.scale)
-
-
-class Glm5NextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: Glm5NextConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Glm5NextConfig | None = None,
-        device: torch.device | None = None,
-        seq_len: int | None = None,
-    ) -> tuple[torch.Tensor, float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        head_dim = config.qk_rope_head_dim
-        attention_factor = 1.0
-        if head_dim == 0:
-            return torch.empty(0, device=device), attention_factor
-
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 @auto_docstring

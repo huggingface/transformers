@@ -41,10 +41,97 @@ from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
 from ..mixtral.modeling_mixtral import MixtralForCausalLM
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNormGated
+from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
 from .configuration_glm5_next import Glm5NextConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+# =============================================================================
+# RMSNorm(Gated), MLP, MoE, RoPE
+# =============================================================================
+
+
+class Glm5NextRMSNorm(LlamaRMSNorm):
+    pass
+
+
+class Glm5NextRMSNormGated(Qwen3_5RMSNormGated):
+    def __init__(self, hidden_size, eps=1e-6, **kwargs):
+        super().__init__(hidden_size, eps, kwargs)
+        self.activation = "sigmoid"  # TODO: config value?
+
+    def forward(self, hidden_states, gate=None):
+        input_dtype = hidden_states.dtype
+
+        # Strict FP32 norm (do not downcast on the weights)
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = self.weight.to(torch.float32) * hidden_states
+
+        # Apply gating
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
+
+        return hidden_states.to(input_dtype)
+
+
+class Glm5NextMLP(Qwen2MoeMLP):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__(config)
+        self.swiglu_limit = config.swiglu_limit
+
+    def forward(self, x):
+        gate = self.gate_proj(x)
+        up = self.up_proj(x)
+        # Optional clamping
+        if self.swiglu_limit is not None:
+            gate = gate.clamp(min=None, max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        return self.down_proj(self.act_fn(gate) * up)
+
+
+class Glm5NextExperts(MiniMaxM3VLExperts):
+    def __init__(self, config):
+        super().__init__(config)
+        del self.limit
+        del self.swiglu_alpha
+        self.intermediate_dim = config.moe_intermediate_size
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        # Optional clamping
+        if self.swiglu_limit is not None:
+            gate = gate.clamp(min=None, max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Simple swiglu instead of alpha
+        return F.silu(gate) * up
+
+
+class Glm5NextMoE(DeepseekV3MoE):
+    pass
+
+
+class Glm5NextRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Glm5NextConfig | None = None,
+        device: torch.device | None = None,
+        seq_len: int | None = None,
+    ) -> tuple[torch.Tensor, float]:
+        base = config.rope_parameters["rope_theta"]
+        head_dim = config.qk_rope_head_dim
+        attention_factor = 1.0
+        if head_dim == 0:
+            return torch.empty(0, device=device), attention_factor
+
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
+        )
+        return inv_freq, attention_factor
 
 
 def apply_rotary_pos_emb_to_single(
@@ -85,99 +172,22 @@ class Glm5NextHyperHead(nn.Module):
 
 
 # =============================================================================
-# Cache
-# =============================================================================
-
-
-class Glm5NextAttentionCacheLayer(DynamicLayer):
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        super().reorder_cache(beam_idx)
-        for attribute_name in ("indexer_keys", "indexer_gate_scores"):
-            state = getattr(self, attribute_name, None)
-            if state is not None:
-                setattr(
-                    self,
-                    attribute_name,
-                    state.index_select(0, beam_idx.to(state.device)),
-                )
-
-    def crop(self, max_length: int) -> None:
-        if max_length < 0:
-            max_length = self.get_seq_length() - abs(max_length)
-        super().crop(max_length)
-        for attribute_name in ("indexer_keys", "indexer_gate_scores"):
-            state = getattr(self, attribute_name, None)
-            if state is not None:
-                setattr(self, attribute_name, state[:, :max_length])
-
-
-class Glm5NextDynamicCache(DynamicCache):
-    def __init__(self, *args, config: Glm5NextConfig | None = None, **kwargs):
-        super().__init__(*args, config=config, **kwargs)
-        if config is not None:
-            for layer_idx, layer_type in enumerate(config.layer_types):
-                if layer_type == "linear_attention":
-                    self.layers[layer_idx] = LinearAttentionLayer(config)
-                else:
-                    self.layers[layer_idx] = Glm5NextAttentionCacheLayer(config)
-
-
-# =============================================================================
 # KDA Linear Attention
 # =============================================================================
 
 
-class Glm5NextRMSNormGated(Qwen3_5RMSNormGated):
-    def forward(self, hidden_states, gate=None):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        # Norm before gate
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = self.weight * hidden_states.to(input_dtype)
-        # Key difference recast on mul (not after) and use sigmoid instead of silu
-        hidden_states = hidden_states.to(input_dtype) * torch.sigmoid(gate.float()).to(input_dtype)
-        return hidden_states
-
-
-class Glm5NextForgetGate(nn.Module):
-    def __init__(self, config: Glm5NextConfig):
-        super().__init__()
-        linear_attn_config = config.linear_attn_config
-        self.head_dim = linear_attn_config["head_dim"]
-        self.num_heads = linear_attn_config["num_heads"]
-        self.safe_gate = linear_attn_config.get("safe_gate", False)
-        self.safe_gate_lower_bound = linear_attn_config.get("lower_bound", None)
-        qk_projection_size = self.head_dim * self.num_heads
-        self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
-        self.f_b_proj = nn.Linear(self.head_dim, qk_projection_size, bias=False)
-        self.dt_bias = nn.Parameter(torch.empty(qk_projection_size, dtype=torch.float32))
-        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        forget_gate = self.f_b_proj(self.f_a_proj(hidden_states))
-        batch_size, seq_len = forget_gate.shape[:2]
-        g = forget_gate.float() + self.dt_bias.view(1, 1, -1)
-        g = g.view(batch_size, seq_len, self.num_heads, self.head_dim)
-        A_log = self.A_log.float().view(1, 1, self.num_heads, 1)
-
-        if self.safe_gate and self.safe_gate_lower_bound is not None:
-            return self.safe_gate_lower_bound * torch.sigmoid(torch.exp(A_log) * g)
-
-        threshold = 20.0
-        g_linear = g > threshold
-        sp = torch.where(g_linear, g, torch.log(1.0 + torch.exp(g)))
-        return -torch.exp(A_log) * sp
-
-
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
-    """This function is intended to align with the l2norm implementation in the FLA library."""
+    """
+    This function is intended to align with the l2norm implementation in the FLA library.
+
     # NOTE: FLA compares against `F.normalize` but does + eps instead of max(..., eps) leading to a slight differences
-    norm = torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)
-    return x / norm
+    """
+    # main difference to qwen's gdn variation: intentionally use sqrt and / to match original triton
+    inv_norm = torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)
+    return x / inv_norm
 
 
-def torch_recurrent_kimi_delta_rule(
+def torch_recurrent_kimi_delta_attention(
     query, key, value, g, beta, initial_state, output_final_state, use_qk_l2norm_in_kernel=False
 ):
     # calculations happen in float as states are more susceptible to rounding errors
@@ -222,7 +232,7 @@ def torch_recurrent_kimi_delta_rule(
     return core_attn_out.to(initial_dtype), last_recurrent_state if output_final_state else None
 
 
-def torch_chunk_kimi_delta_rule(
+def torch_chunk_kimi_delta_attention(
     query,
     key,
     value,
@@ -360,16 +370,34 @@ def torch_causal_conv1d_fn(
     return ACT2FN[activation](out).to(hidden_states.dtype)
 
 
-def apply_mask_to_padding_states(hidden_states, attention_mask):
-    """
-    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
-    """
-    # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
-        dtype = hidden_states.dtype
-        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+class Glm5NextForgetGate(nn.Module):
+    def __init__(self, config: Glm5NextConfig):
+        super().__init__()
+        linear_attn_config = config.linear_attn_config
+        self.head_dim = linear_attn_config["head_dim"]
+        self.num_heads = linear_attn_config["num_heads"]
+        self.safe_gate = linear_attn_config.get("safe_gate", False)
+        self.safe_gate_lower_bound = linear_attn_config.get("lower_bound", None)
+        qk_projection_size = self.head_dim * self.num_heads
+        self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.f_b_proj = nn.Linear(self.head_dim, qk_projection_size, bias=False)
+        self.dt_bias = nn.Parameter(torch.empty(qk_projection_size, dtype=torch.float32))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
 
-    return hidden_states
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        forget_gate = self.f_b_proj(self.f_a_proj(hidden_states))
+        batch_size, seq_len = forget_gate.shape[:2]
+        g = forget_gate.float() + self.dt_bias.view(1, 1, -1)
+        g = g.view(batch_size, seq_len, self.num_heads, self.head_dim)
+        A_log = self.A_log.float().view(1, 1, self.num_heads, 1)
+
+        if self.safe_gate and self.safe_gate_lower_bound is not None:
+            return self.safe_gate_lower_bound * torch.sigmoid(torch.exp(A_log) * g)
+
+        threshold = 20.0
+        g_linear = g > threshold
+        sp = torch.where(g_linear, g, torch.log(1.0 + torch.exp(g)))
+        return -torch.exp(A_log) * sp
 
 
 class Glm5NextLinearAttention(nn.Module):
@@ -495,7 +523,7 @@ class Glm5NextLinearAttention(nn.Module):
 
         # KDA
         if use_precomputed_states and seq_len == 1:
-            core_attn_out, last_recurrent_state = torch_recurrent_kimi_delta_rule(
+            core_attn_out, last_recurrent_state = torch_recurrent_kimi_delta_attention(
                 query,
                 key,
                 value,
@@ -506,7 +534,7 @@ class Glm5NextLinearAttention(nn.Module):
                 use_qk_l2norm_in_kernel=True,
             )
         else:
-            core_attn_out, last_recurrent_state = torch_chunk_kimi_delta_rule(
+            core_attn_out, last_recurrent_state = torch_chunk_kimi_delta_attention(
                 query,
                 key,
                 value,
@@ -528,6 +556,44 @@ class Glm5NextLinearAttention(nn.Module):
         output = self.o_proj(output)
 
         return output, None, None
+
+
+# =============================================================================
+# Cache
+# =============================================================================
+
+
+class Glm5NextAttentionCacheLayer(DynamicLayer):
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for attribute_name in ("indexer_keys", "indexer_gate_scores"):
+            state = getattr(self, attribute_name, None)
+            if state is not None:
+                setattr(
+                    self,
+                    attribute_name,
+                    state.index_select(0, beam_idx.to(state.device)),
+                )
+
+    def crop(self, max_length: int) -> None:
+        if max_length < 0:
+            max_length = self.get_seq_length() - abs(max_length)
+        super().crop(max_length)
+        for attribute_name in ("indexer_keys", "indexer_gate_scores"):
+            state = getattr(self, attribute_name, None)
+            if state is not None:
+                setattr(self, attribute_name, state[:, :max_length])
+
+
+class Glm5NextDynamicCache(DynamicCache):
+    def __init__(self, *args, config: Glm5NextConfig | None = None, **kwargs):
+        super().__init__(*args, config=config, **kwargs)
+        if config is not None:
+            for layer_idx, layer_type in enumerate(config.layer_types):
+                if layer_type == "linear_attention":
+                    self.layers[layer_idx] = LinearAttentionLayer(config)
+                else:
+                    self.layers[layer_idx] = Glm5NextAttentionCacheLayer(config)
 
 
 # =============================================================================
@@ -971,51 +1037,6 @@ class Glm5NextAttention(nn.Module):
 
 
 # =============================================================================
-# RMSNorm, MLP, MoE
-# =============================================================================
-
-
-class Glm5NextRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class Glm5NextMLP(Qwen2MoeMLP):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__(config)
-        self.swiglu_limit = config.swiglu_limit
-
-    def forward(self, x):
-        gate = self.gate_proj(x)
-        up = self.up_proj(x)
-        # Optional clamping
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        return self.down_proj(self.act_fn(gate) * up)
-
-
-class Glm5NextExperts(MiniMaxM3VLExperts):
-    def __init__(self, config):
-        super().__init__(config)
-        del self.limit
-        del self.swiglu_alpha
-        self.intermediate_dim = config.moe_intermediate_size
-
-    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up.chunk(2, dim=-1)
-        # Optional clamping
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        # Simple swiglu instead of alpha
-        return F.silu(gate) * up
-
-
-class Glm5NextMoE(DeepseekV3MoE):
-    pass
-
-
-# =============================================================================
 # Decoder Layer
 # =============================================================================
 
@@ -1080,7 +1101,7 @@ class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
 
 
 # =============================================================================
-# PreTrainedModel, RotaryEmbedding, Model, CausalLM
+# PreTrainedModel, Model, CausalLM
 # =============================================================================
 
 
@@ -1122,27 +1143,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         #    nn.init.normal_(module.fn, mean=0.0, std=0.02)
         #    nn.init.zeros_(module.base)
         #    nn.init.ones_(module.scale)
-
-
-class Glm5NextRotaryEmbedding(LlamaRotaryEmbedding):
-    pass
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Glm5NextConfig | None = None,
-        device: torch.device | None = None,
-        seq_len: int | None = None,
-    ) -> tuple[torch.Tensor, float]:
-        base = config.rope_parameters["rope_theta"]
-        head_dim = config.qk_rope_head_dim
-        attention_factor = 1.0
-        if head_dim == 0:
-            return torch.empty(0, device=device), attention_factor
-
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
-        )
-        return inv_freq, attention_factor
 
 
 @auto_docstring
