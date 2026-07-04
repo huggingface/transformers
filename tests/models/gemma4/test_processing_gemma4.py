@@ -244,7 +244,11 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         outputs = processor(text=f"{processor.audio_token} Transcribe this.", audio=audio, return_tensors="np")
         self.assertGreater(np.sum(outputs["input_ids"] == processor.audio_token_id), 0)
 
-        batch_audio = [np.zeros(1600, dtype=np.float32), np.zeros(3200, dtype=np.float32), np.zeros(4800, dtype=np.float32)]
+        batch_audio = [
+            np.zeros(1600, dtype=np.float32),
+            np.zeros(3200, dtype=np.float32),
+            np.zeros(4800, dtype=np.float32),
+        ]
         outputs = processor(
             text=[processor.audio_token, f"{processor.audio_token} {processor.audio_token}"],
             audio=batch_audio,
