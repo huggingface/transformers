@@ -341,31 +341,34 @@ def torch_chunk_kimi_delta_attention(
 class Glm5NextForgetGate(nn.Module):
     def __init__(self, config: Glm5NextConfig):
         super().__init__()
-        linear_attn_config = config.linear_attn_config
-        self.head_dim = linear_attn_config["head_dim"]
-        self.num_heads = linear_attn_config["num_heads"]
-        self.safe_gate = linear_attn_config.get("safe_gate", False)
-        self.safe_gate_lower_bound = linear_attn_config.get("lower_bound", None)
-        qk_projection_size = self.head_dim * self.num_heads
+        self.head_dim = config.linear_attn_config["head_dim"]
+        self.num_heads = config.linear_attn_config["num_heads"]
+        self.qkv_dim = self.head_dim * self.num_heads
+
         self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
-        self.f_b_proj = nn.Linear(self.head_dim, qk_projection_size, bias=False)
-        self.dt_bias = nn.Parameter(torch.empty(qk_projection_size, dtype=torch.float32))
+        self.f_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
         self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
 
+        self.safe_gate_lower_bound = config.linear_attn_config.get("lower_bound", None)
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_shape = (*hidden_states.shape[:2], -1, self.head_dim)
+
         forget_gate = self.f_b_proj(self.f_a_proj(hidden_states))
-        batch_size, seq_len = forget_gate.shape[:2]
-        g = forget_gate.float() + self.dt_bias.view(1, 1, -1)
-        g = g.view(batch_size, seq_len, self.num_heads, self.head_dim)
+        g = (forget_gate.float() + self.dt_bias.float().view(1, 1, -1)).view(hidden_shape)
         A_log = self.A_log.float().view(1, 1, self.num_heads, 1)
+        decay_rate = torch.exp(A_log)
 
-        if self.safe_gate and self.safe_gate_lower_bound is not None:
-            return self.safe_gate_lower_bound * torch.sigmoid(torch.exp(A_log) * g)
+        # Safe lower bound decay
+        if self.safe_gate_lower_bound is not None:
+            return self.safe_gate_lower_bound * torch.sigmoid(decay_rate * g)
 
-        threshold = 20.0
-        g_linear = g > threshold
-        sp = torch.where(g_linear, g, torch.log(1.0 + torch.exp(g)))
-        return -torch.exp(A_log) * sp
+        # Softplus "log(1 + exp(x))" with uper bound restraint to avoid overflows
+        # NOTE: Softplus for larger values (e.g. 20+), Softplus(x) == x
+        g_softplus = torch.where(g > 20.0, g, torch.log(1.0 + torch.exp(g)))
+
+        return -decay_rate * g_softplus
 
 
 class Glm5NextLinearAttention(nn.Module):
@@ -425,7 +428,7 @@ class Glm5NextLinearAttention(nn.Module):
             ]
         )
 
-        # TODO: fixup causal conv
+        # TODO: fixup causal conv -> FLA always returns a tuple and needs transposed layout (T, D) not (D, T) as currently
         # self.causal_conv1d_fn = causal_conv1d_fn or torch_causal_conv1d_fn
         # self.causal_conv1d_update = causal_conv1d_update or torch_causal_conv1d_update
         # TODO: kernels drift a bit which is expected, keeping torch for easier comparisons
@@ -489,7 +492,7 @@ class Glm5NextLinearAttention(nn.Module):
                 weight=self.conv1d.weight.squeeze(1),
                 bias=self.conv1d.bias,
                 activation=self.activation,
-                seq_idx=kwargs.get("seq_idx"),
+                seq_idx=kwargs.get("seq_idx"),  # TODO: cu seqlens under FLA
             )
 
             # Cut out any tail
