@@ -63,7 +63,7 @@ class Serve:
                     "this flag has no effect."
                 )
             ),
-        ] = ReasoningMode.AUTO,
+        ] = ReasoningMode.AUTO.value,
         chat_template_kwargs: Annotated[
             str | None,
             typer.Option(
