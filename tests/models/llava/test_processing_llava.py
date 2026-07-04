@@ -63,7 +63,11 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_can_load_various_tokenizers(self):
-        for checkpoint in ["Intel/llava-gemma-2b", "llava-hf/llava-1.5-7b-hf"]:
+        # Use tiny repos to avoid loading full 256k-vocab Gemma and 32k-vocab LLaMA tokenizers
+        for checkpoint in [
+            "hf-internal-testing/tiny-processor-llava-gemma",
+            "hf-internal-testing/tiny-processor-llava",
+        ]:
             processor = LlavaProcessor.from_pretrained(checkpoint)
             tokenizer = AutoTokenizer.from_pretrained(checkpoint)
             self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
@@ -71,7 +75,7 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
 
-        processor = LlavaProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        processor = LlavaProcessor.from_pretrained("hf-internal-testing/tiny-processor-llava")
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
