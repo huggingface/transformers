@@ -32,6 +32,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
+    require_scipy,
     require_timm,
     require_torch,
     require_torch_accelerator,
@@ -869,3 +870,53 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             torch.testing.assert_close(outputs.loss_dict[key], expected_loss_dict[key], rtol=1e-5, atol=1e-3)
 
         self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-3))
+
+
+@require_torch
+@require_scipy
+class GroundingDinoHungarianMatcherInfeasibleCostTest(unittest.TestCase):
+    def test_non_finite_costs_do_not_crash_matcher(self):
+        """
+        Regression test for the Grounding DINO Hungarian matcher. Its sigmoid focal classification
+        cost can overflow to inf/NaN (e.g. fp16 saturation under AMP, see #47000), which used to make
+        ``scipy.optimize.linear_sum_assignment`` raise ``ValueError: cost matrix is infeasible``. The
+        matcher now replaces non-finite costs with a large finite value before matching.
+        """
+        from transformers.loss.loss_grounding_dino import GroundingDinoHungarianMatcher
+
+        torch.manual_seed(0)
+        matcher = GroundingDinoHungarianMatcher(class_cost=1, bbox_cost=5, giou_cost=2)
+
+        num_queries, hidden_dim, num_classes, num_targets = 5, 6, 4, 3
+        targets = [
+            {
+                "class_labels": torch.arange(num_targets),
+                "boxes": torch.rand(num_targets, 4) * 0.5 + 0.25,
+            }
+        ]
+        # Per-class token maps (one map per batch element), normalized inside the matcher.
+        label_maps = (torch.rand(num_classes, hidden_dim),)
+
+        def base_inputs():
+            return (
+                torch.randn(1, num_queries, hidden_dim),
+                torch.rand(1, num_queries, 4) * 0.5 + 0.25,
+            )
+
+        cases = []
+        logits, pred_boxes = base_inputs()
+        logits[0, 0, 0] = float("nan")
+        cases.append((logits, pred_boxes))
+        logits, pred_boxes = base_inputs()
+        pred_boxes[0, 0, 2] = float("inf")
+        cases.append((logits, pred_boxes))
+
+        for logits, pred_boxes in cases:
+            outputs = {"logits": logits, "pred_boxes": pred_boxes, "label_maps": label_maps}
+
+            indices = matcher(outputs, targets)
+
+            self.assertEqual(len(indices), 1)
+            row_indices, col_indices = indices[0]
+            self.assertEqual(len(row_indices), num_targets)
+            self.assertEqual(len(col_indices), num_targets)

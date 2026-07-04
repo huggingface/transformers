@@ -22,7 +22,15 @@ from functools import cached_property
 from parameterized import parameterized
 
 from transformers import DetrConfig, ResNetConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import Expectations, require_timm, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    require_scipy,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -733,3 +741,55 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertEqual(predicted_first_segment["label_id"], expected_first_segment["label_id"])
         self.assertEqual(predicted_first_segment["was_fused"], expected_first_segment["was_fused"])
         self.assertAlmostEqual(predicted_first_segment["score"], expected_first_segment["score"], places=3)
+
+
+@require_torch
+@require_scipy
+class HungarianMatcherInfeasibleCostTest(unittest.TestCase):
+    def test_non_finite_costs_do_not_crash_matcher(self):
+        """
+        Regression test for the object-detection Hungarian matcher. When the cost matrix contains
+        non-finite values (e.g. inf/NaN propagated from the model outputs, as happens with fp16
+        overflow under AMP, see #47000), ``scipy.optimize.linear_sum_assignment`` used to raise
+        ``ValueError: cost matrix is infeasible``. The matcher now replaces non-finite costs with a
+        large finite value before matching.
+        """
+        from transformers.loss.loss_for_object_detection import HungarianMatcher
+
+        torch.manual_seed(0)
+        matcher = HungarianMatcher(class_cost=1, bbox_cost=5, giou_cost=2)
+
+        num_queries, num_classes, num_targets = 5, 4, 3
+        # Boxes in normalized center format (cx, cy, w, h) with strictly positive width/height.
+        targets = [
+            {
+                "class_labels": torch.arange(num_targets),
+                "boxes": torch.rand(num_targets, 4) * 0.5 + 0.25,
+            }
+        ]
+
+        # NaN in the logits poisons the classification cost; +inf on a box width poisons the L1/GIoU
+        # cost. Either leaves a non-finite cost matrix that used to make scipy raise.
+        def base_inputs():
+            return (
+                torch.randn(1, num_queries, num_classes),
+                torch.rand(1, num_queries, 4) * 0.5 + 0.25,
+            )
+
+        cases = []
+        logits, pred_boxes = base_inputs()
+        logits[0, 0, 0] = float("nan")
+        cases.append((logits, pred_boxes))
+        logits, pred_boxes = base_inputs()
+        pred_boxes[0, 0, 2] = float("inf")
+        cases.append((logits, pred_boxes))
+
+        for logits, pred_boxes in cases:
+            outputs = {"logits": logits, "pred_boxes": pred_boxes}
+
+            indices = matcher(outputs, targets)
+
+            self.assertEqual(len(indices), 1)
+            row_indices, col_indices = indices[0]
+            self.assertEqual(len(row_indices), num_targets)
+            self.assertEqual(len(col_indices), num_targets)
