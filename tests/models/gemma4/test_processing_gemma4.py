@@ -41,6 +41,7 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
+        cls.audio_token = processor.audio_token
 
     @classmethod
     def _setup_video_processor(cls):
@@ -230,6 +231,45 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         audio_lengths = list(expected_num_tokens)
         num_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)["num_audio_tokens"]
         self.assertListEqual(num_from_helper, list(expected_num_tokens.values()))
+
+    def test_audio_inputs_require_audio_tokens(self):
+        processor = self.get_processor()
+        audio = [np.zeros(1600, dtype=np.float32)]
+
+        with self.assertRaisesRegex(ValueError, "audio"):
+            processor(text="Transcribe this.", audio=audio, return_tensors="np")
+        with self.assertRaisesRegex(ValueError, "audio"):
+            processor(text=f"{processor.audio_token} Transcribe this.", return_tensors="np")
+
+        outputs = processor(text=f"{processor.audio_token} Transcribe this.", audio=audio, return_tensors="np")
+        self.assertGreater(np.sum(outputs["input_ids"] == processor.audio_token_id), 0)
+
+        batch_audio = [np.zeros(1600, dtype=np.float32), np.zeros(3200, dtype=np.float32), np.zeros(4800, dtype=np.float32)]
+        outputs = processor(
+            text=[processor.audio_token, f"{processor.audio_token} {processor.audio_token}"],
+            audio=batch_audio,
+            padding=True,
+            return_tensors="np",
+        )
+        self.assertEqual(outputs["input_features"].shape[0], len(batch_audio))
+
+    def test_text_only_input_without_audio_token(self):
+        processor = self.get_processor()
+        processor.audio_token = None
+
+        outputs = processor(text="hello", return_tensors="np")
+        self.assertIn("input_ids", outputs)
+        self.assertNotIn("input_features", outputs)
+
+    def test_textless_image_audio_inputs_add_both_placeholders(self):
+        processor = self.get_processor()
+        image = [[np.zeros((30, 30, 3), dtype=np.uint8)]]
+        audio = [np.zeros(1600, dtype=np.float32)]
+
+        outputs = processor(images=image, audio=audio, return_tensors="np")
+
+        self.assertGreater(np.sum(outputs["input_ids"] == processor.image_token_id), 0)
+        self.assertGreater(np.sum(outputs["input_ids"] == processor.audio_token_id), 0)
 
     @unittest.skip("This test seems to be loading a different video, check for all models and fix")
     def test_apply_chat_template_video_frame_sampling(self):
