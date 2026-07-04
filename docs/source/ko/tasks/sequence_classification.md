@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 이 가이드에서 학습할 내용은:
 
-1. [IMDb](https://huggingface.co/datasets/imdb) 데이터셋에서 [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased)를 파인 튜닝하여 영화 리뷰가 긍정적인지 부정적인지 판단합니다.
+1. [IMDb](https://huggingface.co/datasets/stanfordnlp/imdb) 데이터셋에서 [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased)를 파인 튜닝하여 영화 리뷰가 긍정적인지 부정적인지 판단합니다.
 2. 추론을 위해 파인 튜닝 모델을 사용합니다.
 
 <Tip>

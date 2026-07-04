@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 سيوضح لك هذا الدليل كيفية:
 
-1. ضبط [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) على مجموعة بيانات [IMDb](https://huggingface.co/datasets/imdb) لتحديد ما إذا كانت مراجعة الفيلم إيجابية أو سلبية.
+1. ضبط [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) على مجموعة بيانات [IMDb](https://huggingface.co/datasets/stanfordnlp/imdb) لتحديد ما إذا كانت مراجعة الفيلم إيجابية أو سلبية.
 2. استخدام نموذج الضبط الدقيق للتنبؤ.
 
 <Tip>
