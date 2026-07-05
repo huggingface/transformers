@@ -24,6 +24,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = JanusProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-janus"
     model_id = "deepseek-community/Janus-Pro-1B"
 
     @classmethod
