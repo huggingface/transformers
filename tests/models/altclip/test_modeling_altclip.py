@@ -293,8 +293,6 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     # AltCLIPTextModel has large embeddings relative to model size, so we need higher split percentages
     model_split_percents = [0.5, 0.8, 0.9]
 
-    # TODO (@SunMarc): Fix me
-    @unittest.skip(reason="It's broken.")
     def test_resize_tokens_embeddings(self):
         super().test_resize_tokens_embeddings()
 
