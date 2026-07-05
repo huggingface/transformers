@@ -132,10 +132,13 @@ def parse_durations(output: str) -> dict[str, float]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Aggregate processor test memory usage.")
     parser.add_argument("--python", default="python3", help="Python executable to use (default: python3)")
+    parser.add_argument("--min-delta", type=float, default=0.0, metavar="MB",
+                        help="Hide entries with |Delta MB| below this threshold (default: 0 = show all)")
     parser.add_argument("test_files", nargs="*", help="Test files to run (default: hardcoded list)")
     args = parser.parse_args()
 
     python = args.python
+    min_delta = args.min_delta
     test_files = args.test_files if args.test_files else DEFAULT_TEST_FILES
 
     if not test_files:
@@ -180,22 +183,30 @@ def main() -> None:
             seen.add(key)
             unique_rows.append(row)
 
+    # Apply min-delta filter for display (both tables)
+    display_rows = [r for r in unique_rows if abs(r["delta"]) >= min_delta]
+
     # -----------------------------------------------------------------------
     # Table 1: per-test
     # -----------------------------------------------------------------------
-    col_test = max(len(r["test"]) for r in unique_rows)
+    if not display_rows:
+        print(f"\nNo entries with |Delta MB| >= {min_delta}.")
+        return
+
+    col_test = max(len(r["test"]) for r in display_rows)
     col_test = max(col_test, 60)
 
+    filter_note = f" (|dMB| >= {min_delta})" if min_delta > 0 else ""
     print(
         f"\n{'='*120}\n"
-        f" PER-TEST MEMORY USAGE — {len(unique_rows)} entries across "
-        f"{len(test_files)} test file(s) — sorted by Delta MB\n"
+        f" PER-TEST MEMORY USAGE — {len(display_rows)} entries across "
+        f"{len(test_files)} test file(s) — sorted by Delta MB{filter_note}\n"
         f"{'='*120}"
     )
     print(f"{'Delta MB':>10}  {'End MB':>10}  {'Duration':>10}  {'Worker':>6}  Test")
     print(f"{'':->10}  {'':->10}  {'':->10}  {'':->6}  {'':-<{col_test}}")
 
-    for row in unique_rows:
+    for row in display_rows:
         test = row["test"]
         dur = all_durations.get(test)
         dur_str = f"{dur:.2f}s" if dur is not None else "n/a"
@@ -218,7 +229,7 @@ def main() -> None:
 
     # Build one entry per model (derived from each row's test path, not source_file)
     model_stats: dict[str, dict] = {}
-    for row in unique_rows:
+    for row in display_rows:
         mn = model_name(row["test"])
         if mn not in model_stats:
             model_stats[mn] = {"delta": row["delta"], "end_mb": row["end_mb"]}
@@ -250,7 +261,7 @@ def main() -> None:
     print(
         f"\n{'='*80}\n"
         f" PER-MODEL SUMMARY — max Delta MB & End MB per test file, "
-        f"total duration — sorted by Delta MB\n"
+        f"total duration — sorted by Delta MB{filter_note}\n"
         f"{'='*80}"
     )
     print(f"{'Delta MB':>10}  {'End MB':>10}  {'Total Dur':>10}  Model")
