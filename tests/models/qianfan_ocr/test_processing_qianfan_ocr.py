@@ -33,6 +33,7 @@ if is_torch_available():
 @require_vision
 class QianfanOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = QianfanOCRProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-qianfan_ocr"
     model_id = "bairongz/QianfanOCR"
     # QianfanOCR has no video support; images and pixel values share the same tensor key
     videos_input_name = "pixel_values"

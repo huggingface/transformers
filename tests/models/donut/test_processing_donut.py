@@ -21,6 +21,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 class DonutProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    tiny_model_id = "hf-internal-testing/tiny-processor-donut"
     model_id = "naver-clova-ix/donut-base"
     processor_class = DonutProcessor
 
