@@ -37,6 +37,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_vision
 class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ColQwen2Processor
+    tiny_model_id = "hf-internal-testing/tiny-processor-colqwen2"
     model_id = "vidore/colqwen2-v1.0-hf"
 
     @parameterized.expand([(1, "pt"), (2, "pt")])
