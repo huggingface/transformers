@@ -37,6 +37,7 @@ class LightOnOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     """Test suite for LightOnOcr processor."""
 
     processor_class = LightOnOcrProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-lighton_ocr"
     model_id = "lightonai/LightOnOCR-1B-1025"
 
     def setUp(self):
