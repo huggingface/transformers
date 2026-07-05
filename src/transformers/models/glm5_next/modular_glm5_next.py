@@ -844,36 +844,23 @@ class Glm5NextAttention(GlmMoeDsaAttention):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
+        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
+        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
-        # ===== Query path =====
-        if self.q_lora_rank is None:
-            query_states = self.q_proj(hidden_states)
-            q_resid = None
-        else:
-            q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
-            query_states = self.q_b_proj(q_resid)
-        query_states = query_states.view(batch_size, seq_length, -1, self.qk_head_dim).transpose(1, 2)
-        # NoPE MLA: GLM-5-Next full-attention layers keep the `qk_rope_head_dim` query/key
-        # slice but do NOT rotate it (matches sglang `skip_rope=mla_nope`). Position
-        # information is carried by the KDA linear-attention layers and the DSA indexer,
-        # which applies RoPE on its own projections.
+        # LoRA based path is guaranteed based on the config validation
+        q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
+        query_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
 
-        # ===== KV path =====
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_compressed, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_compressed = self.kv_a_layernorm(k_compressed)
+        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
+        key_states, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
-        kv_expanded = self.kv_b_proj(k_compressed)
-        kv_expanded = kv_expanded.view(batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
-        key_states, value_states = torch.split(kv_expanded, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
+        # Optional RoPE
         if position_embeddings is not None:
-            # Single-head (MQA) key-pe stream broadcast to all heads, unrotated (NoPE).
-            k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-            k_pe = k_pe.expand(-1, key_states.shape[1], -1, -1)
-            key_states = torch.cat([key_states, k_pe], dim=-1)
+            k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+            k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
+            key_states = torch.cat([key_states, k_rot], dim=-1)
 
         # Cache update
         if past_key_values is not None:
@@ -881,8 +868,6 @@ class Glm5NextAttention(GlmMoeDsaAttention):
 
         topk_indices = None
         if self.indexer is not None:
-            if q_resid is None:
-                raise ValueError("GLM-5-Next DSA indexer requires q_lora_rank to be set.")
             reused_topk_indices = prev_topk_indices if self.skip_topk else None
             topk_indices, attention_mask = self.indexer(
                 hidden_states,

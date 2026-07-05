@@ -225,5 +225,8 @@ class Glm5NextConfig(PreTrainedConfig):
                     f"index_topk ({self.index_topk}) must be divisible by index_kpool ({self.index_kpool})."
                 )
 
+        if self.q_lora_rank is None:
+            raise ValueError("For DSA usage in hte attention layers, the `q_lora_rank` is strictly required!")
+
 
 __all__ = ["Glm5NextConfig"]
