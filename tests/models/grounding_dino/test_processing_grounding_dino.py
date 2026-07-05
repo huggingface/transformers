@@ -32,6 +32,7 @@ if is_torch_available():
 @require_torch
 @require_vision
 class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    tiny_model_id = "hf-internal-testing/tiny-processor-grounding_dino"
     model_id = "IDEA-Research/grounding-dino-base"
     processor_class = GroundingDinoProcessor
     batch_size = 7
