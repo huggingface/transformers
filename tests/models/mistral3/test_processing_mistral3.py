@@ -32,6 +32,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     """This tests Pixtral processor with the new `spatial_merge_size` argument in Mistral3."""
 
     processor_class = PixtralProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-mistral3"
     model_id = "hf-internal-testing/Mistral-Small-3.1-24B-Instruct-2503-only-processor"
 
     @classmethod
@@ -54,7 +55,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }  # fmt: skip
 
     def test_image_token_filling(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         # Important to check with non square image
         image = torch.randint(0, 2, (3, 500, 316))
         expected_image_tokens = 4
@@ -82,7 +83,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(expected_image_tokens, image_tokens)
 
     def test_processor_with_single_image(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = "USER: [IMG]\nWhat's the content of the image? ASSISTANT:"
 
         # Make small for checking image token expansion
@@ -146,7 +147,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
     def test_processor_with_multiple_images_single_list(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = "USER: [IMG][IMG]\nWhat's the difference between these two images? ASSISTANT:"
 
         # Make small for checking image token expansion
@@ -199,7 +200,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
     def test_processor_with_multiple_images_multiple_lists(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = [
             "USER: [IMG][IMG]\nWhat's the difference between these two images? ASSISTANT:",
             "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",
@@ -260,7 +261,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_processor_returns_full_length_batches(self):
         # to avoid https://github.com/huggingface/transformers/issues/34204
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = [
             "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",
         ] * 5
@@ -279,7 +280,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
 
-        processor = self.get_processor()
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)

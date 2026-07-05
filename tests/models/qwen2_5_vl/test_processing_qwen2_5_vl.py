@@ -35,6 +35,7 @@ if is_torch_available():
 @require_torchvision
 class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5_VLProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-qwen2_5_vl"
     model_id = "Qwen/Qwen2-VL-7B-Instruct"
 
     @classmethod
