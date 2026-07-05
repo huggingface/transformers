@@ -30,7 +30,8 @@ if is_vision_available():
 @require_vision
 class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PixtralProcessor
-    model_id = "mistral-community/pixtral-12b"
+    tiny_model_id = "hf-internal-testing/tiny-processor-pixtral"
+    model_id = "mistral-labs/pixtral-12b"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -78,7 +79,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsNotNone(processor.tokenizer)
 
     def test_processor_with_single_image(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = "USER: [IMG]\nWhat's the content of the image? ASSISTANT:"
 
         # Make small for checking image token expansion
@@ -142,7 +143,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
     def test_processor_with_multiple_images_single_list(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = "USER: [IMG][IMG]\nWhat's the difference between these two images? ASSISTANT:"
 
         # Make small for checking image token expansion
@@ -195,7 +196,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
     def test_processor_with_multiple_images_multiple_lists(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = [
             "USER: [IMG][IMG]\nWhat's the difference between these two images? ASSISTANT:",
             "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",
