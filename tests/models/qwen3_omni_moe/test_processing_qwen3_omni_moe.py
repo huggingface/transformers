@@ -45,6 +45,7 @@ if is_torch_available():
 @require_torchvision
 class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3OmniMoeProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_omni_moe"
     model_id = "Qwen/Qwen2.5-Omni-7B"
 
     @classmethod
