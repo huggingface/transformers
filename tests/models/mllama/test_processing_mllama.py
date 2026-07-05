@@ -32,6 +32,7 @@ if is_vision_available():
 @require_vision
 class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MllamaProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-mllama"
     model_id = "hf-internal-testing/mllama-11b"
 
     @classmethod
@@ -99,7 +100,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 ],
             },
         ]
-        processor = MllamaProcessor.from_pretrained(self.tmpdirname)
+        processor = self.get_processor(use_tiny_ckpt=False)
         rendered = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 
         expected_rendered = (
@@ -228,7 +229,10 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(rendered_list, rendered_str)
 
     def test_process_interleaved_images_prompts_image_splitting(self):
-        processor = MllamaProcessor.from_pretrained(self.tmpdirname)
+        processor = self.get_processor(use_tiny_ckpt=False)
+        image_token_id = processor.image_token_id
+        bos_token_id = processor.tokenizer.bos_token_id
+        pad_token_id = processor.tokenizer.pad_token_id
         # Test that a single image is processed correctly
         inputs = processor(images=self.image2, size={"width": 224, "height": 224})
         self.assertEqual(inputs["pixel_values"].shape, (1, 1, 4, 3, 224, 224))
@@ -236,7 +240,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Test that text is processed correctly
         text = "<|begin_of_text|>This is a test sentence.<|end_of_text|>"
         inputs = processor(text=text)
-        expected_ids = [128000, 2028, 374, 264, 1296, 11914, 13, 128001]
+        expected_ids = [bos_token_id, 2028, 374, 264, 1296, 11914, 13, 128001]  # 128001 = <|end_of_text|>
         self.assertEqual(inputs["input_ids"][0], expected_ids)
         self.assertEqual(inputs["attention_mask"][0], [1] * len(expected_ids))
         self.assertEqual(inputs.get("cross_attention_mask"), None)
@@ -250,7 +254,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             images=self.image1,
             size={"width": 128, "height": 128},
         )
-        expected_ids = [self.image_token_id, self.bos_token_id] + [2028, 374, 264, 1296, 11914, 13]
+        expected_ids = [image_token_id, bos_token_id] + [2028, 374, 264, 1296, 11914, 13]
 
         self.assertEqual(inputs["pixel_values"].shape, (1, 1, 4, 3, 128, 128))
         self.assertEqual(inputs["input_ids"][0], expected_ids)
@@ -268,8 +272,8 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         # fmt: off
         expected_ids = [
-            [self.image_token_id, self.bos_token_id, 2028, 374, 264, 1296, 11914, 13],
-            [self.bos_token_id, 2028, 374, 264, 1296, 11914, 13, self.image_token_id, self.image_token_id, 2028, 374, 264, 1296, 11914, 13],
+            [image_token_id, bos_token_id, 2028, 374, 264, 1296, 11914, 13],
+            [bos_token_id, 2028, 374, 264, 1296, 11914, 13, image_token_id, image_token_id, 2028, 374, 264, 1296, 11914, 13],
         ]
         # fmt: on
         images = [[self.image1], [self.image1, self.image2]]
@@ -282,7 +286,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             pad_ids = [id for id, m in zip(input_ids_i, attention_mask_i) if m == 0]
             input_ids = [id for id, m in zip(input_ids_i, attention_mask_i) if m == 1]
             self.assertEqual(input_ids, expected_ids_i)
-            self.assertEqual(pad_ids, [self.pad_token_id] * len(pad_ids))
+            self.assertEqual(pad_ids, [pad_token_id] * len(pad_ids))
 
         cross_attention_mask = inputs["cross_attention_mask"]
         self.assertEqual(cross_attention_mask.shape, (2, 15, 2, 4))
