@@ -34,6 +34,7 @@ if is_torch_available():
 @require_torch
 class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GlmImageProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-glm_image"
     model_id = "zai-org/GLM-Image"
 
     @classmethod
@@ -42,28 +43,30 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
-        return super()._setup_from_pretrained(
-            model_id,
-            subfolder="processor",
-            **kwargs,
-        )
+        # Tiny model has files at root level; full model uses processor/ subfolder
+        if cls.tiny_model_id and model_id == cls.tiny_model_id:
+            return super()._setup_from_pretrained(model_id, **kwargs)
+        return super()._setup_from_pretrained(model_id, subfolder="processor", **kwargs)
 
     @classmethod
     def _setup_image_processor(cls):
         # Provide a tiny image-processor config so placeholder expansion stays small
+        source = cls.tiny_model_id if cls.full_tmpdirname is None else cls.model_id
+        subfolder_kwargs = {} if cls.full_tmpdirname is None else {"subfolder": "processor"}
         return AutoImageProcessor.from_pretrained(
-            cls.model_id,
-            subfolder="processor",
+            source,
             do_resize=True,
             patch_size=4,
             min_pixels=12 * 12,
             max_pixels=18 * 18,
+            **subfolder_kwargs,
         )
 
     @classmethod
     def _setup_tokenizer(cls):
-        # Ensure tokenizer is loaded from the correct subfolder when using custom components
-        return AutoTokenizer.from_pretrained(cls.model_id, subfolder="processor")
+        source = cls.tiny_model_id if cls.full_tmpdirname is None else cls.model_id
+        subfolder_kwargs = {} if cls.full_tmpdirname is None else {"subfolder": "processor"}
+        return AutoTokenizer.from_pretrained(source, **subfolder_kwargs)
 
     def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
         """Override to create images with valid aspect ratio (< 4) for GLM-Image."""
