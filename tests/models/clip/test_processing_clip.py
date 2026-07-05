@@ -27,4 +27,5 @@ if is_vision_available():
 @require_vision
 class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = CLIPProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-clip"
     model_id = "openai/clip-vit-base-patch32"
