@@ -27,7 +27,9 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 @require_vision
 class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Idefics3Processor
+    tiny_model_id = "hf-internal-testing/tiny-processor-idefics3"
     model_id = "HuggingFaceM4/Idefics3-8B-Llama3"
+    image_unstructured_max_length = 100  # tiny tokenizer produces more tokens than default 76
 
     def get_processor(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
