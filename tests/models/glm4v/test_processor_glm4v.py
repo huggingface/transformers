@@ -33,21 +33,13 @@ if is_torch_available():
 @require_torch
 class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Glm4vProcessor
-    model_id = "THUDM/GLM-4.1V-9B-Thinking"
+    # Use tiny repos to avoid loading the full 151k-vocab tokenizer (~309 MB)
+    tiny_model_id = "hf-internal-testing/tiny-processor-glm4v"
+    model_id = "hf-internal-testing/tiny-processor-glm4v"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
-
-    @classmethod
-    def _setup_from_pretrained(cls, model_id, **kwargs):
-        return super()._setup_from_pretrained(
-            model_id,
-            do_sample_frames=False,
-            patch_size=4,
-            size={"shortest_edge": 12 * 12, "longest_edge": 18 * 18},
-            **kwargs,
-        )
 
     @require_torch
     @require_av
