@@ -85,6 +85,78 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
 
         return (batch_size, num_v_heads, head_k_dim, head_v_dim)
 
+    def test_chunked_prefill_matches_full_forward_with_padding(self):
+        # Padding inside continued (cached) chunks must be masked out of the linear-attention/conv
+        # state: splitting a left-padded batch into prefill chunks must match the single forward.
+        config = self.model_tester.get_config()
+        model = Qwen3NextForCausalLM(config).to(torch_device).eval()
+
+        torch.manual_seed(0)
+        # pad with an ordinary token id: random init zeroes the `padding_idx` embedding row, which would hide the bug
+        pad = 7
+        seq_len, pad_len, chunk = 12, 6, 4  # row 1 pads spill into chunk 2: [4 pads][2 pads + 2 real][4 real]
+        row0 = ids_tensor([seq_len], config.vocab_size)
+        row1_real = ids_tensor([seq_len - pad_len], config.vocab_size)
+        input_ids = torch.stack([row0, torch.cat([torch.full((pad_len,), pad, device=torch_device), row1_real])])
+        attention_mask = torch.ones_like(input_ids)
+        attention_mask[1, :pad_len] = 0
+        position_ids = (attention_mask.cumsum(-1) - 1).clamp(min=0)
+
+        with torch.no_grad():
+            full = model(input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids).logits
+
+            cache, past = None, 0
+            for chunk_ids in torch.split(input_ids, chunk, dim=-1):
+                current = past + chunk_ids.shape[-1]
+                out = model(
+                    input_ids=chunk_ids,
+                    attention_mask=attention_mask[:, :current],
+                    position_ids=position_ids[:, past:current],
+                    past_key_values=cache,
+                    use_cache=True,
+                )
+                cache, past = out.past_key_values, current
+
+        torch.testing.assert_close(out.logits[:, -1], full[:, -1], rtol=1e-4, atol=1e-5)
+
+    def test_cache_continuation_matches_full_forward_with_padding(self):
+        # Same invariant for cache continuation: forwarding turn 1 and then a left-padded turn 2 on
+        # top of the cache must match the single forward of the same padded batch.
+        config = self.model_tester.get_config()
+        model = Qwen3NextForCausalLM(config).to(torch_device).eval()
+
+        torch.manual_seed(0)
+        pad = 7
+        turn1_len, turn2_len, pad_len = 6, 5, 3
+        turn1 = ids_tensor([2, turn1_len], config.vocab_size)
+        turn2 = ids_tensor([2, turn2_len], config.vocab_size)
+        turn2[1, :pad_len] = pad
+        attention_mask = torch.ones(2, turn1_len + turn2_len, dtype=torch.long, device=torch_device)
+        attention_mask[1, turn1_len : turn1_len + pad_len] = 0
+        position_ids = (attention_mask.cumsum(-1) - 1).clamp(min=0)
+
+        with torch.no_grad():
+            single = model(
+                input_ids=torch.cat([turn1, turn2], dim=-1),
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+            ).logits
+            out1 = model(
+                input_ids=turn1,
+                attention_mask=attention_mask[:, :turn1_len],
+                position_ids=position_ids[:, :turn1_len],
+                use_cache=True,
+            )
+            out2 = model(
+                input_ids=turn2,
+                attention_mask=attention_mask,
+                position_ids=position_ids[:, turn1_len:],
+                past_key_values=out1.past_key_values,
+                use_cache=True,
+            )
+
+        torch.testing.assert_close(out2.logits[:, -1], single[:, -1], rtol=1e-4, atol=1e-5)
+
     @unittest.skip("Qwen3-Next hybrid linear-attention cache is not compatible with quantized cache yet.")
     def test_generate_with_quant_cache(self):
         pass
