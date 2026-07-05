@@ -13,8 +13,6 @@
 # limitations under the License.
 
 import inspect
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
@@ -39,17 +37,9 @@ if is_torch_available():
 @require_torchvision
 class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Ernie4_5_VLMoeProcessor
-
-    @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = Ernie4_5_VLMoeProcessor.from_pretrained(
-            "hf-internal-testing/Ernie-VL-Moe-Small",
-            patch_size=4,
-            size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56},
-        )
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
+    # Use tiny repos to avoid loading the full 100k-vocab tokenizer (~342 MB)
+    tiny_model_id = "hf-internal-testing/tiny-processor-ernie4_5_vl_moe"
+    model_id = "hf-internal-testing/tiny-processor-ernie4_5_vl_moe"
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -62,10 +52,6 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
