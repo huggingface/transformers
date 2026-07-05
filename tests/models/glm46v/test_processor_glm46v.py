@@ -34,6 +34,7 @@ if is_torch_available():
 @require_torch
 class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Glm46VProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-glm4v"
     model_id = "THUDM/GLM-4.1V-9B-Thinking"
 
     @classmethod
