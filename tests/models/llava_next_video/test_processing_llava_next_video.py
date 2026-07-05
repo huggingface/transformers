@@ -32,18 +32,8 @@ if is_vision_available():
 @require_vision
 class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaNextVideoProcessor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
-        return tokenizer
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
+    tiny_model_id = "hf-internal-testing/tiny-processor-llava_next_video"
+    model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
 
     @classmethod
     def prepare_processor_dict(cls):
