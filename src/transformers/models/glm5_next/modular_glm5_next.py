@@ -32,11 +32,11 @@ from ...utils.import_utils import resolve_internal_import
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4Model
+from ..glm4.modeling_glm4 import apply_rotary_pos_emb
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaDecoderLayer
 from ..llama.modeling_llama import (
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
     eager_attention_forward,
 )
 from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
@@ -132,6 +132,7 @@ class Glm5NextRotaryEmbedding(LlamaRotaryEmbedding):
         base = config.rope_parameters["rope_theta"]
         head_dim = config.qk_rope_head_dim
         attention_factor = 1.0
+        # TODO: Just allow proper non-rope
         if head_dim == 0:
             return torch.empty(0, device=device), attention_factor
 
@@ -139,27 +140,6 @@ class Glm5NextRotaryEmbedding(LlamaRotaryEmbedding):
             base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
         )
         return inv_freq, attention_factor
-
-
-def apply_rotary_pos_emb_to_single(
-    x: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    unsqueeze_dim: int = 1,
-    interleaved: bool = False,
-) -> torch.Tensor:
-    if not interleaved:
-        return apply_rotary_pos_emb(x, x, cos, sin, unsqueeze_dim=unsqueeze_dim)[0]
-
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    rotary_dim = x.shape[-1]
-    cos = cos[..., : rotary_dim // 2].repeat_interleave(2, dim=-1)
-    sin = sin[..., : rotary_dim // 2].repeat_interleave(2, dim=-1)
-    x1 = x[..., ::2]
-    x2 = x[..., 1::2]
-    rotated = torch.stack((-x2, x1), dim=-1).flatten(-2)
-    return (x * cos) + (rotated * sin)
 
 
 # =============================================================================
@@ -594,14 +574,7 @@ class Glm5NextDynamicCache(DynamicCache):
 
 
 class Glm5NextIndexer(nn.Module):
-    """
-    GLM-5-Next DSA/NSA indexer.
-
-    This mirrors sglang's NSA `Indexer` parameter layout (`wq_b`, `wk`,
-    `weights_proj`, `k_norm`). sglang computes the final scores with optimized
-    `fp8_index`/NSA kernels; this path computes the same top-k sparse-attention
-    indices with regular PyTorch ops.
-    """
+    """GLM-5-Next DSA indexer (`wq_b`, `wk`, `weights_proj`, `k_norm`)."""
 
     def __init__(self, config: Glm5NextConfig, layer_idx: int):
         super().__init__()
@@ -611,15 +584,13 @@ class Glm5NextIndexer(nn.Module):
         self.hidden_size: int = config.hidden_size
         self.n_heads: int = config.index_n_heads
         self.head_dim: int = config.index_head_dim
-        self.qk_rope_head_dim: int = config.qk_rope_head_dim
         self.index_topk: int = config.index_topk
         self.q_lora_rank: int = config.q_lora_rank
         self.index_kpool: int = config.index_kpool
         self.index_kpool_compress: bool = config.index_kpool_compress
-        self.indexer_rope_interleave: bool = config.indexer_rope_interleave
         self.kpool_enabled = self.index_kpool > 1 and self.index_kpool_compress
         self.index_kpool_always_select_tail: bool = config.index_kpool_always_select_tail
-        self.skip_rope: bool = True
+        self.qk_rope_head_dim: int = config.qk_rope_head_dim
 
         if self.kpool_enabled:
             self.index_kpool_compress_ape = nn.Parameter(torch.zeros(self.index_kpool, self.head_dim))
@@ -809,23 +780,19 @@ class Glm5NextIndexer(nn.Module):
         mask_dtype = hidden_states.dtype if mask_dtype is None else mask_dtype
 
         if topk_indices is None:
-            cos, sin = position_embeddings
-            q = self.wq_b(q_resid)
-            q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)
-            q_pe, q_nope = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-            if not self.skip_rope and self.qk_rope_head_dim > 0:
-                q_pe = apply_rotary_pos_emb_to_single(
-                    q_pe, cos, sin, unsqueeze_dim=2, interleaved=self.indexer_rope_interleave
-                )
-            q = torch.cat([q_pe, q_nope], dim=-1)
+            # DSA indexer RoPE: interleaved-rotate the leading `qk_rope_head_dim`
+            # slice of the indexer q/k, gated on `qk_rope_head_dim > 0`. 70B
+            # (`qk_rope_head_dim=64`) rotates it; 300B (`qk_rope_head_dim=0`) skips it
+            # and `cat(split(x)) == x` is a no-op.
+            q = self.wq_b(q_resid).view(batch_size, seq_len, self.n_heads, self.head_dim)
+            k = self.k_norm(self.wk(hidden_states)).view(batch_size, seq_len, -1, self.head_dim)
 
-            k = self.k_norm(self.wk(hidden_states))
-            k_pe, k_nope = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-            if not self.skip_rope and self.qk_rope_head_dim > 0:
-                k_pe = apply_rotary_pos_emb_to_single(
-                    k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2, interleaved=self.indexer_rope_interleave
-                ).squeeze(2)
-            k = torch.cat([k_pe, k_nope], dim=-1)
+            cos, sin = position_embeddings
+            # TODO: make proper NoPE
+            if self.qk_rope_head_dim > 0:
+                q, k = apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=2)
+                k = k.squeeze(2)
+
             if self.kpool_enabled:
                 gate_scores = F.linear(hidden_states, self.index_kpool_compress_gate)
                 k_cached, gate_scores = self._update_kpool_cache(
@@ -975,6 +942,8 @@ class Glm5NextAttention(nn.Module):
         key_states, value_states = torch.split(kv_expanded, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
+
+        # TODO: make proper NoPE
         if self.qk_rope_head_dim > 0:
             # Single-head (MQA) key-pe stream broadcast to all heads, unrotated (NoPE).
             k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
@@ -1073,6 +1042,7 @@ class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
         residual = hidden_states
         post, comb, hidden_states = self.attn_hc(hidden_states) if self.uses_mhc else (None, None, hidden_states)
         # Self attn
+        topk_indices = None
         hidden_states = self.input_layernorm(hidden_states)
         if self.block_type == "linear_attention":
             hidden_states = self.self_attn(
@@ -1082,13 +1052,14 @@ class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
                 **kwargs,
             )
         else:
-            hidden_states, _, _ = self.self_attn(
+            hidden_states, _, topk_indices = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
+                prev_topk_indices=prev_topk_indices,
                 **kwargs,
             )
         hidden_states = self.apply_residual(post, comb, hidden_states, residual, dtype=dtype)
@@ -1100,7 +1071,7 @@ class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.apply_residual(post, comb, hidden_states, residual, dtype=dtype)
 
-        return hidden_states, hidden_states.mean(dim=2) if hidden_states.ndim == 4 else hidden_states
+        return hidden_states, topk_indices
 
 
 # =============================================================================
@@ -1123,8 +1094,8 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "attentions": Glm5NextAttention,
-        "hidden_states": OutputRecorder(Glm5NextDecoderLayer, index=1),
-        "router_logits": OutputRecorder(Glm5NextTopkRouter, index=1),  # noqa: F821
+        "hidden_states": Glm5NextDecoderLayer,
+        "router_logits": OutputRecorder(Glm5NextTopkRouter, index=0),  # noqa: F821
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.45\.", r"model\.layers\.\d+\.shared_head\."]
@@ -1196,17 +1167,19 @@ class Glm5NextModel(DeepseekV4Model):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        # TODO: in glm moe dsa but not here
+        if self.config.mhc:
+            hidden_states = hidden_states.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
+
         topk_indices = None
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states, _ = decoder_layer(
+            hidden_states, topk_indices = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                # prev_topk_indices=topk_indices,
+                prev_topk_indices=topk_indices,
                 **kwargs,
             )
 
