@@ -67,6 +67,20 @@ class AqlmConfigTest(unittest.TestCase):
         self.assertEqual(dict["nbits_per_codebook"], quantization_config.nbits_per_codebook)
         self.assertEqual(dict["linear_weights_not_to_quantize"], quantization_config.linear_weights_not_to_quantize)
 
+    def test_int_fields_reject_non_int_with_correct_message(self):
+        """
+        The int-only fields must reject non-int values with a message that says "int",
+        not "float" (which is what these fields actually require).
+        """
+        for field, value in [
+            ("in_group_size", 8.0),
+            ("out_group_size", 1.0),
+            ("num_codebooks", 2.0),
+            ("nbits_per_codebook", 8.0),
+        ]:
+            with self.assertRaisesRegex(TypeError, f"{field} must be an int"):
+                AqlmConfig(**{field: value})
+
 
 @slow
 @require_torch_accelerator
