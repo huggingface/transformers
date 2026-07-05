@@ -8,12 +8,12 @@ Usage:
     python analyze_mem.py tests/models/foo/... # explicit list of test files
 """
 
+import argparse
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-PYTHON = "/c/Users/yih-d/miniconda3/envs/py310/python.exe"
 REPO_ROOT = Path(__file__).parent
 
 # All processor test files modified on debug_mem vs main (git diff main...HEAD)
@@ -60,11 +60,11 @@ DEFAULT_TEST_FILES = [
 ]
 
 
-def run_pytest(test_file: str) -> str:
-    """Run pytest -v --tb=no on one file, return combined stdout+stderr."""
+def run_pytest(test_file: str, python: str) -> str:
+    """Run pytest --tb=no --durations=0 on one file, return combined stdout+stderr."""
     print(f"  running {test_file} ...", flush=True)
     result = subprocess.run(
-        [PYTHON, "-m", "pytest", test_file, "-v", "--tb=no"],
+        [python, "-m", "pytest", test_file, "--tb=no", "--durations=0"],
         cwd=REPO_ROOT, capture_output=True, text=True,
     )
     return result.stdout + result.stderr
@@ -81,16 +81,14 @@ MEM_ROW_RE = re.compile(
     r"^\s+([+-])\s+([\d.]+)\s+([\d.]+)\s+(\S+)\s+(tests/\S+)"
 )
 
-# verbose line: "PASSED tests/...::Cls::method (0.12s)"
-# or with mem plugin: "PASSED tests/... [PASSED] 0.05s mem:+8MB"
+# --durations=0 output: "0.12s call     tests/models/.../test_foo.py::Cls::method"
 DUR_RE = re.compile(
-    r"(?:PASSED|FAILED|ERROR|SKIPPED)\s+(tests/\S+)\s+"
-    r"(?:\[(?:PASSED|FAILED|ERROR|SKIPPED)\]\s+)?"
-    r"([\d.]+)s"
+    r"^\s*([\d.]+)s\s+\w+\s+(tests/\S+)"
 )
 
 
 def parse_memory_table(output: str) -> list[dict]:
+    """Parse all rows from the memory usage table."""
     rows = []
     in_table = False
     for line in output.splitlines():
@@ -106,7 +104,7 @@ def parse_memory_table(output: str) -> list[dict]:
                 "delta": float(delta_str) * (1 if sign == "+" else -1),
                 "end_mb": float(end_str),
                 "worker": worker,
-                "test": test.strip(),
+                "test": test.strip().replace("\\", "/"),
             })
         elif re.search(r"per-worker RSS|={5}", line):
             in_table = False
@@ -114,11 +112,16 @@ def parse_memory_table(output: str) -> list[dict]:
 
 
 def parse_durations(output: str) -> dict[str, float]:
+    """Parse per-test durations from --durations=0 output.
+
+    Lines look like: '0.14s call     tests/models/.../test_foo.py::Cls::method'
+    They appear without a section header, directly before the final summary line.
+    """
     durations: dict[str, float] = {}
     for line in output.splitlines():
-        m = DUR_RE.search(line)
+        m = DUR_RE.match(line)
         if m:
-            durations[m.group(1)] = float(m.group(2))
+            durations[m.group(2).replace("\\", "/")] = float(m.group(1))
     return durations
 
 
@@ -127,7 +130,13 @@ def parse_durations(output: str) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    test_files = sys.argv[1:] if len(sys.argv) > 1 else DEFAULT_TEST_FILES
+    parser = argparse.ArgumentParser(description="Aggregate processor test memory usage.")
+    parser.add_argument("--python", default="python3", help="Python executable to use (default: python3)")
+    parser.add_argument("test_files", nargs="*", help="Test files to run (default: hardcoded list)")
+    args = parser.parse_args()
+
+    python = args.python
+    test_files = args.test_files if args.test_files else DEFAULT_TEST_FILES
 
     if not test_files:
         print("No modified test files found.")
@@ -144,7 +153,7 @@ def main() -> None:
     file_durations: dict[str, float] = {}
 
     for test_file in test_files:
-        output = run_pytest(test_file)
+        output = run_pytest(test_file, python)
         rows = parse_memory_table(output)
         durations = parse_durations(output)
 
@@ -162,11 +171,11 @@ def main() -> None:
     # Sort by Delta MB descending
     all_rows.sort(key=lambda r: r["delta"], reverse=True)
 
-    # Deduplicate: keep the highest-delta entry per (test, source_file)
-    seen: set[tuple] = set()
+    # Deduplicate: keep the highest-delta entry per test (already sorted desc, so first wins)
+    seen: set[str] = set()
     unique_rows: list[dict] = []
     for row in all_rows:
-        key = (row["test"], row["source_file"])
+        key = row["test"]
         if key not in seen:
             seen.add(key)
             unique_rows.append(row)
@@ -207,24 +216,31 @@ def main() -> None:
             return p.stem
         return p.parent.name  # tests/models/<model>/...
 
-    # Build one entry per source file: max delta, max end_mb, total duration
+    # Build one entry per model (derived from each row's test path, not source_file)
     model_stats: dict[str, dict] = {}
     for row in unique_rows:
-        sf = row["source_file"]
-        if sf not in model_stats:
-            model_stats[sf] = {"delta": row["delta"], "end_mb": row["end_mb"]}
+        mn = model_name(row["test"])
+        if mn not in model_stats:
+            model_stats[mn] = {"delta": row["delta"], "end_mb": row["end_mb"]}
         else:
-            model_stats[sf]["delta"] = max(model_stats[sf]["delta"], row["delta"])
-            model_stats[sf]["end_mb"] = max(model_stats[sf]["end_mb"], row["end_mb"])
+            model_stats[mn]["delta"] = max(model_stats[mn]["delta"], row["delta"])
+            model_stats[mn]["end_mb"] = max(model_stats[mn]["end_mb"], row["end_mb"])
+
+    # Match model names back to source_file durations
+    def source_file_for_model(mn: str) -> str:
+        for sf in file_durations:
+            if model_name(sf) == mn:
+                return sf
+        return mn
 
     model_rows = [
         {
-            "model": model_name(sf),
+            "model": mn,
             "delta": stats["delta"],
             "end_mb": stats["end_mb"],
-            "total_dur": file_durations.get(sf, 0.0),
+            "total_dur": file_durations.get(source_file_for_model(mn), 0.0),
         }
-        for sf, stats in model_stats.items()
+        for mn, stats in model_stats.items()
     ]
     model_rows.sort(key=lambda r: r["delta"], reverse=True)
 
