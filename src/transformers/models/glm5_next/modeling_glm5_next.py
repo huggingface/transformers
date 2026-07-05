@@ -18,7 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -236,9 +238,9 @@ class Glm5NextRotaryEmbedding(nn.Module):
     @staticmethod
     def compute_default_rope_parameters(
         config: Glm5NextConfig | None = None,
-        device: torch.device | None = None,
+        device: Optional["torch.device"] = None,
         seq_len: int | None = None,
-    ) -> tuple[torch.Tensor, float]:
+    ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -253,14 +255,13 @@ class Glm5NextRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        head_dim = config.qk_rope_head_dim
-        attention_factor = 1.0
-        # TODO: Just allow proper non-rope
-        if head_dim == 0:
-            return torch.empty(0, device=device), attention_factor
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
         inv_freq = 1.0 / (
-            base ** (torch.arange(0, head_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
         return inv_freq, attention_factor
 
@@ -1083,7 +1084,7 @@ class Glm5NextIndexer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         mask_dtype: torch.dtype | None = None,
@@ -1094,19 +1095,20 @@ class Glm5NextIndexer(nn.Module):
         total_len = seq_len if total_len is None else total_len
         mask_dtype = hidden_states.dtype if mask_dtype is None else mask_dtype
 
+        # Create new indices or use past topk indices
         if topk_indices is None:
-            # DSA indexer RoPE: interleaved-rotate the leading `qk_rope_head_dim`
-            # slice of the indexer q/k, gated on `qk_rope_head_dim > 0`. 70B
-            # (`qk_rope_head_dim=64`) rotates it; 300B (`qk_rope_head_dim=0`) skips it
-            # and `cat(split(x)) == x` is a no-op.
-            q = self.wq_b(q_resid).view(batch_size, seq_len, self.n_heads, self.head_dim)
-            k = self.k_norm(self.wk(hidden_states)).view(batch_size, seq_len, -1, self.head_dim)
+            hidden_shape = (batch_size, seq_len, -1, self.head_dim)
+            q = self.wq_b(q_resid).view(hidden_shape)
+            k = self.k_norm(self.wk(hidden_states)).view(hidden_shape)
 
-            cos, sin = position_embeddings
-            # TODO: make proper NoPE
-            if self.qk_rope_head_dim > 0:
+            # Partial RoPE or NoPE
+            # 70B (`qk_rope_head_dim=64`) rotates it; 300B (`qk_rope_head_dim=0`)
+            if position_embeddings is not None:
+                cos, sin = position_embeddings
                 q, k = apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=2)
-                k = k.squeeze(2)
+
+            # We temporarily treated it as `num_heads == 1` to apply RoPE
+            k = k.squeeze(2)
 
             if self.kpool_enabled:
                 gate_scores = F.linear(hidden_states, self.index_kpool_compress_gate)
@@ -1190,14 +1192,20 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def yarn_get_mscale(scale=1, mscale=1):
+    if scale <= 1:
+        return 1.0
+    return 0.1 * mscale * math.log(scale) + 1.0
+
+
 class Glm5NextAttention(nn.Module):
     """
-    Multi-head Latent Attention (MLA) for GLM-5-Next full-attention layers.
+    DeepSeek-V3 MLA + a DSA indexer, extended with **cross-layer top-k sharing**.
 
-    GLM-5-Next checkpoints use the no-RoPE MLA key path: kv_b_proj outputs
-    full qk_head_dim + v_head_dim.
-
-    **Caching**: fully expanded K/V, compatible with DynamicCache / SDPA / flash attention.
+    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or
+    reuses the previous full layer's top-k selection (`"shared"`).
+    `next_skip_topk` signals that the *next* layer will reuse this
+    layer's top-k, so it is propagated upward via `prev_topk_indices`.
     """
 
     def __init__(self, config: Glm5NextConfig, layer_idx: int):
@@ -1213,28 +1221,40 @@ class Glm5NextAttention(nn.Module):
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        self.qk_head_dim = config.qk_head_dim
+
         self.is_causal = True
+        self.q_proj = (
+            nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is None
+            else None
+        )
+        self.q_a_proj = (
+            nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            if self.q_lora_rank is not None
+            else None
+        )
+        self.q_a_layernorm = (
+            Glm5NextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps) if self.q_lora_rank is not None else None
+        )
+        self.q_b_proj = (
+            nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is not None
+            else None
+        )
 
-        # Query projection
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = Glm5NextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-
-        # Key-Value projections (MLA compressed path plus single-head RoPE key stream).
         self.kv_a_proj_with_mqa = nn.Linear(
             config.hidden_size,
             self.kv_lora_rank + self.qk_rope_head_dim,
             bias=config.attention_bias,
         )
         self.kv_a_layernorm = Glm5NextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
-        kv_b_out = self.num_heads * (self.qk_nope_head_dim + self.v_head_dim)
-        self.kv_b_proj = nn.Linear(self.kv_lora_rank, kv_b_out, bias=False)
+        self.kv_b_proj = nn.Linear(
+            self.kv_lora_rank,
+            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
+            bias=False,
+        )
 
-        # Output projection
         self.o_proj = nn.Linear(
             self.num_heads * self.v_head_dim,
             config.hidden_size,
@@ -1242,28 +1262,24 @@ class Glm5NextAttention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-
-        has_indexer_config = config.index_dsa_use_layernorm is not None or config.index_topk_pattern is not None
-        self.indexer = Glm5NextIndexer(config, layer_idx) if has_indexer_config else None
-        indexer_types = getattr(config, "indexer_types", None)
-        if indexer_types is None:
-            freq = config.index_topk_freq
-            offset = config.index_skip_topk_offset
-            indexer_types = [
-                "full" if (max(index_layer_idx - offset, 0) % freq) == 0 else "shared"
-                for index_layer_idx in range(config.num_hidden_layers)
-            ]
-        self.skip_topk = self.indexer is None or indexer_types[layer_idx] == "shared"
+        if self.config.rope_parameters.get("rope_type", "default") != "default":
+            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
+            scaling_factor = self.config.rope_parameters["factor"]
+            if mscale_all_dim:
+                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+                self.scaling = self.scaling * mscale * mscale
+        # Refer: https://arxiv.org/abs/2603.12201 for more details.
+        self.skip_topk = config.indexer_types[layer_idx] == "shared"
+        # TODO: split kpool indexing vs normal full token indexing
+        self.indexer = None if self.skip_topk else Glm5NextIndexer(config, layer_idx)
         self.next_skip_topk = (
-            self.indexer is not None
-            and layer_idx < len(indexer_types) - 1
-            and indexer_types[layer_idx + 1] == "shared"
+            not self.skip_topk and config.indexer_types[min(layer_idx + 1, len(config.indexer_types) - 1)] == "shared"
         )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         prev_topk_indices: torch.Tensor | None = None,
@@ -1295,8 +1311,7 @@ class Glm5NextAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        # TODO: make proper NoPE
-        if self.qk_rope_head_dim > 0:
+        if position_embeddings is not None:
             # Single-head (MQA) key-pe stream broadcast to all heads, unrotated (NoPE).
             k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
             k_pe = k_pe.expand(-1, key_states.shape[1], -1, -1)
@@ -1483,7 +1498,8 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
             [Glm5NextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Glm5NextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Glm5NextRotaryEmbedding(config)
+        # Potential NoPE we detect by the head dim (alias for `qk_rope_head_dim`)
+        self.rotary_emb = Glm5NextRotaryEmbedding(config) if self.config.head_dim > 0 else None
         self.gradient_checkpointing = False
         self.hc_head = Glm5NextHyperHead() if config.mhc else nn.Identity()
 
@@ -1533,7 +1549,9 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+        position_embeddings = (
+            self.rotary_emb(hidden_states, position_ids=position_ids) if self.rotary_emb is not None else None
+        )
 
         if self.config.mhc:
             hidden_states = hidden_states.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()

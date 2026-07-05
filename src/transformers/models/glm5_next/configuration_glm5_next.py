@@ -203,6 +203,10 @@ class Glm5NextConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+        # TODO: Proper alias and checking/validating
+        self.head_dim = self.qk_rope_head_dim
+        self.qk_head_dim = self.qk_rope_head_dim + self.qk_nope_head_dim
+
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.num_attention_heads % self.num_key_value_heads != 0:
