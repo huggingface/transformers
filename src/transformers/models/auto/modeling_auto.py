@@ -421,6 +421,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
         ("roc_bert", "RoCBertModel"),
         ("roformer", "RoFormerModel"),
+        ("roma", "RomaModel"),
         ("rt_detr", "RTDetrModel"),
         ("rt_detr_v2", "RTDetrV2Model"),
         ("rwkv", "RwkvModel"),
@@ -1838,6 +1839,7 @@ MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES = OrderedDict(
     [
         ("efficientloftr", "EfficientLoFTRForKeypointMatching"),
         ("lightglue", "LightGlueForKeypointMatching"),
+        ("roma", "RomaForKeypointMatching"),
         ("superglue", "SuperGlueForKeypointMatching"),
     ]
 )
