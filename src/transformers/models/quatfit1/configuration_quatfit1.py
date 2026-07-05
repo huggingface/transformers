@@ -1,8 +1,8 @@
 from transformers import (
+    Gemma4AudioConfig,
     Gemma4Config,
     Gemma4TextConfig,
     Gemma4VisionConfig,
-    Gemma4AudioConfig,
 )
 
 
