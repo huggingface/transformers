@@ -42,6 +42,7 @@ def prepare_image_inputs():
 @require_torchvision
 class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VideoLlama3Processor
+    tiny_model_id = "hf-internal-testing/tiny-processor-video_llama_3"
     model_id = "lkhl/VideoLLaMA3-2B-Image-HF"
 
     @classmethod
