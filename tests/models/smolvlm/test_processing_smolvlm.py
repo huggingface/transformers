@@ -28,6 +28,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SmolVLMProcessor
     videos_input_name = "pixel_values"
+    tiny_model_id = "hf-internal-testing/tiny-processor-smolvlm"
     model_id = "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
 
     @classmethod
