@@ -37,15 +37,12 @@ if is_torch_available():
 @require_torchvision
 class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2VLProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-qwen2_vl"
     model_id = "Qwen/Qwen2-VL-7B-Instruct"
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
         return super()._setup_from_pretrained(model_id, patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28, **kwargs)
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
 
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
