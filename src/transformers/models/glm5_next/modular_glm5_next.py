@@ -856,7 +856,7 @@ class Glm5NextAttention(GlmMoeDsaAttention):
         k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
         key_states, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
-        # Optional RoPE
+        # Optional RoPE (only applied in the indexer)
         if position_embeddings is not None:
             k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
             k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
