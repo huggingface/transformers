@@ -25,7 +25,7 @@ class LEDConfig(PreTrainedConfig):
     r"""
     max_encoder_position_embeddings (`int`, *optional*, defaults to 16384):
         The maximum sequence length that the encoder might ever be used with.
-    max_decoder_position_embeddings (`int`, *optional*, defaults to 16384):
+    max_decoder_position_embeddings (`int`, *optional*, defaults to 1024):
         The maximum sequence length that the decoder might ever be used with.
     attention_window (`int` or `list[int]`, *optional*, defaults to 512):
         Size of an attention window around each token. If an `int`, use the same size for all layers. To specify a
