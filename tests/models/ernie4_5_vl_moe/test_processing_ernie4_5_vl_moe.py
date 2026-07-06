@@ -39,7 +39,6 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Ernie4_5_VLMoeProcessor
     # Use tiny repos to avoid loading the full 100k-vocab tokenizer (~342 MB)
     tiny_model_id = "hf-internal-testing/tiny-processor-ernie4_5_vl_moe"
-    model_id = "hf-internal-testing/tiny-processor-ernie4_5_vl_moe"
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer

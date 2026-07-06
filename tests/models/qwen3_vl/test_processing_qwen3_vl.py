@@ -36,7 +36,6 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3VLProcessor
     # Use tiny repos to avoid loading the full 151k-vocab tokenizer (~327 MB)
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_vl"
-    model_id = "hf-internal-testing/tiny-processor-qwen3_vl"
     video_unstructured_max_length = 870
     video_text_kwargs_max_length = 870
     video_text_kwargs_override_max_length = 870

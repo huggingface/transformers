@@ -35,7 +35,6 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Glm4vProcessor
     # Use tiny repos to avoid loading the full 151k-vocab tokenizer (~309 MB)
     tiny_model_id = "hf-internal-testing/tiny-processor-glm4v"
-    model_id = "hf-internal-testing/tiny-processor-glm4v"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
