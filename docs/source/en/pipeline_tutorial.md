@@ -187,7 +187,7 @@ import datasets
 device = Accelerator().device
 
 # KeyDataset is a utility that returns the item in the dict returned by the dataset
-dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
+dataset = datasets.load_dataset("stanfordnlp/imdb", name="plain_text", split="unsupervised")
 pipeline = pipeline(task="text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device)
 for out in pipeline(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)
@@ -300,7 +300,7 @@ from datasets import load_dataset
 
 device = Accelerator().device
 
-dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
+dataset = datasets.load_dataset("stanfordnlp/imdb", name="plain_text", split="unsupervised")
 pipeline = pipeline(task="text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device)
 for out in pipeline(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)
