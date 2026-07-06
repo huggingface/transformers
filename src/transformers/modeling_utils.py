@@ -2281,11 +2281,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "`from_pretrained(..., experts_implementation=...)` to switch."
             )
 
-        # Modify the implementation of the top level config
-        if self._can_set_experts_implementation() and requested_implementation != self.config._experts_implementation:
+        # Check the requested implementation is supported
+        if requested_implementation != self.config._experts_implementation:
             requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)
-            # Apply the change (on the internal attr, to avoid setting it recursively)
-            self.config._experts_implementation_internal = requested_implementation
+
+            # Modify the implementation of the top level config
+            if self._can_set_experts_implementation():
+                # Apply the change (on the internal attr, to avoid setting it recursively)
+                self.config._experts_implementation_internal = requested_implementation
 
         # Apply it to all submodels as well
         for submodule in self.modules():
