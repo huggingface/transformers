@@ -227,44 +227,6 @@ def maybe_pad_block_sequence_ids(
     return block_sequence_ids
 
 
-def _can_skip_causal_mask_xpu(
-    padding_mask: torch.Tensor | None,
-    q_length: int,
-    kv_length: int,
-    q_offset: int,
-    kv_offset: int,
-    local_attention_size: int | None,
-) -> bool:
-    """
-    XPU-specific logic for determining if we can skip causal mask creation.
-
-    For XPU devices, we have special handling:
-    - Single query tokens (query_length == 1) use the same logic as CUDA
-    - Multi-query tokens can skip if padding_mask is provided and correctly structured
-      The mask must have all True values in the query window and all False after
-    """
-
-    if is_tracing(padding_mask):
-        return False
-
-    # Check local attention constraint (same as CUDA)
-    if local_attention_size is not None and kv_length >= local_attention_size:
-        return False
-
-    if padding_mask is None:
-        # Without padding mask, can skip if single query token or full causal attention
-        return q_length == 1 or kv_length == q_length
-
-    # XPU allows skipping under additional conditions when padding_mask is provided
-    if q_length == 1:
-        # Single query token: skip only if no padding tokens present
-        return padding_mask.all()
-
-    # XPU-specific: check if query window is all True and rest is all False.
-    # This allows XPU to optimize the 1st token in static cache when the cache is empty.
-    return q_offset == 0 and padding_mask[:, :q_length].all() and not padding_mask[:, q_length:].any()
-
-
 def _ignore_causal_mask_sdpa(
     padding_mask: torch.Tensor | None,
     q_length: int,
@@ -284,13 +246,6 @@ def _ignore_causal_mask_sdpa(
     if padding_mask is not None and padding_mask.shape[-1] > kv_length:
         mask_indices = torch.arange(kv_length, device=padding_mask.device) + kv_offset
         padding_mask = padding_mask[:, mask_indices]
-
-    if _is_torch_xpu_available:
-        # XPU devices have special handling for mask skipping:
-        # - Single query tokens use the same logic as CUDA
-        # - Multi-query tokens can skip if padding_mask is provided and correctly structured
-        #   (all True in query window, all False after)
-        return _can_skip_causal_mask_xpu(padding_mask, q_length, kv_length, q_offset, kv_offset, local_attention_size)
 
     # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
