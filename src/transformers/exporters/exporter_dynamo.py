@@ -350,8 +350,8 @@ def _reshaped_vision_attention_forward(
         enable_gqa=getattr(self, "num_key_value_heads", self.num_heads) != self.num_heads,
     )
 
-    # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim)
-    attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1).contiguous()
+    # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim).
+    attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1)
     out_proj = self.proj if hasattr(self, "proj") else self.out_proj
     attn_output = out_proj(attn_output)
 
@@ -381,6 +381,8 @@ def _reshaped_vision_attention_forward(
     "transformers.models.glm_image.modeling_glm_image.GlmImageVisionAttention.forward",
     # Separate `.q` / `.k` / `.v` + single rotary tensor + `.proj`
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniVisionAttention.forward",
+    # Separate `q_proj`/`k_proj`/`v_proj` + `(cos, sin)` rotary + `.proj` (single return)
+    "transformers.models.kimi_k25.modeling_kimi_k25.Kimi_K25VisionAttention.forward",
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",

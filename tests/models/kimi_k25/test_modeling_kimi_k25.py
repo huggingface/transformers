@@ -127,7 +127,6 @@ class Kimi_K25VisionText2TextModelTester(VLMModelTester):
 @require_torch
 class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Kimi_K25VisionText2TextModelTester
-    test_torch_exportable = False
 
     # Kimi has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
