@@ -935,13 +935,9 @@ def create_causal_mask(
     # are properly index-based as required by our implementation).
     use_vmap = False
 
-    # Do not allow skip if we are compiling (this is to match BC)
-    # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    if _is_torch_xpu_available:
-        # Do not allow skip if we are compiling for decoding, but for prefill, we still allow skip to optimization the perf of 1st token generation
-        allow_is_causal_skip = not (getattr(past_key_values, "is_compileable", False) and q_length == 1)
-    else:
-        allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
+    # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
+    # prefill is not compiled)
+    allow_is_causal_skip = not (getattr(past_key_values, "is_compileable", False) and q_length == 1)
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
@@ -1164,9 +1160,9 @@ def create_sliding_window_causal_mask(
     # users passing custom mask functions (as we cannot guarantee that they
     # are properly index-based as required by our implementation).
     use_vmap = False
-    # Do not allow skip if we are compiling (this is to match BC)
-    # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
+    # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
+    # prefill is not compiled)
+    allow_is_causal_skip = not (getattr(past_key_values, "is_compileable", False) and q_length == 1)
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
@@ -1379,9 +1375,9 @@ def create_chunked_causal_mask(
     # users passing custom mask functions (as we cannot guarantee that they
     # are properly index-based as required by our implementation).
     use_vmap = False
-    # Do not allow skip if we are compiling (this is to match BC)
-    # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
+    # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
+    # prefill is not compiled)
+    allow_is_causal_skip = not (getattr(past_key_values, "is_compileable", False) and q_length == 1)
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
