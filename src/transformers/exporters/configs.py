@@ -100,8 +100,8 @@ class DynamoConfig(ExportConfigMixin):
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
-    dynamic: bool = False
 
+    dynamic: bool = False
     strict: bool = False
     dynamic_shapes: dict[str, Any] | None = None
     prefer_deferred_runtime_asserts_over_guards: bool = False
@@ -142,7 +142,6 @@ class OnnxConfig(DynamoConfig):
     export_format: ExportFormat = ExportFormat.ONNX
 
     output_path: str | PathLike | None = None
-    dynamic_shapes: dict[str, Any] | None = None
     opset_version: int | None = None
     external_data: bool = True
     optimize: bool = True

@@ -72,7 +72,7 @@ class AutoExportConfig:
 
 class AutoHfExporter:
     """
-    The Auto-HF expoerter class that takes care of automatically instantiating to the correct
+    The Auto-HF exporter class that takes care of automatically instantiating to the correct
     `HfExporter` given the `ExportConfig`.
     """
 

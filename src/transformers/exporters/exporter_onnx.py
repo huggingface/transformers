@@ -74,6 +74,27 @@ if is_onnxscript_available():
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
 
+    # torch.dtype -> onnx_ir.DataType, mirroring torch.onnx's private _TORCH_DTYPE_TO_ONNX so we
+    # don't depend on that path. Only the dtypes a `Cast` target can realistically be; exotic
+    # float8/float4 variants (never emitted as an ``out_dtype``) are omitted.
+    _TORCH_DTYPE_TO_ONNX: dict[torch.dtype, onnx_ir.DataType] = {
+        torch.float32: onnx_ir.DataType.FLOAT,
+        torch.float64: onnx_ir.DataType.DOUBLE,
+        torch.float16: onnx_ir.DataType.FLOAT16,
+        torch.bfloat16: onnx_ir.DataType.BFLOAT16,
+        torch.bool: onnx_ir.DataType.BOOL,
+        torch.int8: onnx_ir.DataType.INT8,
+        torch.int16: onnx_ir.DataType.INT16,
+        torch.int32: onnx_ir.DataType.INT32,
+        torch.int64: onnx_ir.DataType.INT64,
+        torch.uint8: onnx_ir.DataType.UINT8,
+        torch.uint16: onnx_ir.DataType.UINT16,
+        torch.uint32: onnx_ir.DataType.UINT32,
+        torch.uint64: onnx_ir.DataType.UINT64,
+        torch.complex64: onnx_ir.DataType.COMPLEX64,
+        torch.complex128: onnx_ir.DataType.COMPLEX128,
+    }
+
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
@@ -125,6 +146,7 @@ class OnnxExporter(DynamoExporter):
                 output_names=outputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
                 custom_translation_table=_ONNX_TRANSLATION_TABLE,
+                keep_initializers_as_inputs=config.keep_initializers_as_inputs,
                 opset_version=config.opset_version,
                 external_data=config.external_data,
                 export_params=config.export_params,
@@ -472,7 +494,8 @@ def _patch_full(original):
         if dtype is None:
             # find fill_value: positional arg or kwarg
             fill_value = kwargs.get("fill_value", args[1] if len(args) > 1 else None)
-            if isinstance(fill_value, int):
+            # `bool` is a subclass of `int` — exclude it so `torch.full(size, True)` stays bool.
+            if isinstance(fill_value, int) and not isinstance(fill_value, bool):
                 dtype = torch.long
         return original(*args, dtype=dtype, **kwargs)
 
@@ -723,8 +746,10 @@ def _fix_sort_stable(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     if node.target is not torch.ops.aten.sort.stable:
         return False
     self_arg = node.args[0]
-    dim = node.args[2] if len(node.args) > 2 else -1
-    descending = node.args[3] if len(node.args) > 3 else False
+    # `dim`/`descending` are keyword-only in `sort.stable` (schema: `sort.stable(self, *, stable, dim=-1,
+    # descending=False)`), so they arrive in `node.kwargs`, never `node.args`.
+    dim = node.kwargs.get("dim", -1)
+    descending = node.kwargs.get("descending", False)
     with gm.graph.inserting_before(node):
         new = gm.graph.call_function(torch.ops.aten.sort.default, args=(self_arg, dim, descending))
     node.replace_all_uses_with(new)
@@ -801,7 +826,9 @@ def _aten_index_put(
     is_bool = (
         bool_mask is not None and getattr(getattr(bool_mask, "type", None), "dtype", None) == onnx_ir.DataType.BOOL
     )
-    if not is_bool:
+    # The Where-based paths below overwrite; they can't express `self[mask] += values`. Delegate the
+    # accumulate case (and any non-bool-mask index) to torchlib, which handles both correctly.
+    if not is_bool or accumulate:
         return aten_index_put(self, indices, values, accumulate)
     for _ in range(len(self.shape) - len(bool_mask.shape)):
         bool_mask = op.Unsqueeze(bool_mask, op.Constant(value_ints=[-1]))
@@ -835,6 +862,11 @@ def _aten_bincount(self: INT64, weights=None, minlength: int = 0) -> INT64:
     return op.ReduceSum(one_hot, op.Constant(value_ints=[0]), keepdims=0)
 
 
+def _torch_dtype_to_onnx(dtype: torch.dtype) -> int:
+    """Map a ``torch.dtype`` to the ONNX ``op.Cast(to=...)`` TensorProto int."""
+    return _TORCH_DTYPE_TO_ONNX[dtype].value
+
+
 def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dtype=None) -> TReal:
     """ONNX implementation of `aten._grouped_mm.default`.
 
@@ -863,10 +895,17 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
         end = op.Slice(offs_i64, g_lo, g_hi, axes_0)  # (1,) — offs[g]
         a_g = op.Slice(mat_a, prev_end, end, axes_0)  # (n_g, K)
         w_g = op.Squeeze(op.Slice(mat_b, g_lo, g_hi, axes_0), axes_0)  # (K, N)
-        outputs.append(op.MatMul(a_g, w_g))  # (n_g, N)
+        out_g = op.MatMul(a_g, w_g)  # (n_g, N)
+        if bias is not None:
+            # per-group bias ``(G, N)`` → ``(N,)`` broadcasts over the group's rows
+            out_g = op.Add(out_g, op.Squeeze(op.Slice(bias, g_lo, g_hi, axes_0), axes_0))
+        outputs.append(out_g)
         prev_end = end
 
-    return op.Concat(*outputs, axis=0)  # (M, N)
+    result = op.Concat(*outputs, axis=0)  # (M, N)
+    if out_dtype is not None:
+        result = op.Cast(result, to=_torch_dtype_to_onnx(out_dtype))
+    return result
 
 
 def _aten_repeat_interleave_self_int(self, repeats, dim=None, output_size=None):

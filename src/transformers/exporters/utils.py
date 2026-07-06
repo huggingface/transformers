@@ -232,7 +232,7 @@ def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
 
     Mutates dicts and `__dict__`-bearing objects in place (preserving identity — callers
     rely on this so downstream pops/mutations propagate back to the original mapping);
-    rebuilds lists/tuples/sets/frozensets (immutable or order-sensitive containers).
+    rebuilds lists/tuples/sets (immutable or order-sensitive containers).
     Skips non-traversable leaf types (enum, SymInt, etc.).
     """
     if isinstance(obj, _LEAF_SKIP_TYPES):
@@ -444,10 +444,18 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
         spatial_merge_size = inputs.get("merge_sizes", 1)
 
     inputs["cu_seqlens"] = get_vision_cu_seqlens(grid_thw)
-    # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
-    # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
-    include_temporal = _find_submodule_attr(model, "axis_dim") is not None
-    inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
+
+    # Only set the vision `position_ids` when nothing already has: a full (non-decomposed) multimodal
+    # export precomputes the LLM's `position_ids` via `get_rope_index` first, and the vision ids
+    # (different shape/meaning) must not overwrite it. On the decomposed vision sub-model nothing sets
+    # it first, so this still fires there.
+    if inputs.get("position_ids") is None:
+        # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
+        # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
+        include_temporal = _find_submodule_attr(model, "axis_dim") is not None
+        inputs["position_ids"] = get_vision_position_ids(
+            grid_thw, spatial_merge_size, include_temporal=include_temporal
+        )
 
     window_size = _find_submodule_attr(model, "window_size")
     patch_size = _find_submodule_attr(model, "patch_size")

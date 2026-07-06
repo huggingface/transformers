@@ -446,7 +446,12 @@ def _patch_expand(original):
     def patch(self, *sizes):
         if len(sizes) == 1 and isinstance(sizes[0], (list, tuple, torch.Size)):
             sizes = tuple(sizes[0])
-        return original(self, *sizes).clone(memory_format=torch.contiguous_format)
+        result = original(self, *sizes)
+        # Only materialise when ``expand`` actually introduced a stride-0 (broadcast) dim; a
+        # no-broadcast expand is a plain view ExecuTorch's memory planner accepts as-is.
+        if 0 in result.stride():
+            return result.clone(memory_format=torch.contiguous_format)
+        return result
 
     return patch
 
@@ -1372,10 +1377,17 @@ def _fix_sym_pow_as_mul(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     mul_scalar = _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS.get(operator.mul)
     if mul_scalar is None:
         return False
+    base_val = base.meta.get("val") if isinstance(base, torch.fx.Node) else base
     with gm.graph.inserting_before(node):
         running = base
+        running_val = base_val
         for _ in range(exp - 1):
             running = gm.graph.call_function(mul_scalar, (running, base))
+            # Propagate the symbolic value so downstream passes / the emitter see a ``meta["val"]``
+            # on the synthesised products (matches the original ``pow`` node's value).
+            if base_val is not None and running_val is not None:
+                running_val = running_val * base_val
+                running.meta["val"] = running_val
     node.replace_all_uses_with(running)
     gm.graph.erase_node(node)
     return True

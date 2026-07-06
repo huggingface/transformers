@@ -634,7 +634,7 @@ def _deduplicate_output_args(graph_module) -> None:
             return arg
         with graph_module.graph.inserting_before(output_node):
             val = source.meta.get("val")
-            if val is not None and val.dtype == torch.bool:
+            if isinstance(val, torch.Tensor) and val.dtype == torch.bool:
                 copy = graph_module.graph.call_function(torch.ops.aten.logical_and.default, args=(source, source))
             else:
                 copy = graph_module.graph.call_function(torch.ops.aten.maximum.default, args=(source, source))
@@ -720,16 +720,14 @@ def _fix_sym_min_max(gm, node):
 
 @register_fx_program_fix("openvino")
 def _fix_to_dtype_layout_in_subgraphs(exported_program):
-    """Rewrite ``aten.to.dtype_layout`` and ``aten.to.device`` in *submodule* FX graphs to
-    ``aten._to_copy`` (with just the dtype kwarg).
+    """Rewrite every ``aten.to.{dtype,dtype_layout,device,other}`` node to ``aten._to_copy``
+    (keeping only the dtype kwarg), in the top-level graph and every submodule graph.
 
-    OV's PyTorch frontend registers ``ConversionExtension`` handlers only for the top-level
-    graph; nested ``HigherOrderOp`` subgraphs (like the one wrapped by
-    ``wrap_with_set_grad_enabled`` in Chameleon's rotary path) still see the raw
-    ``aten.to.dtype_layout`` node, for which OV has no translator — resulting in a dangling
-    ``torch::None`` constant. Rewriting the FX target here lets OV's built-in
-    ``aten._to_copy.default`` handler take over (which we also override at the top level to
-    swallow complex-dtype casts)."""
+    OV's PyTorch frontend has no ``aten.to.*`` translators at all — an unhandled variant falls
+    back to a dangling ``torch::None`` constant that fails conversion (e.g. the
+    ``wrap_with_set_grad_enabled`` HigherOrderOp subgraph in Chameleon's rotary path hits
+    ``aten.to.dtype_layout``). Rewriting the FX target here — before conversion — lets our
+    ``_convert_to_copy`` override handle every case (it also swallows complex-dtype casts)."""
     # Walk the top-level graph AND every submodule's graph (higher-order-op subgraphs).
     graphs = [exported_program.graph_module]
     graphs.extend(m for _, m in exported_program.graph_module.named_children() if hasattr(m, "graph"))
@@ -901,11 +899,11 @@ def _fix_scatter_reduce(gm, node):
         return True
 
     if reduce == "amax" and include_self is False:
-        # ``self`` is initialised to zeros; each source element competes for the max at
-        # ``index[j]``; empty positions stay zero. Decompose to a broadcast comparison + amax:
-        # build a one-hot mask ``(index.unsqueeze(dim) == arange(K))``, then take the elementwise
-        # max of ``src`` where the mask is set (``-inf`` elsewhere), then zero any positions with
-        # no scatter.
+        # ``amax`` with ``include_self=False``: each source element competes for the max at
+        # ``index[j]``; positions no source scatters to keep ``self``'s original value. Decompose to
+        # a broadcast comparison + amax: build a one-hot mask ``(index.unsqueeze(dim) == arange(K))``,
+        # take the elementwise max of ``src`` where the mask is set (``-inf`` elsewhere), then fall
+        # back to ``self`` for positions with no scatter.
         self_val = self_arg.meta.get("val")
         src_val = src.meta.get("val")
         if self_val is None or src_val is None or not src_val.dtype.is_floating_point:
@@ -941,10 +939,7 @@ def _fix_scatter_reduce(gm, node):
             masked = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, src_unsq, min_tensor))
             maxes = gm.graph.call_function(torch.ops.aten.amax.default, args=(masked, [d + 1]))
             any_match = gm.graph.call_function(torch.ops.aten.any.dim, args=(mask, d + 1))
-            zero_tensor = gm.graph.call_function(
-                torch.ops.aten.scalar_tensor.default, args=(0.0,), kwargs=scalar_kwargs
-            )
-            result = gm.graph.call_function(torch.ops.aten.where.self, args=(any_match, maxes, zero_tensor))
+            result = gm.graph.call_function(torch.ops.aten.where.self, args=(any_match, maxes, self_arg))
             result.meta.update(node.meta)
         node.replace_all_uses_with(result)
         gm.graph.erase_node(node)
@@ -1780,6 +1775,14 @@ def _convert_index_add(context):
     dim = int(context.get_values_from_const_input(1))
     index = context.get_input(2)
     source = context.get_input(3)
+    # ``index_add`` is ``self[index] += alpha * source``; fold a non-default ``alpha`` (FX input 4)
+    # into ``source`` before the scatter-add.
+    if context.get_input_size() > 4 and context.get_input(4).get_node().get_type_name() == "Constant":
+        alpha = context.get_values_from_const_input(4)
+        if alpha != 1:
+            source = ov_ops.multiply(
+                source, ov_ops.convert(ov_ops.constant(np.array(alpha)), source.get_element_type())
+            )
     # Broadcast 1-D index to source's rank/shape along ``dim`` so ScatterElementsUpdate
     # can consume element-wise ``source`` values.
     src_shape = ov_ops.shape_of(source, output_type="i64")
@@ -1882,28 +1885,6 @@ def _convert_layer_norm(context):
     return [shifted.output(0)]
 
 
-def _convert_aten_to(context):
-    """Convert ``aten.to.{dtype,device,dtype_layout,other}`` — emit a real ``Convert`` when the
-    target dtype is present, else identity.
-
-    OV's frontend has no ``aten.to.*`` translations at all (only ``aten._to_copy.default``);
-    every unhandled variant falls back to a ``torch::None`` constant that fails conversion
-    (chameleon's rotary sub-module hits ``aten.to.dtype_layout``). ``layout`` / ``device``
-    kwargs are silently dropped — OV exports are inherently device-neutral."""
-    data = context.get_input(0)
-    if not context.has_attribute("dtype"):
-        # ``aten.to.device`` — just device move, no dtype. Emit identity.
-        return [data]
-    try:
-        dtype = context.get_attribute("dtype")
-    except Exception:
-        # Complex dtypes throw. Skip (identity) — see ``_convert_to_copy``.
-        return [data]
-    if dtype is None:
-        return [data]
-    return [ov_ops.convert(data, dtype).output(0)]
-
-
 def _convert_to_copy(context):
     """Convert ``aten._to_copy(self, dtype=..., ...)`` to an OV ``Convert``.
 
@@ -1951,23 +1932,35 @@ def _convert_sdpa(context):
 
     OV's ``opset13::ScaledDotProductAttention`` rejects int-typed masks. Under CUDA export
     ``aten.expand`` promotes bool masks to ``i64`` during OV translation, so we insert a
-    ``Convert(→ boolean)`` on the mask input before instantiating the op. Q/K/V/scale pass
-    through unchanged."""
+    ``Convert(→ boolean)`` on the mask input before instantiating the op.
+
+    The ``scale`` arg (FX input 6) is threaded through when present: it defaults to
+    ``head_dim**-0.5`` in both aten and OV, but models like Gemma2/Gemma3 pass an explicit
+    ``query_pre_attn_scalar**-0.5`` that differs — dropping it would silently change the attention
+    temperature. Q/K/V pass through unchanged."""
     q, k, v = context.get_input(0), context.get_input(1), context.get_input(2)
     # A ``None`` FX arg reaches the extension as an unconverted ``PtFrameworkNode``.
     mask = None
     if context.get_input_size() > 3:
         candidate = context.get_input(3)
         if candidate.get_node().get_type_name() != "PtFrameworkNode":
-            mask = ov_ops.convert(candidate, "boolean")
+            # A bool mask that `aten.expand` promoted to ``i64`` under CUDA export is cast back to
+            # boolean; a float *additive* mask (``0`` attend / ``-inf`` masked) passes through unchanged
+            # — OV's SDPA adds it to the scores, whereas casting it to bool would invert/destroy it.
+            mask = candidate if candidate.get_element_type().is_real() else ov_ops.convert(candidate, "boolean")
     is_causal = False
     if context.get_input_size() > 5:
         # ``is_causal`` is a positional FX input (arg 5), not a node attribute.
         if context.get_input(5).get_node().get_type_name() == "Constant":
             is_causal = bool(context.get_values_from_const_input(5))
-    if mask is None:
-        return [ov_ops.scaled_dot_product_attention(q, k, v, causal=is_causal).output(0)]
-    return [ov_ops.scaled_dot_product_attention(q, k, v, mask, causal=is_causal).output(0)]
+    # ``scale`` is FX input 6; a ``None`` (default) arrives as a non-``Constant`` and is skipped so
+    # OV falls back to its own ``head_dim**-0.5`` default (identical to aten's).
+    kwargs = {"causal": is_causal}
+    if mask is not None:
+        kwargs["attention_mask"] = mask
+    if context.get_input_size() > 6 and context.get_input(6).get_node().get_type_name() == "Constant":
+        kwargs["scale"] = context.get_input(6)
+    return [ov_ops.scaled_dot_product_attention(q, k, v, **kwargs).output(0)]
 
 
 def _convert_complex(context):
@@ -2081,10 +2074,6 @@ if is_openvino_available():
             ConversionExtension("aten._fft_c2c.default", _convert_fft_c2c),
             ConversionExtension("aten._conj.default", _convert_conj),
             ConversionExtension("aten._to_copy.default", _convert_to_copy),
-            ConversionExtension("aten.to.dtype", _convert_aten_to),
-            ConversionExtension("aten.to.dtype_layout", _convert_aten_to),
-            ConversionExtension("aten.to.device", _convert_aten_to),
-            ConversionExtension("aten.to.other", _convert_aten_to),
             ConversionExtension("aten.layer_norm.default", _convert_layer_norm),
             ConversionExtension("aten.scaled_dot_product_attention.default", _convert_sdpa),
             ConversionExtension("aten.bitwise_not.default", _convert_bitwise_not),
