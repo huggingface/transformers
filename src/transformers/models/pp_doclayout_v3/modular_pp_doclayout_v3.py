@@ -599,12 +599,7 @@ def mask_to_box_coordinate(mask, dtype):
     is_mask_non_empty = torch.any(mask, dim=(-2, -1)).unsqueeze(-1)
     unnormalized_bbox = unnormalized_bbox * is_mask_non_empty
 
-    # ``torch.tensor([w, h, w, h])`` where ``w`` / ``h`` are SymInts materialises on CPU and
-    # then transfers, tripping FakeTensor device propagation during export. Build via
-    # ``torch.stack`` on already-device-side scalars instead.
-    width_t = torch.as_tensor(width, device=mask.device, dtype=dtype)
-    height_t = torch.as_tensor(height, device=mask.device, dtype=dtype)
-    norm_tensor = torch.stack([width_t, height_t, width_t, height_t])
+    norm_tensor = torch.tensor([width, height, width, height], device=mask.device, dtype=dtype)
     normalized_bbox_xyxy = unnormalized_bbox / norm_tensor
 
     x_min_norm, y_min_norm, x_max_norm, y_max_norm = normalized_bbox_xyxy.unbind(dim=-1)

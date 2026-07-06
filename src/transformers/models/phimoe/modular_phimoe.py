@@ -49,17 +49,10 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
         self.rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        # Precompute both LongRoPE variants at init so forward stays traceable: at forward we
-        # blend by the runtime ``max(position_ids) + 1 > original_max_position_embeddings`` mask
-        # via ``torch.where``, avoiding a data-dependent Python-``bool`` on the seq_len tensor.
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-        if self.rope_type != "default":
-            inv_freq_long, _ = self.rope_init_fn(
-                self.config, device, seq_len=self.config.rope_parameters["original_max_position_embeddings"] + 1
-            )
-            self.register_buffer("inv_freq_long", inv_freq_long, persistent=False)
 
     def forward(self, x, position_ids=None, layer_type=None):
         if layer_type is not None:
@@ -67,22 +60,16 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
                 f"{self.__class__.__name__} does not support layer types, but got `layer_type={layer_type}`"
             )
 
-        if self.rope_type != "default":
-            threshold = self.config.rope_parameters["original_max_position_embeddings"]
-            # ``max(position_ids) + 1`` (not ``shape[-1]``) so decode / sliding-window paths that
-            # ship a short slice of position_ids still see the true reached max — matters for
-            # LongRoPE scale selection. Blending via ``torch.where`` avoids the ``Python bool``
-            # on a tensor that trips ``GuardOnDataDependentSymNode`` under ``torch.export``.
-            is_long_context = (torch.max(position_ids) + 1) > threshold
-            inv_freq = torch.where(is_long_context, self.inv_freq_long, self.inv_freq)
-            mscale = torch.where(
-                is_long_context,
-                torch.tensor(self.config.rope_parameters["long_mscale"], device=x.device, dtype=torch.float32),
-                torch.tensor(self.config.rope_parameters["short_mscale"], device=x.device, dtype=torch.float32),
+        mscale = None
+        seq_len = torch.max(position_ids) + 1
+        if self.config.rope_parameters["rope_type"] != "default" and seq_len:
+            mscale = (
+                self.config.rope_parameters["long_mscale"]
+                if seq_len > self.config.rope_parameters["original_max_position_embeddings"]
+                else self.config.rope_parameters["short_mscale"]
             )
-        else:
-            inv_freq = self.inv_freq
-            mscale = self.attention_scaling
+        inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
+        mscale = attention_scaling if mscale is None else mscale
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 

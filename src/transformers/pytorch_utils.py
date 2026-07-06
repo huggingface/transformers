@@ -118,9 +118,7 @@ class Conv1D(nn.Module):
 
     def forward(self, x):
         size_out = x.size()[:-1] + (self.nf,)
-        # reshape, not view: export passes (e.g. ExecuTorch's dim-order pass) can hand this a
-        # non-contiguous input, which view rejects; reshape is free when contiguous.
-        x = torch.addmm(self.bias, x.reshape(-1, x.size(-1)), self.weight)
+        x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
         x = x.view(size_out)
         return x
 
