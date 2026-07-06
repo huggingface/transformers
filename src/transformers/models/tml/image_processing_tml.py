@@ -126,8 +126,9 @@ class TmlImageProcessor(TorchvisionBackend):
             per_image_patches.append(image_patches)
             num_patches.append(image_patches.shape[0])
 
+        pixel_values = torch.cat(per_image_patches, dim=0).permute(0, 4, 2, 3, 1)
         data = {
-            "pixel_values": torch.cat(per_image_patches, dim=0),
+            "pixel_values": pixel_values,
             "num_patches": torch.tensor(num_patches),
         }
         return BatchFeature(data=data, tensor_type=return_tensors)

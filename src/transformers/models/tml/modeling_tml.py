@@ -771,7 +771,7 @@ class TmlAudioModel(TmlPreTrainedModel):
         embedding_indices = torch.arange(self.n_mel_bins) * self.mel_vocab_size
         self.register_buffer("embedding_indices", embedding_indices.unsqueeze(0), persistent=False)
 
-    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+    def forward(self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         if input_features.shape[1] != self.n_mel_bins:
             raise ValueError("`input_features` have to have exactly `num_mel_bin` length!")
 
@@ -934,7 +934,7 @@ class TmlVisionModel(TmlPreTrainedModel):
 
         self.final_norm = TmlRMSNorm(config.text_hidden_size)
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         num_patches = pixel_values.shape[0]
         hidden_states = pixel_values
         for layer in self.encoder_layers:
