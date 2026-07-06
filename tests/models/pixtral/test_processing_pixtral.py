@@ -31,7 +31,7 @@ if is_vision_available():
 class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PixtralProcessor
     tiny_model_id = "hf-internal-testing/tiny-processor-pixtral"
-    model_id = "mistral-labs/pixtral-12b"
+    model_id = "mistral-community/pixtral-12b"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
