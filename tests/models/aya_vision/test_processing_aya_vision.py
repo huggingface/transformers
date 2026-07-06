@@ -64,20 +64,6 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
-    def test_get_num_multimodal_tokens_matches_processor_call(self):
-        # The tiny tokenizer encodes '<image>' as different IDs than the full Cohere tokenizer,
-        # so the processor can't detect image token positions in input_ids. Build a one-off
-        # processor with the full tokenizer (from model_id) + our custom image processor.
-        components = self.prepare_components()
-        tokenizer_cls = self._get_component_class_from_processor("tokenizer")
-        components["tokenizer"] = tokenizer_cls.from_pretrained(self.model_id, padding_side="left")
-        proc = self.processor_class(**components, **self.prepare_processor_dict())
-        self.get_processor = lambda use_tiny_ckpt=True: proc
-        try:
-            super().test_get_num_multimodal_tokens_matches_processor_call()
-        finally:
-            del self.get_processor
-
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
