@@ -282,8 +282,7 @@ def _ignore_causal_mask_sdpa(
     passed).
     """
     if padding_mask is not None and padding_mask.shape[-1] > kv_length:
-        mask_indices = torch.arange(kv_length, device=padding_mask.device)
-        mask_indices += kv_offset
+        mask_indices = torch.arange(kv_length, device=padding_mask.device) + kv_offset
         padding_mask = padding_mask[:, mask_indices]
 
     if _is_torch_xpu_available:
@@ -292,19 +291,26 @@ def _ignore_causal_mask_sdpa(
         # - Multi-query tokens can skip if padding_mask is provided and correctly structured
         #   (all True in query window, all False after)
         return _can_skip_causal_mask_xpu(padding_mask, q_length, kv_length, q_offset, kv_offset, local_attention_size)
+
     # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
     # `ignore_causal_mask = True` if we are not tracing
-    if (
-        not is_tracing(padding_mask)
-        # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
-        and (q_length == 1 or kv_length == q_length)
-        # in this case we need to add special patterns to the mask so cannot be skipped otherwise
-        and (local_attention_size is None or kv_length < local_attention_size)
-        # In this case, we need to add padding to the mask, so cannot be skipped otherwise
-        and (padding_mask is None or padding_mask.all())
-    ):
+    if is_tracing(padding_mask):
+        return False
+    # In this case, we need to add special patterns to the mask no matter what, so we cannot use any of the later skip conditions
+    if local_attention_size is not None and kv_length >= local_attention_size:
+        return False
+
+    # If `q_length == 1`, we then use `is_causal=False` in sdpa integration to mimic lower-right alignment. If `kv_length == q_length`,
+    # we use `is_causal=True` as upper-left alignment (torch's default) is the same as lower-right in this case. If we have padding,
+    # we need to add padding to the mask, so cannot be skipped
+    if (q_length == 1 or kv_length == q_length) and (padding_mask is None or padding_mask.all()):
+        return True
+    # Additional case to optimize prefill: if the cache is empty (`q_offset == 0`), we can use `is_causal=True` even
+    # with a padding_mask, if the padding_mask only contains padding related to "future k/v tokens" of the static k/v states
+    # returned by StaticCaches. This works thanks to the upper-left alignment of sdpa's `is_causal` mask
+    if q_offset == 0 and padding_mask[:, :q_length].all() and not padding_mask[:, q_length:].any():
         return True
 
     return False
