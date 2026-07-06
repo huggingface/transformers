@@ -271,13 +271,11 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_image_processor(self):
-        return Tipsv2DptImageProcessor.from_pretrained(self.model_id, revision=self.revision)
+        return Tipsv2DptImageProcessor.from_pretrained(self.model_id)
 
     @slow
     def test_inference_model(self):
-        model = Tipsv2DptForDensePrediction.from_pretrained(
-            self.model_id, revision=self.revision, device_map=torch_device
-        ).eval()
+        model = Tipsv2DptForDensePrediction.from_pretrained(self.model_id, device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -375,9 +373,7 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_depth_estimation(self):
-        model = Tipsv2DptForDepthEstimation.from_pretrained(
-            self.model_id, revision=self.revision, device_map=torch_device
-        ).eval()
+        model = Tipsv2DptForDepthEstimation.from_pretrained(self.model_id, device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -421,9 +417,7 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_normal_estimation(self):
-        model = Tipsv2DptForNormalEstimation.from_pretrained(
-            self.model_id, revision=self.revision, device_map=torch_device
-        ).eval()
+        model = Tipsv2DptForNormalEstimation.from_pretrained(self.model_id, device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
@@ -467,9 +461,7 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = Tipsv2DptForSemanticSegmentation.from_pretrained(
-            self.model_id, revision=self.revision, device_map=torch_device
-        ).eval()
+        model = Tipsv2DptForSemanticSegmentation.from_pretrained(self.model_id, device_map=torch_device).eval()
 
         image = prepare_img()
         image_processor = self.default_image_processor
