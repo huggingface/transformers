@@ -296,48 +296,13 @@ class OpenPanguV2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip("OpenPanguV2 MLA uses custom cache format incompatible with standard cache")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("OpenPanguV2 MLA uses custom cache format incompatible with standard cache")
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("OpenPanguV2 MLA compressor is not compatible with QuantizedCache")
-    def test_generate_with_quant_cache(self):
-        pass
-
-    @unittest.skip("SDPA can't dispatch on flash due to unsupported custom head dims in MLA")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(
-        reason=(
-            "DSA/MHC compression mechanism pools windows before attention mask is applied "
-            "- left-padding shifts window boundaries and causes logits divergence"
-        )
-    )
-    def test_left_padding_compatibility(self):
-        pass
-
     @unittest.skip("OpenPanguV2 uses custom rope_parameters that may not support standard scaling")
     def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @unittest.skip("OpenPanguV2 uses custom rope_parameters that may not support standard scaling")
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
     @unittest.skip("OpenPanguV2 MLA/MHC components not fully compatible with torch.compile")
     @pytest.mark.torch_compile_test
     def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("OpenPanguV2 MLA/MHC components not fully compatible with torch.compile")
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward(self):
         pass
 
     @unittest.skip("Can not handle 4D attention mask from static cache")
@@ -346,25 +311,25 @@ class OpenPanguV2ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip(
-        "mHCModule implementation does not currently support offload: parameters are accessed "
-        "via hc_pre/hc_post methods instead of forward, preventing accelerate hooks from "
-        "moving weights to the execution device"
+        "OpenPanguV2 MoME WindowBuffer stores Conv1d.forward bound methods and calls them directly, "
+        "bypassing accelerate offload hooks; offload output parity is only verified when "
+        "router_sliding_window=0"
     )
     def test_disk_offload_bin(self):
         pass
 
     @unittest.skip(
-        "mHCModule implementation does not currently support offload: parameters are accessed "
-        "via hc_pre/hc_post methods instead of forward, preventing accelerate hooks from "
-        "moving weights to the execution device"
+        "OpenPanguV2 MoME WindowBuffer stores Conv1d.forward bound methods and calls them directly, "
+        "bypassing accelerate offload hooks; offload output parity is only verified when "
+        "router_sliding_window=0"
     )
     def test_disk_offload_safetensors(self):
         pass
 
     @unittest.skip(
-        "mHCModule implementation does not currently support offload: parameters are accessed "
-        "via hc_pre/hc_post methods instead of forward, preventing accelerate hooks from "
-        "moving weights to the execution device"
+        "OpenPanguV2 MoME WindowBuffer stores Conv1d.forward bound methods and calls them directly, "
+        "bypassing accelerate offload hooks; offload output parity is only verified when "
+        "router_sliding_window=0"
     )
     def test_cpu_offload(self):
         pass

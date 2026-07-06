@@ -246,43 +246,78 @@ class FastGELU(nn.Module):
         return input * torch.sigmoid(1.702 * abs_value) * torch.exp(0.851 * (input - abs_value))
 
 
-class mHCModule(nn.Module):
-    def __init__(
-        self,
-        config: OpenPanguV2Config,
-        merge_layer_only_pre=False,
-    ):
+class OpenPanguV2HyperConnection(nn.Module):
+    def __init__(self, config: OpenPanguV2Config):
         super().__init__()
         self.num_stream = config.mhc_num_stream
         self.hidden_size = config.hidden_size
-        self.merge_layer_only_pre = merge_layer_only_pre
-
-        if not self.merge_layer_only_pre:
-            phi_output_hidden_size = (self.num_stream + 2) * self.num_stream
-            self.branch_alpha = nn.Parameter(torch.empty(3, dtype=torch.bfloat16))
-            self.branch_beta = nn.Parameter(torch.empty(self.num_stream * (self.num_stream + 2), dtype=torch.bfloat16))
-        else:
-            phi_output_hidden_size = self.num_stream
-            self.branch_alpha_pre = nn.Parameter(torch.empty(1, dtype=torch.bfloat16))
-            self.branch_beta_pre = nn.Parameter(torch.empty(self.num_stream, dtype=torch.bfloat16))
-        self.phi = nn.Linear(
-            self.hidden_size * self.num_stream,
-            phi_output_hidden_size,
-            bias=False,
-            dtype=torch.bfloat16,
-        )
         self.mhc_use_gamma = config.mhc_use_gamma
         self.hc_eps = 1e-6
         self.norm_eps = config.rms_norm_eps
         self.mhc_recur_norm = config.mhc_recur_norm
+        self.phi = nn.Linear(
+            self.hidden_size * self.num_stream,
+            (self.num_stream + 2) * self.num_stream,
+            bias=False,
+            dtype=torch.bfloat16,
+        )
+        self.branch_alpha = nn.Parameter(torch.empty(3, dtype=torch.bfloat16))
+        self.branch_beta = nn.Parameter(torch.empty(self.num_stream * (self.num_stream + 2), dtype=torch.bfloat16))
         if self.mhc_use_gamma:
             self.norm_gamma = nn.Parameter(torch.empty(self.hidden_size * self.num_stream, dtype=torch.bfloat16))
 
-    def hc_pre(self, x: torch.Tensor):
-        """
-        x: (B, S, n * H)
-        """
-        dtype = x.dtype
+    def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        target_dtype = self.phi.weight.dtype
+        rsqrt = torch.rsqrt(hidden_streams.square().mean(-1, keepdim=True) + self.norm_eps)
+        if self.mhc_use_gamma:
+            weight = self.phi((hidden_streams * rsqrt * self.norm_gamma.unsqueeze(0)).to(target_dtype))
+        else:
+            weight = self.phi(hidden_streams) * rsqrt
+
+        h_pre, h_post, h_res = weight.split(
+            [self.num_stream, self.num_stream, self.num_stream * self.num_stream], dim=-1
+        )
+        alpha_pre, alpha_post, alpha_res = self.branch_alpha.view(-1).split([1, 1, 1])
+        beta_pre, beta_post, beta_res = self.branch_beta.view(-1).split(
+            [self.num_stream, self.num_stream, self.num_stream * self.num_stream]
+        )
+
+        h_pre = torch.sigmoid(h_pre * alpha_pre + beta_pre) + self.hc_eps
+        h_post = 2 * torch.sigmoid(h_post * alpha_post + beta_post)
+        h_res = h_res.unflatten(-1, (self.num_stream, self.num_stream))
+        h_res = h_res * alpha_res + beta_res.view(self.num_stream, self.num_stream)
+        h_res = h_res.softmax(-1) + self.hc_eps
+        h_res = h_res / (h_res.sum(-2, keepdim=True) + self.hc_eps)
+        for _ in range(self.mhc_recur_norm - 1):
+            h_res = h_res / (h_res.sum(-1, keepdim=True) + self.hc_eps)
+            h_res = h_res / (h_res.sum(-2, keepdim=True) + self.hc_eps)
+
+        collapsed = torch.sum(
+            h_pre.unsqueeze(-1) * hidden_streams.unflatten(dim=-1, sizes=(self.num_stream, -1)), dim=-2
+        )
+        return h_post, h_res, collapsed.to(hidden_streams.dtype)
+
+
+class OpenPanguV2HyperHead(nn.Module):
+    def __init__(self, config: OpenPanguV2Config):
+        super().__init__()
+        self.num_stream = config.mhc_num_stream
+        self.hidden_size = config.hidden_size
+        self.mhc_use_gamma = config.mhc_use_gamma
+        self.hc_eps = 1e-6
+        self.norm_eps = config.rms_norm_eps
+        self.phi = nn.Linear(
+            self.hidden_size * self.num_stream,
+            self.num_stream,
+            bias=False,
+            dtype=torch.bfloat16,
+        )
+        self.branch_alpha_pre = nn.Parameter(torch.empty(1, dtype=torch.bfloat16))
+        self.branch_beta_pre = nn.Parameter(torch.empty(self.num_stream, dtype=torch.bfloat16))
+        if self.mhc_use_gamma:
+            self.norm_gamma = nn.Parameter(torch.empty(self.hidden_size * self.num_stream, dtype=torch.bfloat16))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         target_dtype = self.phi.weight.dtype
         rsqrt = torch.rsqrt(x.square().mean(-1, keepdim=True) + self.norm_eps)
         if self.mhc_use_gamma:
@@ -290,61 +325,10 @@ class mHCModule(nn.Module):
         else:
             weight = self.phi(x) * rsqrt
 
-        # (B,S,n), (B,S,n), (B,S,n,n)
-        h_pre, h_post, h_res = self.hc_split_sinkhorn_torch(weight)
-
-        # (B,S,H)
+        h_pre = weight
+        h_pre = torch.sigmoid(h_pre * self.branch_alpha_pre + self.branch_beta_pre) + self.hc_eps
         y = torch.sum(h_pre.unsqueeze(-1) * x.unflatten(dim=-1, sizes=(self.num_stream, -1)), dim=-2)
-        return y.to(dtype), h_post, h_res
-
-    def hc_post(self, x: torch.Tensor, residual: torch.Tensor, h_post: torch.Tensor, h_res: torch.Tensor):
-        """
-        x: (B, S, H)
-        residual: (B, S, n * H)
-        h_post: (B, S, n)
-        h_res: (B, S, n, n)
-        """
-        if self.merge_layer_only_pre:
-            return x
-
-        y = h_post.unsqueeze(-1) * x.unsqueeze(-2) + torch.sum(
-            h_res.unsqueeze(-1) * residual.unflatten(dim=-1, sizes=(self.num_stream, -1)).unsqueeze(-2), dim=-3
-        )
-        return y.view(residual.shape).type_as(x)
-
-    def hc_split_sinkhorn_torch(self, weight):
-        if not self.merge_layer_only_pre:
-            h_pre, h_post, h_res = weight.split(
-                [self.num_stream, self.num_stream, self.num_stream * self.num_stream], dim=-1
-            )
-            alpha_pre, alpha_post, alpha_res = self.branch_alpha.view(-1).split([1, 1, 1])
-            beta_pre, beta_post, beta_res = self.branch_beta.view(-1).split(
-                [self.num_stream, self.num_stream, self.num_stream * self.num_stream]
-            )
-
-            h_post = 2 * torch.sigmoid(h_post * alpha_post + beta_post)
-            h_res = h_res.unflatten(-1, (self.num_stream, self.num_stream))
-            h_res = h_res * alpha_res + beta_res.view(self.num_stream, self.num_stream)
-            h_res = self.sinkhorn_knopps(h_res, self.mhc_recur_norm, self.hc_eps)
-        else:
-            h_pre = weight
-            h_post = None
-            h_res = None
-            alpha_pre = self.branch_alpha_pre
-            beta_pre = self.branch_beta_pre
-        h_pre = torch.sigmoid(h_pre * alpha_pre + beta_pre) + self.hc_eps
-        return h_pre, h_post, h_res
-
-    def sinkhorn_knopps(self, h_res, sinkhorn_iters, eps):
-        h_res = h_res.softmax(-1) + eps
-        col_sum = h_res.sum(-2, keepdim=True)
-        h_res = h_res / (col_sum + eps)
-        for _ in range(sinkhorn_iters - 1):
-            row_sum = h_res.sum(-1, keepdim=True)
-            h_res = h_res / (row_sum + eps)
-            col_sum = h_res.sum(-2, keepdim=True)
-            h_res = h_res / (col_sum + eps)
-        return h_res
+        return y.to(x.dtype)
 
 
 class WindowBuffer:
@@ -789,8 +773,8 @@ class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
         block_post_layernorm_hidden_size = config.hidden_size
         self.use_mhc = config.use_mhc
         if self.use_mhc:
-            self.attn_mhc_module = mHCModule(config)
-            self.mlp_mhc_module = mHCModule(config)
+            self.attn_mhc_module = OpenPanguV2HyperConnection(config)
+            self.mlp_mhc_module = OpenPanguV2HyperConnection(config)
             block_post_layernorm_hidden_size *= config.mhc_num_stream
 
         self.has_block_post_layernorm = (
@@ -812,7 +796,7 @@ class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
         residual = hidden_states
 
         if self.use_mhc:
-            hidden_states, h_post, h_res = self.attn_mhc_module.hc_pre(hidden_states)
+            h_post, h_res, hidden_states = self.attn_mhc_module(hidden_states)
 
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
@@ -829,7 +813,11 @@ class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
             hidden_states = self.post_attention_layernorm(hidden_states)
 
         if self.use_mhc:
-            hidden_states = self.attn_mhc_module.hc_post(hidden_states, residual, h_post, h_res)
+            residual_streams = residual.unflatten(dim=-1, sizes=(self.attn_mhc_module.num_stream, -1))
+            hidden_states = h_post.to(hidden_states.dtype).unsqueeze(-1) * hidden_states.unsqueeze(-2) + torch.sum(
+                h_res.unsqueeze(-1) * residual_streams.unsqueeze(-2), dim=-3
+            )
+            hidden_states = hidden_states.view(residual.shape)
         else:
             hidden_states = residual + hidden_states
 
@@ -837,7 +825,7 @@ class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
         residual = hidden_states
 
         if self.use_mhc:
-            hidden_states, h_post, h_res = self.mlp_mhc_module.hc_pre(hidden_states)
+            h_post, h_res, hidden_states = self.mlp_mhc_module(hidden_states)
 
         if self.sandwich_norm:
             hidden_states = self.pre_mlp_layernorm(hidden_states)
@@ -849,7 +837,11 @@ class OpenPanguV2DecoderLayer(LlamaDecoderLayer):
             hidden_states = self.post_mlp_layernorm(hidden_states)
 
         if self.use_mhc:
-            hidden_states = self.mlp_mhc_module.hc_post(hidden_states, residual, h_post, h_res)
+            residual_streams = residual.unflatten(dim=-1, sizes=(self.mlp_mhc_module.num_stream, -1))
+            hidden_states = h_post.to(hidden_states.dtype).unsqueeze(-1) * hidden_states.unsqueeze(-2) + torch.sum(
+                h_res.unsqueeze(-1) * residual_streams.unsqueeze(-2), dim=-3
+            )
+            hidden_states = hidden_states.view(residual.shape)
         else:
             hidden_states = residual + hidden_states
 
@@ -871,7 +863,7 @@ class OpenPanguV2PreTrainedModel(LlamaPreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         std = 0.02
 
-        if isinstance(module, mHCModule):
+        if isinstance(module, (OpenPanguV2HyperConnection, OpenPanguV2HyperHead)):
             # Initialize MHC bfloat16 parameters
             if hasattr(module, "norm_gamma"):
                 init.normal_(module.norm_gamma, mean=0.0, std=std)
@@ -915,10 +907,7 @@ class OpenPanguV2Model(LlamaModel):
         self.use_mhc = config.use_mhc
         if self.use_mhc:
             self.num_stream = config.mhc_num_stream
-            self.merge_mhc_module = mHCModule(
-                config=config,
-                merge_layer_only_pre=True,
-            )
+            self.merge_mhc_module = OpenPanguV2HyperHead(config)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -983,7 +972,7 @@ class OpenPanguV2Model(LlamaModel):
             )
 
         if self.use_mhc:
-            hidden_states, _, _ = self.merge_mhc_module.hc_pre(hidden_states)
+            hidden_states = self.merge_mhc_module(hidden_states)
 
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
