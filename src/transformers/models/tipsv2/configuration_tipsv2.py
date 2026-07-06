@@ -32,7 +32,8 @@ class Tipsv2VisionConfig(BackboneConfigMixin, PreTrainedConfig):
     layerscale_value (`float`, *optional*, defaults to `1.0`):
         Initial value to use for layer scale.
     use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
-        Whether to use the SwiGLU feedforward neural network.
+        Whether to use the SwiGLU feedforward neural network. Otherwise a standard MLP
+        with `hidden_act` as activation function is used.
     num_register_tokens (`int`, *optional*, defaults to `1`):
         Number of register tokens to use.
     apply_layernorm (`bool`, *optional*, defaults to `True`):
