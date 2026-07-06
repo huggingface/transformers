@@ -33,7 +33,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InternVLProcessor
     videos_input_name = "pixel_values"
     tiny_model_id = "hf-internal-testing/tiny-processor-internvl"
-    model_id = "OpenGVLab/InternVL3-1B-hf"
+    model_id = "hf-internal-testing/tiny-processor-internvl"
 
     @classmethod
     def _setup_image_processor(cls):
