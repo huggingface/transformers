@@ -53,6 +53,12 @@ if is_torch_available():
     import torch
 
 
+# Tiny Mixtral + a LoRA checkpoint saved in the pre-v5 format (i.e. when the MoE experts still were individual nn.Linear
+# layers instead of fused 3d nn.Parameters), thus requiring weight conversion at load time.
+MIXTRAL_MODEL_ID = "hf-internal-testing/Mixtral-tiny"
+MIXTRAL_PRE_V5_LORA_ID = "peft-internal-testing/mixtral-pre-v5-lora"
+
+
 @require_peft
 @require_torch
 class PeftTesterMixin:
@@ -1054,8 +1060,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
     @require_peft_greater_or_equal("0.20.0")
     def test_mixtral_lora_conversion(self):
         inputs = torch.arange(10).view(1, -1).to(torch_device)
-        model_name = "hf-internal-testing/Mixtral-tiny"
-        adapter_name = "peft-internal-testing/mixtral-pre-v5-lora"
+        model_name = MIXTRAL_MODEL_ID
+        adapter_name = MIXTRAL_PRE_V5_LORA_ID
 
         # original logits were:
         # tensor([[[ 0.2676,  0.3870,  0.2956,  ...,  0.4624,  0.1966,  0.2539],
@@ -1326,15 +1332,72 @@ class PeftHotswapIntegrationTest(unittest.TestCase):
             AutoModel.from_pretrained(tmp_dir)
 
     def test_mixtral_hotswap_without_compile_works(self):
-        # test a model that usees weight conversion
-        model_id = "hf-internal-testing/Mixtral-tiny"
-        self._check_model_hotswap(rank1=7, rank2=13, do_compile=False, model_id=model_id)
+        # test a model that uses weight conversion
+        self._check_model_hotswap(rank1=7, rank2=13, do_compile=False, model_id=MIXTRAL_MODEL_ID)
 
     def test_mixtral_hotswap_with_compile_works(self):
-        # test a model that usees weight conversion
-        model_id = "hf-internal-testing/Mixtral-tiny"
+        # test a model that uses weight conversion
         with (
             torch._dynamo.config.patch(error_on_recompile=True),
             torch._inductor.utils.fresh_inductor_cache(),
         ):
-            self._check_model_hotswap(rank1=8, rank2=8, do_compile=True, model_id=model_id)
+            self._check_model_hotswap(rank1=8, rank2=8, do_compile=True, model_id=MIXTRAL_MODEL_ID)
+
+    def _check_pre_v5_lora_hotswap_with_conversion(self, *, do_compile):
+        # Check that hotswapping works for a LoRA checkpoint that was saved in the pre-v5 format (here: trained on
+        # Mixtral when the MoE experts still were individual nn.Linear layers). Loading such a checkpoint requires the
+        # adapter weights to be converted to the new architecture (fused 3d nn.Parameter experts). The normal loading
+        # path applies the conversion in `_load_pretrained_model` (covered by `test_mixtral_lora_conversion`), but the
+        # hotswap path bypasses it and needs to apply the conversion itself, which is what this test checks: the
+        # hotswapped adapter must produce the same outputs as the same checkpoint loaded through the normal path.
+        atol, rtol = 2e-3, 1e-6
+        inputs = torch.arange(10).view(1, -1).to(torch_device)
+
+        model = AutoModelForCausalLM.from_pretrained(MIXTRAL_MODEL_ID).to(torch_device)
+        model.eval()
+        with torch.inference_mode():
+            base_logits = model(inputs).logits
+
+        # load the pre-v5 checkpoint through the normal (non-hotswap) path to obtain the reference output
+        model.load_adapter(MIXTRAL_PRE_V5_LORA_ID, adapter_name="default", is_trainable=False)
+        if do_compile:
+            # Compile with the eager backend: the converted checkpoint targets nn.Parameters (the fused expert
+            # weights), which relies on nn.utils.parametrize and leads to graph breaks that can affect the outputs
+            # with the inductor backend, see the equivalent test_hotswap_lora_target_parameters in PEFT.
+            model = torch.compile(model, backend="eager")
+
+        with torch.inference_mode():
+            lora_logits = model(inputs).logits
+        # sanity check: the adapter influences the output
+        self.assertFalse(torch.allclose(base_logits, lora_logits, atol=atol, rtol=rtol))
+
+        # scramble the LoRA weights so that we can tell whether hotswapping actually swapped in the checkpoint
+        # weights (hotswapping the same checkpoint onto pristine weights would hide a silent no-op)
+        torch.manual_seed(0)
+        with torch.no_grad():
+            for name, param in model.named_parameters():
+                if "lora_" in name:
+                    param.add_(torch.randn_like(param))
+        with torch.inference_mode():
+            scrambled_logits = model(inputs).logits
+        self.assertFalse(torch.allclose(lora_logits, scrambled_logits, atol=atol, rtol=rtol))
+
+        # hotswap the same pre-v5 checkpoint; the weight conversion has to be applied by the hotswap code path
+        model.load_adapter(MIXTRAL_PRE_V5_LORA_ID, adapter_name="default", hotswap=True, is_trainable=False)
+        with torch.inference_mode():
+            hotswapped_logits = model(inputs).logits
+        self.assertTrue(torch.allclose(lora_logits, hotswapped_logits, atol=atol, rtol=rtol))
+
+    @require_peft_greater_or_equal("0.20.0")
+    def test_mixtral_pre_v5_lora_hotswap_without_compile_works(self):
+        # hotswapping a checkpoint that requires weight conversion
+        self._check_pre_v5_lora_hotswap_with_conversion(do_compile=False)
+
+    @require_peft_greater_or_equal("0.20.0")
+    def test_mixtral_pre_v5_lora_hotswap_with_compile_works(self):
+        # Hotswapping a checkpoint that requires weight conversion, with the model compiled. Contrary to the other
+        # compile tests, error_on_recompile is not used here: LoRA adapters targeting nn.Parameters (as the converted
+        # checkpoint does for the fused expert weights) rely on nn.utils.parametrize, which triggers recompilation
+        # independently of hotswapping (see the equivalent test_hotswap_lora_target_parameters in PEFT). This test
+        # therefore only checks correctness of the hotswapped outputs under compilation, not recompilation avoidance.
+        self._check_pre_v5_lora_hotswap_with_conversion(do_compile=True)

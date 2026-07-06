@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import inspect
 import json
 import os
@@ -334,11 +335,15 @@ class PeftAdapterMixin:
             _maybe_shard_state_dict_for_tp(self, adapter_state_dict, adapter_name)
 
         if hotswap:
-            # Bypass the standard loader and use PEFT's hotswap path so that LoRA weights
-            # whose rank differs from the existing adapter's are copied (and zero-padded)
-            # in place rather than triggering a "size mismatch" reinit, and so the LoRA
-            # scaling is updated alongside the weights.
+            # Bypass the standard loader and use PEFT's hotswap path so that LoRA weights whose rank differs from the
+            # existing adapter's are copied (and zero-padded) in place rather than triggering a "size mismatch" reinit,
+            # and so the LoRA scaling is updated alongside the weights.
             from peft.utils.hotswap import check_hotswap_configs_compatible, hotswap_adapter_from_state_dict
+            from peft.utils.transformers_weight_conversion import convert_peft_config_for_transformers
+
+            # The PEFT config conversion for v5 architecture changes is normally applied in-place by
+            # inject_adapter_in_model, which is skipped when hotswapping, so it needs to be applied explicitly.
+            convert_peft_config_for_transformers(peft_config, self, weight_conversions)
 
             adapter_state_dict = self._resolve_adapter_state_dict(adapter_state_dict, checkpoint_files)
 
