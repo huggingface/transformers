@@ -90,8 +90,8 @@ DUR_RE = re.compile(
     r"^\s*([\d.]+)s\s+\w+\s+(tests/\S+)"
 )
 
-# pytest summary line: "===== 42 passed in 43.03s =====" or "===== 1 failed, 41 passed in 43.03s ====="
-PYTEST_TIME_RE = re.compile(r"in ([\d.]+)s")
+# pytest summary line: "===== 42 passed in 43.03s =====" or "===== 1 failed, 41 passed in 1m 23.45s ====="
+PYTEST_TIME_RE = re.compile(r"in (?:(\d+)m\s*)?([\d.]+)s")
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
@@ -140,7 +140,8 @@ def parse_pytest_time(output: str) -> float:
         if "passed" in clean or "failed" in clean or "error" in clean:
             m = PYTEST_TIME_RE.search(clean)
             if m:
-                return float(m.group(1))
+                minutes = int(m.group(1)) if m.group(1) else 0
+                return minutes * 60 + float(m.group(2))
     return 0.0
 
 
