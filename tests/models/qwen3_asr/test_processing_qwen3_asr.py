@@ -36,7 +36,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     @require_torch
     def setUpClass(cls):
-        cls.checkpoint = "Qwen/Qwen3-ASR-0.6B-hf"
+        cls.checkpoint = "bezzam/Qwen3-ASR-0.6B-hf"
         cls.tmpdirname = tempfile.mkdtemp()
 
         processor = Qwen3ASRProcessor.from_pretrained(cls.checkpoint)
@@ -114,6 +114,36 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         for key in ("input_ids", "attention_mask", "input_features", "input_features_mask"):
             self.assertIn(key, outputs)
+
+        # The language is forced by appending "language <NAME><asr_text>" after the generation prompt
+        decoded = processor.tokenizer.decode(outputs["input_ids"][0])
+        self.assertTrue(decoded.endswith("<|im_start|>assistant\nlanguage English<asr_text>"))
+
+    @require_torch
+    def test_apply_transcription_request_with_prompt(self):
+        processor = AutoProcessor.from_pretrained(self.checkpoint)
+
+        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+        context = "Vocabulary: Quilter, apostle, gospel."
+        outputs = processor.apply_transcription_request(audio=audio_url, prompt=context, language="English")
+
+        decoded = processor.tokenizer.decode(outputs["input_ids"][0])
+        # The context/hotwords prompt goes into the system turn
+        self.assertIn(f"<|im_start|>system\n{context}<|im_end|>", decoded)
+        self.assertTrue(decoded.endswith("<|im_start|>assistant\nlanguage English<asr_text>"))
+
+    @require_torch
+    def test_apply_transcription_request_mixed_batch(self):
+        """Mixed batch: forced-language samples get the prefill, auto-detect samples a bare generation prompt."""
+        processor = AutoProcessor.from_pretrained(self.checkpoint)
+
+        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+        outputs = processor.apply_transcription_request(audio=[audio_url, audio_url], language=[None, "zh"])
+
+        decoded_auto = processor.tokenizer.decode(outputs["input_ids"][0], skip_special_tokens=False)
+        decoded_forced = processor.tokenizer.decode(outputs["input_ids"][1])
+        self.assertTrue(decoded_auto.replace("<|endoftext|>", "").endswith("<|im_start|>assistant\n"))
+        self.assertTrue(decoded_forced.endswith("<|im_start|>assistant\nlanguage Chinese<asr_text>"))
 
     @require_torch
     def test_decode_formats(self):

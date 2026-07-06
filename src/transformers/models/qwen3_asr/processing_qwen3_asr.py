@@ -16,16 +16,21 @@ import unicodedata
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, load_audio, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, is_torch_available
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
 
 
+if is_torch_available():
+    import torch
+
+
 # fmt: off
-# The ASR model was trained with these full names as system prompts.
+# The ASR model was trained with these full names in the forced-language suffix
+# appended after the generation prompt: "language <NAME><asr_text>".
 LANGUAGE_CODE_TO_NAME = {
     "ar": "Arabic",
     "yue": "Cantonese",
@@ -444,9 +449,10 @@ class Qwen3ASRProcessor(ProcessorMixin):
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
-            labels = model_inputs.pop("mm_token_type_ids")
+            mm_token_type_ids = model_inputs.pop("mm_token_type_ids")
+            labels = model_inputs["input_ids"].clone()
+            labels[mm_token_type_ids != 0] = -100  # audio positions
             for token_id in [
-                self.audio_token_id,
                 self.tokenizer.pad_token_id,
                 self.audio_bos_token_id,
                 self.audio_eos_token_id,
@@ -496,7 +502,8 @@ class Qwen3ASRProcessor(ProcessorMixin):
         self,
         audio: AudioInput | list[AudioInput],
         language: str | list[str] | None = None,
-        **kwargs,
+        prompt: str | list[str] | None = None,
+        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
     ) -> BatchFeature:
         """
         Prepare inputs for automatic speech recognition without manually writing the chat template.
@@ -505,39 +512,89 @@ class Qwen3ASRProcessor(ProcessorMixin):
             audio (`AudioInput` or `list[AudioInput]`):
                 Audio to transcribe. Can be a URL string, local path, numpy array, or a list of these.
             language (`str` or `list[str]`, *optional*):
-                Language hint(s) to include in the system prompt. Accepts full names
+                Language(s) to force for transcription. Accepts full names
                 (e.g. ``"English"``, ``"Chinese"``) or ISO codes (e.g. ``"en"``, ``"zh"``).
                 A list must be the same length as the audio batch.
-                When ``None``, the model performs automatic language detection.
+                Following the original implementation, the language is forced by appending
+                ``language <NAME><asr_text>`` after the generation prompt, so the model
+                generates only the transcription text. When ``None``, the model performs
+                automatic language detection and outputs ``language <NAME><asr_text>...`` itself.
+            prompt (`str` or `list[str]`, *optional*):
+                Context/hotwords to include as the system prompt, e.g. domain-specific words or
+                phrases to bias the transcription towards. A list must be the same length as the
+                audio batch. When `None`, the system prompt is left empty.
             **kwargs:
-                Additional keyword arguments forwarded to
-                [`~Qwen3ASRProcessor.apply_chat_template`].
+                Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`]
+                and the underlying processor call (for example `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
             [`BatchFeature`]: Processor outputs ready to be passed to
             [`Qwen3ASRForConditionalGeneration.generate`].
         """
-        audio_items = make_list_of_audio_chat_template(audio)
+        audio_items = list(make_list_of_audio_chat_template(audio))
+        if is_torch_available():
+            audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
         batch_size = len(audio_items)
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
         languages = _prepare_language_inputs(language, batch_size)
 
+        if prompt is None:
+            prompts = [None] * batch_size
+        elif isinstance(prompt, str):
+            prompts = [prompt] * batch_size
+        elif isinstance(prompt, (list, tuple)):
+            if len(prompt) != batch_size:
+                raise ValueError(
+                    f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
+                )
+            prompts = list(prompt)
+        else:
+            raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
+
         conversations = []
-        for lang, audio_item in zip(languages, audio_items):
+        for prompt_text, audio_item in zip(prompts, audio_items):
             messages = []
-            if lang is not None:
-                messages.append({"role": "system", "content": [{"type": "text", "text": lang}]})
+            if prompt_text is not None:
+                messages.append({"role": "system", "content": [{"type": "text", "text": prompt_text}]})
             messages.append({"role": "user", "content": [_audio_content_item(audio_item)]})
             conversations.append(messages)
 
-        return self.apply_chat_template(
-            conversations,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            **kwargs,
+        # Following the original implementation, the language is forced by prefilling the assistant
+        # turn with "language <NAME><asr_text>" so that the model only generates the transcription.
+        if self._template_renders_assistant_turns():
+            for messages, lang in zip(conversations, languages):
+                prefill = f"language {lang}<asr_text>" if lang is not None else ""
+                messages.append({"role": "assistant", "content": [{"type": "text", "text": prefill}]})
+            return self.apply_chat_template(
+                conversations,
+                tokenize=True,
+                return_dict=True,
+                continue_final_message=True,
+                **kwargs,
+            )
+
+        # Legacy chat templates (before assistant-turn rendering was added) cannot express the
+        # prefill, so splice the forced-language suffix into the rendered text manually.
+        text = self.apply_chat_template(conversations, tokenize=False, add_generation_prompt=True)
+        text = [
+            rendered if lang is None else f"{rendered}language {lang}<asr_text>"
+            for rendered, lang in zip(text, languages)
+        ]
+
+        sampling_rate = kwargs.get(
+            "sampling_rate", kwargs.get("audio_kwargs", {}).get("sampling_rate", self.feature_extractor.sampling_rate)
         )
+        audio_arrays = [load_audio(item, sampling_rate=sampling_rate) for item in audio_items]
+        return self(text=text, audio=audio_arrays, **kwargs)
+
+    def _template_renders_assistant_turns(self) -> bool:
+        """Whether the chat template renders assistant turns (needed for the forced-language prefill)."""
+        sentinel = "assistant-turn-probe"
+        rendered = self.apply_chat_template(
+            [[{"role": "assistant", "content": [{"type": "text", "text": sentinel}]}]], tokenize=False
+        )[0]
+        return sentinel in rendered
 
     def decode(self, *args, return_format="raw", **kwargs):
         """

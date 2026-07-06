@@ -81,9 +81,9 @@ Transcription: Mr. Quilter is the apostle of the middle classes, and we are glad
 """
 ```
 
-### Language hint
+### Forcing the language
 
-You can provide a language hint to guide the model.
+You can force the transcription language as shown below.
 
 ```python
 from transformers import AutoProcessor, AutoModelForMultimodalLM
@@ -100,19 +100,41 @@ output_ids = model.generate(**inputs, max_new_tokens=256)
 generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
 print(f"Auto-detect: {processor.decode(generated_ids, return_format='transcription_only')[0]}")
 
-# With language hint 
+# With forced language
 inputs = processor.apply_transcription_request(
     audio="https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
     language="Chinese",  # or language code "zh"
 ).to(model.device, model.dtype)
 output_ids = model.generate(**inputs, max_new_tokens=256)
 generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
-print(f"With hint:   {processor.decode(generated_ids, return_format='transcription_only')[0]}")
+print(f"Forced:      {processor.decode(generated_ids, return_format='transcription_only')[0]}")
+```
+
+### Context / hotwords
+
+You can pass free-form context (e.g. domain-specific vocabulary, names, or background information) via `prompt` to bias the transcription.
+
+```python
+from transformers import AutoProcessor, AutoModelForMultimodalLM
+
+model_id = "Qwen/Qwen3-ASR-1.7B-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
+
+inputs = processor.apply_transcription_request(
+    audio="https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
+    prompt="Vocabulary: Quilter, apostle, gospel.",
+    language="English",
+).to(model.device, model.dtype)
+
+output_ids = model.generate(**inputs, max_new_tokens=256)
+generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
+print(processor.decode(generated_ids, return_format="transcription_only")[0])
 ```
 
 ### Batch inference
 
-Batch inference is possible by passing a list of audios and, if provided, a list of languages.
+Batch inference is possible by passing a list of audios and, if provided, a list of languages and/or prompts.
 
 ```python
 from transformers import AutoProcessor, AutoModelForMultimodalLM
@@ -149,10 +171,10 @@ model_id = "Qwen/Qwen3-ASR-1.7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
-# With language hint as system message
+# With context/hotwords as system message
 chat_template = [
     [
-        {"role": "system", "content": [{"type": "text", "text": "English"}]},
+        {"role": "system", "content": [{"type": "text", "text": "Vocabulary: Quilter, apostle, gospel."}]},
         {
             "role": "user",
             "content": [
@@ -187,9 +209,36 @@ for text in transcriptions:
     print(text)
 ```
 
+The language can be forced through the chat template by *prefilling* the assistant turn with `language <NAME><asr_text>` and passing `continue_final_message=True`, which is what `apply_transcription_request` does under the hood:
+
+```python
+chat_template = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "audio",
+                    "path": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+                },
+            ],
+        },
+        {"role": "assistant", "content": [{"type": "text", "text": "language Chinese<asr_text>"}]},
+    ],
+]
+
+inputs = processor.apply_chat_template(
+    chat_template, tokenize=True, return_dict=True, continue_final_message=True,
+).to(model.device, model.dtype)
+
+output_ids = model.generate(**inputs, max_new_tokens=256)
+generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
+print(processor.decode(generated_ids, return_format="transcription_only")[0])
+```
+
 ### Training
 
-Qwen3 ASR can be trained with the loss outputted by the model.
+Qwen3 ASR can be trained with the loss outputted by the model. Put the target transcript in the assistant turn — in the model's output format `language <NAME><asr_text>...` to preserve the pretrained behavior — and pass `output_labels=True`. Audio and padding positions are masked automatically.
 
 ```python
 from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
@@ -199,26 +248,24 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.train()
 
-chat_template = [
+transcript = "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
+conversation = [
     [
         {
             "role": "user",
             "content": [
                 {
-                    "type": "text",
-                    "text": "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
-                },
-                {
                     "type": "audio",
                     "path": "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
                 },
             ],
-        }
+        },
+        {"role": "assistant", "content": [{"type": "text", "text": f"language English<asr_text>{transcript}"}]},
     ],
 ]
 
 inputs = processor.apply_chat_template(
-    chat_template, tokenize=True, return_dict=True, output_labels=True,
+    conversation, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True},
 ).to(model.device, model.dtype)
 
 loss = model(**inputs).loss
