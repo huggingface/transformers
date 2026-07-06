@@ -726,3 +726,60 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             expected_output,
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
+
+
+@require_torch
+class MllamaCrossAttentionMaskTest(unittest.TestCase):
+    def test_full_text_row_masked_out_mask_blocks_cross_attention_residual(self):
+        """
+        Regression test for #39379. A text row that is fully masked out of cross-attention (e.g. a
+        token that precedes its image) must not receive any image information. `full_text_row_masked_out_mask`
+        was only applied to the MLP output, so the cross-attention result still leaked into the row
+        through the residual connection. Such a row must come out of the decoder layer unchanged.
+        """
+        from transformers.models.mllama.modeling_mllama import MllamaCrossAttentionDecoderLayer
+
+        config = MllamaTextConfig(
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            intermediate_size=37,
+            hidden_act="gelu",
+            max_position_embeddings=512,
+            rope_parameters={"rope_type": "default"},
+        )
+        config._attn_implementation = "eager"
+
+        torch.manual_seed(0)
+        layer = MllamaCrossAttentionDecoderLayer(config, layer_idx=0).eval()
+        # The cross-attention and MLP contributions are tanh-gated and the gates are zero-initialized,
+        # so open them to make the residual contributions non-trivial for this test.
+        with torch.no_grad():
+            layer.cross_attn_attn_gate.fill_(1.0)
+            layer.cross_attn_mlp_gate.fill_(1.0)
+
+        batch_size, seq_len, image_len = 1, 4, 6
+        hidden_states = torch.randn(batch_size, seq_len, config.hidden_size)
+        cross_attention_states = torch.randn(batch_size, image_len, config.hidden_size)
+
+        # Row 0 is masked out of cross-attention (it precedes the image); the other rows attend normally.
+        full_text_row_masked_out_mask = torch.ones(batch_size, 1, seq_len, 1)
+        full_text_row_masked_out_mask[:, :, 0, :] = 0.0
+
+        output = layer(
+            hidden_states=hidden_states,
+            cross_attention_states=cross_attention_states,
+            cross_attention_mask=None,
+            attention_mask=None,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask,
+            past_key_values=None,
+            use_cache=False,
+            position_embeddings=None,
+        )
+
+        # The fully masked-out row must be untouched by cross-attention...
+        torch.testing.assert_close(output[:, 0], hidden_states[:, 0])
+        # ...while a row that does attend to the image is modified.
+        self.assertFalse(torch.allclose(output[:, 1], hidden_states[:, 1]))
