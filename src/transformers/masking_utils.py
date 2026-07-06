@@ -229,8 +229,9 @@ def maybe_pad_block_sequence_ids(
 
 def _can_skip_causal_mask_xpu(
     padding_mask: torch.Tensor | None,
-    query_length: int,
+    q_length: int,
     kv_length: int,
+    q_offset: int,
     kv_offset: int,
     local_attention_size: int | None,
 ) -> bool:
@@ -252,22 +253,23 @@ def _can_skip_causal_mask_xpu(
 
     if padding_mask is None:
         # Without padding mask, can skip if single query token or full causal attention
-        return query_length == 1 or kv_length == query_length
+        return q_length == 1 or kv_length == q_length
 
     # XPU allows skipping under additional conditions when padding_mask is provided
-    if query_length == 1:
+    if q_length == 1:
         # Single query token: skip only if no padding tokens present
         return padding_mask.all()
 
     # XPU-specific: check if query window is all True and rest is all False.
     # This allows XPU to optimize the 1st token in static cache when the cache is empty.
-    return kv_offset == 0 and padding_mask[:, :query_length].all() and not padding_mask[:, query_length:].any()
+    return q_offset == 0 and padding_mask[:, :q_length].all() and not padding_mask[:, q_length:].any()
 
 
 def _ignore_causal_mask_sdpa(
     padding_mask: torch.Tensor | None,
-    query_length: int,
+    q_length: int,
     kv_length: int,
+    q_offset: int,
     kv_offset: int,
     local_attention_size: int | None = None,
 ) -> bool:
@@ -289,7 +291,7 @@ def _ignore_causal_mask_sdpa(
         # - Single query tokens use the same logic as CUDA
         # - Multi-query tokens can skip if padding_mask is provided and correctly structured
         #   (all True in query window, all False after)
-        return _can_skip_causal_mask_xpu(padding_mask, query_length, kv_length, kv_offset, local_attention_size)
+        return _can_skip_causal_mask_xpu(padding_mask, q_length, kv_length, q_offset, kv_offset, local_attention_size)
     # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
@@ -297,7 +299,7 @@ def _ignore_causal_mask_sdpa(
     if (
         not is_tracing(padding_mask)
         # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
-        and (query_length == 1 or kv_length == query_length)
+        and (q_length == 1 or kv_length == q_length)
         # in this case we need to add special patterns to the mask so cannot be skipped otherwise
         and (local_attention_size is None or kv_length < local_attention_size)
         # In this case, we need to add padding to the mask, so cannot be skipped otherwise
@@ -523,7 +525,9 @@ def sdpa_mask(
     # Under specific conditions, we can avoid materializing the mask
     #   1. Causal masks can rely on the `is_causal` argument
     #   2. Bidirectional do not need any further processing (no bias)
-    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, kv_offset, local_size):
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(
+        padding_mask, q_length, kv_length, q_offset, kv_offset, local_size
+    ):
         return None
     if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask, kv_length, local_size):
         return None
