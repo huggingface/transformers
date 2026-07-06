@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 import torch
 
-from transformers import Molmo2Processor
+from transformers import Molmo2ImageProcessor, Molmo2Processor, Molmo2VideoProcessor
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -32,8 +32,12 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     model_id = "allenai/Molmo2-8B"
 
     @classmethod
-    def _setup_from_pretrained(cls, model_id, **kwargs):
-        return super()._setup_from_pretrained(model_id, **kwargs)
+    def _setup_image_processor(cls):
+        return Molmo2ImageProcessor(size={"height": 56, "width": 56}, max_crops=1, overlap_margins=[1, 1])
+
+    @classmethod
+    def _setup_video_processor(cls):
+        return Molmo2VideoProcessor(size={"height": 56, "width": 56}, num_frames=4)
 
     @staticmethod
     def prepare_processor_dict():
