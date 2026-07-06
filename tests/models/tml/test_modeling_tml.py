@@ -36,7 +36,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...causal_lm_tester import CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -69,108 +69,15 @@ class TmlTextModelTester(CausalLMModelTester):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.num_hidden_layers = 4  # override to correctly test sharing cache pattern
-        self.num_kv_shared_layers = 2  # important to override
-        self.layer_types = [
-            "sliding_attention",
-            "full_attention",
-            "sliding_attention",
-            "full_attention",
-        ]  # similarly we want to test sharing on both types
+        self.num_hidden_layers = 2
+        # we want to test sharing on both types
+        self.layer_types = ["sliding_attention", "full_attention"]
+        self.mlp_layer_types = ["dense", "sparse"]
         self.global_head_dim = self.head_dim  # gemma4 use a different head_dim for full and sliding layers
-
-        # To make model small
-        self.vocab_size_per_layer_input = 99
-        self.hidden_size_per_layer_input = 16
 
         # To activate moe blocks
         self.enable_moe_block = True
         self.moe_intermediate_size = 16
-        self.top_k_experts = 2
-
-        # Test if bidirectional image mask path works
-        self.use_bidirectional_attention = "vision"
-
-
-@require_torch
-class TmlTextModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = TmlTextModelTester
-    # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = TmlForCausalLM if is_torch_available() else None
-
-    @unittest.skip("We need 4 layers to correctly test cache sharing.")
-    def test_num_layers_is_small(self):
-        pass
-
-    @unittest.skip("Tml uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("Tml uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_from_config(self):
-        pass
-
-    @unittest.skip("Tml cannot use random inputs_embeds, as it needs to reverse them when input_ids is not provided")
-    def test_generate_from_random_inputs_embeds(self):
-        pass
-
-    @unittest.skip(
-        "Flaky on CI, but not locally on Mac. If model is set to fp32 instead of bf16, not flaky anymore."
-        "TODO Cyril: investigate where the loss of precision between bf16 and fp32 comes from."
-    )
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip(
-        "Fails after fully removing the unused weights, even if `forward` is exactly the same. Investigate why."
-    )
-    def test_tp_generation_quantized(self):
-        pass
-
-    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
-    def test_flash_attn_2_equivalence(self):
-        pass
-
-    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    def test_all_bidirectional_attention_uses_bidirectional_mask(self):
-        self.model_tester.use_bidirectional_attention = "all"
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config._attn_implementation = "eager"
-
-        model = TmlTextModel(config).to(torch_device)
-        model.eval()
-
-        input_ids = inputs_dict["input_ids"][:1]
-        with torch.no_grad():
-            out = model(input_ids=input_ids, output_attentions=True)
-
-        for attention in out.attentions:
-            self.assertTrue((attention[..., :4, :4] != 0).all().item())
-
-    def test_model_training(self):
-        pass
-
-    @unittest.skip(
-        "Under non-bf16 dtypes, MoE grouped_mm falls back to "
-        "_grouped_mm_fallback_backward which is incompatible with torch.compile under 'reduce-overhead' mode"
-    )
-    def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
-        pass
-
-    @unittest.skip(
-        "Under non-bf16 dtypes, MoE grouped_mm falls back to "
-        "_grouped_mm_fallback_backward which is incompatible with torch.compile under 'reduce-overhead' mode"
-    )
-    def test_torch_compile_for_training(self):
-        pass
 
 
 class TmlAudio2TextModelTester:

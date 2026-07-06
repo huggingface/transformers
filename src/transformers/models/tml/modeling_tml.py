@@ -1231,4 +1231,11 @@ class TmlForConditionalGeneration(TmlPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["TmlPreTrainedModel", "TmlTextModel", "TmlAudioModel", "TmlVisionModel", "TmlForConditionalGeneration"]
+__all__ = [
+    "TmlPreTrainedModel",
+    "TmlModel",
+    "TmlTextModel",
+    "TmlAudioModel",
+    "TmlVisionModel",
+    "TmlForConditionalGeneration",
+]

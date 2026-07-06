@@ -1028,5 +1028,6 @@ __all__ = [
     "TmlTextModel",
     "TmlAudioModel",
     "TmlVisionModel",
+    "TmlModel",
     "TmlForConditionalGeneration",
 ]
