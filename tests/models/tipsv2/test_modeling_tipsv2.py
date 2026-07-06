@@ -26,7 +26,6 @@ from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
-    require_sentencepiece,
     require_torch,
     require_vision,
     slow,
@@ -442,7 +441,6 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
         return Tipsv2Processor.from_pretrained(self.model_id)
 
     @slow
-    @require_sentencepiece
     def test_inference(self):
         model = Tipsv2Model.from_pretrained(self.model_id, device_map=torch_device).eval()
 
