@@ -476,7 +476,7 @@ def remove_tied_weights_from_state_dict(
             # In offloaded cases, there may be meta tensors in the state_dict.
             # For these cases, key by the pointer of the original tensor object
             # (state_dict tensors are detached and therefore no longer shared)
-            tensor = model.get_parameter(name)
+            tensor = model.get_parameter_or_buffer(name)
             ptrs[id(tensor)].append(name)
 
         else:
@@ -2110,36 +2110,37 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
-        """Detect whether the class supports setting its attention implementation dynamically. It is an ugly check based on
-        opening the file, but avoids maintaining yet another property flag.
+        """Detect whether the class supports setting its attention implementation dynamically. Inspects the module source as a
+        heuristic, which avoids maintaining yet another property flag.
         """
         class_module = sys.modules.get(cls.__module__)
         # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
-        if class_module is None or not hasattr(class_module, "__file__"):
+        if class_module is None:
             return False
-        class_file = class_module.__file__
-        with open(class_file, "r", encoding="utf-8") as f:
-            code = f.read()
-        # heuristic -> if we find those patterns, the model uses the correct interface
-        if re.search(r"class \w+Attention\(nn.Module\)", code):
-            return "eager_attention_forward" in code and "ALL_ATTENTION_FUNCTIONS.get_interface(" in code
-        else:
-            # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
-            return True
+        try:
+            code = inspect.getsource(class_module)
+        except (OSError, TypeError):
+            return False
+        # Heuristic: if we find an `*Attention*(nn.Module)` class, check whether the interface is used
+        if re.search(r"^class \w*Attention\w*\(nn\.Module\):", code, re.MULTILINE):
+            return "ALL_ATTENTION_FUNCTIONS.get_interface(" in code
+        # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
+        return True
 
     @classmethod
     def _can_set_experts_implementation(cls) -> bool:
-        """Detect whether the class supports setting its experts implementation dynamically. It is an ugly check based on
-        opening the file, but avoids maintaining yet another property flag.
+        """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source as a
+        heuristic, which avoids maintaining yet another property flag.
         """
         class_module = sys.modules.get(cls.__module__)
         # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
-        if class_module is None or not hasattr(class_module, "__file__"):
+        if class_module is None:
             return False
-        class_file = class_module.__file__
-        with open(class_file, "r", encoding="utf-8") as f:
-            code = f.read()
-        # heuristic -> if we the use_experts_implementation decorator is used, then we can set it
+        try:
+            code = inspect.getsource(class_module)
+        except (OSError, TypeError):
+            return False
+        # Heuristic: if the `@use_experts_implementation` decorator is used, then we can set it
         return "@use_experts_implementation" in code
 
     def set_attn_implementation(self, attn_implementation: str | dict, allow_all_kernels: bool = False):
@@ -2521,7 +2522,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)
 
-    def _initialize_weights(self, module, is_remote_code: bool = False):
+    def _initialize_weights(self, module, is_custom_code: bool = False):
         """
         Initialize the weights if they are not already initialized.
         """
@@ -2532,7 +2533,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # which allow to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
         # otherwise
         if (
-            is_remote_code
+            is_custom_code
             and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
             and all(
                 getattr(buffer, "_is_hf_initialized", False)
@@ -2559,14 +2560,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if not hasattr(torch.nn.Module, "smart_apply"):
             # This function is equivalent to `torch.nn.Module.apply`, except that it dynamically adjust the function
             # to apply as we go down the graph
-            def smart_apply(module: nn.Module, fn: Callable[[nn.Module, bool], None], is_remote_code: bool):
+            def smart_apply(module: nn.Module, fn: Callable[[nn.Module, bool], None], is_custom_code: bool):
                 for child in module.children():
                     # We found a sub-model: recursively dispatch its own init function now!
                     if isinstance(child, PreTrainedModel):
-                        smart_apply(child, child._initialize_weights, is_remote_code)
+                        smart_apply(child, child._initialize_weights, is_custom_code)
                     else:
-                        smart_apply(child, fn, is_remote_code)
-                fn(module, is_remote_code)
+                        smart_apply(child, fn, is_custom_code)
+                fn(module, is_custom_code)
                 return module
 
             setattr(torch.nn.Module, "smart_apply", smart_apply)
@@ -2574,7 +2575,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Let the magic happen with this simple call
         smart_apply_fn = getattr(self, "smart_apply")
         # `getattr(self, ...)` returns a bound method, so `self` is already provided as the receiver.
-        smart_apply_fn(self._initialize_weights, self.is_remote_code())
+        smart_apply_fn(self._initialize_weights, self.is_custom_code())
 
     def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
         r"""
@@ -3474,7 +3475,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self._auto_class is not None:
+        if self.is_remote_code():
             custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
@@ -3546,8 +3547,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Remove tied weights as safetensors do not handle them
         state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
 
-        # Revert all renaming and/or weight operations
-        if save_original_format and not _hf_peft_config_loaded:
+        # Revert all renaming and/or weight operations. In general, due to potential many-weights-to-one conversion patterns,
+        # we need to revert the whole state_dict at once to make sure all weights are available. For offloaded models though,
+        # some weights are on meta device, so we need to first load them back into cpu then convert (and we do it later inside a
+        # given shard, to avoid blowing cpu memory since offloading means constrained resources)
+        if save_original_format and not is_offloaded and not _hf_peft_config_loaded:
             state_dict = revert_weight_conversion(model_to_save, state_dict)
 
         # Shard the model if it is too big.
@@ -3561,13 +3565,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         state_dict_split = split_torch_state_dict_into_shards(
             state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
         )
-        # Save index if sharded
-        index = None
-        if state_dict_split.is_sharded:
-            index = {
-                "metadata": {"total_parameters": self.num_parameters(), **state_dict_split.metadata},
-                "weight_map": state_dict_split.tensor_to_filename,
-            }
 
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
@@ -3589,6 +3586,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             ):
                 os.remove(full_filename)
 
+        # The weight_map may change compared to state_dict_split.tensor_to_filename due to revert weight conversions
+        weight_map = None
+        if state_dict_split.is_sharded:
+            # For offloaded weights, we will convert each shard later, so the weight names will change and we will fill
+            # the weight_map as we get them
+            weight_map = (
+                state_dict_split.tensor_to_filename
+                if not (is_offloaded and save_original_format and not _hf_peft_config_loaded)
+                else {}
+            )
+
         # Save the model
         for shard_file, tensor_names in logging.tqdm(
             state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
@@ -3608,12 +3616,37 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # only do contiguous after it's permuted correctly in case of TP
                 shard_state_dict[tensor_name] = tensor.contiguous()
 
+            # As explained above, for offloaded scenarios, weight format could not be reverted before due to meta weights,
+            # so do it now after they were loaded onto cpu. For one-weight-to-many operations, it may be an issue, but usually the shards
+            # contain all the necessary params, except if we are quite unlucky on the sharding. The failure surface is (very few models
+            # with one-weight-to-many + offloading to disk + unlucky sharding), so it will almost never happen
+            if is_offloaded and save_original_format and not _hf_peft_config_loaded:
+                try:
+                    shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
+                    # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
+                    if state_dict_split.is_sharded:
+                        weight_map.update({k: os.path.basename(shard_file)} for k in shard_state_dict.keys())  # ty: ignore[unresolved-attribute]
+                except Exception:
+                    raise RuntimeError(
+                        "We could not revert some weight conversions because of offlading, and several weights needed for a single "
+                        "conversion operation living in different shard files. Try reducing `max_shard_size` a bit, or worst case "
+                        "set `save_original_format=False`."
+                    )
+
             # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
             # so it's not possible for now....
             # Write the shard to disk
             safe_save_file(shard_state_dict, filename, metadata=metadata)
             # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
             del shard_state_dict
+
+        # Save index if sharded
+        index = None
+        if state_dict_split.is_sharded:
+            index = {
+                "metadata": {"total_parameters": self.num_parameters(), **state_dict_split.metadata},
+                "weight_map": weight_map,
+            }
 
         if index is None:
             path_to_weights = os.path.join(save_directory, weights_name)
@@ -4878,7 +4911,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             param = self.get_parameter(tied_param)
             setattr(param, "_is_hf_initialized", True)
 
-        # Some remote code models define module tying (not parameter tying) in their __init__. When modules themselves are shared,
+        # Some custom code models define module tying (not parameter tying) in their __init__. When modules themselves are shared,
         # weights inside both modules appear in the `state_dict` but only one will appear in the safetensors checkpoints
         # as they are inherently tied because the 2 modules are the same object. In this case, once we load a parameter
         # inside one of the 2 modules, the other will also automatically be loaded and will have the `_is_hf_initialized`
@@ -4887,7 +4920,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # So we remove it now - otherwise it's considered missing and will be wrongly reinitialized
         # Note: this is never an issue in main Transformers, as we never do module-tying, only parameter-tying, and we know
         # which params are supposed to be tied to which other params
-        if self.is_remote_code():
+        if self.is_custom_code():
             # Remove those that are already initialized, but appear as missing due to module tying (only if they are not known
             # tied weights, i.e. we did not explicitly mark them as initialized just above)
             loading_info.missing_keys = {
@@ -4947,7 +4980,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @classmethod
     def is_remote_code(cls) -> bool:
+        """Return whether the current model is custom code, i.e. code loaded from the hub, or class that we just registered
+        via `register_for_auto_class`."""
         return cls._auto_class is not None
+
+    @classmethod
+    def is_custom_code(cls) -> bool:
+        """Return whether the current model is custom code, i.e. either code loaded from the hub, or defined in any user-specific
+        module/session."""
+        return cls.is_remote_code() or not cls.__module__.startswith("transformers.")
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)

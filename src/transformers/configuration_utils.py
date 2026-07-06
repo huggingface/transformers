@@ -67,16 +67,30 @@ ALLOWED_LAYER_TYPES = (
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
     "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
-    "linear_attention",  # used in minimax
     "conv",  # used in LFMv2
-    "mamba",
-    "attention",
     "sparse",
     "dense",
-    "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
+    "hybrid",  # layers that combine attention + mamba/linear-attention-shaped states (zamba2, falcon_h1, zaya1)
+    "hybrid_sliding",  # layers that combine sliding attention + linear-attention-shaped states (zaya1)
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
     "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
+    # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning)
+    "linear_attention",
 )
+
+
+# Legacy ``layer_types`` strings → current ``linear_attention`` / ``full_attention`` convention.
+# Configs call ``remap_legacy_layer_types`` in their ``__post_init__`` so checkpoints stored on
+# the Hub with the old names (``mamba``, ``attention``) load transparently.
+_LEGACY_LAYER_TYPE_REMAP = {
+    "mamba": "linear_attention",
+    "attention": "full_attention",
+}
+
+
+def remap_legacy_layer_types(layer_types: list[str]) -> list[str]:
+    """Apply legacy → current layer-type name mapping."""
+    return [_LEGACY_LAYER_TYPE_REMAP.get(t, t) for t in layer_types]
 
 
 # copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
@@ -266,7 +280,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # Our configs prev wouldn't save `id2label` for 2 labels because it is the default. In all other
         # cases we expect the config dict to have an `id2label` field if it's a clf model, or not otherwise
         if self.id2label is None:
-            self.num_labels = kwargs.get("num_labels", 2)
+            self.num_labels = kwargs.get("num_labels", self.num_labels if self.num_labels is not None else 2)
         else:
             if kwargs.get("num_labels") is not None and len(self.id2label) != kwargs.get("num_labels"):
                 logger.warning(

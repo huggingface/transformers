@@ -79,7 +79,6 @@ def prepare_image_inputs():
     return image_inputs
 
 
-# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
@@ -98,9 +97,13 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 @require_vision
 class ProcessorTesterMixin:
     processor_class = None
-    model_id = (
-        None  # Optional: set this to load from a specific pretrained model instead of creating generic components
-    )
+    # Optional: set this to a real Hub repo containing a complete set of processor files
+    # (tokenizer, image processor, etc.) so all components can be loaded via from_pretrained.
+    model_id = None
+    # Optional: set this to a Hub repo containing a complete set of processor files where some
+    # components represent a tiny version (e.g. a tokenizer with a trimmed vocab) for
+    # memory-sensitive tests. Must be a real Hub repo with all components loadable via from_pretrained.
+    tiny_model_id = None
     text_input_name = "input_ids"
     images_input_name = "pixel_values"
     videos_input_name = "pixel_values_videos"
@@ -139,17 +142,40 @@ class ProcessorTesterMixin:
             )
 
         cls.tmpdirname = tempfile.mkdtemp()
+        cls.full_tmpdirname = None
 
-        # If model_id is specified, load components from that model
-        if cls.model_id is not None:
-            processor = cls._setup_from_pretrained(cls.model_id)
+        if cls.tiny_model_id is not None:
+            # tiny_model_id is set: tmpdirname holds the lightweight processor (used by all tests),
+            # full_tmpdirname holds the full processor (used only by tests that call get_processor(use_tiny_ckpt=False)).
+            tiny_processor = cls._setup_from_pretrained(cls.tiny_model_id)
+            cls._setup_test_attributes(tiny_processor)
+            tiny_processor.save_pretrained(cls.tmpdirname)
+
+            cls.full_tmpdirname = tempfile.mkdtemp()
+            # If model_id is specified, load components from that model
+            if cls.model_id is not None:
+                full_processor = cls._setup_from_pretrained(cls.model_id)
+            else:
+                # Otherwise, create generic components
+                full_processor = cls._setup_from_components()
+            # TODO: make this more robust. We intentionally do NOT call _setup_test_attributes(full_processor)
+            # here because it would overwrite the class attributes already set from tiny_processor (e.g.
+            # image_token, video_token, audio_token). We assume these special tokens are identical between
+            # the tiny and full processor — but this is not guaranteed: if the tiny tokenizer is built
+            # differently (e.g. missing special tokens or using different token strings), cls.image_token
+            # etc. will silently reflect the wrong values for tests that use the full processor.
+            full_processor.save_pretrained(cls.full_tmpdirname)
         else:
-            # Otherwise, create generic components
-            processor = cls._setup_from_components()
-
-        # setup test attributes
-        cls._setup_test_attributes(processor)
-        processor.save_pretrained(cls.tmpdirname)
+            # No tiny_model_id: tmpdirname holds the only processor.
+            # If model_id is specified, load components from that model
+            if cls.model_id is not None:
+                processor = cls._setup_from_pretrained(cls.model_id)
+            else:
+                # Otherwise, create generic components
+                processor = cls._setup_from_components()
+            # setup test attributes
+            cls._setup_test_attributes(processor)
+            processor.save_pretrained(cls.tmpdirname)
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -161,14 +187,19 @@ class ProcessorTesterMixin:
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
-        """Load all components from a pretrained model."""
+        """Load all components from model_id to build the processor.
 
+        If any component is provided via a _setup_<attribute>() hook, all remaining components
+        are loaded individually from model_id so that processor_class.__init__ receives a complete
+        set of components (all must be passed together when any one is customized).
+        """
         # check if there are any custom components to setup
         custom_components = {}
         for attribute in cls.processor_class.get_attributes():
             if hasattr(cls, f"_setup_{attribute}"):
                 custom_method = getattr(cls, f"_setup_{attribute}")
                 custom_components[attribute] = custom_method()
+
         # if there is one custom component, we need to add all the other ones (with from_pretrained)
         if custom_components:
             for attribute in cls.processor_class.get_attributes():
@@ -349,19 +380,26 @@ class ProcessorTesterMixin:
         """Clean up the temporary directory."""
         if hasattr(cls, "tmpdirname"):
             shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+        if hasattr(cls, "full_tmpdirname") and cls.full_tmpdirname is not None:
+            shutil.rmtree(cls.full_tmpdirname, ignore_errors=True)
 
     @staticmethod
     def prepare_processor_dict():
         """Override this method to provide custom kwargs for processor initialization."""
         return {}
 
-    def get_component(self, attribute, **kwargs):
+    def get_component(self, attribute, use_tiny_ckpt=True, **kwargs):
+        # use_tiny_ckpt only has effect when tiny_model_id is set. In that case, tmpdirname holds the
+        # lightweight processor and full_tmpdirname holds the full one. If tiny_model_id is not set,
+        # tmpdirname already contains the full processor loaded from cls.model_id, and calling this
+        # function with use_tiny_ckpt=True still returns a full processor.
+        dirpath = self.tmpdirname if (use_tiny_ckpt or self.full_tmpdirname is None) else self.full_tmpdirname
         if attribute not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in attribute:
             auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
-            component = auto_processor_class.from_pretrained(self.tmpdirname, subfolder=attribute, **kwargs)  # noqa
+            component = auto_processor_class.from_pretrained(dirpath, subfolder=attribute, **kwargs)  # noqa
         else:
             auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute]
-            component = auto_processor_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
+            component = auto_processor_class.from_pretrained(dirpath, **kwargs)  # noqa
         if "tokenizer" in attribute and not component.pad_token:
             component.pad_token = "[TEST_PAD]"
             if component.pad_token_id is None:
@@ -377,9 +415,14 @@ class ProcessorTesterMixin:
 
         return components
 
-    def get_processor(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
-        return processor
+    def get_processor(self, use_tiny_ckpt=True):
+        # use_tiny_ckpt only has effect when tiny_model_id is set. In that case, tmpdirname holds the
+        # lightweight processor and full_tmpdirname holds the full one. If tiny_model_id is not set,
+        # tmpdirname already contains the full processor loaded from cls.model_id, and calling this
+        # function with use_tiny_ckpt=True still returns a full processor.
+        if not use_tiny_ckpt and self.full_tmpdirname is not None:
+            return self.processor_class.from_pretrained(self.full_tmpdirname)
+        return self.processor_class.from_pretrained(self.tmpdirname)
 
     def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
         if isinstance(modalities, str):
