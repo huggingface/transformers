@@ -320,9 +320,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
         self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
 
-        # HeterogeneousConfigMixin: Heterogeneity kwargs have dedicated handling,
-        # so exclude them from regular additional attributes.
-        heterogeneous_kwargs = self._pop_heterogeneous_kwargs(kwargs)
+        # HeterogeneousConfigMixin: `per_layer_config` should be applied last, as heterogeneity needs to have all of the other kwargs set
+        per_layer_config = kwargs.pop("per_layer_config", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -334,8 +333,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
 
-        # HeterogeneousConfigMixin: apply heterogeneity after all of the config attributes are initialized.
-        self._apply_heterogeneous_kwargs(heterogeneous_kwargs)
+        # HeterogeneousConfigMixin
+        if per_layer_config is not None:
+            self.per_layer_config = per_layer_config
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
@@ -461,8 +461,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     def __getattribute__(self, key):
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
-
-        # HeterogeneousConfigMixin participates in attribute access through the MRO.
         return super().__getattribute__(key)
 
     def validate_output_attentions(self):
@@ -870,9 +868,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                     to_remove.append(key)
                 elif value != "auto":
                     config_dict[key] = value
-
-        # HeterogeneousConfigMixin: move heterogeneity-specific kwargs into the constructor config dict.
-        cls._update_config_dict_with_heterogeneous_kwargs(config_dict, kwargs)
 
         config = cls(**config_dict)
 
