@@ -1127,6 +1127,48 @@ def _fix_index_put_none_indices(gm, node):
     return True
 
 
+@register_fx_node_fix("openvino")
+def _fix_index_put_bool_mask(gm, node):
+    """Rewrite ``aten.index_put`` with a single boolean-mask index into a broadcast ``where``.
+
+    ``x[bool_mask] = values`` (e.g. t5gemma2 swapping in an end-of-image embedding where
+    ``input_ids == eoi_token``) traces as ``index_put(x, [bool_mask], values)``; OV lowers the
+    boolean advanced index through a ``nonzero``-style dynamic gather its frontend can't convert
+    (``SequenceMark`` OpConversionFailure). When ``bool_mask`` indexes ``x``'s leading dims and
+    ``values`` broadcasts over the trailing ones, this equals ``where(mask[..., None], values, x)``
+    — pure elementwise, no dynamic indexing. Flattened per-row values (which ``where`` can't
+    express) are left untouched.
+    """
+    if node.target not in (torch.ops.aten.index_put.default, torch.ops.aten.index_put_.default):
+        return False
+    if len(node.args) < 3:
+        return False
+    self_arg, indices, values = node.args[0], node.args[1], node.args[2]
+    accumulate = node.args[3] if len(node.args) > 3 else node.kwargs.get("accumulate", False)
+    if accumulate or not isinstance(indices, (list, tuple)) or len(indices) != 1 or indices[0] is None:
+        return False
+    mask = indices[0]
+    self_val = self_arg.meta.get("val")
+    mask_val = mask.meta.get("val") if hasattr(mask, "meta") else None
+    values_val = values.meta.get("val") if hasattr(values, "meta") else None
+    if self_val is None or mask_val is None or getattr(mask_val, "dtype", None) != torch.bool:
+        return False
+    # The mask must cover the leading dims and the value must fit the trailing (non-mask) dims —
+    # otherwise ``values`` is a flattened selected-rows tensor that a broadcast ``where`` can't
+    # reproduce.
+    if mask_val.ndim > self_val.ndim or values_val is None or values_val.ndim > self_val.ndim - mask_val.ndim:
+        return False
+    with gm.graph.inserting_before(node):
+        broadcast_mask = mask
+        for _ in range(self_val.ndim - mask_val.ndim):
+            broadcast_mask = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(broadcast_mask, -1))
+        result = gm.graph.call_function(torch.ops.aten.where.self, args=(broadcast_mask, values, self_arg))
+        result.meta.update(node.meta)
+    node.replace_all_uses_with(result)
+    gm.graph.erase_node(node)
+    return True
+
+
 # ── Torch patches ───────────────────────────────────────────────────────────
 # Each `_patch_*(original)` factory is registered via `@register_patch("openvino", path)`
 # and reversibly swaps a `torch` op the OV frontend can't lower with a decomposed

@@ -1212,17 +1212,11 @@ def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
     """Drop ``_assert_scalar`` / ``_assert_tensor_metadata`` runtime asserts before lowering.
 
     ``_assert_scalar`` lowers a ``torch._check`` on an unbacked symint (e.g. the image-token
-    count in ``get_placeholder_mask``, or SmolVLM's ``inputs_merger`` registering ``Eq(u2, 1)``
-    off the unbacked real-image count) into a ``cast_symbool_to_symint`` + ``eq`` chain whose
+    count in ``get_placeholder_mask``) into a ``cast_symbool_to_symint`` + ``eq`` chain whose
     ``Piecewise`` result the ``_ModuleStackTracer`` used by ``to_edge_transform_and_lower``'s
     decomposition pass cannot proxy (``... is not tracked with proxy``). The range facts these
     asserts encode survive on ``exported_program.range_constraints`` (further capped by
     ``_fix_range_constraints``), so dropping the nodes (and the now-dead symint feeders) is safe.
-
-    Erasing the nodes is not sufficient on its own: ``to_edge``'s internal re-export re-runs
-    ``insert_deferred_runtime_asserts``, which reads ``shape_env.deferred_runtime_asserts`` to
-    decide what to regenerate — so that registry has to be cleared too, else the equality assert
-    reappears and trips the tracer again.
     """
     for module in exported_program.graph_module.modules():
         if not isinstance(module, torch.fx.GraphModule):
@@ -1235,14 +1229,6 @@ def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
                 module.graph.erase_node(node)
         module.graph.eliminate_dead_code()
         module.recompile()
-
-    for node in exported_program.graph_module.graph.nodes:
-        val = node.meta.get("val")
-        if isinstance(val, torch.Tensor) and getattr(val, "fake_mode", None) is not None:
-            shape_env = val.fake_mode.shape_env
-            if shape_env is not None:
-                shape_env.deferred_runtime_asserts.clear()
-            break  # all nodes share the same shape_env
 
 
 @register_fx_program_fix("executorch")
