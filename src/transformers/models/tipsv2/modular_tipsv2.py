@@ -174,11 +174,11 @@ class Tipsv2VisionConfig(Dinov2WithRegistersConfig):
     num_register_tokens (`int`, *optional*, defaults to `1`):
         Number of register tokens to use.
     apply_layernorm (`bool`, *optional*, defaults to `True`):
-        DINOv2-with-registers compatibility flag serialized for config parity. It is not used by
-        [`Tipsv2VisionModel`].
+        Whether to apply layer normalization to the feature maps in case the model is used as backbone.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
-        DINOv2-with-registers compatibility flag serialized for config parity. It is not used by
-        [`Tipsv2VisionModel`].
+        Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+        case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
+        seq_len, hidden_size)`.
 
     Example:
 
