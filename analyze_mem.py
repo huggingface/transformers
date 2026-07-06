@@ -10,6 +10,7 @@ Usage:
 
 import argparse
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -61,6 +62,10 @@ DEFAULT_TEST_FILES = [
 
 def run_pytest(test_file: str, python: str) -> str:
     """Run pytest --tb=no --durations=0 on one file, return combined stdout+stderr."""
+    # Clear memory_logs/ so the plugin only reports results from this run
+    mem_logs = REPO_ROOT / "memory_logs"
+    if mem_logs.exists():
+        shutil.rmtree(mem_logs)
     print(f"  running {test_file} ...", flush=True)
     result = subprocess.run(
         [python, "-m", "pytest", test_file, "--tb=no", "--durations=0"],
