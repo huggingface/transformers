@@ -55,15 +55,15 @@ class Serve:
             str | None, typer.Option(help="Quantization method: 'bnb-4bit' or 'bnb-8bit'.")
         ] = None,
         reasoning: Annotated[
-            ReasoningMode | None,
+            ReasoningMode,
             typer.Option(
                 help=(
-                    "Reasoning mode. Defaults to 'auto', which uses the chat template default. Only applies to "
-                    "models that support reasoning via their chat template (e.g. Qwen3, Gemma 4) — for other "
-                    "models this flag has no effect."
+                    "Reasoning mode. 'auto' uses the chat template default. Only applies to models that "
+                    "support reasoning via their chat template (e.g. Qwen3, Gemma 4) — for other models "
+                    "this flag has no effect."
                 )
             ),
-        ] = None,
+        ] = ReasoningMode.AUTO.value,  # type: ignore[invalid-parameter-default]
         chat_template_kwargs: Annotated[
             str | None,
             typer.Option(
