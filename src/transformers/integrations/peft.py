@@ -355,6 +355,12 @@ class PeftAdapterMixin:
                 renamed_key, source_pattern = rename_source_key(
                     key, renamings, converters, self.base_model_prefix, meta_state_dict
                 )
+                if renamed_key not in meta_state_dict and key in meta_state_dict:  # see #44396 ff
+                    # Key should probably not have been renamed but we might need the `prefix` to be added.
+                    renamed_key, source_pattern = rename_source_key(
+                        key, [], [], base_model_prefix=self.base_model_prefix, meta_state_dict=meta_state_dict
+                    )
+
                 if source_pattern is not None:
                     # A WeightConverter matched: bucket the tensor so its operations can run over all siblings.
                     mapping = conversion_mapping.setdefault(
