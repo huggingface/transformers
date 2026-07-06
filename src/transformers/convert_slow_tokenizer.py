@@ -1876,65 +1876,6 @@ class ParakeetConverter(SpmConverter):
         return tokenizer
 
 
-class Tipsv2Converter(SpmConverter):
-    handle_byte_fallback = True
-
-    def tokenizer(self, proto):
-        vocab_scores = self.vocab(proto)
-        bpe_vocab = {piece: index for index, (piece, score) in enumerate(vocab_scores)}
-        merges = generate_merges(bpe_vocab, None)
-        tokenizer = Tokenizer(
-            BPE(
-                bpe_vocab,
-                merges,
-                fuse_unk=True,
-                byte_fallback=self.handle_byte_fallback,
-                dropout=None,
-            )
-        )
-
-        spm_added_tokens = [
-            (index, piece.piece, piece.type == 3 or piece.piece in self.special_tokens)
-            for index, piece in enumerate(proto.pieces)
-            if piece.type in [3, 4]
-        ]
-        tokenizer.add_tokens(
-            [
-                AddedToken(token, normalized=False, special=special)
-                for index, token, special in sorted(spm_added_tokens, key=lambda item: item[0])
-            ]
-        )
-
-        return tokenizer
-
-    def normalizer(self, proto):
-        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        list_normalizers = []
-        # TODO: Check how to get this properly
-        if getattr(self.original_tokenizer, "do_lower_case", True):
-            list_normalizers.append(normalizers.Lowercase())
-        if precompiled_charsmap:
-            list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
-        return normalizers.Sequence(list_normalizers)
-
-    def pre_tokenizer(self, replacement, add_prefix_space):
-        return pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme="always"),
-            ]
-        )
-
-    def decoder(self, replacement, add_prefix_space):
-        return decoders.Sequence(
-            [
-                decoders.Metaspace(replacement=replacement, prepend_scheme="always"),
-                decoders.ByteFallback(),
-                decoders.Fuse(),
-            ]
-        )
-
-
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
@@ -2163,7 +2104,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
-    "Tipsv2Tokenizer": Tipsv2Converter,
     "UdopTokenizer": UdopConverter,
     "VideoPrismTokenizer": VideoPrismConverter,
     "WhisperTokenizer": WhisperConverter,
