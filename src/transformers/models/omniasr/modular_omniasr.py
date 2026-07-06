@@ -36,6 +36,7 @@ from ...utils import (
     can_return_tuple,
 )
 from ..auto import AutoModel, AutoModelForCausalLM
+from ..voxtral.modeling_voxtral import VoxtralModel
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
     Wav2Vec2Encoder,
@@ -239,6 +240,7 @@ class OmniASRBaseModelOutput(Wav2Vec2BaseModelOutput):
     pass
 
 
+# TODO: this should be encoder, and separate model like Voxral
 class OmniASRModel(Wav2Vec2Model):
     def __init__(self, config: OmniASREncoderConfig):
         super().__init__(config)
