@@ -227,6 +227,11 @@ def maybe_pad_block_sequence_ids(
     return block_sequence_ids
 
 
+def fast_all(tensor: torch.BoolTensor) -> torch.BoolTensor:
+    """Similar to `tensor.all()`, but uses an implementation with `tensor.sum()`, which is actually much faster."""
+    return tensor.sum() == tensor.numel()
+
+
 def _ignore_causal_mask_sdpa(
     padding_mask: torch.Tensor | None,
     q_length: int,
@@ -260,13 +265,13 @@ def _ignore_causal_mask_sdpa(
     # If `q_length == 1`, we then use `is_causal=False` in sdpa integration to mimic lower-right alignment. If `kv_length == q_length`,
     # we use `is_causal=True` as upper-left alignment (torch's default) is the same as lower-right in this case. If we have padding,
     # we need to add padding to the mask, so cannot be skipped
-    if (q_length == 1 or kv_length == q_length) and (padding_mask is None or padding_mask.all()):
+    if (q_length == 1 or kv_length == q_length) and (padding_mask is None or fast_all(padding_mask)):
         return True
     # Additional case to optimize prefill: if the cache is empty (`q_offset == 0`), we can use `is_causal=True` even
     # with a padding_mask, if the padding_mask only contains padding related to "future k/v tokens" of the static k/v states
     # returned by StaticCaches. This works thanks to the upper-left alignment of sdpa's `is_causal` mask
     if q_offset == 0 and (
-        padding_mask is None or (padding_mask[:, :q_length].all() and not padding_mask[:, q_length:].any())
+        padding_mask is None or (fast_all(padding_mask[:, :q_length]) and fast_all(~padding_mask[:, q_length:]))
     ):
         return True
 
