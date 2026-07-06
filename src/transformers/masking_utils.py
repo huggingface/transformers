@@ -265,7 +265,9 @@ def _ignore_causal_mask_sdpa(
     # Additional case to optimize prefill: if the cache is empty (`q_offset == 0`), we can use `is_causal=True` even
     # with a padding_mask, if the padding_mask only contains padding related to "future k/v tokens" of the static k/v states
     # returned by StaticCaches. This works thanks to the upper-left alignment of sdpa's `is_causal` mask
-    if q_offset == 0 and padding_mask[:, :q_length].all() and not padding_mask[:, q_length:].any():
+    if q_offset == 0 and (
+        padding_mask is None or (padding_mask[:, :q_length].all() and not padding_mask[:, q_length:].any())
+    ):
         return True
 
     return False
