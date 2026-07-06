@@ -12,6 +12,7 @@ import argparse
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent
@@ -60,18 +61,20 @@ DEFAULT_TEST_FILES = [
 ]
 
 
-def run_pytest(test_file: str, python: str) -> str:
-    """Run pytest --tb=no --durations=0 on one file, return combined stdout+stderr."""
+def run_pytest(test_file: str, python: str) -> tuple[str, float]:
+    """Run pytest on one file, return (output, wall_seconds)."""
     # Clear memory_logs/ so the plugin only reports results from this run
     mem_logs = REPO_ROOT / "memory_logs"
     if mem_logs.exists():
         shutil.rmtree(mem_logs)
     print(f"  running {test_file} ...", flush=True)
+    t0 = time.perf_counter()
     result = subprocess.run(
         [python, "-m", "pytest", test_file, "--tb=no", "--durations=0"],
         cwd=REPO_ROOT, capture_output=True, text=True,
     )
-    return result.stdout + result.stderr
+    wall = time.perf_counter() - t0
+    return result.stdout + result.stderr, wall
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +175,7 @@ def main() -> None:
     file_wall_times: dict[str, float] = {}
 
     for test_file in test_files:
-        output = run_pytest(test_file, python)
+        output, wall = run_pytest(test_file, python)
         rows = parse_memory_table(output)
         durations = parse_durations(output)
 
@@ -181,7 +184,7 @@ def main() -> None:
 
         all_rows.extend(rows)
         all_durations.update(durations)
-        file_wall_times[test_file] = parse_pytest_time(output)
+        file_wall_times[test_file] = wall
 
     if not all_rows:
         print("\nNo memory-usage table found in any output.")
