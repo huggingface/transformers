@@ -24,7 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="ibm-research/granite-4.5-3b-pipecleaner-r260528a")
+@auto_docstring(checkpoint="ibm-research/granite-swash-3b-a600m")
 @strict
 class GraniteMoeSWAConfig(PreTrainedConfig):
     r"""
@@ -45,6 +45,9 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
         Per-layer attention type, each either `"full_attention"` or `"sliding_attention"`. When
         `None`, every fourth layer (`i % 4 == 0`) uses full attention and the rest use sliding
         window attention.
+    no_rope_layers (`list[int]`, *optional*):
+        Per-layer flag for rotary position embeddings, `1` to apply RoPE and `0` for NoPE (no
+        positional embedding). When `None`, defaults to all-RoPE (`1` for every layer).
 
     ```python
     >>> from transformers import GraniteMoeSWAModel, GraniteMoeSWAConfig
@@ -92,12 +95,18 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
 
     sliding_window: int | None = 128
     layer_types: list[str] | None = None
+    no_rope_layers: list[int] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if i % 4 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
+
+        # Per-layer RoPE vs NoPE (1 = apply RoPE, 0 = NoPE). Default is all-RoPE;
+        # set `no_rope_layers` explicitly to make specific layers NoPE.
+        if self.no_rope_layers is None:
+            self.no_rope_layers = [1] * self.num_hidden_layers
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 

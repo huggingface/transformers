@@ -53,7 +53,7 @@ from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, repeat_
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="ibm-research/granite-4.5-3b-pipecleaner-r260528a")
+@auto_docstring(checkpoint="ibm-research/granite-swash-2b")
 @strict
 class GraniteSWAConfig(GraniteConfig):
     r"""
@@ -64,6 +64,9 @@ class GraniteSWAConfig(GraniteConfig):
         Per-layer attention type, each either `"full_attention"` or `"sliding_attention"`. When
         `None`, every fourth layer (`i % 4 == 0`) uses full attention and the rest use sliding
         window attention.
+    no_rope_layers (`list[int]`, *optional*):
+        Per-layer flag for rotary position embeddings, `1` to apply RoPE and `0` for NoPE (no
+        positional embedding). When `None`, defaults to all-RoPE (`1` for every layer).
 
     ```python
     >>> from transformers import GraniteSWAModel, GraniteSWAConfig
@@ -93,12 +96,18 @@ class GraniteSWAConfig(GraniteConfig):
     tie_word_embeddings: bool = True
     sliding_window: int | None = 128
     layer_types: list[str] | None = None
+    no_rope_layers: list[int] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if i % 4 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
+
+        # Per-layer RoPE vs NoPE (1 = apply RoPE, 0 = NoPE). Default is all-RoPE;
+        # set `no_rope_layers` explicitly to make specific layers NoPE.
+        if self.no_rope_layers is None:
+            self.no_rope_layers = [1] * self.num_hidden_layers
 
         super().__post_init__(**kwargs)
 
@@ -141,6 +150,7 @@ class GraniteSWAAttention(LlamaAttention):
         self.scaling = config.attention_multiplier
         self.layer_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.use_rope = bool(config.no_rope_layers[layer_idx])
 
         # Learnable per-head attention sink (applied as an auxiliary softmax logit).
         self.sinks = nn.Parameter(torch.zeros(config.num_attention_heads))
@@ -160,8 +170,9 @@ class GraniteSWAAttention(LlamaAttention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        if self.use_rope:
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)

@@ -43,7 +43,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="ibm-research/granite-4.5-3b-pipecleaner-r260528a",
+    model="ibm-research/granite-swash-2b",
     device=0,
 )
 pipe("Explain quantum computing in simple terms", max_new_tokens=50)
@@ -56,9 +56,9 @@ pipe("Explain quantum computing in simple terms", max_new_tokens=50)
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-tokenizer = AutoTokenizer.from_pretrained("ibm-research/granite-4.5-3b-pipecleaner-r260528a")
+tokenizer = AutoTokenizer.from_pretrained("ibm-research/granite-swash-2b")
 model = AutoModelForCausalLM.from_pretrained(
-    "ibm-research/granite-4.5-3b-pipecleaner-r260528a",
+    "ibm-research/granite-swash-2b",
     device_map="auto",
     attn_implementation="eager",
 )
