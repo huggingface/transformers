@@ -46,6 +46,10 @@ class _HeterogeneitySpec:
     per_layer_attributes: set[str]
     explicit_per_layer_attributes: set[str]
 
+    # Layers whose skips disable their KV-cache update. Resolved from the modeling spec by
+    # `apply_heterogeneous_modeling`; `None` until a model has been constructed from this config.
+    disabled_kv_layer_indices: tuple[int, ...] | None = None
+
 
 class HeterogeneousConfigMixin:
     """Mixin for heterogeneous per-layer config behavior.

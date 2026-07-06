@@ -281,8 +281,20 @@ class TestSupportedHeterogeneousModels(unittest.TestCase):
         replacement_types = tuple(
             type(replacement_factory())
             for skip_descriptor in (modeling_spec.skip_descriptors or {}).values()
-            for replacement_factory in skip_descriptor.values()
+            for replacement_factory in skip_descriptor.replacements.values()
         )
+        expected_disabled_kv_layer_indices = tuple(
+            layer_idx
+            for layer_idx, layer_overrides in sorted(case.per_layer_config.items())
+            if any(
+                modeling_spec.skip_descriptors[skip_type].replaces_kv_cache_updater
+                for skip_type in layer_overrides.get("skip", ())
+            )
+        )
+        self.assertEqual(
+            model.config._heterogeneity_spec.disabled_kv_layer_indices, expected_disabled_kv_layer_indices
+        )
+
         ref_layer_cls = MODEL_FIXTURES[case.model_key].ref_layer_cls
         for i in range(config.num_hidden_layers):
             ref_layer = ref_layer_cls(config, layer_idx=i)

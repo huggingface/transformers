@@ -1096,16 +1096,16 @@ class Cache:
             )
         self.layers = layers if layers is not None else []
         self.layer_class_to_replicate = layer_class_to_replicate
-        # Some construction paths provide layers that already contain KV state.
-        self._updated_kv_layer_indices = {
-            layer_idx
-            for layer_idx, layer in enumerate(self.layers)
-            if isinstance(layer, CacheLayerMixin) and layer.get_seq_length() > 0
-        }
         self.offloading = offloading
         if self.offloading:
             self.only_non_sliding = offload_only_non_sliding
             self.prefetch_stream = torch.Stream() if _is_torch_greater_or_equal_than_2_7 else torch.cuda.Stream()
+
+        # Cache metadata (sequence length, mask sizes) used to be readable from any attention layer, but
+        # heterogeneous models can skip a layer's attention and leave its KV cache unused, so
+        # `get_representative_kv_layer_idx` picks an updated layer instead — using the layers' lengths when this
+        # is `None`, or these indices when a subclass precomputes them (see `StaticCache`).
+        self._enabled_kv_layer_indices: tuple[int, ...] | None = None
 
     def __repr__(self):
         return f"{self.__class__.__name__}(layers={self.layers})"
@@ -1178,9 +1178,6 @@ class Cache:
             self.prefetch(layer_idx + 1, self.only_non_sliding)
 
         keys, values = self.layers[layer_idx].update(key_states, value_states, *args, **kwargs)
-
-        if key_states.shape[-2] > 0:
-            self._updated_kv_layer_indices.add(layer_idx)
 
         if self.offloading:
             self.offload(layer_idx, self.only_non_sliding)
@@ -1286,38 +1283,46 @@ class Cache:
             layer.lazy_initialization(fake_kv_tensor, fake_kv_tensor)
 
     def get_seq_length(self, layer_idx: int | None = None) -> int:
-        """Returns the sequence length of the cache for the given layer, or the lowest-index updated KV layer when omitted."""
+        """Returns the sequence length of the cache for the given layer, or of a representative KV layer when
+        omitted."""
         if layer_idx is None:
-            layer_idx = next(
-                (idx for idx in range(len(self.layers)) if idx in self._updated_kv_layer_indices),
-                0,
-            )
+            layer_idx = self.get_representative_kv_layer_idx(range(len(self.layers)))
+            if layer_idx is None:
+                if self.layers and not any(isinstance(layer, CacheLayerMixin) for layer in self.layers):
+                    raise ValueError(
+                        "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only "
+                        "contain LinearAttention layers."
+                    )
+                return 0
 
         if layer_idx >= len(self.layers):
             return 0
 
-        # For alternating attention/linear attention  caches, `get_seq_length` needs to use attention layer idx when called with default layer_idx
         if not isinstance(self.layers[layer_idx], CacheLayerMixin):
-            # If this is called with non-default arg, raise
-            if layer_idx != 0:
-                raise ValueError(
-                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
-                    "does not track sequence length."
-                )
-            try:
-                # Use the first attention layer
-                layer_idx = next(idx for idx in range(len(self)) if isinstance(self.layers[idx], CacheLayerMixin))
-            except StopIteration:
-                raise ValueError(
-                    "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only contain "
-                    "LinearAttention layers."
-                )
+            raise ValueError(
+                f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
+                "does not track sequence length."
+            )
 
         return self.layers[layer_idx].get_seq_length()
 
-    def get_updated_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
-        """Returns the first provided KV layer index that has received a non-empty update."""
-        return next((layer_idx for layer_idx in layer_indices if layer_idx in self._updated_kv_layer_indices), None)
+    def get_representative_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
+        """Return the first of the given layer indices that can represent KV-cache metadata: the first layer with a
+        non-empty KV cache, or for static caches the first layer in `_enabled_kv_layer_indices`."""
+        if self._enabled_kv_layer_indices is not None:
+            return next(
+                (layer_idx for layer_idx in layer_indices if layer_idx in self._enabled_kv_layer_indices), None
+            )
+        return next(
+            (
+                layer_idx
+                for layer_idx in layer_indices
+                if layer_idx < len(self.layers)
+                and isinstance(self.layers[layer_idx], CacheLayerMixin)
+                and self.layers[layer_idx].get_seq_length() > 0
+            ),
+            None,
+        )
 
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """
@@ -1395,7 +1400,6 @@ class Cache:
         """Recursively reset all layers tensors"""
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].reset()
-        self._updated_kv_layer_indices.clear()
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorder the cache for beam search"""
@@ -1529,39 +1533,28 @@ class DynamicCache(Cache):
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
             decoder_config = config.get_text_config(decoder=True)
-            if decoder_config.is_heterogeneous and (
-                {"sliding_window", "attention_chunk_size"} & decoder_config.per_layer_attributes
-            ):
-                sliding_windows = []
-                for layer_idx in range(decoder_config.num_hidden_layers):
-                    layer_config = decoder_config.per_layer_config[layer_idx]
-                    sliding_windows.append(
-                        getattr(layer_config, "sliding_window", None)
-                        or getattr(layer_config, "attention_chunk_size", None)
-                    )
+            if decoder_config.is_heterogeneous:
+                layer_configs = list(decoder_config.per_layer_config)
             else:
-                sliding_windows = [
-                    getattr(decoder_config, "sliding_window", None)
-                    or getattr(decoder_config, "attention_chunk_size", None)
-                ] * decoder_config.num_hidden_layers
+                layer_configs = [decoder_config] * decoder_config.num_hidden_layers
             layer_types = getattr(decoder_config, "layer_types", None)
             if layer_types is None:
-                layer_types = []
-                for sliding_window in sliding_windows:
-                    if sliding_window is not None:
-                        layer_types.append("sliding_attention")
-                    else:
-                        layer_types.append("full_attention")
+                sliding_windows = [
+                    getattr(layer_config, "sliding_window", None)
+                    or getattr(layer_config, "attention_chunk_size", None)
+                    for layer_config in layer_configs
+                ]
+                layer_types = [
+                    "sliding_attention" if sliding_window is not None else "full_attention"
+                    for sliding_window in sliding_windows
+                ]
             # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
             if hasattr(decoder_config, "num_kv_shared_layers"):
                 layer_types = layer_types[: -decoder_config.num_kv_shared_layers]
 
             for layer_idx, layer_type in enumerate(layer_types):
                 cache_cls = LAYER_TYPE_CACHE_MAPPING.get(layer_type, DynamicLayer)
-                layer_decoder_config = (
-                    decoder_config.per_layer_config[layer_idx] if decoder_config.is_heterogeneous else decoder_config
-                )
-                layers.append(cache_cls(layer_decoder_config))
+                layers.append(cache_cls(layer_configs[layer_idx]))
 
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
@@ -1646,29 +1639,21 @@ class StaticCache(Cache):
         **kwargs,
     ):
         config = config.get_text_config(decoder=True)
-
-        if config.is_heterogeneous and ({"sliding_window", "attention_chunk_size"} & config.per_layer_attributes):
-            sliding_windows = []
-            for layer_idx in range(config.num_hidden_layers):
-                layer_config = config.per_layer_config[layer_idx]
-                sliding_windows.append(
-                    getattr(layer_config, "sliding_window", None)
-                    or getattr(layer_config, "attention_chunk_size", None)
-                )
+        if config.is_heterogeneous:
+            layer_configs = list(config.per_layer_config)
         else:
-            sliding_windows = [
-                getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
-            ] * config.num_hidden_layers
-
+            layer_configs = [config] * config.num_hidden_layers
+        sliding_windows = [
+            getattr(layer_config, "sliding_window", None) or getattr(layer_config, "attention_chunk_size", None)
+            for layer_config in layer_configs
+        ]
         layer_types = getattr(config, "layer_types", None)
         # If `layer_types` is not explicitly provided, infer from sliding windows
         if layer_types is None:
-            layer_types = []
-            for sliding_window in sliding_windows:
-                if sliding_window is not None:
-                    layer_types.append("sliding_attention")
-                else:
-                    layer_types.append("full_attention")
+            layer_types = [
+                "sliding_attention" if sliding_window is not None else "full_attention"
+                for sliding_window in sliding_windows
+            ]
         # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
         num_kv_shared_layers = getattr(config, "num_kv_shared_layers", 0)
         if num_kv_shared_layers > 0:
@@ -1705,6 +1690,26 @@ class StaticCache(Cache):
             layers.append(layer)
 
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
+
+        # `get_representative_kv_layer_idx` needs precomputed indices here: under `torch.compile` a static layer's
+        # length is a tensor and cannot be used to pick a layer.
+        enabled_kv_layer_indices = [
+            layer_idx for layer_idx, layer in enumerate(layers) if isinstance(layer, CacheLayerMixin)
+        ]
+        if config.is_heterogeneous:
+            disabled_kv_layer_indices = config._heterogeneity_spec.disabled_kv_layer_indices
+            if disabled_kv_layer_indices is None:
+                if any(layer_config.skip for layer_config in config.per_layer_config):
+                    raise ValueError(
+                        "This heterogeneous config has skipped layers, but which of them still update their KV "
+                        "cache is only resolved during model construction. Construct the model before creating a "
+                        "`StaticCache` from its config."
+                    )
+                disabled_kv_layer_indices = ()
+            enabled_kv_layer_indices = [
+                layer_idx for layer_idx in enabled_kv_layer_indices if layer_idx not in disabled_kv_layer_indices
+            ]
+        self._enabled_kv_layer_indices = tuple(enabled_kv_layer_indices)
 
 
 class QuantizedCache(Cache):
@@ -1848,9 +1853,9 @@ class EncoderDecoderCache(Cache):
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         return self.self_attention_cache.get_seq_length(layer_idx)
 
-    def get_updated_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
-        """Returns the first provided self-attention KV layer index that has received a non-empty update."""
-        return self.self_attention_cache.get_updated_kv_layer_idx(layer_indices)
+    def get_representative_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
+        """Return the self-attention layer representing KV-cache metadata for the given layer indices."""
+        return self.self_attention_cache.get_representative_kv_layer_idx(layer_indices)
 
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """Returns the maximum sequence length (i.e. max capacity) of the cache object"""

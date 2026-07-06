@@ -15,6 +15,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers.testing_utils import cleanup, is_torch_available, require_torch, torch_device
 
 
@@ -73,9 +75,11 @@ class TestHeterogeneousMasking(unittest.TestCase):
         for sliding_window, expected_mask in expected_masks.items():
             torch.testing.assert_close(mask[sliding_window], expected_mask[None, None])
 
-    def test_sliding_window_mask_uses_updated_layer_with_matching_window(self):
+    @parameterized.expand([("causal", True), ("bidirectional", False)])
+    def test_sliding_window_mask_uses_updated_layer_with_matching_window(self, _name, is_causal):
         config = tiny_llama_config(
             sliding_window=None,
+            is_causal=is_causal,
             per_layer_config={
                 0: {"sliding_window": 3},
                 1: {"sliding_window": 5},
@@ -149,6 +153,8 @@ class TestHeterogeneousMasking(unittest.TestCase):
             past_key_values=DynamicCache(config=config),
         )
 
+        # Existing model code selects a layer's mask by pattern name, so the attribute-value masks must also
+        # answer the shared-pattern lookup, returning themselves.
         self.assertIsInstance(attention_masks, AttentionMasksByAttributeValue)
         self.assertIs(attention_masks["sliding_attention"], attention_masks)
         self.assertEqual(set(attention_masks.keys()), {32, 16, 8})

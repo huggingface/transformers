@@ -29,8 +29,10 @@ class AttentionMasksByAttributeValue(dict[Hashable, Any]):
 
 
 class _SinglePatternAttentionMasks(AttentionMasksByAttributeValue):
-    """Attribute-value masks that also support lookup by their shared attention pattern.
-    This lets existing model code resolve masks without adding heterogeneity-specific branches.
+    """Attribute-value masks that also support lookup by their shared attention pattern, returning `self`.
+
+    This lets existing model code that selects a layer's mask by pattern name resolve masks without
+    heterogeneity-specific branches.
     """
 
     def __init__(self, attention_pattern: str) -> None:
@@ -69,9 +71,9 @@ def create_attention_masks_by_attribute_value(
     for attribute_value, layer_indices in attribute_value_to_layer_indices.items():
         layer_idx = layer_indices[0]
         if past_key_values is not None:
-            updated_layer_idx = past_key_values.get_updated_kv_layer_idx(layer_indices)
-            if updated_layer_idx is not None:
-                layer_idx = updated_layer_idx
+            representative_layer_idx = past_key_values.get_representative_kv_layer_idx(layer_indices)
+            if representative_layer_idx is not None:
+                layer_idx = representative_layer_idx
 
         layer_config = config.per_layer_config[layer_idx]
         attention_masks[attribute_value] = create_mask_fn(layer_config, *args, **kwargs, layer_idx=layer_idx)

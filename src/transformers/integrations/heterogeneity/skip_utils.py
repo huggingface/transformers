@@ -18,6 +18,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING
 
 from transformers.utils import is_torch_available
@@ -83,35 +84,14 @@ if is_torch_available():
             return tuple(outputs) if self._return_tuple else outputs[0]
 
 
-    @dataclass(frozen=True)
-    class _NoOpReplacementFactory:
-        source_class_name: str
-        signature: inspect.Signature
-        return_entries: tuple[ReturnEntry | None, ...] | None
-        return_tuple: bool
-
-        def __call__(self) -> nn.Module:
-            return _NoOpReplacement(
-                source_class_name=self.source_class_name,
-                signature=self.signature,
-                return_entries=self.return_entries,
-                return_tuple=self.return_tuple,
-            )
-
-
 def get_skip_replacement(
     cls: type[nn.Module],
     to_return: ReturnEntry | list[ReturnEntry | None] | None,
 ) -> Callable[[], nn.Module]:
     if to_return is None:
-        return _NoOpReplacementFactory(
-            source_class_name=cls.__qualname__,
-            signature=inspect.signature(cls.forward),
-            return_entries=None,
-            return_tuple=False,
-        )
-
-    if isinstance(to_return, ReturnEntry):
+        return_entries = None
+        return_tuple = False
+    elif isinstance(to_return, ReturnEntry):
         return_entries = (to_return,)
         return_tuple = False
     else:
@@ -120,18 +100,20 @@ def get_skip_replacement(
 
     signature = inspect.signature(cls.forward)
 
-    missing_names = [
-        return_entry.arg_name
-        for return_entry in return_entries
-        if return_entry is not None and return_entry.arg_name not in signature.parameters
-    ]
-    if missing_names:
-        raise ValueError(
-            f"In the skip replacement for {cls.__qualname__}, the following return entry arg names "
-            f"are not arguments of {cls.__qualname__}.forward(): {missing_names}"
-        )
+    if return_entries is not None:
+        missing_names = [
+            return_entry.arg_name
+            for return_entry in return_entries
+            if return_entry is not None and return_entry.arg_name not in signature.parameters
+        ]
+        if missing_names:
+            raise ValueError(
+                f"In the skip replacement for {cls.__qualname__}, the following return entry arg names "
+                f"are not arguments of {cls.__qualname__}.forward(): {missing_names}"
+            )
 
-    return _NoOpReplacementFactory(
+    return partial(
+        _NoOpReplacement,
         source_class_name=cls.__qualname__,
         signature=signature,
         return_entries=return_entries,

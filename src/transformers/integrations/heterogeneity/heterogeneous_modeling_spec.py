@@ -27,7 +27,24 @@ if TYPE_CHECKING:
 
 _MODEL_MODULE_PREFIX = "transformers.models."
 
-SkipDescriptor: TypeAlias = "dict[str | tuple[str, type], Callable[[], nn.Module]]"
+SkipReplacements: TypeAlias = "dict[str | tuple[str, type], Callable[[], nn.Module]]"
+
+
+@dataclass(frozen=True)
+class SkipDescriptor:
+    """Describes the module replacements and cache effect of a heterogeneous skip type.
+
+    Args:
+        replacements: Factories for the modules that replace layer members, keyed by one of two forms:
+            - `"member_name"`: always replaces that member (e.g. `"self_attn"`).
+            - `("member_name", member_class)`: replaces the member only when it is an instance of `member_class`,
+            taking precedence over a plain member-name key (e.g. `("mixer", NemotronHAttention)`).
+        replaces_kv_cache_updater: Whether this skip replaces the member that updates the layer's KV cache,
+        leaving the layer without KV-cache state.
+    """
+
+    replacements: SkipReplacements
+    replaces_kv_cache_updater: bool
 
 
 @dataclass

@@ -65,7 +65,7 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
     The model must resolve to a ``HeterogeneousModelingSpec`` either by setting
     ``_heterogeneous_modeling_spec`` on the model class, or by having a built-in
     spec factory in ``transformers.integrations.heterogeneity.supported_models``.
-    The spec defines the decoder layer class to patch, an optional layer-index argument name,
+    The spec defines the layer class to patch, the layer-index argument or variable name,
     and optional skip descriptors.
 
     The mechanism monkey-patches ``layer_cls.__init__`` and stores the per-model
@@ -89,8 +89,8 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
         ``layer_cls``: The layer class to patch, e.g. ``LlamaDecoderLayer``.
         ``layer_idx_variable_name``: Name of the layer index argument in ``layer_cls.__init__``,
             or the layer index variable from higher up the call stack.
-        ``skip_descriptors``: Optional dict mapping skip type names to
-            dicts of ``{member_name_or_(name, class): ReplacementModule}``.
+        ``skip_descriptors``: Optional dict mapping skip type names to descriptors containing replacement modules
+        and whether a replaced member is the one updating the layer's KV cache.
 
     Args:
         model: The model being constructed. Must have a heterogeneous ``config``
@@ -101,6 +101,14 @@ def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
     per_layer_skip_types = [layer_config.skip for layer_config in model.config.per_layer_config]
     skip_descriptors = heterogeneous_modeling_spec.skip_descriptors or {}
     _validate_skip_descriptors(per_layer_skip_types, skip_descriptors)
+
+    # Record which layers have their KV-cache update disabled on the config's heterogeneity spec,
+    # where cache construction (e.g. `StaticCache`) can read it from the config alone.
+    model.config._heterogeneity_spec.disabled_kv_layer_indices = tuple(
+        layer_idx
+        for layer_idx, skip_types in enumerate(per_layer_skip_types)
+        if any(skip_descriptors[skip_type].replaces_kv_cache_updater for skip_type in skip_types)
+    )
 
     ctx = _LayerInitContext(
         model_config=model.config,
@@ -252,7 +260,7 @@ def _apply_skip_descriptor(
     generic_replacements = {}
     class_specific_replacements = {}
 
-    for key, replacement_module in skip_descriptor.items():
+    for key, replacement_module in skip_descriptor.replacements.items():
         if isinstance(key, tuple):
             member_name, cls = key
         else:

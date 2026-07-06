@@ -15,11 +15,14 @@
 
 import unittest
 
+import pytest
+
 from transformers.testing_utils import cleanup, is_torch_available, require_torch, torch_device
 
 
 if is_torch_available():
     import torch
+    from torch._dynamo.testing import CompileCounter
 
     from tests.heterogeneity.testing_utils import (
         build_model,
@@ -29,6 +32,7 @@ if is_torch_available():
     )
     from transformers import DynamicCache, LlamaForCausalLM, StaticCache
     from transformers.cache_utils import DynamicSlidingWindowLayer, StaticSlidingWindowLayer
+    from transformers.integrations.executorch import export_with_dynamic_cache
 
 
 @require_torch
@@ -88,6 +92,128 @@ class TestHeterogeneousCache(unittest.TestCase):
                     ).logits[:, -1]
                     torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
 
+    def test_static_cache_generation_with_layer_zero_attention_skipped(self):
+        config = tiny_llama_config(
+            num_hidden_layers=2,
+            per_layer_config={0: {"skip": ["attention"]}},
+        )
+        with hetero_context("llama"):
+            model = build_model(config, LlamaForCausalLM)
+        input_ids = torch.tensor([[1, 2]], device=model.device)
+        generation_kwargs = {"max_new_tokens": 2, "do_sample": False, "disable_compile": True}
+
+        expected_ids = model.generate(input_ids, cache_implementation="dynamic", **generation_kwargs)
+        actual_ids = model.generate(input_ids, cache_implementation="static", **generation_kwargs)
+
+        torch.testing.assert_close(actual_ids, expected_ids)
+
+    @pytest.mark.torch_compile_test
+    def test_static_cache_compiles_once_with_layer_zero_attention_skipped(self):
+        config = tiny_llama_config(
+            num_hidden_layers=2,
+            per_layer_config={0: {"skip": ["xyz"]}},
+        )
+        with hetero_context("llama") as modeling_spec:
+            modeling_spec.skip_descriptors["xyz"] = modeling_spec.skip_descriptors.pop("attention")
+            model = build_model(config, LlamaForCausalLM)
+        input_ids = torch.tensor([[1, 2]], device=model.device)
+        cache = StaticCache(config=config, max_cache_len=input_ids.shape[1])
+
+        cache.early_initialization(
+            batch_size=input_ids.shape[0],
+            num_heads=config.num_key_value_heads,
+            head_dim=config.head_dim,
+            dtype=model.dtype,
+            device=model.device,
+        )
+        torch.compiler.reset()
+        compile_counter = CompileCounter()
+
+        def cached_forward(current_input_ids):
+            return model(current_input_ids, past_key_values=cache, use_cache=True).logits
+
+        compiled_forward = torch.compile(cached_forward, backend=compile_counter, fullgraph=True)
+
+        with torch.no_grad():
+            expected_logits = model(input_ids, use_cache=False).logits
+            actual_logits = torch.cat(
+                [compiled_forward(input_ids[:, position : position + 1]) for position in range(input_ids.shape[1])],
+                dim=1,
+            )
+
+        torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
+        self.assertEqual(cache.get_seq_length(), input_ids.shape[1])
+        self.assertEqual(cache.get_seq_length(layer_idx=0), 0)
+        self.assertEqual(compile_counter.frame_count, 1)
+
+    def test_static_cache_keeps_layer_with_mlp_skip_enabled(self):
+        config = tiny_llama_config(
+            num_hidden_layers=2,
+            per_layer_config={0: {"skip": ["mlp"]}},
+        )
+        with hetero_context("llama"):
+            model = build_model(config, LlamaForCausalLM)
+        cache = StaticCache(config=config, max_cache_len=1)
+
+        with torch.no_grad():
+            model(torch.tensor([[1]], device=model.device), past_key_values=cache, use_cache=True)
+
+        self.assertEqual(cache.get_representative_kv_layer_idx(range(config.num_hidden_layers)), 0)
+        self.assertEqual(cache.get_seq_length(layer_idx=0), 1)
+
+    def test_static_cache_with_skips_requires_model_construction(self):
+        config = tiny_llama_config(
+            num_hidden_layers=2,
+            per_layer_config={0: {"skip": ["attention"]}},
+        )
+
+        with self.assertRaisesRegex(ValueError, "Construct the model before creating a `StaticCache`"):
+            StaticCache(config=config, max_cache_len=1)
+
+        with hetero_context("llama"):
+            model = build_model(config, LlamaForCausalLM)
+        cache = StaticCache(config=model.config, max_cache_len=1)
+        self.assertEqual(cache.get_representative_kv_layer_idx(range(config.num_hidden_layers)), 1)
+
+    @pytest.mark.torch_export_test
+    def test_dynamic_cache_export_preserves_skipped_layer_indices(self):
+        config = tiny_llama_config(
+            num_hidden_layers=2,
+            per_layer_config={0: {"skip": ["attention"]}},
+        )
+        with hetero_context("llama"):
+            model = build_model(config, LlamaForCausalLM)
+
+        input_ids = torch.tensor([[1, 2]], device=model.device)
+        attention_mask = torch.ones_like(input_ids)
+        exported_program = export_with_dynamic_cache(model, input_ids, attention_mask)
+
+        with torch.no_grad():
+            exported_outputs = exported_program.module()(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                past_key_values=DynamicCache(config=config),
+                use_cache=True,
+            )
+            eager_outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                past_key_values=DynamicCache(config=config),
+                use_cache=True,
+            )
+
+        torch.testing.assert_close(exported_outputs.logits, eager_outputs.logits)
+        exported_cache = exported_outputs.past_key_values
+        eager_cache = eager_outputs.past_key_values
+        self.assertEqual(len(exported_cache.layers), config.num_hidden_layers)
+        self.assertIsNone(exported_cache.layers[0].keys)
+        self.assertIsNone(exported_cache.layers[0].values)
+        torch.testing.assert_close(exported_cache.layers[1].keys, eager_cache.layers[1].keys)
+        torch.testing.assert_close(exported_cache.layers[1].values, eager_cache.layers[1].values)
+        self.assertEqual(exported_cache.get_seq_length(layer_idx=0), 0)
+        self.assertEqual(exported_cache.get_seq_length(), input_ids.shape[1])
+        self.assertEqual(exported_cache.get_representative_kv_layer_idx(range(config.num_hidden_layers)), 1)
+
     def test_preloaded_cache_uses_populated_layer(self):
         empty_states = torch.empty(1, 1, 0, 4)
         populated_states = torch.randn(1, 1, 3, 4)
@@ -95,7 +221,7 @@ class TestHeterogeneousCache(unittest.TestCase):
         cache = DynamicCache([(empty_states, empty_states), (populated_states, populated_states)])
 
         self.assertEqual(cache.get_seq_length(), 3)
-        self.assertEqual(cache.get_updated_kv_layer_idx([0, 1]), 1)
+        self.assertEqual(cache.get_representative_kv_layer_idx([0, 1]), 1)
 
     def test_dynamic_cache_heterogeneous_sliding_window(self):
         """DynamicCache should create sliding layers matching per-layer sliding_window."""

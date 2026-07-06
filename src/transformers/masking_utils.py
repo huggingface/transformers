@@ -791,8 +791,12 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor | N
 
 
 def _get_mask_layer_idx(past_key_values: Cache | None, *, is_sliding: bool) -> int:
-    if past_key_values is None:
-        return 0
+    if not isinstance(past_key_values, Cache):
+        # Historical behavior
+        if hasattr(past_key_values, "is_sliding") and is_sliding in past_key_values.is_sliding:
+            return past_key_values.is_sliding.index(is_sliding)
+        else:
+            return 0
 
     candidate_indices = [
         layer_idx
@@ -804,8 +808,8 @@ def _get_mask_layer_idx(past_key_values: Cache | None, *, is_sliding: bool) -> i
     if not candidate_indices:
         return 0
 
-    updated_layer_idx = past_key_values.get_updated_kv_layer_idx(candidate_indices)
-    return candidate_indices[0] if updated_layer_idx is None else updated_layer_idx
+    representative_layer_idx = past_key_values.get_representative_kv_layer_idx(candidate_indices)
+    return candidate_indices[0] if representative_layer_idx is None else representative_layer_idx
 
 
 def _preprocess_mask_arguments(
@@ -1214,6 +1218,7 @@ def _create_sliding_window_causal_mask(
             past_key_values=past_key_values,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
+            layer_idx=layer_idx,
         )
 
     # If no layer is specified, select a sliding-attention layer, preferring one with cached KV state.
@@ -1294,6 +1299,7 @@ def create_bidirectional_sliding_window_mask(
     past_key_values: Cache | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
+    layer_idx: int | None = None,
     **kwargs,
 ) -> torch.Tensor | BlockMask | None:
     """
@@ -1320,9 +1326,12 @@ def create_bidirectional_sliding_window_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
+        layer_idx (`int`, optional):
+            The layer index to create the mask for, used to read cache metadata from.
     """
-    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
-    layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=True)
+    if layer_idx is None:
+        # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
+        layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=True)
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(

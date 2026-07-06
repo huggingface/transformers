@@ -33,7 +33,7 @@ if is_torch_available():
         tiny_llama_config,
     )
     from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedModel
-    from transformers.integrations.heterogeneity import HeterogeneousModelingSpec
+    from transformers.integrations.heterogeneity import HeterogeneousModelingSpec, SkipDescriptor
 
 
 if is_torch_available():
@@ -68,7 +68,12 @@ if is_torch_available():
         return HeterogeneousModelingSpec(
             layer_cls=layer_cls,
             layer_idx_variable_name="layer_idx",
-            skip_descriptors={"attention": {"self_attn": attention_replacement_cls}},
+            skip_descriptors={
+                "attention": SkipDescriptor(
+                    replacements={"self_attn": attention_replacement_cls},
+                    replaces_kv_cache_updater=True,
+                )
+            },
         )
 
     def _toy_config(intermediate_size, skip_attention=False):
