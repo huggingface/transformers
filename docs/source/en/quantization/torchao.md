@@ -175,7 +175,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -586,6 +586,10 @@ correct_output_text = tokenizer.batch_decode(
 print("Response:", correct_output_text[0][len(prompt) :])
 
 
+# Save the quantized model
+save_to = "opt-125m-quantized"
+quantized_model.save_pretrained(save_to)
+
 # Load model from saved checkpoint
 reloaded_model = AutoModelForCausalLM.from_pretrained(
     save_to,
@@ -716,6 +720,28 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 For a better sense of expected performance, view the [benchmarks](https://github.com/pytorch/ao/tree/main/torchao/quantization#benchmarks) for various models with CUDA and XPU backends. You can also run the code below to benchmark a model yourself.
 
 ```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+from torchao.quantization import Int4WeightOnlyConfig
+
+# Define model and load tokenizer
+model_name = "meta-llama/Llama-3.1-8B-Instruct"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+# Load and quantize the model
+quant_config = Int4WeightOnlyConfig()
+quantization_config = TorchAoConfig(quant_type=quant_config)
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    device_map="auto",
+    torch_dtype=torch.bfloat16,
+    quantization_config=quantization_config,
+)
+
+# Prepare input
+input_text = "What are we having for dinner?"
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
+
 from torch._inductor.utils import do_bench_using_profiling
 from typing import Callable
 
