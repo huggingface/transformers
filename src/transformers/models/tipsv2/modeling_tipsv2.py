@@ -926,7 +926,6 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         self.embeddings = Tipsv2TextEmbeddings(config)
         self.encoder = Tipsv2TextEncoder(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = None
         self.post_init()
 
     @merge_with_config_defaults

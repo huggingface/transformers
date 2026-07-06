@@ -378,12 +378,7 @@ class Tipsv2VisionEncoder(Dinov2WithRegistersEncoder):
 
 
 class Tipsv2VisionModel(Dinov2WithRegistersModel):
-    def forward(
-        self,
-        pixel_values: torch.Tensor | None = None,
-        bool_masked_pos: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    def forward(self, **super_kwargs) -> BaseModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
@@ -412,7 +407,7 @@ class Tipsv2VisionModel(Dinov2WithRegistersModel):
         >>> cls_token_1 = sequence[:, 0]  # supervised by web alt-text captions
         >>> cls_token_2 = sequence[:, 1 : 1 + model.config.num_register_tokens]  # supervised by synthetic captions
         ```"""
-        return super().forward(**kwargs)
+        return super().forward(**super_kwargs)
 
 
 class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
@@ -437,11 +432,7 @@ class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
     @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BackboneOutput:
+    def forward(self, **super_kwargs) -> BackboneOutput:
         r"""
         Examples:
 
@@ -459,7 +450,7 @@ class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 32, 32]
         ```"""
-        return super().forward(**kwargs)
+        return super().forward(**super_kwargs)
 
 
 class Tipsv2SinusoidalPositionalEmbedding(Speech2TextSinusoidalPositionalEmbedding):
@@ -630,7 +621,6 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         self.embeddings = Tipsv2TextEmbeddings(config)
         self.encoder = Tipsv2TextEncoder(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = None
         self.post_init()
 
     @merge_with_config_defaults
