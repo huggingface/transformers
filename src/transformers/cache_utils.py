@@ -1689,7 +1689,7 @@ class StaticCache(Cache):
             for layer_config in layer_configs
         ]
         layer_types = getattr(config, "layer_types", None)
-        # If `layer_types` is not explicitly provided, infer from the per-layer window attributes
+        # If `layer_types` is not explicitly provided, infer from attributes on the layer configs
         if layer_types is None:
             layer_types = []
             for layer_config in layer_configs:
