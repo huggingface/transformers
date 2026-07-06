@@ -641,6 +641,7 @@ class TmlPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+    _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
@@ -791,12 +792,14 @@ class TmlAudioModel(TmlPreTrainedModel):
 
 
 class TmlVisionEncoderLayer(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, t_fold: int, hw_fold: int):
+    def __init__(self, input_dim: int, output_dim: int, t_fold: int, hw_fold: int, add_norm: bool):
         super().__init__()
         self.projection = nn.Linear(input_dim, output_dim, bias=False)
-        self.layer_norm = TmlRMSNorm(output_dim)
+        if add_norm:
+            self.layer_norm = TmlRMSNorm(output_dim)
         self.hw_fold = hw_fold
         self.t_fold = t_fold
+        self.add_norm = add_norm
 
     def fold_timespace_to_depth(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
@@ -819,8 +822,9 @@ class TmlVisionEncoderLayer(nn.Module):
             hidden_states = self.fold_timespace_to_depth(hidden_states)
 
         hidden_states = self.projection(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = F.gelu(hidden_states)
+        if self.add_norm:
+            hidden_states = self.layer_norm(hidden_states)
+            hidden_states = F.gelu(hidden_states)
         return hidden_states
 
 
@@ -871,8 +875,8 @@ def plan_out_scales(temporal_patch_size: int, patch_size: int, n_layers: int, n_
     h = torch.cumprod(torch.tensor(prime_factors(patch_size)[::-1], device=device), dim=0)
     t = torch.cumprod(torch.tensor(prime_factors(temporal_patch_size)[::-1], device=device), dim=0)
 
-    h_ch = torch.ceil(h**2 / 64).int() * 64 * n_channels
-    t_ch = (h_ch[-1] if len(h_ch) else 64 * n_channels) * t
+    h_ch = torch.ceil(h**2 * n_channels/ 64).int() * 64
+    t_ch = torch.ceil(h[-1]**2 * n_channels * t).int() * 64
 
     base = torch.tensor([[1, 1, 1, n_channels]], device=device)
     spatial = torch.stack([torch.ones_like(h), h, h, h_ch], dim=1)
@@ -920,9 +924,15 @@ class TmlVisionModel(TmlPreTrainedModel):
             t_fold = end_scale[0] // start_scale[0]
             self.encoder_layers.append(
                 TmlVisionEncoderLayer(
-                    input_dim=start_scale[3] * shuffle_mult, output_dim=output_dim, hw_fold=hw_fold, t_fold=t_fold
+                    input_dim=start_scale[3] * shuffle_mult,
+                    output_dim=output_dim,
+                    hw_fold=hw_fold,
+                    t_fold=t_fold,
+                    add_norm=i != config.num_hidden_layers - 1,
                 )
             )
+
+        self.final_norm = TmlRMSNorm(config.text_hidden_size)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_patches = pixel_values.shape[0]
@@ -930,6 +940,7 @@ class TmlVisionModel(TmlPreTrainedModel):
         for layer in self.encoder_layers:
             hidden_states = layer(hidden_states=hidden_states)
 
+        hidden_states = self.final_norm(hidden_states)
         hidden_states = hidden_states.reshape(num_patches, -1)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,

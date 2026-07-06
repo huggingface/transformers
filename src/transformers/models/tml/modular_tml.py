@@ -525,6 +525,7 @@ class TmlPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+    _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
