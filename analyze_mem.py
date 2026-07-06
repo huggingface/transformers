@@ -11,7 +11,7 @@ Usage:
 import argparse
 import re
 import subprocess
-import sys
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent
@@ -60,14 +60,16 @@ DEFAULT_TEST_FILES = [
 ]
 
 
-def run_pytest(test_file: str, python: str) -> str:
-    """Run pytest --tb=no --durations=0 on one file, return combined stdout+stderr."""
+def run_pytest(test_file: str, python: str) -> tuple[str, float]:
+    """Run pytest --tb=no --durations=0 on one file, return (output, wall_seconds)."""
     print(f"  running {test_file} ...", flush=True)
+    t0 = time.perf_counter()
     result = subprocess.run(
         [python, "-m", "pytest", test_file, "--tb=no", "--durations=0"],
         cwd=REPO_ROOT, capture_output=True, text=True,
     )
-    return result.stdout + result.stderr
+    wall = time.perf_counter() - t0
+    return result.stdout + result.stderr, wall
 
 
 # ---------------------------------------------------------------------------
@@ -152,11 +154,11 @@ def main() -> None:
 
     all_rows: list[dict] = []
     all_durations: dict[str, float] = {}
-    # track total duration per test file (sum of all per-test durations in that file)
-    file_durations: dict[str, float] = {}
+    # wall-clock time per test file (from subprocess elapsed time)
+    file_wall_times: dict[str, float] = {}
 
     for test_file in test_files:
-        output = run_pytest(test_file, python)
+        output, wall = run_pytest(test_file, python)
         rows = parse_memory_table(output)
         durations = parse_durations(output)
 
@@ -165,7 +167,7 @@ def main() -> None:
 
         all_rows.extend(rows)
         all_durations.update(durations)
-        file_durations[test_file] = sum(durations.values())
+        file_wall_times[test_file] = wall
 
     if not all_rows:
         print("\nNo memory-usage table found in any output.")
@@ -183,7 +185,37 @@ def main() -> None:
             seen.add(key)
             unique_rows.append(row)
 
-    # Apply min-delta filter for display (both tables)
+    def model_name(path: str) -> str:
+        """'tests/models/aria/test_processing_aria.py' -> 'aria'"""
+        p = Path(path)
+        if p.parent.name == "models":
+            return p.stem
+        return p.parent.name
+
+    def source_file_for_model(mn: str) -> str:
+        for sf in file_wall_times:
+            if model_name(sf) == mn:
+                return sf
+        return mn
+
+    # -----------------------------------------------------------------------
+    # Per-model stats — computed from ALL unique_rows (never filtered)
+    # -----------------------------------------------------------------------
+    model_stats: dict[str, dict] = {}
+    for row in unique_rows:
+        mn = model_name(row["test"])
+        if mn not in model_stats:
+            model_stats[mn] = {"max_delta": row["delta"], "max_end_mb": row["end_mb"],
+                                "total_delta": 0.0, "count_ge10": 0}
+        s = model_stats[mn]
+        s["max_delta"] = max(s["max_delta"], row["delta"])
+        s["max_end_mb"] = max(s["max_end_mb"], row["end_mb"])
+        if row["delta"] > 0:
+            s["total_delta"] += row["delta"]
+        if row["delta"] >= 10.0:
+            s["count_ge10"] += 1
+
+    # Apply min-delta filter for display (Table 1 and Table 2)
     display_rows = [r for r in unique_rows if abs(r["delta"]) >= min_delta]
 
     # -----------------------------------------------------------------------
@@ -217,66 +249,78 @@ def main() -> None:
         )
 
     # -----------------------------------------------------------------------
-    # Table 2: per-model (aggregated per source file)
+    # Table 2: per-model summary
+    # stats are from all unique_rows; only models with max_delta >= min_delta shown
     # -----------------------------------------------------------------------
-    def model_name(path: str) -> str:
-        """'tests/models/aria/test_processing_aria.py' -> 'aria'"""
-        p = Path(path)
-        if p.parent.name == "models":
-            # tests/test_processing_common.py
-            return p.stem
-        return p.parent.name  # tests/models/<model>/...
-
-    # Build one entry per model (derived from each row's test path, not source_file)
-    model_stats: dict[str, dict] = {}
-    for row in display_rows:
-        mn = model_name(row["test"])
-        if mn not in model_stats:
-            model_stats[mn] = {"delta": row["delta"], "end_mb": row["end_mb"]}
-        else:
-            model_stats[mn]["delta"] = max(model_stats[mn]["delta"], row["delta"])
-            model_stats[mn]["end_mb"] = max(model_stats[mn]["end_mb"], row["end_mb"])
-
-    # Match model names back to source_file durations
-    def source_file_for_model(mn: str) -> str:
-        for sf in file_durations:
-            if model_name(sf) == mn:
-                return sf
-        return mn
-
-    model_rows = [
-        {
+    model_rows = []
+    for mn, s in model_stats.items():
+        if s["max_delta"] < min_delta:
+            continue
+        sf = source_file_for_model(mn)
+        model_rows.append({
             "model": mn,
-            "delta": stats["delta"],
-            "end_mb": stats["end_mb"],
-            "total_dur": file_durations.get(source_file_for_model(mn), 0.0),
-        }
-        for mn, stats in model_stats.items()
-    ]
-    model_rows.sort(key=lambda r: r["delta"], reverse=True)
+            "max_delta": s["max_delta"],
+            "max_end_mb": s["max_end_mb"],
+            "total_delta": s["total_delta"],
+            "count_ge10": s["count_ge10"],
+            "wall_time": file_wall_times.get(sf, 0.0),
+        })
+    model_rows.sort(key=lambda r: r["max_delta"], reverse=True)
 
-    col_model = max(len(r["model"]) for r in model_rows)
+    col_model = max(len(r["model"]) for r in model_rows) if model_rows else 20
     col_model = max(col_model, 20)
 
+    total_wall = sum(file_wall_times.values())
+    total_model_delta = sum(r["total_delta"] for r in model_rows)
+
     print(
-        f"\n{'='*80}\n"
-        f" PER-MODEL SUMMARY — max Delta MB & End MB per test file, "
-        f"total duration — sorted by Delta MB{filter_note}\n"
-        f"{'='*80}"
+        f"\n{'='*100}\n"
+        f" PER-MODEL SUMMARY — sorted by max Delta MB{filter_note}"
+        f" | total wall time: {total_wall:.0f}s ({total_wall/60:.1f} min)"
+        f" | total delta: {total_model_delta:.0f} MB\n"
+        f"{'='*100}"
     )
-    print(f"{'Delta MB':>10}  {'End MB':>10}  {'Total Dur':>10}  Model")
-    print(f"{'':->10}  {'':->10}  {'':->10}  {'':-<{col_model}}")
+    print(f"{'Max dMB':>10}  {'Total dMB':>10}  {'>=10MB':>7}  {'Wall Time':>10}  {'Max End MB':>10}  Model")
+    print(f"{'':->10}  {'':->10}  {'':->7}  {'':->10}  {'':->10}  {'':-<{col_model}}")
 
     for r in model_rows:
-        sign = "+" if r["delta"] >= 0 else ""
-        dur_str = f"{r['total_dur']:.1f}s" if r["total_dur"] > 0 else "n/a"
+        sign = "+" if r["max_delta"] >= 0 else ""
+        wall_str = f"{r['wall_time']:.1f}s"
         print(
-            f"  {sign}{r['delta']:>8.1f}  {r['end_mb']:>10.1f}"
-            f"  {dur_str:>10}  {r['model']}"
+            f"  {sign}{r['max_delta']:>8.1f}  {r['total_delta']:>10.1f}"
+            f"  {r['count_ge10']:>7}  {wall_str:>10}  {r['max_end_mb']:>10.1f}  {r['model']}"
         )
 
-    print(f"\nTotal unique entries: {len(unique_rows)}")
-    print(f"Source files run:     {len(test_files)}")
+    # -----------------------------------------------------------------------
+    # Table 3: all entries with delta >= 100 MB across all models
+    # -----------------------------------------------------------------------
+    high_rows = [r for r in unique_rows if r["delta"] >= 100.0]
+
+    print(
+        f"\n{'='*120}\n"
+        f" HIGH-MEMORY ENTRIES — {len(high_rows)} entries with Delta MB >= 100 across all models\n"
+        f"{'='*120}"
+    )
+    if high_rows:
+        col_test3 = max(len(r["test"]) for r in high_rows)
+        col_test3 = max(col_test3, 60)
+        print(f"{'Delta MB':>10}  {'End MB':>10}  {'Duration':>10}  {'Worker':>6}  Test")
+        print(f"{'':->10}  {'':->10}  {'':->10}  {'':->6}  {'':-<{col_test3}}")
+        for row in high_rows:
+            test = row["test"]
+            dur = all_durations.get(test)
+            dur_str = f"{dur:.2f}s" if dur is not None else "n/a"
+            sign = "+" if row["delta"] >= 0 else ""
+            print(
+                f"  {sign}{row['delta']:>8.1f}  {row['end_mb']:>10.1f}"
+                f"  {dur_str:>10}  {row['worker']:>6}  {test}"
+            )
+    else:
+        print("  (none)")
+
+    print(f"\nTotal unique entries:      {len(unique_rows)}")
+    print(f"Source files run:          {len(test_files)}")
+    print(f"Total wall time:           {total_wall:.0f}s ({total_wall/60:.1f} min)")
 
 
 if __name__ == "__main__":
