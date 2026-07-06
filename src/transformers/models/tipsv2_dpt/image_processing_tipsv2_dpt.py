@@ -138,9 +138,8 @@ class Tipsv2DptImageProcessor(TorchvisionBackend):
             `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
             `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
-        try:
-            logits = outputs.segmentation_logits  # DptOutput
-        except AttributeError:
+        logits = getattr(outputs, "segmentation_logits", None)  # DptOutput
+        if logits is None:
             logits = outputs.logits  # SemanticSegmentorOutput
 
         if target_sizes is not None and len(logits) != len(target_sizes):
