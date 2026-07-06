@@ -1076,6 +1076,57 @@ def _fix_view_inferred_dim(gm, node):
     return True
 
 
+@register_fx_node_fix("openvino")
+def _fix_index_put_none_indices(gm, node):
+    """Rewrite ``aten.index_put`` with ``None`` index entries into a broadcast ``where``.
+
+    ``x[:, :, idx] = value`` traces as ``index_put(x, [None, None, idx], value)``; OV's frontend
+    turns each ``None`` into a ``torch::None`` constant it can't translate (chameleon masks image
+    tokens out of its logits this way). For a single 1-D index tensor on one dim (the rest ``None``)
+    and a scalar value, this is equivalent to marking that dim's ``idx`` positions with a boolean
+    mask and ``where``-ing the value in — built from ``arange``/``eq``/``any``/``where``, all of
+    which translate cleanly. Non-scalar values or multi-index puts fall through unchanged.
+    """
+    if node.target not in (torch.ops.aten.index_put.default, torch.ops.aten.index_put_.default):
+        return False
+    if len(node.args) < 3:
+        return False
+    self_arg, indices, values = node.args[0], node.args[1], node.args[2]
+    accumulate = node.args[3] if len(node.args) > 3 else node.kwargs.get("accumulate", False)
+    if accumulate or not isinstance(indices, (list, tuple)):
+        return False
+    non_none = [(dim, ix) for dim, ix in enumerate(indices) if ix is not None]
+    # Only the "some `None`s + exactly one 1-D index tensor" pattern; skip fully-explicit puts
+    # (OV lowers those) and multi-index puts.
+    if len(non_none) != 1 or len(indices) == len(non_none):
+        return False
+    dim, idx = non_none[0]
+    self_val = self_arg.meta.get("val")
+    idx_val = idx.meta.get("val") if hasattr(idx, "meta") else None
+    values_val = values.meta.get("val") if hasattr(values, "meta") else None
+    if self_val is None or idx_val is None or idx_val.ndim != 1:
+        return False
+    if values_val is None or values_val.numel() != 1:  # scalar / broadcast value only
+        return False
+    size = self_val.shape[dim]
+    if not isinstance(size, int):
+        return False
+    with gm.graph.inserting_before(node):
+        iota = gm.graph.call_function(torch.ops.aten.arange.default, args=(size,), kwargs={"device": self_val.device})
+        iota_u = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(iota, 1))
+        idx_u = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(idx, 0))
+        eq = gm.graph.call_function(torch.ops.aten.eq.Tensor, args=(iota_u, idx_u))
+        mask = gm.graph.call_function(torch.ops.aten.any.dim, args=(eq, 1))
+        broadcast_shape = [1] * self_val.ndim
+        broadcast_shape[dim] = size
+        mask = gm.graph.call_function(torch.ops.aten.view.default, args=(mask, broadcast_shape))
+        result = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, values, self_arg))
+        result.meta.update(node.meta)
+    node.replace_all_uses_with(result)
+    gm.graph.erase_node(node)
+    return True
+
+
 # ── Torch patches ───────────────────────────────────────────────────────────
 # Each `_patch_*(original)` factory is registered via `@register_patch("openvino", path)`
 # and reversibly swaps a `torch` op the OV frontend can't lower with a decomposed
@@ -1942,8 +1993,18 @@ def _convert_sym_unop(op, *, cast_to_i64=False):
 def _convert_sym_floordiv(context):
     """``a // b`` over SymInts → ``floor(a / b)``, cast to i64. Used by patch/window-size
     computations (focalnet, donut_swin). The i64 cast keeps the result shape-op-friendly —
-    downstream ``SequenceMark → Concat`` requires a uniform int dtype."""
+    downstream ``SequenceMark → Concat`` requires a uniform int dtype.
+
+    Integer operands must be promoted to ``f32`` first: OV's ``Divide`` on two integers truncates
+    toward zero, so a subsequent ``floor`` is a no-op and the result is wrong for negative operands
+    (``-200 // 64`` gives ``-3`` instead of ``-4``). This breaks the ceil-div idiom ``-(-x // n)``
+    on a symbolic ``x`` — e.g. minimax_m3_vl's ``num_key_blocks``, which then comes out one too small
+    and sends a downstream ``scatter`` out of bounds. Dividing in float restores true floor division."""
     a, b = context.get_input(0), context.get_input(1)
+    if a.get_element_type().is_integral():
+        a = ov_ops.convert(a, "f32")
+    if b.get_element_type().is_integral():
+        b = ov_ops.convert(b, "f32")
     return [ov_ops.convert(ov_ops.floor(ov_ops.divide(a, b)), "i64").output(0)]
 
 

@@ -63,7 +63,7 @@ class VideoMAEDecoderOutput(ModelOutput):
 @dataclass
 class VideoMAEForPreTrainingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+    loss (`torch.FloatTensor` of shape `(1,)`):
         Pixel reconstruction loss.
     logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
         Pixel reconstruction logits.
@@ -494,12 +494,7 @@ class VideoMAEDecoder(nn.Module):
         for layer_module in self.decoder_layers:
             hidden_states = layer_module(hidden_states)
 
-        # Equivalent to `hidden_states[:, -return_token_num:]`, but with a non-negative start
-        # index. `return_token_num` is the number of masked patches (produced by boolean
-        # indexing → a data-dependent unbacked symint); slicing from the end forces `torch.export`
-        # to guard on the sign of that symint (`-(u//13) < 0`), which is unresolvable and breaks
-        # ExecuTorch's `slice_copy` lowering. A non-negative start avoids the guard.
-        hidden_states = hidden_states[:, hidden_states.shape[1] - return_token_num :]
+        hidden_states = hidden_states[:, -return_token_num:]
 
         # predictor projection
         hidden_states = self.norm(hidden_states)
@@ -537,7 +532,6 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         bool_masked_pos: torch.BoolTensor,
-        return_loss: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VideoMAEForPreTrainingOutput:
         r"""
@@ -545,9 +539,6 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Each video in the
             batch must have the same number of masked patches. Sequence length is `(num_frames // tubelet_size) *
             (image_size // patch_size) ** 2`.
-        return_loss (`bool`, *optional*):
-            Whether to compute and return the pixel reconstruction loss. Defaults to `self.config.return_loss` if
-            that attribute is set, and `True` otherwise.
 
         Examples:
         ```python
@@ -595,89 +586,82 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         logits = decoder_outputs.logits
 
         loss = None
-        if return_loss is None:
-            return_loss = getattr(self.config, "return_loss", True)
-        if return_loss:
-            with torch.no_grad():
-                # calculate the labels to be predicted
+        with torch.no_grad():
+            # calculate the labels to be predicted
+            if self.config.num_channels != 3:
+                # Can't unnormalize with default means/stds
+                frames = pixel_values
+            else:
+                # first, unnormalize the frames
+                device = pixel_values.device
+                dtype = pixel_values.dtype
+                mean = torch.as_tensor(IMAGENET_DEFAULT_MEAN).to(device=device, dtype=dtype)[None, None, :, None, None]
+                std = torch.as_tensor(IMAGENET_DEFAULT_STD).to(device=device, dtype=dtype)[None, None, :, None, None]
+                frames = pixel_values * std + mean  # in [0, 1]
+
+            batch_size, time, num_channels, height, width = frames.shape
+            tubelet_size, patch_size = self.config.tubelet_size, self.config.patch_size
+            if self.config.norm_pix_loss:
+                # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
+                frames = frames.view(
+                    batch_size,
+                    time // tubelet_size,
+                    tubelet_size,
+                    num_channels,
+                    height // patch_size,
+                    patch_size,
+                    width // patch_size,
+                    patch_size,
+                )
+                # step 2: move dimensions to concatenate:
+                frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
+                # step 3: concatenate:
+                frames = frames.view(
+                    batch_size,
+                    time // tubelet_size * height // patch_size * width // patch_size,
+                    tubelet_size * patch_size * patch_size,
+                    num_channels,
+                )
+                # step 4: normalize. The authors find that the mean is about 0.48 and standard deviation is about 0.08.
+                frames_norm = (frames - frames.mean(dim=-2, keepdim=True)) / (
+                    frames.var(dim=-2, unbiased=True, keepdim=True).sqrt() + 1e-6
+                )
+                # step 5: reshape to (batch_size, T//ts * H//ps * W//ps, ts * ps * ps * C)
+                videos_patch = frames_norm.view(
+                    batch_size,
+                    time // tubelet_size * height // patch_size * width // patch_size,
+                    tubelet_size * patch_size * patch_size * num_channels,
+                )
+            else:
                 if self.config.num_channels != 3:
-                    # Can't unnormalize with default means/stds
-                    frames = pixel_values
-                else:
-                    # first, unnormalize the frames
-                    device = pixel_values.device
-                    dtype = pixel_values.dtype
-                    mean = torch.as_tensor(IMAGENET_DEFAULT_MEAN).to(device=device, dtype=dtype)[
-                        None, None, :, None, None
-                    ]
-                    std = torch.as_tensor(IMAGENET_DEFAULT_STD).to(device=device, dtype=dtype)[
-                        None, None, :, None, None
-                    ]
-                    frames = pixel_values * std + mean  # in [0, 1]
+                    raise ValueError(
+                        "Can't unnormalize non-RGB images. Consider setting config.norm_pix_loss to False."
+                    )
+                # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
+                frames = frames.view(
+                    batch_size,
+                    time // tubelet_size,
+                    tubelet_size,
+                    num_channels,
+                    height // patch_size,
+                    patch_size,
+                    width // patch_size,
+                    patch_size,
+                )
+                # step 2: move dimensions to concatenate: (batch_size, T//ts, H//ps, W//ps, ts, ps, ps, C)
+                frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
+                # step 3: concatenate
+                videos_patch = frames.view(
+                    batch_size,
+                    time // tubelet_size * height // patch_size * width // patch_size,
+                    tubelet_size * patch_size * patch_size * num_channels,
+                )
 
-                batch_size, time, num_channels, height, width = frames.shape
-                tubelet_size, patch_size = self.config.tubelet_size, self.config.patch_size
-                if self.config.norm_pix_loss:
-                    # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
-                    frames = frames.view(
-                        batch_size,
-                        time // tubelet_size,
-                        tubelet_size,
-                        num_channels,
-                        height // patch_size,
-                        patch_size,
-                        width // patch_size,
-                        patch_size,
-                    )
-                    # step 2: move dimensions to concatenate:
-                    frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
-                    # step 3: concatenate:
-                    frames = frames.view(
-                        batch_size,
-                        time // tubelet_size * height // patch_size * width // patch_size,
-                        tubelet_size * patch_size * patch_size,
-                        num_channels,
-                    )
-                    # step 4: normalize. The authors find that the mean is about 0.48 and standard deviation is about 0.08.
-                    frames_norm = (frames - frames.mean(dim=-2, keepdim=True)) / (
-                        frames.var(dim=-2, unbiased=True, keepdim=True).sqrt() + 1e-6
-                    )
-                    # step 5: reshape to (batch_size, T//ts * H//ps * W//ps, ts * ps * ps * C)
-                    videos_patch = frames_norm.view(
-                        batch_size,
-                        time // tubelet_size * height // patch_size * width // patch_size,
-                        tubelet_size * patch_size * patch_size * num_channels,
-                    )
-                else:
-                    if self.config.num_channels != 3:
-                        raise ValueError(
-                            "Can't unnormalize non-RGB images. Consider setting config.norm_pix_loss to False."
-                        )
-                    # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
-                    frames = frames.view(
-                        batch_size,
-                        time // tubelet_size,
-                        tubelet_size,
-                        num_channels,
-                        height // patch_size,
-                        patch_size,
-                        width // patch_size,
-                        patch_size,
-                    )
-                    # step 2: move dimensions to concatenate: (batch_size, T//ts, H//ps, W//ps, ts, ps, ps, C)
-                    frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
-                    # step 3: concatenate
-                    videos_patch = frames.view(
-                        batch_size,
-                        time // tubelet_size * height // patch_size * width // patch_size,
-                        tubelet_size * patch_size * patch_size * num_channels,
-                    )
+            batch_size, _, num_channels = videos_patch.shape
+            labels = videos_patch[bool_masked_pos].reshape(batch_size, -1, num_channels)
 
-                batch_size, _, num_channels = videos_patch.shape
-                labels = videos_patch[bool_masked_pos].reshape(batch_size, -1, num_channels)
-
-            loss_fct = MSELoss()
-            loss = loss_fct(logits, labels)
+        loss_fct = MSELoss()
+        loss = loss_fct(logits, labels)
 
         return VideoMAEForPreTrainingOutput(
             loss=loss,

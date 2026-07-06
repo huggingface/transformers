@@ -761,26 +761,17 @@ class ChameleonImageVocabularyMapping:
     def bpe2img_search_tensors(self):
         return torch.tensor(sorted(self.bpe2img.keys())), torch.tensor(sorted(self.bpe2img.values()))
 
-    def _build_img2bpe_mapping_tensor(self, device: torch.device) -> torch.Tensor:
-        """Build a device-local ``(max_img_id + 1,)`` int lookup table mapping VQ image ids to
-        BPE token ids. Cached per-device so we don't rebuild on every call."""
-        if not hasattr(self, "_img2bpe_mapping_cache"):
-            self._img2bpe_mapping_cache: dict[torch.device, torch.Tensor] = {}
-        if device not in self._img2bpe_mapping_cache:
-            # Build on CPU via ``scatter`` then move — avoids a Python-level element-wise
-            # assignment loop that trips FakeTensor propagation during export.
-            keys = torch.tensor(list(self.img2bpe.keys()), dtype=torch.long)
-            values = torch.tensor(list(self.img2bpe.values()), dtype=torch.int)
-            # `max()` over the Python dict keys (a compile-time constant) instead of
-            # `keys.max().item()`: `.item()` on a tensor yields a data-dependent unbacked symint
-            # under `torch.export` that `torch.zeros(...)` cannot specialize.
-            mapping = torch.zeros(max(self.img2bpe.keys()) + 1, dtype=torch.int)
-            mapping.scatter_(0, keys, values)
-            self._img2bpe_mapping_cache[device] = mapping.to(device)
-        return self._img2bpe_mapping_cache[device]
+    @cached_property
+    def img2bpe_mapping_tensor(self):
+        mapping = torch.zeros(max(self.img2bpe.keys()) + 1, dtype=torch.int)
+        for k, v in self.img2bpe.items():
+            mapping[k] = v
+        return mapping
 
     def convert_img2bpe(self, img_batch: torch.Tensor) -> torch.Tensor:
-        return self._build_img2bpe_mapping_tensor(img_batch.device)[img_batch]
+        device = img_batch.device
+        img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
+        return img_tokens.to(device)
 
 
 @auto_docstring
@@ -1086,14 +1077,9 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
-        # Disallow image tokens which does not include special begin-image and end-image tokens.
-        # ``logits[:, :, image_tokens] = ...`` traces as ``aten.index_put`` with ``[None, None, tensor]``
-        # indices — the ``None`` values become ``torch::None`` under torch.export, which OpenVINO's
-        # frontend can't lower. A vocab-sized bool mask + ``masked_fill`` is equivalent and traces cleanly.
+        # Disallow image tokens which does not include special begin-image and end-image tokens
         image_tokens = self.model.vocabulary_mapping.image_tokens
-        image_token_mask = torch.zeros(logits.shape[-1], dtype=torch.bool, device=logits.device)
-        image_token_mask[image_tokens] = True
-        logits = logits.masked_fill(image_token_mask, torch.finfo(logits.dtype).min)
+        logits[:, :, image_tokens] = torch.finfo(logits.dtype).min
 
         loss = None
         if labels is not None:

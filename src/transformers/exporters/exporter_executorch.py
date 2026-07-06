@@ -336,7 +336,7 @@ def _patch_scaled_dot_product_attention(original):
 
     ``sdpa_kernel(MATH)`` forces the decomposable SDPA variant on any device — without it,
     CUDA traces pick ``_scaled_dot_product_efficient_attention``, which XNNPACK's edge-dialect
-    verifier rejects as non-core-ATen. Same shape of fix as the dynamo-path ``_patch_sdpa``,
+    verifier rejects as non-core-ATen. Same shape of fix as the Dynamo-path ``_patch_sdpa``,
     but unconditional here since the CUDA fused kernel is never lowerable by ExecuTorch's
     xnnpack backend. No-op on CPU (MATH is already the default), so this is safe everywhere.
 

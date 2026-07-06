@@ -61,7 +61,23 @@ from transformers.testing_utils import (
 
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
-    "all": {},
+    "all": {
+        "VideoMAEForPreTraining": (
+            "The reconstruction-loss path indexes `videos_patch[bool_masked_pos]` (a boolean "
+            "index → data-dependent unbacked count) and compares its shape against `logits`, which "
+            "`torch.export` can't guard (`Eq(u2 // 13, u3)`). Only the pretraining head hits this; "
+            "`VideoMAEModel` / `VideoMAEForVideoClassification` export fine."
+        ),
+    },
+    # Any backend (incl. plain `torch.export`), dynamic-shape variant only.
+    "dynamic": {
+        "Sam2Model": (
+            "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the 1000s "
+            "test timeout on every backend (Dynamo/ONNX/OpenVINO/ExecuTorch) — 12 attention blocks "
+            "× 3 Q-pool stage transitions on symbolic H/W. Static exports fine."
+        ),
+        "Sam2VisionModel": "Same Hiera-backbone dynamic-shape `timeout` as `Sam2Model`.",
+    },
     # Every backend, generate path only.
     "generate": {
         "RecurrentGemmaForCausalLM": (
@@ -93,12 +109,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "GroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
         "MMGroundingDinoModel": "Same as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
-        "Sam2VisionModel": (
-            "`torch.export` of the Hiera vision backbone under dynamic shapes takes ~7.5 min "
-            "even after simplifying `window_partition`/`window_unpartition` (12 attention blocks "
-            "× 3 Q-pool stage transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
-        ),
-        "Sam2Model": "Same Hiera-backbone dynamic-shape budget overrun as `Sam2VisionModel`.",
         "SwinModel": (
             "Shifted-window attention on symbolic H/W: `torch.export` + onnxscript exceed the "
             "1000s test timeout under dynamic shapes (static exports fine)."
@@ -143,12 +153,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "Sam2Model": (
-            "The dropped-weight `KeyError` is fixed, but `torch.export` of the Hiera vision "
-            "backbone under dynamic shapes then exceeds the 1000s test timeout (same "
-            "Hiera-backbone dynamic-shape overrun as `Sam2VisionModel`)."
-        ),
-        "Sam2VisionModel": "Same `timeout` failure as `BigBirdModel`.",
         "Qwen3NextModel": ("Lowering exceeds the 1000s test timeout under dynamic shapes."),
         "Qwen3NextForCausalLM": "Same `timeout` failure as `Qwen3NextModel`.",
         "DiffusionGemmaModel": ("Lowering exceeds the 1000s test timeout under dynamic shapes."),
@@ -159,13 +163,23 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # OpenVINO, generate path only.
     "openvino.generate": {},
     # OpenVINO, dynamic-shape only.
-    "openvino.dynamic": {},
-    # OpenVINO, generate + dynamic-shape only.
-    "openvino.generate.dynamic": {
-        "MiniMaxM3SparseForConditionalGeneration": (
-            "OpenVINO CPU runtime error (`infer_request.cpp`) on the MoE decoder generate graph "
-            "under dynamic shapes; static and non-generate variants export fine."
-        ),
+    "openvino.dynamic": {
+        "BigBirdModel": ("OpenVINO conversion exceeds the 1000s test timeout under dynamic shapes."),
+        "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForMultipleChoice": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "MaskFormerModel": "Shifted-window (Swin) backbone exceeds the 1000s test timeout under dynamic shapes.",
+        "MaskFormerForInstanceSegmentation": "Same `timeout` as `MaskFormerModel`.",
+        "Mask2FormerModel": "Deformable-attention pixel decoder exceeds the 1000s test timeout under dynamic shapes.",
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` as `Mask2FormerModel`.",
+        "GroundingDinoModel": ("Deformable-attention encoder exceeds the 1000s test timeout under dynamic shapes."),
+        "GroundingDinoForObjectDetection": "Same `timeout` as `GroundingDinoModel`.",
+        "MMGroundingDinoModel": "Same `timeout` as `GroundingDinoModel`.",
+        "MMGroundingDinoForObjectDetection": "Same `timeout` as `GroundingDinoModel`.",
     },
 }
 
