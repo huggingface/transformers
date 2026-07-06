@@ -62,7 +62,7 @@ class Tipsv2Tokenizer(TokenizersBackend):
                 vocab=self._vocab,
                 merges=self._merges,
                 fuse_unk=True,
-                byte_fallback=False,
+                byte_fallback=True,
                 dropout=None,
             )
         )
@@ -80,7 +80,13 @@ class Tipsv2Tokenizer(TokenizersBackend):
                 pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always"),
             ]
         )
-        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always")
+        self._tokenizer.decoder = decoders.Sequence(
+            [
+                decoders.Metaspace(replacement="▁", prepend_scheme="always"),
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+            ]
+        )
 
         super().__init__(
             unk_token=unk_token,
