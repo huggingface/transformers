@@ -1997,6 +1997,13 @@ Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
+SOUNDFILE_IMPORT_ERROR = """
+{0} requires the soundfile library. But that was not found in your environment. You can install it with pip:
+`pip install soundfile`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 PRETTY_MIDI_IMPORT_ERROR = """
 {0} requires the pretty_midi library. But that was not found in your environment. You can install them with pip:
 `pip install pretty_midi`
@@ -2051,6 +2058,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
         ("levenshtein", (is_levenshtein_available, LEVENSHTEIN_IMPORT_ERROR)),
         ("librosa", (is_librosa_available, LIBROSA_IMPORT_ERROR)),
+        ("soundfile", (is_soundfile_available, SOUNDFILE_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
