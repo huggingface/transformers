@@ -24,7 +24,6 @@ from ...test_processing_common import ProcessorTesterMixin
 class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaProcessor
     tiny_model_id = "hf-internal-testing/tiny-processor-llava"
-    model_id = "hf-internal-testing/tiny-processor-llava"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
