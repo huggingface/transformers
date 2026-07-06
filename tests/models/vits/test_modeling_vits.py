@@ -150,7 +150,10 @@ class VitsModelTester:
         attention_mask = inputs_dict["attention_mask"]
 
         result = model(input_ids, attention_mask=attention_mask)
-        self.parent.assertEqual((self.batch_size, 624), result.waveform.shape)
+        self.parent.assertEqual(2, result.waveform.ndim)
+        self.parent.assertEqual(self.batch_size, result.waveform.shape[0])
+        self.parent.assertEqual((self.batch_size,), result.sequence_lengths.shape)
+        self.parent.assertEqual(result.sequence_lengths.max().item(), result.waveform.shape[1])
 
 
 @require_torch
@@ -181,7 +184,6 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_pipeline_feature_extraction_fp16(self):
         super().test_pipeline_feature_extraction_fp16()
 
-    @unittest.skip(reason="Need to fix this after #26538")
     def test_model_forward(self):
         set_seed(12345)
         global_rng.seed(12345)
