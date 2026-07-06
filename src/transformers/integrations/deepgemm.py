@@ -18,7 +18,7 @@ Provides:
 - `deepgemm_bf16_experts_forward`: BF16 M-grouped experts forward.
 - `deepgemm_fp8_fp4_linear`: end-to-end FP8/FP4 linear (BF16 in, BF16 out).
 - `deepgemm_fp8_fp4_experts_forward`: FP8 (or FP4 on SM100+) M-grouped experts forward.
-- `deepgemm_fp8_fp4_megamoe_experts_forward`: FP8×FP4 Mega MoE forward (SM100+).
+- `deepgemm_fp8_fp4_megamoe_experts_forward`: FP8xFP4 Mega MoE forward (SM100+).
 
 Requirements: CUDA, Hopper (SM90+), CUDA runtime ≥ 12.3, kernels-community/deep-gemm
 ≥ 2.5 (Mega MoE symbols required). Mega MoE additionally needs SM100+ at call time.
@@ -720,7 +720,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     top_k_weights: torch.Tensor,
     process_group: torch.distributed.ProcessGroup | None = None,
 ) -> torch.Tensor:
-    """FP8 acts × FP4 weights Mega MoE forward (SM100+).
+    """FP8 acts x FP4 weights Mega MoE forward (SM100+).
 
     Fuses EP dispatch + L1 + SwiGLU + L2 + EP combine into one kernel,
     overlapping NVLink with tensor-core compute. The kernel handles the full

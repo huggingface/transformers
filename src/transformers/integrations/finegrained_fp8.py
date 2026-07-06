@@ -217,8 +217,8 @@ def fp8_linear(
     """End-to-end FP8/FP4 linear used by `FP8Linear` and the eager `FP8Experts` loop.
 
     Dispatch order — both backends handle FP8 and FP4 weights with fp32 or UE8M0 scales:
-      1. DeepGEMM (`deepgemm_fp8_fp4_linear`) — 3-6× faster on the shapes it supports.
-         Preferred for FP4, UE8M0 SFs, and 128×128 block FP8.
+      1. DeepGEMM (`deepgemm_fp8_fp4_linear`) — 3-6x faster on the shapes it supports.
+         Preferred for FP4, UE8M0 SFs, and 128x128 block FP8.
       2. Triton finegrained-fp8 fallback — used when DeepGEMM is unavailable, when the
          caller passes ``activation_scale`` (DeepGEMM is dynamic-only), or for any
          shape DeepGEMM declined.
