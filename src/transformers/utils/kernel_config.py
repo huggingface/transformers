@@ -91,7 +91,7 @@ def add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping
         device: {
             mode: LocalLayerRepository(
                 repo_path=Path(repo_path),
-                package_name=repo_package_name,
+                package_name=repo_package_name,  # type: ignore[unknown-argument]
                 layer_name=repo_layer_name,
             )
         }
