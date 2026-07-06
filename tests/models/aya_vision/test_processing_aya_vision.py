@@ -64,7 +64,9 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
-    @unittest.skip(reason="Tiny image processor has non-standard max_patches; use test_get_num_vision_tokens for coverage")
+    @unittest.skip(
+        reason="Tiny image processor has non-standard max_patches; use test_get_num_vision_tokens for coverage"
+    )
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         pass
 
