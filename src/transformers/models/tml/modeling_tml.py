@@ -841,7 +841,7 @@ def prime_factors(number: int) -> list[int]:
     return factors
 
 
-def plan_out_scales(temporal_patch_size: int, patch_size: int, n_layers: int, n_channels: int) -> torch.LongTensor:
+def plan_out_scales(temporal_patch_size: int, patch_size: int, n_layers: int, n_channels: int, device='cpu') -> torch.LongTensor:
     """
     Plan out the dimensions for each layer in the HMLP encoder.
 
@@ -868,13 +868,13 @@ def plan_out_scales(temporal_patch_size: int, patch_size: int, n_layers: int, n_
     Returns:
         torch.LongTensor of shape `(n_layers + 1, 4)` where the last dim holds values for (t, h, w, c) grids.
     """
-    h = torch.cumprod(torch.tensor(prime_factors(patch_size)[::-1]), dim=0)
-    t = torch.cumprod(torch.tensor(prime_factors(temporal_patch_size)[::-1]), dim=0)
+    h = torch.cumprod(torch.tensor(prime_factors(patch_size)[::-1], device=device), dim=0)
+    t = torch.cumprod(torch.tensor(prime_factors(temporal_patch_size)[::-1], device=device), dim=0)
 
     h_ch = torch.ceil(h**2 / 64).int() * 64 * n_channels
     t_ch = (h_ch[-1] if len(h_ch) else 64 * n_channels) * t
 
-    base = torch.tensor([[1, 1, 1, n_channels]])
+    base = torch.tensor([[1, 1, 1, n_channels]], device=device)
     spatial = torch.stack([torch.ones_like(h), h, h, h_ch], dim=1)
     temporal = torch.stack([t, torch.full_like(t, h[-1]), torch.full_like(t, h[-1]), t_ch], dim=1)
     scales = torch.cat([base, spatial, temporal], dim=0)
@@ -882,7 +882,7 @@ def plan_out_scales(temporal_patch_size: int, patch_size: int, n_layers: int, n_
     size_reduction = torch.prod(scales[:, :-1], dim=1).float()
 
     total_elements = patch_size * patch_size * temporal_patch_size * n_channels
-    log_ideal_scales = torch.linspace(0, torch.log(torch.tensor(total_elements)), n_layers + 1)
+    log_ideal_scales = torch.linspace(0, torch.log(torch.tensor(total_elements, device=device)), n_layers + 1, device=device)
     cost_matrix = torch.abs(log_ideal_scales.unsqueeze(1) - torch.log(size_reduction).unsqueeze(0))
 
     if n_layers >= scales.shape[0]:
@@ -891,7 +891,7 @@ def plan_out_scales(temporal_patch_size: int, patch_size: int, n_layers: int, n_
         from scipy.optimize import linear_sum_assignment
 
         _, idxs_np = linear_sum_assignment(cost_matrix.cpu().numpy())
-        idxs = torch.tensor(idxs_np)
+        idxs = torch.tensor(idxs_np, device=device)
         # idxs = torch.softmax(-cost_matrix * 10, dim=1).argmax(dim=1)
 
     idxs[0] = 0
