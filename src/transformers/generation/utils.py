@@ -2868,7 +2868,7 @@ class GenerationMixin(ContinuousMixin):
 
                 # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
                 # (the clone itself is always small)
-                next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
+                next_token_logits = outputs.logits[:, -1].to(copy=True, dtype=torch.float32, device=input_ids.device)
 
                 # pre-process distribution
                 next_token_scores = logits_processor(input_ids, next_token_logits)
