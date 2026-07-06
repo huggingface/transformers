@@ -356,14 +356,35 @@ def _patch_scaled_dot_product_attention(original):
     ``(L, N, H, E)`` buffer — invalidating those recorded views (``Cannot view a tensor with
     shape/strides``). ``clone`` records unconditionally and re-executes correctly under either
     layout, normalizing the strides the rest of the graph was recorded against.
+
+    The eager fallback also fires on **any** device when ``attn_mask`` has a data-dependent
+    (unbacked) batch dim — the Idefics2/3 / SmolVLM vision tower drops padding images via
+    ``pixel_values[real_images_inds]`` (a boolean index → unbacked ``u0`` image count), so the
+    vision attention mask carries batch ``u0``. ``to_edge_transform_and_lower`` decomposes the
+    surviving ``aten.scaled_dot_product_attention`` node through the SDPA math CIA kernel, which
+    guards ``Eq(u0, 1)`` on the mask's batch (broadcast-vs-not) and raises
+    ``GuardOnDataDependentSymNode``. The manual matmul+softmax path masks against ``attn_weight``
+    (both batch ``u0``) with plain broadcasting, so no ``Eq(u0, 1)`` guard is needed and no SDPA
+    node survives to be re-decomposed.
     """
+    from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
+
+    def _has_unbacked_batch(t):
+        # True when ``t``'s batch dim is a data-dependent (unbacked, ``u*``) SymInt.
+        if t is None or t.ndim == 0:
+            return False
+        batch = t.shape[0]
+        return isinstance(batch, torch.SymInt) and bool(free_unbacked_symbols(batch.node.expr))
 
     def patch(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs):
-        needs_eager_attention = query.device.type == "cuda" and (
-            kwargs.get("enable_gqa", False)
-            or query.shape[-1] != value.shape[-1]
-            or (attn_mask is not None and attn_mask.is_floating_point())
-        )
+        needs_eager_attention = (
+            query.device.type == "cuda"
+            and (
+                kwargs.get("enable_gqa", False)
+                or query.shape[-1] != value.shape[-1]
+                or (attn_mask is not None and attn_mask.is_floating_point())
+            )
+        ) or (attn_mask is not None and _has_unbacked_batch(attn_mask))
         if needs_eager_attention:
             scale_factor = scale if scale is not None else math.sqrt(query.shape[-1]) ** -1
             if key.shape[1] != query.shape[1]:
@@ -376,7 +397,10 @@ def _patch_scaled_dot_product_attention(original):
                 causal_mask = torch.ones(L, S, dtype=torch.bool, device=query.device).tril()
                 attn_weight = attn_weight.masked_fill(~causal_mask, float("-inf"))
             if attn_mask is not None:
-                attn_weight = attn_weight + attn_mask
+                if attn_mask.dtype == torch.bool:
+                    attn_weight = attn_weight.masked_fill(~attn_mask, float("-inf"))
+                else:
+                    attn_weight = attn_weight + attn_mask
             attn_weight = torch.nn.functional.softmax(attn_weight, dim=-1)
             return torch.matmul(attn_weight, value)
         with sdpa_kernel(SDPBackend.MATH):
@@ -1188,11 +1212,17 @@ def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
     """Drop ``_assert_scalar`` / ``_assert_tensor_metadata`` runtime asserts before lowering.
 
     ``_assert_scalar`` lowers a ``torch._check`` on an unbacked symint (e.g. the image-token
-    count in ``get_placeholder_mask``) into a ``cast_symbool_to_symint`` + ``eq`` chain whose
+    count in ``get_placeholder_mask``, or SmolVLM's ``inputs_merger`` registering ``Eq(u2, 1)``
+    off the unbacked real-image count) into a ``cast_symbool_to_symint`` + ``eq`` chain whose
     ``Piecewise`` result the ``_ModuleStackTracer`` used by ``to_edge_transform_and_lower``'s
     decomposition pass cannot proxy (``... is not tracked with proxy``). The range facts these
     asserts encode survive on ``exported_program.range_constraints`` (further capped by
     ``_fix_range_constraints``), so dropping the nodes (and the now-dead symint feeders) is safe.
+
+    Erasing the nodes is not sufficient on its own: ``to_edge``'s internal re-export re-runs
+    ``insert_deferred_runtime_asserts``, which reads ``shape_env.deferred_runtime_asserts`` to
+    decide what to regenerate — so that registry has to be cleared too, else the equality assert
+    reappears and trips the tracer again.
     """
     for module in exported_program.graph_module.modules():
         if not isinstance(module, torch.fx.GraphModule):
@@ -1205,6 +1235,14 @@ def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
                 module.graph.erase_node(node)
         module.graph.eliminate_dead_code()
         module.recompile()
+
+    for node in exported_program.graph_module.graph.nodes:
+        val = node.meta.get("val")
+        if isinstance(val, torch.Tensor) and getattr(val, "fake_mode", None) is not None:
+            shape_env = val.fake_mode.shape_env
+            if shape_env is not None:
+                shape_env.deferred_runtime_asserts.clear()
+            break  # all nodes share the same shape_env
 
 
 @register_fx_program_fix("executorch")

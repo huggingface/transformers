@@ -449,6 +449,22 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
     if isinstance(obj, torch.layout):
         return {"_t": "layout", "n": str(obj).removeprefix("torch.")}
     if isinstance(obj, (torch.SymInt, torch.SymFloat, torch.SymBool)):
+        # A Sym* that has already specialized to a concrete constant is not a genuine dynamic
+        # graph output — bake it as a plain scalar instead of a leaf. Leaving it as a leaf makes
+        # flatten non-deterministic: the same field can be a constant-valued SymInt at one trace
+        # point (the dynamo out_spec capture) and an already-materialized python scalar at another
+        # (the aot-decomposition retrace), so the leaf count flips and `treespec.unflatten` fails
+        # with an off-by-one. deepseek_v4 hits this via two sibling cache layers
+        # (DeepseekV4HCACache / DeepseekV4CSACache) sharing a `cumulative_length` counter that one
+        # path leaves as a constant SymInt and the other as a python int.
+        if isinstance(obj, torch.SymBool):
+            const = obj.node.maybe_as_bool()
+        elif isinstance(obj, torch.SymFloat):
+            const = obj.node.maybe_as_float()
+        else:
+            const = obj.node.maybe_as_int()
+        if const is not None:
+            return const
         idx = len(tensors)
         tensors.append(obj)
         return {"_t": "sym", "i": idx}

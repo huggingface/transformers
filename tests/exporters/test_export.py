@@ -46,14 +46,17 @@ from transformers.testing_utils import (
 # ──────────────────────────── skip lists ────────────────────────────
 #
 # A single mapping ``EXPORT_SKIPS[scope][model_class_name] = reason`` drives every skip.
-# ``scope`` is a dotted path that narrows from broad (``"all"`` — every backend, every variant)
-# to specific (``"onnx.generate"``, ``"onnx.dynamic"``, ``"openvino"``, …). At test time
-# ``_should_skip`` walks the scopes that match the current ``(backend, generate, dynamic)``
-# triple and returns ``True`` as soon as the model is found in any of them. Reasons live next
-# to the model name so the "why" travels with the entry.
+# A ``scope`` key is a **dotted set of tags** drawn from the active context — the backend
+# (``"onnx"`` / ``"openvino"`` / ``"executorch"``), ``"generate"``, and ``"dynamic"``. It applies
+# when *all* its tags are active, so tag order doesn't matter and any combination composes:
+# ``"all"`` (no tags) always applies, ``"dynamic"`` matches any dynamic export, ``"onnx.dynamic"``
+# matches dynamic ONNX, ``"openvino.generate.dynamic"`` matches only OpenVINO generate-under-dynamic.
+# ``_scope_applies`` does the subset check; ``_should_skip`` returns ``True`` as soon as the model
+# is found under any applicable scope. Reasons live next to the model name so the "why" travels
+# with the entry.
 #
-# Adding a new skip: pick the most specific scope that applies and add a ``"Name": "reason"``
-# entry. Add a new scope key if the existing ones don't fit.
+# Adding a new skip: pick the tightest tag-set that covers the failure and add a ``"Name": "reason"``
+# entry under that dotted key (creating the key if needed — no matcher change required).
 
 
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
@@ -96,6 +99,25 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "× 3 Q-pool stage transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
         ),
         "Sam2Model": "Same Hiera-backbone dynamic-shape budget overrun as `Sam2VisionModel`.",
+        "SwinModel": (
+            "Shifted-window attention on symbolic H/W: `torch.export` + onnxscript exceed the "
+            "1000s test timeout under dynamic shapes (static exports fine)."
+        ),
+        "SwinBackbone": "Same shifted-window `timeout` as `SwinModel`.",
+        "SwinForImageClassification": "Same shifted-window `timeout` as `SwinModel`.",
+        "SwinForMaskedImageModeling": "Same shifted-window `timeout` as `SwinModel`.",
+        "Swinv2Model": "Same shifted-window `timeout` as `SwinModel`.",
+        "Swinv2ForImageClassification": "Same shifted-window `timeout` as `SwinModel`.",
+        "Swinv2ForMaskedImageModeling": "Same shifted-window `timeout` as `SwinModel`.",
+        "Swinv2Backbone": "Same shifted-window `timeout` as `SwinModel`.",
+        "DonutSwinModel": "Same shifted-window `timeout` as `SwinModel`.",
+        "DonutSwinForImageClassification": "Same shifted-window `timeout` as `SwinModel`.",
+        "MaskFormerModel": "Same shifted-window (Swin backbone) `timeout` as `SwinModel`.",
+        "MaskFormerForInstanceSegmentation": "Same `timeout` as `MaskFormerModel`.",
+        "Mask2FormerModel": (
+            "Deformable-attention pixel decoder exceeds the 1000s test timeout under dynamic shapes."
+        ),
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` as `Mask2FormerModel`.",
     },
     # ExecuTorch, every variant.
     "executorch": {
@@ -105,7 +127,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
     },
     # ExecuTorch, generate path only.
-    "executorch.generate": {},
+    "executorch.generate": {
+        "MiniMaxM3SparseForConditionalGeneration": (
+            "`flatc` schema compilation fails when serializing the ExecuTorch program for the MoE "
+            "decoder generate graph."
+        ),
+    },
     # ExecuTorch, dynamic-shape only.
     "executorch.dynamic": {
         "BigBirdModel": ("Lowering exceeds the test timeout under dynamic shapes."),
@@ -116,31 +143,16 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "MaskFormerModel": "Same `timeout` failure as `BigBirdModel`.",
-        "MaskFormerForInstanceSegmentation": "Same `timeout` failure as `BigBirdModel`.",
-        "MaskFormerSwinModel": (
-            "ExecuTorch memory planning overflows under unbounded dynamic shapes (`mem_offset does not fit in 64 bits`)."
-        ),
-        "MaskFormerSwinBackbone": "Same `overflow` failure as `MaskFormerSwinModel`.",
-        "MllamaModel": "Same `overflow` failure as `MaskFormerSwinModel`.",
-        "MllamaForConditionalGeneration": "Same `overflow` failure as `MaskFormerSwinModel`.",
         "Sam2Model": (
             "The dropped-weight `KeyError` is fixed, but `torch.export` of the Hiera vision "
             "backbone under dynamic shapes then exceeds the 1000s test timeout (same "
             "Hiera-backbone dynamic-shape overrun as `Sam2VisionModel`)."
         ),
         "Sam2VisionModel": "Same `timeout` failure as `BigBirdModel`.",
-        "Swin2SRModel": "Same `overflow` failure as `MaskFormerSwinModel`.",
-        "Swin2SRForImageSuperResolution": "Same `overflow` failure as `MaskFormerSwinModel`.",
-        "Swinv2Model": "Same `overflow` failure as `MaskFormerSwinModel`.",
-        "Swinv2ForImageClassification": "Same `overflow` failure as `MaskFormerSwinModel`.",
-        "Swinv2ForMaskedImageModeling": "Same `overflow` failure as `MaskFormerSwinModel`.",
-        "Swinv2Backbone": "Same `overflow` failure as `MaskFormerSwinModel`.",
-        "Wav2Vec2BertForCTC": ("`flatc` schema compilation fails when serializing the program."),
-        "Wav2Vec2BertModel": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
-        "Wav2Vec2BertForSequenceClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
-        "Wav2Vec2BertForAudioFrameClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
-        "Wav2Vec2BertForXVector": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
+        "Qwen3NextModel": ("Lowering exceeds the 1000s test timeout under dynamic shapes."),
+        "Qwen3NextForCausalLM": "Same `timeout` failure as `Qwen3NextModel`.",
+        "DiffusionGemmaModel": ("Lowering exceeds the 1000s test timeout under dynamic shapes."),
+        "DiffusionGemmaForBlockDiffusion": "Same `timeout` failure as `DiffusionGemmaModel`.",
     },
     # OpenVINO, every variant.
     "openvino": {},
@@ -148,17 +160,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     "openvino.generate": {},
     # OpenVINO, dynamic-shape only.
     "openvino.dynamic": {},
-}
-
-
-# ──────────────────────────── ONNX optimization toggles ────────────────────────────
-# Not "skips" — these select whether `onnxscript` optimisation runs for a given model.
-# Same scope-keyed shape as ``EXPORT_SKIPS`` for symmetry.
-
-
-ONNX_DISABLE_OPTIMIZE: dict[str, dict[str, str]] = {
-    # Disable for dynamic-shape only — static benefits from optimisation.
-    "dynamic": {},
+    # OpenVINO, generate + dynamic-shape only.
+    "openvino.generate.dynamic": {
+        "MiniMaxM3SparseForConditionalGeneration": (
+            "OpenVINO CPU runtime error (`infer_request.cpp`) on the MoE decoder generate graph "
+            "under dynamic shapes; static and non-generate variants export fine."
+        ),
+    },
 }
 
 
@@ -264,15 +272,16 @@ def _run_openvino_model(ov_model, inputs) -> dict:
     return outputs
 
 
-def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
-    """Return whether onnxscript optimisation should run for this model under this shape mode.
+def _scope_applies(mapping: dict[str, dict[str, str]], active: set[str], name: str) -> bool:
+    """Whether ``name`` is listed under any scope in ``mapping`` applicable to ``active``.
 
-    Mirrors ``_should_skip``'s scope walk on ``ONNX_DISABLE_OPTIMIZE`` — ``"all"`` always
-    applies; ``"dynamic"`` adds the dynamic-only entries.
+    A dotted scope key is a set of required tags; it applies when every tag is in ``active``
+    (``"all"`` = no tags = always). Tag order is irrelevant and any combination composes.
     """
-    name = model_class.__name__
-    scopes = ["all"] + (["dynamic"] if dynamic else [])
-    return not any(name in ONNX_DISABLE_OPTIMIZE.get(scope, {}) for scope in scopes)
+    return any(
+        (set() if scope == "all" else set(scope.split("."))) <= active and name in entries
+        for scope, entries in mapping.items()
+    )
 
 
 # ──────────────────────────── mixins ────────────────────────────
@@ -310,22 +319,17 @@ class ExportTesterMixin:
     def _should_skip(self, model_class, generate=False, dynamic=False, backend=None):
         """Return True if this model class should be skipped for export tests.
 
-        Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
-        ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
-        for generate tests, ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` for
-        the more-specific intersections.
+        Builds the active tag-set from ``(backend, generate, dynamic)`` and returns True if
+        ``EXPORT_SKIPS`` lists the model under any applicable scope (see ``_scope_applies``).
         """
-        name = model_class.__name__
-        scopes = ["all"]
-        if generate:
-            scopes.append("generate")
+        active = set()
         if backend:
-            scopes.append(backend)
-            if generate:
-                scopes.append(f"{backend}.generate")
-            if dynamic:
-                scopes.append(f"{backend}.dynamic")
-        return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
+            active.add(backend)
+        if generate:
+            active.add("generate")
+        if dynamic:
+            active.add("dynamic")
+        return _scope_applies(EXPORT_SKIPS, active, model_class.__name__)
 
     def _prepare_export_model_and_inputs(self, model_class):
         """Create model and forward inputs ready for export.
@@ -424,9 +428,8 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="onnx"):
                 continue
 
-            optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
-            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
+            config = OnnxConfig(dynamic=dynamic)
 
             components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
@@ -571,9 +574,8 @@ class ExportGenerateTesterMixin:
             if self._should_skip(model_class, generate=True, dynamic=dynamic, backend="onnx"):
                 continue
 
-            optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
-            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
+            config = OnnxConfig(dynamic=dynamic)
 
             components = self._prepare_export_generate_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)

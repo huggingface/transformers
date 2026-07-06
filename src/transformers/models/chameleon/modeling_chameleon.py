@@ -771,7 +771,10 @@ class ChameleonImageVocabularyMapping:
             # assignment loop that trips FakeTensor propagation during export.
             keys = torch.tensor(list(self.img2bpe.keys()), dtype=torch.long)
             values = torch.tensor(list(self.img2bpe.values()), dtype=torch.int)
-            mapping = torch.zeros(int(keys.max().item()) + 1, dtype=torch.int)
+            # `max()` over the Python dict keys (a compile-time constant) instead of
+            # `keys.max().item()`: `.item()` on a tensor yields a data-dependent unbacked symint
+            # under `torch.export` that `torch.zeros(...)` cannot specialize.
+            mapping = torch.zeros(max(self.img2bpe.keys()) + 1, dtype=torch.int)
             mapping.scatter_(0, keys, values)
             self._img2bpe_mapping_cache[device] = mapping.to(device)
         return self._img2bpe_mapping_cache[device]

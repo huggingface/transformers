@@ -494,7 +494,12 @@ class VideoMAEDecoder(nn.Module):
         for layer_module in self.decoder_layers:
             hidden_states = layer_module(hidden_states)
 
-        hidden_states = hidden_states[:, -return_token_num:]
+        # Equivalent to `hidden_states[:, -return_token_num:]`, but with a non-negative start
+        # index. `return_token_num` is the number of masked patches (produced by boolean
+        # indexing → a data-dependent unbacked symint); slicing from the end forces `torch.export`
+        # to guard on the sign of that symint (`-(u//13) < 0`), which is unresolvable and breaks
+        # ExecuTorch's `slice_copy` lowering. A non-negative start avoids the guard.
+        hidden_states = hidden_states[:, hidden_states.shape[1] - return_token_num :]
 
         # predictor projection
         hidden_states = self.norm(hidden_states)

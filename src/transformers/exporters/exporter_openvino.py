@@ -607,14 +607,17 @@ def _run_openvino_decompositions(exported_program: ExportedProgram) -> ExportedP
 
 
 def _deduplicate_output_args(graph_module) -> None:
-    """Give repeated graph outputs their own node via a real ``+ 0`` op.
+    """Give repeated graph outputs their own node via a fold-resistant self-identity op.
 
     Two Results sharing one OV tensor crash the translate session's ``is_number`` check: the
     results-cleanup pass erases the shared tensor's numeric id on the first visit and fails
     decoding the debug alias on the second. Repeats arise when decomposition collapses the
     distinction between two output nodes (and ``aten.clone`` is no protection — OV folds it to
-    identity); ``+ 0`` is the cheapest op that survives translation as a distinct tensor
-    (constant-folded away afterwards by OV's optimization passes).
+    identity). The copy must survive OV's neutral-constant elimination: ``add(x, 0)`` gets folded
+    back to ``x`` (so a duplicate output re-aliases the original — e.g. moshi's ``depth_past_key_values``
+    ports collapsing onto the main-cache state buffer and losing their names), whereas ``maximum(x, x)``
+    is a self-identity with no neutral constant and survives as a distinct tensor (mirroring the
+    ``logical_and(x, x)`` used for the bool branch).
     """
     # Ops OV translates as pass-through — their output IS their input's tensor, so an output
     # arg behind one of these still aliases the underlying node.
@@ -634,7 +637,7 @@ def _deduplicate_output_args(graph_module) -> None:
             if val is not None and val.dtype == torch.bool:
                 copy = graph_module.graph.call_function(torch.ops.aten.logical_and.default, args=(source, source))
             else:
-                copy = graph_module.graph.call_function(torch.ops.aten.add.Tensor, args=(source, 0))
+                copy = graph_module.graph.call_function(torch.ops.aten.maximum.default, args=(source, source))
             copy.meta.update(source.meta)
         seen.add(source)
         return copy
@@ -1034,6 +1037,42 @@ def _fix_empty_expand(gm, node):
     for user in users:
         user.replace_input_with(node, full)
     gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("openvino")
+def _fix_view_inferred_dim(gm, node):
+    """Replace the inferred ``-1`` in an ``aten.view`` target that also carries a symbolic dim.
+
+    OV lowers ``aten.view`` to a ``Reshape`` and infers the ``-1`` dimension from the input's
+    element count. When another target dim is a runtime ``sym_size`` expression, OV's shape
+    inference can't reconcile the dynamic dim with the inferred ``-1`` and mis-resolves it —
+    edgetam/sam3_tracker's mask decoder does ``x.view(pixel_values.shape[0], -1, 8, 8)`` on a
+    ``[batch, 32, spatial]`` tensor and OV folds the ``-1`` to ``1`` while shifting the other
+    axes, so the runtime Reshape sees ``(64, 1, 8, 8)`` instead of ``(2, 32, 8, 8)`` and the
+    pattern product no longer matches the input. Substituting the ``-1`` with its concrete size
+    from the node's traced output — a static int for every graph that hits this — removes the
+    inference entirely and leaves OV a fully-determined pattern.
+    """
+    if node.target not in (torch.ops.aten.view.default, torch.ops.aten._unsafe_view.default):
+        return False
+    shape = node.args[1]
+    if not isinstance(shape, (list, tuple)):
+        return False
+    minus_one = [i for i, dim in enumerate(shape) if isinstance(dim, int) and dim == -1]
+    has_symbolic = any(not isinstance(dim, int) for dim in shape)
+    if len(minus_one) != 1 or not has_symbolic:
+        return False
+    out_val = node.meta.get("val")
+    if out_val is None:
+        return False
+    index = minus_one[0]
+    resolved = out_val.shape[index]
+    if not isinstance(resolved, int):
+        return False
+    new_shape = list(shape)
+    new_shape[index] = resolved
+    node.args = (node.args[0], new_shape) + tuple(node.args[2:])
     return True
 
 
@@ -1908,6 +1947,23 @@ def _convert_sym_floordiv(context):
     return [ov_ops.convert(ov_ops.floor(ov_ops.divide(a, b)), "i64").output(0)]
 
 
+def _convert_sym_truediv(context):
+    """``a / b`` over SymInts → **float** division, matching Python's ``truediv``.
+
+    OV's ``Divide`` on two integer operands does integer (truncating) division, but Python's
+    ``/`` always returns a float. granite_speech's chunked-attention reshape computes the merged
+    batch dim as ``batch * ceil(seq / chunk)`` — traced as ``ceil(truediv(sym_size, 200))``.
+    With integer operands ``200 / 200`` … ``128 / 200`` truncated to ``0``, so ``ceil(0) == 0``
+    and the reshape got a ``0`` batch dim (pattern ``(0, 200, 2, 16)`` vs input ``(2, 200, 32)``).
+    Promoting integer operands to ``f32`` restores true division so the ``ceil`` rounds up."""
+    a, b = context.get_input(0), context.get_input(1)
+    if a.get_element_type().is_integral():
+        a = ov_ops.convert(a, "f32")
+    if b.get_element_type().is_integral():
+        b = ov_ops.convert(b, "f32")
+    return [ov_ops.divide(a, b).output(0)]
+
+
 _OV_CONVERSION_EXTENSIONS: list[Any] = []
 if is_openvino_available():
     _OV_CONVERSION_EXTENSIONS.extend(
@@ -1933,7 +1989,7 @@ if is_openvino_available():
             ConversionExtension("<built-in function add>", _convert_sym_binop(ov_ops.add)),
             ConversionExtension("<built-in function sub>", _convert_sym_binop(ov_ops.subtract)),
             ConversionExtension("<built-in function mul>", _convert_sym_binop(ov_ops.multiply)),
-            ConversionExtension("<built-in function truediv>", _convert_sym_binop(ov_ops.divide)),
+            ConversionExtension("<built-in function truediv>", _convert_sym_truediv),
             ConversionExtension("<built-in function floordiv>", _convert_sym_floordiv),
             ConversionExtension("<built-in function mod>", _convert_sym_binop(ov_ops.floor_mod)),
             ConversionExtension("<built-in function pow>", _convert_sym_binop(ov_ops.power)),
