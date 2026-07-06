@@ -67,6 +67,7 @@ class AqlmConfigTest(unittest.TestCase):
         self.assertEqual(dict["nbits_per_codebook"], quantization_config.nbits_per_codebook)
         self.assertEqual(dict["linear_weights_not_to_quantize"], quantization_config.linear_weights_not_to_quantize)
 
+
 @slow
 @require_torch_accelerator
 @require_aqlm
