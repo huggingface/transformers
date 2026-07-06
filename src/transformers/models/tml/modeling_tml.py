@@ -590,27 +590,23 @@ def torch_causal_conv1d_update(
 
 
 class TmlShortConvolution(nn.Module):
-    def __init__(self, config: TmlTextConfig, layer_idx: int):
+    def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.conv_kernel_size = config.conv_kernel_size
         self.layer_idx = layer_idx
-        self.activation = config.hidden_act
-        self.act = ACT2FN[config.hidden_act]
 
         self.conv1d = nn.Conv1d(
-            in_channels=config.hidden_size,
-            out_channels=config.hidden_size,
-            kernel_size=config.conv_kernel_size,
-            groups=config.hidden_size,
-            padding=config.conv_kernel_size - 1,
+            in_channels=hidden_size,
+            out_channels=hidden_size,
+            kernel_size=conv_kernel_size,
+            groups=hidden_size,
+            padding=conv_kernel_size - 1,
             bias=False,
         )
 
         self.causal_conv1d_fn = causal_conv1d_fn
         self.causal_conv1d_update = causal_conv1d_update or torch_causal_conv1d_update
 
-        if not all(causal_conv1d_fn, causal_conv1d_update):
+        if not (causal_conv1d_fn is not None and causal_conv1d_update is not None):
             logger.warning_once(
                 "The fast path is not available because one of the required library is not installed. Falling back to "
                 "torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and"
@@ -624,8 +620,10 @@ class TmlShortConvolution(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        residual = hidden_states
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         seq_len = hidden_states.shape[1]
+        hidden_states = hidden_states.transpose(1, 2)
 
         # We have cached `conv_state` to continue from. The two cached modes
         # (single-token decode and chunk-tokens continuation) share the state read here; they only
@@ -669,8 +667,7 @@ class TmlShortConvolution(nn.Module):
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.act(hidden_states)
-        return hidden_states
+        return hidden_states + residual
 
 
 class TmlDecoderLayer(GradientCheckpointingLayer):
@@ -688,8 +685,8 @@ class TmlDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = TmlRMSNorm(config.hidden_size, config.rms_norm_eps)
         # Maybe use_conv is always `True`, check it!
         self.layer_type = config.layer_types[layer_idx]
-        self.attn_sconv = TmlShortConvolution(config, layer_idx=layer_idx)
-        self.mlp_sconv = TmlShortConvolution(config, layer_idx=layer_idx)
+        self.attn_sconv = TmlShortConvolution(config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx)
+        self.mlp_sconv = TmlShortConvolution(config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx)
 
     def forward(
         self,
