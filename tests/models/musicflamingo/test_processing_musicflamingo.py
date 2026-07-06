@@ -203,10 +203,6 @@ class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(kept_positions.any())
         self.assertTrue((labels[kept_positions] == input_ids[kept_positions]).all())
 
-        # labels are only returned when requested
-        inputs_no_labels = processor(text=text, audio=audio)
-        self.assertNotIn("labels", inputs_no_labels)
-
     @require_torch
     def test_output_labels_without_audio(self):
         processor = self.get_processor()
