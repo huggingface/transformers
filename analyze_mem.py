@@ -12,7 +12,6 @@ import argparse
 import re
 import shutil
 import subprocess
-import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent
@@ -61,20 +60,18 @@ DEFAULT_TEST_FILES = [
 ]
 
 
-def run_pytest(test_file: str, python: str) -> tuple[str, float]:
-    """Run pytest on one file, return (output, wall_seconds)."""
+def run_pytest(test_file: str, python: str) -> str:
+    """Run pytest on one file, return combined stdout+stderr."""
     # Clear memory_logs/ so the plugin only reports results from this run
     mem_logs = REPO_ROOT / "memory_logs"
     if mem_logs.exists():
         shutil.rmtree(mem_logs)
     print(f"  running {test_file} ...", flush=True)
-    t0 = time.perf_counter()
     result = subprocess.run(
         [python, "-m", "pytest", test_file, "--tb=no", "--durations=0"],
         cwd=REPO_ROOT, capture_output=True, text=True,
     )
-    wall = time.perf_counter() - t0
-    return result.stdout + result.stderr, wall
+    return result.stdout + result.stderr
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +91,8 @@ DUR_RE = re.compile(
 )
 
 # pytest summary line: "===== 42 passed in 43.03s =====" or "===== 1 failed, 41 passed in 43.03s ====="
-PYTEST_TIME_RE = re.compile(r"in ([\d.]+)s\s*=+\s*$")
+PYTEST_TIME_RE = re.compile(r"in ([\d.]+)s")
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def parse_memory_table(output: str) -> list[dict]:
@@ -138,9 +136,11 @@ def parse_pytest_time(output: str) -> float:
     Returns 0.0 if not found.
     """
     for line in reversed(output.splitlines()):
-        m = PYTEST_TIME_RE.search(line)
-        if m:
-            return float(m.group(1))
+        clean = ANSI_RE.sub("", line)
+        if "passed" in clean or "failed" in clean or "error" in clean:
+            m = PYTEST_TIME_RE.search(clean)
+            if m:
+                return float(m.group(1))
     return 0.0
 
 
@@ -175,7 +175,7 @@ def main() -> None:
     file_wall_times: dict[str, float] = {}
 
     for test_file in test_files:
-        output, wall = run_pytest(test_file, python)
+        output = run_pytest(test_file, python)
         rows = parse_memory_table(output)
         durations = parse_durations(output)
 
@@ -184,7 +184,7 @@ def main() -> None:
 
         all_rows.extend(rows)
         all_durations.update(durations)
-        file_wall_times[test_file] = wall
+        file_wall_times[test_file] = parse_pytest_time(output)
 
     if not all_rows:
         print("\nNo memory-usage table found in any output.")
