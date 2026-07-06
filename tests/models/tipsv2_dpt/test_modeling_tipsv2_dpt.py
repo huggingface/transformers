@@ -189,10 +189,10 @@ class Tipsv2DptForDensePredictionTester:
 class Tipsv2DptForDensePredictionTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            # Tipsv2DptForDensePrediction,
-            # Tipsv2DptForDepthEstimation,
+            Tipsv2DptForDensePrediction,
+            Tipsv2DptForDepthEstimation,
             Tipsv2DptForNormalEstimation,
-            # Tipsv2DptForSemanticSegmentation,
+            Tipsv2DptForSemanticSegmentation,
         )
         if is_torch_available()
         else ()
