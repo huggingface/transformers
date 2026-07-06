@@ -25,7 +25,10 @@ from ...configuration_utils import PreTrainedConfig
 class TmlTextConfig(PreTrainedConfig):
     model_type = "tml_text"
     base_config_key = "text_config"
-    attribute_map = {"embedding_multiplier": "logits_mup_width_multiplier"}
+    attribute_map = {
+        "embedding_multiplier": "logits_mup_width_multiplier",
+        "sliding_window": "sliding_window_size",
+    }
 
     vocab_size: int = 201024
     hidden_size: int = 6144
@@ -36,15 +39,15 @@ class TmlTextConfig(PreTrainedConfig):
     swa_num_attention_heads: int = 64
     swa_num_key_value_heads: int = 16
     swa_head_dim: int = 128
-    sliding_window: int = 512
-    layer_types: list[int] | None = None
-    rope_parameters: dict | None = None  # dont forget partial_rotary_factor
+    sliding_window_size: int = 512
+    d_rel: int = 16
+    rel_extent: int = 1024
+    local_layer_ids: list[int] | None = None
+    layer_types: list[str] | None = None
     max_position_embeddings: int = 131072
-    log_scaling_n_floor: int | None = None
-    log_scaling_alpha: float = 1.0
     rms_norm_eps: float = 1e-6
     sconv_kernel_size: int = 4
-    mlp_layer_types: list[int] | None = None
+    mlp_layer_types: list[str] | None = None
     intermediate_size: int = 24576
     hidden_act: str = "silu"
     # MoE
@@ -63,8 +66,13 @@ class TmlTextConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
+            if self.local_layer_ids is not None:
+                local_layer_ids = set(self.local_layer_ids)
+            else:
+                local_layer_ids = {i for i in range(self.num_hidden_layers) if (i + 1) % 6}
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % 6) else "full_attention" for i in range(self.num_hidden_layers)
+                "sliding_attention" if i in local_layer_ids else "full_attention"
+                for i in range(self.num_hidden_layers)
             ]
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] * self.num_hidden_layers
@@ -85,7 +93,6 @@ class TmlAudioConfig(PreTrainedConfig):
 class TmlVisionConfig(PreTrainedConfig):
     model_type = "tml_vision"
     base_config_key = "vision_config"
-    attribute_map = {"num_hidden_layers": "n_layers"}
 
     vision_encoder_type: str = "hmlp"
     text_hidden_size: int = 6144
@@ -111,6 +118,7 @@ class TmlConfig(PreTrainedConfig):
     text_config: TmlTextConfig | dict | None = None
     audio_config: TmlAudioConfig | dict | None = None
     vision_config: TmlVisionConfig | dict | None = None
+    # `<|content_image|>` / `<|content_audio_input|>` in the tml tokenizer
     image_token_id: int = 200005
     audio_token_id: int = 200020
 

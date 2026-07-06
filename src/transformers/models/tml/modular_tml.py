@@ -36,9 +36,8 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3Model,
     Gemma3ModelOutputWithPast,
 )
-from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer, Glm4MoeLiteModel
-from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding, apply_rotary_pos_emb
-from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, eager_attention_forward
+from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
+from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
 from ..phi3.modeling_phi3 import Phi3MLP
 
 
@@ -48,7 +47,10 @@ logger = logging.get_logger(__name__)
 class TmlTextConfig(PreTrainedConfig):
     model_type = "tml_text"
     base_config_key = "text_config"
-    attribute_map = {"embedding_multiplier": "logits_mup_width_multiplier"}
+    attribute_map = {
+        "embedding_multiplier": "logits_mup_width_multiplier",
+        "sliding_window": "sliding_window_size",
+    }
 
     vocab_size: int = 201024
     hidden_size: int = 6144
@@ -60,14 +62,16 @@ class TmlTextConfig(PreTrainedConfig):
     swa_num_key_value_heads: int = 16
     swa_head_dim: int = 128
     sliding_window_size: int = 512
-    layer_types: list[int] | None = None
-    rope_parameters: dict | None = None  # dont forget partial_rotary_factor
+    # for ref: 16 is the dim of the relative states (so small)
+    # and we clamp beyond 1024
+    d_rel: int = 16 
+    rel_extent: int = 1024
+    local_layer_ids: list[int] | None = None
+    layer_types: list[str] | None = None
     max_position_embeddings: int = 131072
-    log_scaling_n_floor: int | None = None
-    log_scaling_alpha: float = 1.0
     rms_norm_eps: float = 1e-6
     sconv_kernel_size: int = 4
-    mlp_layer_types: list[int] | None = None
+    mlp_layer_types: list[str] | None = None
     intermediate_size: int = 24576
     hidden_act: str = "silu"
     # MoE
@@ -86,8 +90,13 @@ class TmlTextConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
+            if self.local_layer_ids is not None:
+                local_layer_ids = set(self.local_layer_ids)
+            else:
+                local_layer_ids = {i for i in range(self.num_hidden_layers) if (i + 1) % 6}
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % 6) else "full_attention" for i in range(self.num_hidden_layers)
+                "sliding_attention" if i in local_layer_ids else "full_attention"
+                for i in range(self.num_hidden_layers)
             ]
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] * self.num_hidden_layers
@@ -133,8 +142,9 @@ class TmlConfig(PreTrainedConfig):
     text_config: TmlTextConfig | dict | None = None
     audio_config: TmlAudioConfig | dict | None = None
     vision_config: TmlVisionConfig | dict | None = None
-    image_token_id: int | None = None
-    audio_token_id: int | None = None
+    # `<|content_image|>` / `<|content_audio_input|>` in the tml tokenizer
+    image_token_id: int = 200005
+    audio_token_id: int = 200020
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
@@ -165,21 +175,6 @@ class TmlCausalLMOutputWithPast(Gemma3CausalLMOutputWithPast):
     pass
 
 
-def compute_log_scaling_tau(position_ids: torch.Tensor, floor: int | None, alpha: float) -> torch.Tensor | None:
-    """ "logn"-style per-position attention-logit scale.
-
-    tau = alpha * log(max(pos + 1, floor)); multiplies attention scores so
-    scores don't blow up at positions far beyond the trained context length.
-    Returns None if `floor` is None (feature disabled), matching the
-    SGLang call site which only invokes this when
-    `config.log_scaling_n_floor is not None`.
-    """
-    if floor is None:
-        return None
-    pos = (position_ids + 1).clamp(min=floor).to(torch.float32)
-    return alpha * torch.log(pos)
-
-
 def swiglu_interleaved(gate_up: torch.Tensor) -> torch.Tensor:
     """SwiGLU over an *interleaved* fused gate/up tensor, computed in fp32.
 
@@ -201,90 +196,143 @@ class TmlRMSNorm(LlamaRMSNorm):
 
 
 class TmlShortConvolution(nn.Module):
-    """Causal depthwise short convolution applied to a branch output before
-    the residual add (`attn_sconv` / `mlp_sconv` in `TmlDecoderLayer`).
+    """Causal depthwise short convolution with a residual connection, `y = conv(x) + x`
+    (sglang `ShortConvolution` with `use_residual=True` and no activation).
 
-    NOTE: SGLang instantiates this per-layer with a `layer_id` and
-    `sconv_type` (ATTN vs MLP) but the actual math isn't in the provided
-    source; this is a standard causal depthwise Conv1d, which is the usual
-    implementation for this kind of "short conv" branch (à la Hyena/Mamba
-    conv-in-block patterns). Swap in the real kernel if this differs.
+    NOTE: stateless for now — cached decoding needs the last `kernel_size - 1`
+    pre-convolution inputs carried in the cache.
     """
 
     def __init__(self, hidden_size: int, kernel_size: int):
         super().__init__()
+        self.hidden_size = hidden_size
         self.kernel_size = kernel_size
-        self.conv = nn.Conv1d(
-            hidden_size,
-            hidden_size,
-            kernel_size=kernel_size,
-            groups=hidden_size,
-            padding=kernel_size - 1,
-            bias=False,
-        )
+        self.weight = nn.Parameter(torch.empty(hidden_size, 1, kernel_size))
 
-    def forward(self, hidden_states: torch.Tensor, cache: torch.Tensor | None = None) -> torch.Tensor:
-        # hidden_states: (batch, seq_len, hidden_size)
-        x = hidden_states.transpose(1, 2)  # (batch, hidden, seq_len)
-        x = self.conv(x)[..., : hidden_states.shape[1]]
-        return x.transpose(1, 2)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = F.pad(hidden_states, (self.kernel_size - 1, 0))
+        conv_out = F.conv1d(hidden_states, self.weight, groups=self.hidden_size)
+        return conv_out.transpose(1, 2) + residual
 
 
-class TmlRotaryEmbedding(GPTNeoXRotaryEmbedding):
-    pass
+class TmlRelativeLogits(nn.Module):
+    """hidden states conditioned relative position bias. `proj` is a trained bank of bias-vs-distance profiles; each token's
+    `relative_states` mixes them into one bias value per backward distance
+    (`sglang RelLogitsProj` + the FA4 `score_mod`, materialized densely). The bias is zero
+    outside `0 <= distance < rel_extent`; causality and padding stay in the attention mask.
+    """
+
+    def __init__(self, d_rel: int, rel_extent: int):
+        super().__init__()
+        self.rel_extent = rel_extent
+        self.proj = nn.Parameter(torch.empty(d_rel, rel_extent))
+
+    def forward(
+        self,
+        relative_states: torch.Tensor,
+        query_positions: torch.Tensor,
+        key_positions: torch.Tensor,
+    ) -> torch.Tensor:
+        # relative_states: [batch, q_len, num_heads, d_rel] -> bias: [batch, num_heads, q_len, kv_len]
+        # this is the core of the relative states --> bias computation
+        # it is also very naive but should work
+        rel_logits = (relative_states @ self.proj).transpose(1, 2)
+        distance = (query_positions[:, None] - key_positions[None, :])[None, None, :, :]
+        gather_index = distance.clamp(0, self.rel_extent - 1).expand(*rel_logits.shape[:2], -1, -1)
+        position_bias = rel_logits.gather(-1, gather_index)
+        return position_bias.masked_fill((distance < 0) | (distance >= self.rel_extent), 0.0)
 
 
-class TmlAttention(LlamaAttention):
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    position_bias: torch.Tensor | None = None,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if position_bias is not None:
+        attn_weights = attn_weights + position_bias
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class TmlAttention(nn.Module):
     def __init__(self, config: TmlTextConfig, layer_idx: int):
-        nn.Module.__init__()
+        super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.is_local_attn = config.layer_types[self.layer_idx] == "sliding_attention"
         self.head_dim = config.swa_head_dim if self.is_local_attn else config.head_dim
         self.num_heads = config.swa_num_attention_heads if self.is_local_attn else config.num_attention_heads
         self.num_key_value_heads = config.swa_num_key_value_heads if self.is_local_attn else config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.sliding_window = config.sliding_window_size if self.is_local_attn else None
-        self.scaling = self.head_dim**-0.5
+        self.rel_extent = config.sliding_window_size if self.is_local_attn else config.rel_extent
+        # q/k are RMS-normalized per head, hence 1/d rather than 1/sqrt(d)
+        self.scaling = 1.0 / self.head_dim
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.r_proj = nn.Linear(config.hidden_size, self.num_heads * config.d_rel, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
-        self.r_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-
-    def _apply_r_gate(self, attn_output: torch.Tensor, hidden_states: torch.Tensor, shape: tuple) -> torch.Tensor:
-        # best-effort "receptance" gate: r = sigmoid(W_r x), applied
-        # elementwise to the attention output before the output projection
-        r = torch.sigmoid(self.r_proj(hidden_states).view(*shape))
-        return attn_output * r.transpose(1, 2).reshape(attn_output.shape)
+        self.k_sconv = TmlShortConvolution(self.num_key_value_heads * self.head_dim, config.sconv_kernel_size)
+        self.v_sconv = TmlShortConvolution(self.num_key_value_heads * self.head_dim, config.sconv_kernel_size)
+        self.q_norm = TmlRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = TmlRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.rel_logits_proj = TmlRelativeLogits(config.d_rel, self.rel_extent)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        log_scaling_tau: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_sconv(self.k_proj(hidden_states))
+        value_states = self.v_sconv(self.v_proj(hidden_states))
+        relative_states = self.r_proj(hidden_states)
 
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states = self.q_norm(query_states.view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(key_states.view(hidden_shape)).transpose(1, 2)
+        value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        kv_length = key_states.shape[-2]
+        key_positions = torch.arange(kv_length, device=cache_position.device) + cache_position[-1] + 1 - kv_length
+        relative_states = relative_states.view(*input_shape, self.num_heads, -1)
+        position_bias = self.rel_logits_proj(relative_states, cache_position, key_positions)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -295,11 +343,10 @@ class TmlAttention(LlamaAttention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            log_scaling_tau=log_scaling_tau,
+            position_bias=position_bias,
             **kwargs,
         )
 
-        attn_output = self._apply_r_gate(attn_output, hidden_states, hidden_shape)
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -311,8 +358,10 @@ class TmlMLP(Phi3MLP):
         self.global_scale = 1.0 / math.sqrt(config.intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        out = super().forward(hidden_states)
-        return out * self.global_scale
+        up_states = self.gate_up_proj(hidden_states)
+        gate, up_states = up_states.chunk(2, dim=-1)
+        up_states = up_states * self.activation_fn(gate)
+        return self.down_proj(up_states) * self.global_scale
 
 
 class TmlExperts(DeepseekV4Experts):
@@ -486,10 +535,8 @@ class TmlDecoderLayer(Glm4MoeLiteDecoderLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        log_scaling_tau: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -497,11 +544,13 @@ class TmlDecoderLayer(Glm4MoeLiteDecoderLayer):
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             past_key_values=past_key_values,
-            position_embeddings=position_embeddings,
+            cache_position=cache_position,
             **kwargs,
         )
+        # TODO: the short convolutions are stateless for now, so cached decoding is wrong for
+        # sequences continued token-by-token; they need their conv context carried in the cache
+        # TOFIX as well ig
         hidden_states = self.attn_sconv(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -520,11 +569,13 @@ class TmlPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["TmlDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
+    # The relative position bias flows through the attention interface as a `position_bias` (duh)
+    # kwarg that only the eager path consumes; other backends need a score_mod/kernel
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
+    _can_compile_fullgraph = False
+    _supports_attention_backend = False
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
 
     def _init_weights(self, module):
@@ -539,15 +590,28 @@ class TmlPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, TmlRMSNorm):
             module.weight.data.fill_(1.0)
+        elif isinstance(module, TmlShortConvolution):
+            module.weight.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, TmlRelativeLogits):
+            module.proj.data.normal_(mean=0.0, std=std)
 
 
-class TmlTextModel(Glm4MoeLiteModel):
+class TmlTextModel(TmlPreTrainedModel):
     config: TmlTextConfig
 
     def __init__(self, config: TmlTextConfig):
         super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [TmlDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.embed_norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.embedding_multiplier = config.embedding_multiplier
+        self.gradient_checkpointing = False
+        self.post_init()
 
     def forward(
         self,
@@ -571,37 +635,33 @@ class TmlTextModel(Glm4MoeLiteModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        cache_position = torch.arange(
+            past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+        )
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            ).unsqueeze(0)
+            position_ids = cache_position.unsqueeze(0)
 
-        mask_kwargs = {
-            "config": self.config,
-            "input_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        causal_mask_mapping = {
-            "full_attention": create_causal_mask(**mask_kwargs),
-            "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
-        }
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        log_scaling_tau = compute_log_scaling_tau(
-            position_ids, self.config.log_scaling_n_floor, self.config.log_scaling_alpha
-        )
-
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=causal_mask_mapping[decoder_layer.layer_type],
                 past_key_values=past_key_values,
-                log_scaling_tau=log_scaling_tau,
+                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -796,16 +856,17 @@ class TmlVisionModel(TmlPreTrainedModel):
 
 class TmlModel(Gemma3Model, TmlPreTrainedModel):
     def __init__(self, config: TmlConfig):
-        super().__init__(config)
+        TmlPreTrainedModel.__init__(self, config)
+        self.vocab_size = config.text_config.vocab_size
         self.language_model = TmlTextModel(config.text_config)
         self.audio_tower = TmlAudioModel(config.audio_config)
         self.vision_tower = TmlVisionModel(config.vision_config)
-        del self.multi_modal_projector
+        self.post_init()
 
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
+        return self.vision_tower(pixel_values=pixel_values, **kwargs)
 
     def forward(
         self,
@@ -857,7 +918,7 @@ class TmlModel(Gemma3Model, TmlPreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+            image_features = self.get_image_features(pixel_values).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -885,7 +946,6 @@ class TmlModel(Gemma3Model, TmlPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=True,
             **lm_kwargs,
         )
 
@@ -968,7 +1028,6 @@ class TmlForConditionalGeneration(Gemma3ForConditionalGeneration, GenerationMixi
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             labels=labels,
-            return_dict=True,
             **kwargs,
         )
 
