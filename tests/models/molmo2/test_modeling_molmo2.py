@@ -51,6 +51,8 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
 
+    from transformers.models.molmo2.modeling_molmo2 import token_type_ids_mask_function
+
 if is_vision_available():
     from PIL import Image
 
@@ -423,6 +425,68 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    def test_bidirectional_image_attention(self):
+        """
+        Image patch tokens attend bidirectionally while text tokens stay causal.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Molmo2Model._from_config(config, attn_implementation="eager").to(torch_device).eval()
+        with torch.no_grad():
+            outputs = model(**inputs_dict, output_attentions=True)
+
+        token_types = inputs_dict["mm_token_type_ids"][0]
+        image_positions = (token_types == 1).nonzero().flatten()
+        text_positions = (token_types == 0).nonzero().flatten()
+        self.assertGreater(len(image_positions), 1)
+        self.assertGreater(len(text_positions), 1)
+
+        attention = outputs.attentions[0][0]  # [num_heads, seq_len, seq_len]
+        # an image token sees a later image token
+        self.assertTrue((attention[:, image_positions[0], image_positions[-1]] > 0).all())
+        # a text token never sees a later text token
+        self.assertTrue((attention[:, text_positions[0], text_positions[-1]] == 0).all())
+
+    def test_token_type_ids_mask_function_beyond_prompt(self):
+        """
+        Positions past `mm_token_type_ids` (static cache, assisted decoding) are masked as text.
+        """
+        token_type_ids = torch.tensor([[0, 1, 1, 0]])
+        inner_mask = token_type_ids_mask_function(token_type_ids)
+
+        indices = torch.arange(8)
+        q_idx, kv_idx = torch.meshgrid(indices, indices, indexing="ij")
+        mask = inner_mask(torch.zeros_like(q_idx), 0, q_idx, kv_idx)
+
+        expected = torch.zeros(8, 8, dtype=torch.bool)
+        expected[1:3, 1:3] = True
+        self.assertTrue(torch.equal(mask, expected))
+
+    def test_expand_inputs_for_generation_repeats_visual_pooling(self):
+        """
+        Beam expansion repeats each sample's flat pooling block `expand_size` times in batch order.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Molmo2ForConditionalGeneration._from_config(config).to(torch_device).eval()
+
+        input_ids = torch.ones((2, 4), dtype=torch.long, device=torch_device)
+        input_ids[0, :3] = config.image_token_id  # sample 0: 3 patches
+        input_ids[1, :2] = config.image_token_id  # sample 1: 2 patches
+        token_pooling = torch.arange(5 * 4, device=torch_device).reshape(5, 4)
+
+        expanded_ids, model_kwargs = model._expand_inputs_for_generation(
+            expand_size=2, input_ids=input_ids, image_token_pooling=token_pooling
+        )
+
+        expected = torch.cat([token_pooling[:3], token_pooling[:3], token_pooling[3:], token_pooling[3:]], dim=0)
+        self.assertTrue(torch.equal(model_kwargs["image_token_pooling"], expected))
+        self.assertTrue(torch.equal(expanded_ids, input_ids.repeat_interleave(2, dim=0)))
+
+        # a pooling tensor inconsistent with the per-sample patch counts raises instead of passing through
+        with self.assertRaises(RuntimeError):
+            model._expand_inputs_for_generation(
+                expand_size=2, input_ids=input_ids, image_token_pooling=token_pooling[:4]
+            )
 
     def test_mismatching_num_image_tokens(self):
         """

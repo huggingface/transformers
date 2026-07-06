@@ -870,7 +870,6 @@ class Molmo2Processor(ProcessorMixin):
         return super().apply_chat_template(conversation, chat_template=chat_template, **kwargs)
 
 
-# Output dataclasses - same structure as LLaVA
 class Molmo2CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
@@ -1416,54 +1415,12 @@ def token_type_ids_mask_function(token_type_ids: torch.Tensor | None = None) -> 
     seq_len = token_type_ids.shape[1]
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        # `q_idx`/`kv_idx` can run past `mm_token_type_ids` (which only covers the original prompt) when
-        # generation verifies several new tokens at once (e.g. assisted decoding). Those positions are
-        # always newly generated text, never image patches, so clamp the lookup and treat them as type 0.
-        safe_kv = torch.where(kv_idx < seq_len, kv_idx, 0)
-        kv_is_image = torch.where(kv_idx < seq_len, token_type_ids[batch_idx, safe_kv], 0) == 1
-        safe_q = torch.where(q_idx < seq_len, q_idx, 0)
-        q_is_image = torch.where(q_idx < seq_len, token_type_ids[batch_idx, safe_q], 0) == 1
-        return q_is_image & kv_is_image
+        # Indices past `token_type_ids` (static cache, assisted decoding) are generated text: type 0.
+        q_type = torch.where(q_idx < seq_len, token_type_ids[batch_idx, q_idx.clamp(max=seq_len - 1)], 0)
+        kv_type = torch.where(kv_idx < seq_len, token_type_ids[batch_idx, kv_idx.clamp(max=seq_len - 1)], 0)
+        return (q_type == 1) & (kv_type == 1)
 
     return inner_mask
-
-
-def create_causal_mask_mapping(
-    config: PreTrainedConfig,
-    inputs_embeds: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
-    position_ids: torch.Tensor | None,
-    mm_token_type_ids: torch.Tensor | None = None,
-    has_multimodal_inputs: bool = False,
-    is_training: bool = False,
-    is_first_iteration: bool | None = None,
-    **kwargs,
-) -> dict:
-    """
-    Create the causal mask mapping for Molmo2 forward passes. Multimodal patch tokens use bidirectional attention
-    within the visual region.
-    """
-    if is_training and mm_token_type_ids is None:
-        raise ValueError("`mm_token_type_ids` is required as a model input when training")
-
-    mask_kwargs = {
-        "config": config.get_text_config(),
-        "inputs_embeds": inputs_embeds,
-        "attention_mask": attention_mask,
-        "past_key_values": past_key_values,
-        "position_ids": position_ids,
-    }
-
-    is_first_iteration = (
-        is_first_iteration
-        if is_first_iteration is not None
-        else (past_key_values is None or not past_key_values.is_initialized or has_multimodal_inputs)
-    )
-    if mm_token_type_ids is not None and is_first_iteration:
-        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(mm_token_type_ids.to(inputs_embeds.device))
-
-    return create_causal_mask(**mask_kwargs)
 
 
 class Molmo2Model(Molmo2PreTrainedModel):
@@ -1581,16 +1538,22 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask_mapping = create_causal_mask_mapping(
-                self.config,
-                inputs_embeds,
-                attention_mask,
-                past_key_values,
-                position_ids,
-                mm_token_type_ids,
-                has_multimodal_inputs=images is not None,
-                is_training=self.training,
-            )
+            if self.training and mm_token_type_ids is None:
+                raise ValueError("`mm_token_type_ids` is required as a model input when training")
+
+            mask_kwargs = {
+                "config": self.config.get_text_config(),
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            is_prefill = past_key_values is None or not past_key_values.is_initialized or images is not None
+            if mm_token_type_ids is not None and is_prefill:
+                mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
+                    mm_token_type_ids.to(inputs_embeds.device)
+                )
+            causal_mask_mapping = create_causal_mask(**mask_kwargs)
 
         outputs = self.language_model(
             attention_mask=causal_mask_mapping,
@@ -1611,11 +1574,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
 
 class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
-    # Molmo2 keeps a separate `lm_head` and a custom `Molmo2Embedding`, so no weights are tied.
-    # `None` is the flag the base test/`get_expanded_tied_weights_keys` expect (an empty list breaks
-    # the dict-based tied-weights handling); it makes `test_tied_weights_keys` pass without a skip.
-    _tied_weights_keys = None
-    # Reference: fix gemma3 grad acc #37208
+    # the loss must not be normalized by `num_items_in_batch`: logits/labels are filtered before computing it
     accepts_loss_kwargs = False
     config: Molmo2Config
 
@@ -1734,37 +1693,15 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             **model_kwargs,
         )
         if expand_size != 1 and original_input_ids is not None:
-            image_token_counts = (original_input_ids == self.config.image_token_id).sum(dim=-1)
-            if "image_token_pooling" in visual:
-                visual["image_token_pooling"] = self._repeat_visual_token_pooling_for_generation(
-                    visual["image_token_pooling"], image_token_counts, expand_size
-                )
-            if "video_token_pooling" in visual:
-                visual["video_token_pooling"] = self._repeat_visual_token_pooling_for_generation(
-                    visual["video_token_pooling"], image_token_counts, expand_size
-                )
+            # image and video patches share `image_token_id` in `input_ids`, so the per-sample count
+            # covers whichever pooling tensor is present
+            patch_counts = (original_input_ids == self.config.image_token_id).sum(dim=-1).tolist()
+            for pooling_key in ("image_token_pooling", "video_token_pooling"):
+                if visual.get(pooling_key) is not None:
+                    chunks = visual[pooling_key].split(patch_counts)
+                    visual[pooling_key] = torch.cat([chunk for chunk in chunks for _ in range(expand_size)], dim=0)
         model_kwargs.update(visual)
         return input_ids, model_kwargs
-
-    @staticmethod
-    def _repeat_visual_token_pooling_for_generation(
-        token_pooling: torch.Tensor | None, token_counts: torch.Tensor, expand_size: int
-    ) -> torch.Tensor | None:
-        if token_pooling is None:
-            return None
-
-        counts = [int(count) for count in token_counts.tolist()]
-        if token_pooling.shape[0] != sum(counts):
-            return token_pooling
-
-        repeated_pooling = []
-        offset = 0
-        for count in counts:
-            token_pooling_slice = token_pooling[offset : offset + count]
-            offset += count
-            repeated_pooling.extend(token_pooling_slice for _ in range(expand_size))
-
-        return torch.cat(repeated_pooling, dim=0) if repeated_pooling else token_pooling
 
     def prepare_inputs_for_generation(
         self,

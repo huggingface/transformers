@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2026-01-15 and contributed to Hugging Face Transformers on 2026-06-28.*
+*This model was published in HF papers on 2026-01-15 and contributed to Hugging Face Transformers on 2026-07-06.*
 *This model was released on 2026-01-15 and added to Hugging Face Transformers on 2026-05-21.*
 
 <div style="float: right;">
