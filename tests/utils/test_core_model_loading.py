@@ -30,10 +30,13 @@ from transformers.core_model_loading import (
     Concatenate,
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
+    GroupWeightRename,
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    VisionFuseAndPermuteForRope,
+    VisionUnfuseAndPermuteForRope,
     WeightConverter,
     WeightRenaming,
     build_glob_alternation,
@@ -213,6 +216,18 @@ class DummyMLP(nn.Module):
     def __init__(self):
         super().__init__()
         self.down_proj = DummyParamModule((2, 2))
+
+
+class DummyModelWithNorm(PreTrainedModel):
+    base_model_prefix = "model"
+    config: PreTrainedConfig
+
+    def __init__(self, config, add_extra_moe=False):
+        super().__init__(config)
+        self.model = DummyTopModel(add_extra_moe)
+        self.norm1 = nn.LayerNorm(16)
+        self.norm2 = nn.LayerNorm(16)
+        self.post_init()
 
 
 class DummyRoot(PreTrainedModel):
@@ -1129,6 +1144,90 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
 
 class TestConversionMapping(unittest.TestCase):
+    def test_unfuse_and_permute_rope(self):
+        vision_config = PreTrainedConfig(hidden_size=16, head_dim=8, num_attention_heads=2)
+        config = PreTrainedConfig(vision_config=vision_config)
+        qkv_weight = torch.randn(3 * vision_config.hidden_size, vision_config.hidden_size, dtype=torch.float32)
+
+        q_proj, k_proj, v_proj = torch.chunk(qkv_weight, 3, dim=0)
+
+        q_proj = q_proj.view(
+            vision_config.num_attention_heads, vision_config.head_dim // 2, 2, vision_config.hidden_size
+        )
+        q_proj = q_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
+
+        k_proj = k_proj.view(
+            vision_config.num_attention_heads, vision_config.head_dim // 2, 2, vision_config.hidden_size
+        )
+        k_proj = k_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
+
+        unfuse = VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
+        fuse = VisionFuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
+
+        unfused_output = unfuse.convert({"qkv": [qkv_weight]}, ["qkv"], ["q_proj", "k_proj", "v_proj"], config=config)
+        fused_output = fuse.convert(
+            {k: [v] for k, v in unfused_output.items()}, ["q_proj", "k_proj", "v_proj"], ["qkv"], config=config
+        )
+
+        torch.testing.assert_close(unfused_output["v_proj"], v_proj)
+        torch.testing.assert_close(unfused_output["q_proj"], q_proj)
+        torch.testing.assert_close(unfused_output["k_proj"], k_proj)
+        torch.testing.assert_close(fused_output["qkv"], qkv_weight)
+
+    def test_group_weight_rename(self):
+        model = DummyModelWithNorm(PreTrainedConfig())
+
+        bad_serialized_checkpoints = {
+            k.replace("norm1", "norm0").replace("norm2", "norm1"): v.clone() for k, v in model.state_dict().items()
+        }
+        weight_mapping = [
+            GroupWeightRename(
+                source_patterns=[r"norm0", r"norm1"],
+                target_patterns=[r"norm1", r"norm2"],
+            )
+        ]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
     def test_conv3d_linear_conversion_ops(self):
         weight_name = "patch_embed.proj.weight"
         kernel_size = (2, 2, 2)
