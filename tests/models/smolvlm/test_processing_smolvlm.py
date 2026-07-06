@@ -77,7 +77,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def prepare_video_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy videos."""
-        video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
+        video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 2
         if batch_size is None:
             return [[video_input]]
         return [[video_input]] * batch_size
