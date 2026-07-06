@@ -34,7 +34,7 @@ from .configuration_tipsv2_dpt import Tipsv2DptConfig
 
 
 @dataclass
-class Tipsv2DptOutput(ModelOutput):
+class Tipsv2DptDensePredictorOutput(ModelOutput):
     r"""
     predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
         Predicted depth for each pixel.
@@ -412,7 +412,7 @@ class Tipsv2DptForDensePrediction(Tipsv2DptPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Tipsv2DptOutput:
+    ) -> Tipsv2DptDensePredictorOutput:
         r"""
         Example:
 
@@ -464,7 +464,7 @@ class Tipsv2DptForDensePrediction(Tipsv2DptPreTrainedModel):
         )
         segmentation_logits = self.segmentation_decoder(segmentation_feature_maps_fused[-1])
 
-        return Tipsv2DptOutput(
+        return Tipsv2DptDensePredictorOutput(
             predicted_depth=predicted_depth,
             normals=normals,
             segmentation_logits=segmentation_logits,

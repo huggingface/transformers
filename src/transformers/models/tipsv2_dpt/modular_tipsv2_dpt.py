@@ -40,7 +40,7 @@ from ..zoedepth.modeling_zoedepth import (
 
 
 @dataclass
-class Tipsv2DptOutput(ModelOutput):
+class Tipsv2DptDensePredictorOutput(ModelOutput):
     r"""
     predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
         Predicted depth for each pixel.
@@ -77,7 +77,7 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
         Converts the output of [`Tipsv2DptForDepthEstimation`] or [`Tipsv2DptForDensePrediction`] into final depth predictions.
 
         Args:
-            outputs ([`DepthEstimatorOutput`] or `Tipsv2DptOutput`):
+            outputs ([`DepthEstimatorOutput`] or `Tipsv2DptDensePredictorOutput`):
                 Raw outputs of the model.
             target_sizes ([`TensorType`] or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
@@ -113,7 +113,7 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
         Converts the output of [`Tipsv2DptForNormalEstimation`] or [`Tipsv2DptForDensePrediction`] into L2-normalized surface normal maps.
 
         Args:
-            outputs (`Tipsv2DptNormalEstimatorOutput` or `Tipsv2DptOutput`):
+            outputs (`Tipsv2DptNormalEstimatorOutput` or `Tipsv2DptDensePredictorOutput`):
                 Raw outputs of the model.
             target_sizes ([`TensorType`] or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
@@ -151,7 +151,7 @@ class Tipsv2DptImageProcessor(Tipsv2ImageProcessor):
         Converts the output of [`Tipsv2DptForSemanticSegmentation`] or [`Tipsv2DptForDensePrediction`] into semantic segmentation maps.
 
         Args:
-            outputs ([`SemanticSegmenterOutput`] or `Tipsv2DptOutput`):
+            outputs ([`SemanticSegmenterOutput`] or `Tipsv2DptDensePredictorOutput`):
                 Raw outputs of the model.
             target_sizes [([`TensorType`] or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
@@ -440,7 +440,7 @@ class Tipsv2DptForDensePrediction(Tipsv2DptPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Tipsv2DptOutput:
+    ) -> Tipsv2DptDensePredictorOutput:
         r"""
         Example:
 
@@ -492,7 +492,7 @@ class Tipsv2DptForDensePrediction(Tipsv2DptPreTrainedModel):
         )
         segmentation_logits = self.segmentation_decoder(segmentation_feature_maps_fused[-1])
 
-        return Tipsv2DptOutput(
+        return Tipsv2DptDensePredictorOutput(
             predicted_depth=predicted_depth,
             normals=normals,
             segmentation_logits=segmentation_logits,
