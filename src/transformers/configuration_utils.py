@@ -70,7 +70,8 @@ ALLOWED_LAYER_TYPES = (
     "conv",  # used in LFMv2
     "sparse",
     "dense",
-    "hybrid",  # layers that combine attention + mamba in a single block (zamba2, falcon_h1)
+    "hybrid",  # layers that combine attention + mamba/linear-attention-shaped states (zamba2, falcon_h1, zaya1)
+    "hybrid_sliding",  # layers that combine sliding attention + linear-attention-shaped states (zaya1)
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
     "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
     # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning)
