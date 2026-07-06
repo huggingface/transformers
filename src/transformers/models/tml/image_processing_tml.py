@@ -50,7 +50,7 @@ class TmlImageProcessor(TorchvisionBackend):
     do_convert_rgb = True
     do_resize = True
     do_rescale = True
-    do_normalize = False
+    do_normalize = True
     size = {"height": 40, "width": 40}
     valid_kwargs = ImagesKwargs
 
@@ -116,7 +116,8 @@ class TmlImageProcessor(TorchvisionBackend):
         num_patches: list[int] = []
         for image in images:
             image_patches = divide_to_patches(image, size.height)
-            image_patches = self.pad(image_patches, pad_size=SizeDict(height=size.height, width=size.width), fill_value=0)
+            image_patches = [im.float() for im in image_patches] # so we can pad with -1.0
+            image_patches = self.pad(image_patches, pad_size=SizeDict(height=size.height, width=size.width), fill_value=-1.0)
             image_patches = torch.stack(image_patches, dim=0)
             image_patches = self.rescale_and_normalize(
                 image_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -126,7 +127,7 @@ class TmlImageProcessor(TorchvisionBackend):
             num_patches.append(image_patches.shape[0])
 
         data = {
-            "vision_patches_bthwc": torch.cat(per_image_patches, dim=0),
+            "pixel_values": torch.cat(per_image_patches, dim=0),
             "num_patches": torch.tensor(num_patches),
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
