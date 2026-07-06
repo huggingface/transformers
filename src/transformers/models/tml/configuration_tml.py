@@ -43,7 +43,7 @@ class TmlTextConfig(PreTrainedConfig):
     log_scaling_n_floor: int | None = None
     log_scaling_alpha: float = 1.0
     rms_norm_eps: float = 1e-6
-    sconv_kernel_size: int = 4
+    conv_kernel_size: int = 4
     mlp_layer_types: list[int] | None = None
     intermediate_size: int = 24576
     hidden_act: str = "silu"
