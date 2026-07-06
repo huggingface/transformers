@@ -35,7 +35,7 @@ deps = {
     "pandas": "pandas<2.3.0",
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized>=0.9",
-    "peft": "peft>=0.19.0",
+    "peft": "peft>=0.19.1",
     "phonemizer": "phonemizer",
     "protobuf": "protobuf",
     "psutil": "psutil",

@@ -27,10 +27,14 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import (
+    _preprocess_mask_arguments,
+    blockwise_overlay,
     create_bidirectional_mask,
     create_causal_mask,
     create_masks_for_generate,
     create_sliding_window_causal_mask,
+    maybe_pad_block_sequence_ids,
+    sliding_window_overlay,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -79,6 +83,61 @@ if is_accelerate_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+def create_masks_for_vision_model(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    past_key_values: Cache | None,
+    position_ids: torch.Tensor | None,
+    block_sequence_ids: torch.Tensor,
+) -> dict:
+    """Create full_attention and sliding_attention masks with correct composition.
+
+    For global (full attention) layers:  causal only (no bidirectional)
+    For local (sliding window) layers:  AND(sliding_window, OR(causal, blockwise))
+
+    Unlike Gemma 3 (which applies bidirectional attention on all layers), Gemma 4
+    explicitly disables bidirectional attention on global attention layers.
+    """
+    mask_kwargs = {
+        "config": config,
+        "inputs_embeds": inputs_embeds,
+        "attention_mask": attention_mask,
+        "past_key_values": past_key_values,
+        "position_ids": position_ids,
+    }
+
+    # Full attention: causal only — no bidirectional blockwise overlay.
+    full_mask = create_causal_mask(**mask_kwargs)
+
+    # We need to manually pad the sequence IDs for the sliding mask
+    # as it's passed as an `or_mask_function` which bypasses internal padding.
+    early_exit, _, _, _, kv_length, _, kv_offset = _preprocess_mask_arguments(
+        **mask_kwargs,
+        layer_idx=0,
+    )
+    if early_exit:
+        padded_block_sequence_ids = block_sequence_ids
+    else:
+        padded_block_sequence_ids = maybe_pad_block_sequence_ids(
+            block_sequence_ids, attention_mask, kv_length, kv_offset
+        )
+
+    # Sliding attention: AND(sliding_window, OR(causal, blockwise))
+    # Pass blockwise as or_mask_function (applied as step 2 in create_causal_mask)
+    # Pass sliding_window as and_mask_function (applied as step 3, after OR)
+    sliding_mask = create_causal_mask(
+        **mask_kwargs,
+        or_mask_function=blockwise_overlay(padded_block_sequence_ids),
+        and_mask_function=sliding_window_overlay(config.sliding_window),
+    )
+
+    return {
+        "full_attention": full_mask,
+        "sliding_attention": sliding_mask,
+    }
 
 
 class Gemma4ModelOutputWithPast(Gemma3nModelOutputWithPast):
@@ -584,7 +643,9 @@ class Gemma4VisionPatchEmbedder(nn.Module):
     ) -> torch.Tensor:
         # Gemma4 applies no normalization and instead scales in model code
         pixel_values = 2 * (pixel_values - 0.5)
-        hidden_states = self.input_proj(pixel_values.to(self.input_proj.weight.dtype))
+        if (target_dtype := self.input_proj.weight.dtype).is_floating_point:
+            pixel_values = pixel_values.to(target_dtype)
+        hidden_states = self.input_proj(pixel_values)
         position_embeddings = self._position_embeddings(pixel_position_ids, padding_positions)
         return hidden_states + position_embeddings
 
@@ -2060,19 +2121,19 @@ class Gemma4Model(Gemma3nModel):
                 "position_ids": position_ids,
             }
 
-            # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-            # Smaller Gemma models use a conventional casual attention mask
-            if self.config.get_text_config().use_bidirectional_attention == "vision":
-                block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-                if mm_token_type_ids is not None:
-                    block_sequence_ids = get_block_sequence_ids_for_mask(
-                        mm_token_type_ids, device=inputs_embeds.device
-                    )
+            text_config = self.config.get_text_config()
+            use_bidir = text_config.use_bidirectional_attention == "vision"
 
-                mask_kwargs["block_sequence_ids"] = block_sequence_ids
-
-            # Create the masks
-            causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
+            if use_bidir and mm_token_type_ids is not None:
+                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+                causal_mask_mapping = create_masks_for_vision_model(
+                    block_sequence_ids=block_sequence_ids,
+                    **mask_kwargs,
+                )
+            else:
+                # Smaller Gemma models (use_bidirectional_attention=None) or
+                # text-only inputs use standard causal masking
+                causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
 
         outputs = self.language_model(
             per_layer_inputs=per_layer_inputs,
@@ -2249,14 +2310,15 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             "position_ids": position_ids,
         }
 
-        # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
-        # Smaller Gemma models use a conventional casual attention mask
-        if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-            if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+        text_config = config.get_text_config()
+        use_bidir = getattr(text_config, "use_bidirectional_attention", None) == "vision"
 
-            mask_kwargs["block_sequence_ids"] = block_sequence_ids
+        if use_bidir and mm_token_type_ids is not None:
+            block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
+            return create_masks_for_vision_model(
+                block_sequence_ids=block_sequence_ids,
+                **mask_kwargs,
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 
