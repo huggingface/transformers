@@ -69,7 +69,6 @@ import urllib.request
 import torch
 from fairseq2.models.hub import load_model
 from fairseq2.models.llama import LLaMAConfig
-from fairseq2.models.transformer.norm_order import TransformerNormOrder
 from fairseq2.models.wav2vec2.asr.config import Wav2Vec2AsrConfig
 from fairseq2.models.wav2vec2.config import Wav2Vec2Config
 from fairseq2.runtime.config_registry import get_config
@@ -80,8 +79,8 @@ from omnilingual_asr.models.wav2vec2_llama.config import ModelType, Wav2Vec2Llam
 from transformers import (
     LasrTokenizer,
     LlamaConfig,
-    OmniASRConfig,
     OmniASRCTCConfig,
+    OmniASREncoderConfig,
     OmniASRFeatureExtractor,
     OmniASRForConditionalGeneration,
     OmniASRForCTC,
@@ -383,31 +382,14 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 
     # 2) Initialize Transformers model
     conv_dim, conv_kernel, conv_stride = zip(*original_config.encoder_config.feature_extractor_layer_descs)
-    layer_norm_pre = original_config.encoder_config.norm_order == TransformerNormOrder.PRE
     feat_extract_norm = "layer" if original_config.encoder_config.feature_extractor_layer_norm_convs else "group"
-    encoder_config = OmniASRConfig(
-        # TODO clean up unused and make Transformers compatible
-        max_seq_len=original_config.encoder_config.max_seq_len,
-        feature_dim=original_config.encoder_config.feature_dim,
-        use_fbank=original_config.encoder_config.use_fbank,
-        first_pass_dropout_p=original_config.encoder_config.first_pass_dropout_p,
-        layer_norm_features=original_config.encoder_config.layer_norm_features,
-        feature_grad_scale=original_config.encoder_config.feature_grad_scale,
-        num_fbank_channels=original_config.encoder_config.num_fbank_channels,
-        fbank_stride=original_config.encoder_config.fbank_stride,
-        sample_fbank_every_k=original_config.encoder_config.sample_fbank_every_k,
-        pos_encoder_depth=original_config.encoder_config.pos_encoder_depth,
-        use_conformer=original_config.encoder_config.use_conformer,
-        # dropout_p=original_config.encoder_config.dropout_p,
-        depthwise_conv_kernel_size=original_config.encoder_config.depthwise_conv_kernel_size,
-        # NOTE (ebezzam): below are modified to Transformer convention
+    encoder_config = OmniASREncoderConfig(
         hidden_size=original_config.encoder_config.model_dim,
         conv_dim=conv_dim,
         conv_kernel=conv_kernel,
         conv_stride=conv_stride,
         conv_bias=original_config.encoder_config.feature_extractor_bias,
         feat_extract_norm=feat_extract_norm,
-        layer_norm_pre=layer_norm_pre,
         attention_dropout=original_config.encoder_config.attn_dropout_p,
         num_hidden_layers=original_config.encoder_config.num_encoder_layers,
         num_attention_heads=original_config.encoder_config.num_encoder_attn_heads,
@@ -416,8 +398,6 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         hidden_dropout=original_config.encoder_config.ffn_inner_dropout_p,
         activation_dropout=original_config.encoder_config.ffn_inner_dropout_p,
         intermediate_size=original_config.encoder_config.ffn_inner_dim,
-        position_embeddings_type=original_config.encoder_config.pos_encoder_type,
-        # final_dropout=original_config.final_dropout_p,  # TODO 0 so remove?
         layerdrop=original_config.encoder_config.layer_drop_p,
         # NOTE (ebezzam) do we keep specaugment params?
         apply_spec_augment=original_config.use_masking,
@@ -479,17 +459,17 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L28
 
         config = OmniASRLLMConfig(
-            encoder_config=encoder_config,
+            audio_config=encoder_config,
             text_config=llama_config,
             encoder_stacking=original_config_llm.encoder_stacking,
-            # num_lang_embeddings=len(original_model.lang_embeddings.weight),   # TODO remove
+            # TODO check if len(self.language_mapping) + 1, OR + self.num_special_tokens?
+            num_language_embeddings=len(original_model.lang_embeddings.weight),
             bos_token_id=original_config_llm.bos_idx,
             pad_token_id=original_config_llm.pad_idx,
             eos_token_id=original_config_llm.eos_idx,
             unk_token_id=original_config_llm.unk_idx,
             # TODO better handlnig?
             num_special_tokens=original_config_llm.n_special_tokens,
-            language_mapping=original_model.lang_mapping,
             language_embedding_probability=original_config_llm.lang_embeddings_p,
             # LID marker is the first reserved special token, i.e. the base
             # vocabulary size before adding extra syntax tokens.
@@ -498,7 +478,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         hf_model = OmniASRForConditionalGeneration(config)
     elif "W2V" in model_card:
         # TODO not working
-        config = OmniASRConfig(**encoder_config.to_dict())
+        config = OmniASREncoderConfig(**encoder_config.to_dict())
         hf_model = OmniASRModel(config)
     else:
         raise ValueError(f"Unsupported model type, got {model_card}")

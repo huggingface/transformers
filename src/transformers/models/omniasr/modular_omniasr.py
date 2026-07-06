@@ -29,13 +29,21 @@ from ...modeling_outputs import (
     Wav2Vec2BaseModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
 )
 from ..auto import AutoModel, AutoModelForCausalLM
-from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2Encoder, Wav2Vec2EncoderLayer, Wav2Vec2Model, Wav2Vec2PreTrainedModel
-from .configuration_omniasr import OmniASRCTCConfig, OmniASRLLMConfig
+from ..wav2vec2.modeling_wav2vec2 import (
+    Wav2Vec2Attention,
+    Wav2Vec2Encoder,
+    Wav2Vec2EncoderLayer,
+    Wav2Vec2Model,
+    Wav2Vec2PreTrainedModel,
+)
+from .configuration_omniasr import OmniASRCTCConfig, OmniASREncoderConfig, OmniASRLLMConfig
 
 
 # Different from Wav2Vec2PositionalConvEmbedding: no weight norm, has residual, uses remove_pad instead of SamePadLayer
@@ -61,6 +69,21 @@ class OmniASRPositionalConvEmbedding(nn.Module):
         hidden_states = self.activation(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states + residual
+
+
+# NOTE: need to overwrite config name
+class OmniASRAttention(Wav2Vec2Attention):
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
+        is_causal: bool = False,
+        config: OmniASREncoderConfig | None = None,
+    ):
+        super().__init__(embed_dim, num_heads, dropout, is_decoder, bias, is_causal, config)
 
 
 class OmniASREncoderLayer(Wav2Vec2EncoderLayer):
@@ -98,13 +121,13 @@ class OmniASREncoderLayer(Wav2Vec2EncoderLayer):
 
 
 class OmniASREncoder(Wav2Vec2Encoder):
+    @can_return_tuple
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -153,8 +176,6 @@ class OmniASREncoder(Wav2Vec2Encoder):
         if self.training:
             hidden_states = self.dropout(hidden_states)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -163,6 +184,8 @@ class OmniASREncoder(Wav2Vec2Encoder):
 
 
 class OmniASRPreTrainedModel(Wav2Vec2PreTrainedModel):
+    config: OmniASREncoderConfig
+
     def _init_weights(self, module):
         # TODO upstream change to `Wav2Vec2PreTrainedModel` for standard layers?
         PreTrainedModel._init_weights(self, module)
@@ -196,13 +219,30 @@ class OmniASRPreTrainedModel(Wav2Vec2PreTrainedModel):
         # TODO deepspeed zero3 case
         remove_weight_norm(self.encoder.encoder.pos_conv_embed.conv, name="weight")
 
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: torch.LongTensor | int, add_adapter: bool = False
+    ) -> torch.LongTensor | int:
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        return input_lengths
+
 
 class OmniASRBaseModelOutput(Wav2Vec2BaseModelOutput):
     pass
 
 
 class OmniASRModel(Wav2Vec2Model):
-    pass
+    def __init__(self, config: OmniASREncoderConfig):
+        super().__init__(config)
+        self.adapter = None
 
 
 @auto_docstring(
@@ -219,17 +259,15 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         self.ctc_head = nn.Linear(config.hidden_size, config.vocab_size)
         self.post_init()
 
-    @can_return_tuple
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
-        input_values: torch.Tensor | None,
+        input_values: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple | CausalLMOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -244,8 +282,7 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         outputs = self.encoder(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -295,18 +332,17 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
 
     def __init__(self, config):
         super().__init__(config)
-        self.vocab_size = config.vocab_size
         self.language_token_id = config.language_token_id
         if config.num_special_tokens > 0:
-            reserved_language_token_id = config.vocab_size - config.num_special_tokens
+            reserved_language_token_id = config.text_config.vocab_size - config.num_special_tokens
             if self.language_token_id < reserved_language_token_id:
                 self.language_token_id = reserved_language_token_id
 
-        self.encoder = AutoModel.from_config(config.encoder_config)
+        self.encoder = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
         self.multi_modal_projector = nn.Linear(
-            config.encoder_config.hidden_size * config.encoder_stacking,
+            config.audio_config.hidden_size * config.encoder_stacking,
             config.text_config.hidden_size,
             bias=True,
         )
@@ -491,5 +527,6 @@ __all__ = [
     "OmniASRForCTC",
     "OmniASRForConditionalGeneration",
     "OmniASRModel",
+    "OmniASREncoder",
     "OmniASRPreTrainedModel",
 ]

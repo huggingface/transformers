@@ -46,7 +46,7 @@ from ...utils import (
     logging,
 )
 from ..auto import AutoModel, AutoModelForCausalLM
-from .configuration_omniasr import OmniASRConfig, OmniASRCTCConfig, OmniASRLLMConfig
+from .configuration_omniasr import OmniASRCTCConfig, OmniASREncoderConfig, OmniASRLLMConfig
 
 
 logger = logging.get_logger(__name__)
@@ -116,7 +116,7 @@ class OmniASRAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        config: OmniASRConfig | None = None,
+        config: OmniASREncoderConfig | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -272,13 +272,13 @@ class OmniASREncoder(nn.Module):
         self.layers = nn.ModuleList([OmniASREncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -327,8 +327,6 @@ class OmniASREncoder(nn.Module):
         if self.training:
             hidden_states = self.dropout(hidden_states)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -361,14 +359,14 @@ class OmniASRAttnAdapterLayer(nn.Module):
         return hidden_states
 
 
-OMNIASR_ADAPTER_PT_FILE = "adapter.{}.bin"
-OMNIASR_ADAPTER_SAFE_FILE = "adapter.{}.safetensors"
+OMNI_A_S_R_ADAPTER_PT_FILE = "adapter.{}.bin"
+OMNI_A_S_R_ADAPTER_SAFE_FILE = "adapter.{}.safetensors"
 
 
 @auto_docstring
 class OmniASRPreTrainedModel(PreTrainedModel):
-    config: OmniASRConfig
-    base_model_prefix = "omniasr"
+    config: OmniASREncoderConfig
+    base_model_prefix = "omni_a_s_r"
     main_input_name = "input_values"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
@@ -382,24 +380,18 @@ class OmniASRPreTrainedModel(PreTrainedModel):
         # TODO upstream change to `Wav2Vec2PreTrainedModel` for standard layers?
         super()._init_weights(module)
 
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int, add_adapter: bool | None = None):
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: torch.LongTensor | int, add_adapter: bool = False
+    ) -> torch.LongTensor | int:
         """
         Computes the output length of the convolutional layers
         """
 
-        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
-
         def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
             return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
-
-        if add_adapter:
-            for _ in range(self.config.num_adapter_layers):
-                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
 
         return input_lengths
 
@@ -531,7 +523,7 @@ class OmniASRPreTrainedModel(PreTrainedModel):
 
         # 1. Let's first try loading a safetensors adapter weight
         if use_safetensors is not False:
-            filepath = OMNIASR_ADAPTER_SAFE_FILE.format(target_lang)
+            filepath = OMNI_A_S_R_ADAPTER_SAFE_FILE.format(target_lang)
 
             try:
                 weight_path = cached_file(
@@ -565,7 +557,7 @@ class OmniASRPreTrainedModel(PreTrainedModel):
 
         # 2. If this didn't work let's try loading a PyTorch adapter weight
         if state_dict is None:
-            filepath = OMNIASR_ADAPTER_PT_FILE.format(target_lang)
+            filepath = OMNI_A_S_R_ADAPTER_PT_FILE.format(target_lang)
 
             try:
                 weight_path = cached_file(
@@ -910,55 +902,6 @@ class OmniASREncoderStableLayerNorm(nn.Module):
         )
 
 
-class OmniASRAdapterLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.conv = nn.Conv1d(
-            config.output_hidden_size,
-            2 * config.output_hidden_size,
-            config.adapter_kernel_size,
-            stride=config.adapter_stride,
-            padding=1,
-        )
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = nn.functional.glu(hidden_states, dim=1)
-
-        return hidden_states
-
-
-class OmniASRAdapter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        # feature dim might need to be down-projected
-        if config.output_hidden_size != config.hidden_size:
-            self.proj = nn.Linear(config.hidden_size, config.output_hidden_size)
-            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size)
-        else:
-            self.proj = self.proj_layer_norm = None
-
-        self.layers = nn.ModuleList(OmniASRAdapterLayer(config) for _ in range(config.num_adapter_layers))
-        self.layerdrop = config.layerdrop
-
-    def forward(self, hidden_states):
-        # down project hidden_states if necessary
-        if self.proj is not None and self.proj_layer_norm is not None:
-            hidden_states = self.proj(hidden_states)
-            hidden_states = self.proj_layer_norm(hidden_states)
-
-        hidden_states = hidden_states.transpose(1, 2)
-
-        for layer in self.layers:
-            layerdrop_prob = np.random.random()
-            if not self.training or (layerdrop_prob > self.layerdrop):
-                hidden_states = layer(hidden_states)
-
-        hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states
-
-
 def _compute_mask_indices(
     shape: tuple[int, int],
     mask_prob: float,
@@ -1080,7 +1023,7 @@ def _compute_mask_indices(
 
 @auto_docstring
 class OmniASRModel(OmniASRPreTrainedModel):
-    def __init__(self, config: OmniASRConfig):
+    def __init__(self, config: OmniASREncoderConfig):
         super().__init__(config)
         self.config = config
         self.feature_extractor = OmniASRFeatureEncoder(config)
@@ -1094,8 +1037,7 @@ class OmniASRModel(OmniASRPreTrainedModel):
             self.encoder = OmniASREncoderStableLayerNorm(config)
         else:
             self.encoder = OmniASREncoder(config)
-
-        self.adapter = OmniASRAdapter(config) if config.add_adapter else None
+        self.adapter = None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1227,17 +1169,15 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         self.ctc_head = nn.Linear(config.hidden_size, config.vocab_size)
         self.post_init()
 
-    @can_return_tuple
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
-        input_values: torch.Tensor | None,
+        input_values: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple | CausalLMOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -1252,8 +1192,7 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         outputs = self.encoder(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -1303,18 +1242,17 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
 
     def __init__(self, config):
         super().__init__(config)
-        self.vocab_size = config.vocab_size
         self.language_token_id = config.language_token_id
         if config.num_special_tokens > 0:
-            reserved_language_token_id = config.vocab_size - config.num_special_tokens
+            reserved_language_token_id = config.text_config.vocab_size - config.num_special_tokens
             if self.language_token_id < reserved_language_token_id:
                 self.language_token_id = reserved_language_token_id
 
-        self.encoder = AutoModel.from_config(config.encoder_config)
+        self.encoder = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
         self.multi_modal_projector = nn.Linear(
-            config.encoder_config.hidden_size * config.encoder_stacking,
+            config.audio_config.hidden_size * config.encoder_stacking,
             config.text_config.hidden_size,
             bias=True,
         )
@@ -1495,4 +1433,10 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
         return super().generate(**kwargs)
 
 
-__all__ = ["OmniASRForCTC", "OmniASRForConditionalGeneration", "OmniASRModel", "OmniASRPreTrainedModel"]
+__all__ = [
+    "OmniASRForCTC",
+    "OmniASRForConditionalGeneration",
+    "OmniASRModel",
+    "OmniASREncoder",
+    "OmniASRPreTrainedModel",
+]
