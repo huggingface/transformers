@@ -329,7 +329,8 @@ def main() -> None:
 
     print(f"\nTotal unique entries:      {len(unique_rows)}")
     print(f"Source files run:          {len(test_files)}")
-    print(f"Total wall time:           {total_wall:.0f}s ({total_wall/60:.1f} min)")
+    print(f"Total memory delta:        {total_model_delta:.0f} MB")
+    print(f"Total duration:            {total_wall:.0f}s ({total_wall/60:.1f} min)")
 
 
 if __name__ == "__main__":
