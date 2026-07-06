@@ -1689,12 +1689,16 @@ class StaticCache(Cache):
             for layer_config in layer_configs
         ]
         layer_types = getattr(config, "layer_types", None)
-        # If `layer_types` is not explicitly provided, infer from sliding windows
+        # If `layer_types` is not explicitly provided, infer from the per-layer window attributes
         if layer_types is None:
-            layer_types = [
-                "sliding_attention" if sliding_window is not None else "full_attention"
-                for sliding_window in sliding_windows
-            ]
+            layer_types = []
+            for layer_config in layer_configs:
+                if getattr(layer_config, "sliding_window", None) is not None:
+                    layer_types.append("sliding_attention")
+                elif getattr(layer_config, "attention_chunk_size", None) is not None:
+                    layer_types.append("chunked_attention")
+                else:
+                    layer_types.append("full_attention")
         # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
         num_kv_shared_layers = getattr(config, "num_kv_shared_layers", 0)
         if num_kv_shared_layers > 0:

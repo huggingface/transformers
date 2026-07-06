@@ -1334,8 +1334,8 @@ def create_bidirectional_sliding_window_mask(
         layer_idx (`int`, optional):
             The layer index to create the mask for, used to read cache metadata from.
     """
+    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
     if layer_idx is None:
-        # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
         layer_idx = _get_mask_layer_idx(past_key_values, is_sliding=True)
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here

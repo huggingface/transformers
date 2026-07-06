@@ -242,9 +242,9 @@ class SkipAwareNemotronHBlock(NemotronHBlock):
             hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 
         if self.mixer is not None:
-            if self.block_type == "mamba":
+            if self.block_type == "linear_attention":
                 hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
-            elif self.block_type == "attention":
+            elif self.block_type == "full_attention":
                 hidden_states, _ = self.mixer(
                     hidden_states=hidden_states,
                     past_key_values=past_key_values,
