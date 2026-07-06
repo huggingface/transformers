@@ -21,7 +21,8 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import divide_to_patches
 from ...image_utils import ImageInput, PILImageResampling
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring
+from ...utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
 class TmlImageProcessorKwargs(ImagesKwargs, total=False):

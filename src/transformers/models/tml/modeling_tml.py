@@ -31,7 +31,7 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -41,7 +41,6 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..deepseek_v3 import DeepseekV3MLP, DeepseekV3MoE, DeepseekV3TopkRouter
 from .configuration_tml import TmlAudioConfig, TmlConfig, TmlTextConfig, TmlVisionConfig
 
 
@@ -303,10 +302,10 @@ class TmlAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.q_bias)
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=config.o_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         self.is_local_attn = config.layer_types[self.layer_idx] == "sliding_attention"
 
         self.num_heads = config.swa_num_attention_heads if self.is_local_attn else config.num_attention_heads
@@ -365,7 +364,7 @@ class TmlAttention(nn.Module):
         return attn_output * r.transpose(1, 2).reshape(attn_output.shape)
 
 
-class TmlDenseMLP(nn.Module):
+class TmlMLP(nn.Module):
     def __init__(self, config: TmlTextConfig):
         super().__init__()
 
@@ -373,69 +372,214 @@ class TmlDenseMLP(nn.Module):
         self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.global_scale = 1.0 / math.sqrt(config.intermediate_size) if config.use_global_scale else 1.0
+        self.global_scale = 1.0 / math.sqrt(config.intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         out = super().forward(hidden_states)
-        return out * self.global_scale if self.global_scale != 1.0 else out
+        return out * self.global_scale
 
 
-class TmlMoEGate(DeepseekV3TopkRouter):
-    def __init__(self, config: TmlTextConfig):
-        super().__init__(config)
-        self.router_type = config.moe_router_type
-        if not config.moe_router_use_bias_correction:
-            self.e_score_correction_bias = None
+def swiglu_interleaved(gate_up: torch.Tensor) -> torch.Tensor:
+    """SwiGLU over an *interleaved* fused gate/up tensor, computed in fp32.
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        if self.router_type == "sigmoid_grouped":
-            return super().forward(hidden_states)
-
-        # flat softmax top-k fallback
-        logits = F.linear(hidden_states.to(torch.float32), self.weight.to(torch.float32))
-        scores = logits.softmax(dim=-1)
-        topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1)
-        if self.norm_topk_prob:
-            topk_weight = topk_weight / (topk_weight.sum(dim=-1, keepdim=True) + 1e-20)
-        return topk_idx, topk_weight.to(hidden_states.dtype)
+    `gate_up[..., 0::2]` are gate channels, `gate_up[..., 1::2]` up channels.
+    """
+    input_dtype = gate_up.dtype
+    gate_up = gate_up.float()
+    return (F.silu(gate_up[..., 0::2]) * gate_up[..., 1::2]).to(input_dtype)
 
 
-class TmlMoEExpertMLP(DeepseekV3MLP):
-    pass
+@use_experts_implementation
+class TmlExperts(nn.Module):
+    """Routed experts. Inherits the 3D-parameter dispatch loop and the
+    `gate_up_proj` / `down_proj` parameters verbatim; only the activation differs
+    (interleaved + fp32, and no swiglu clamp)."""
+
+    def __init__(self, config: TmlConfig):
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.limit = config.swiglu_limit
+
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
+        final = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(mask[expert_idx])
+            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
+            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
+            final.index_add_(0, token_idx, current.to(final.dtype))
+        return final
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        return swiglu_interleaved(gate_up)
 
 
-class TmlMoE(DeepseekV3MoE):
-    def __init__(self, config: TmlTextConfig):
-        super().__init__(config)
-        self.gate = TmlMoEGate(config)
-        self.experts = nn.ModuleList(
-            [
-                TmlMoEExpertMLP(config, intermediate_size=config.moe_intermediate_size)
-                for _ in range(config.n_routed_experts)
-            ]
-        )
-        if config.n_shared_experts is not None and config.n_shared_experts > 0:
-            self.shared_experts = TmlMoEExpertMLP(
-                config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-            )
+class TmlTopkRouter(nn.Module):
+    """Flat top-k router. No group-limited selection. Shared experts, in "sink"
+    mode, occupy the *last* `n_shared_experts` columns and are always active; the
+    additive selection bias applies to routed columns only. `forward` returns the
+    raw logits — renormalization happens in the MoE block."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.n_routed_experts = config.n_routed_experts
+        self.n_shared_experts = config.n_shared_experts if config.shared_expert_sink else 0
+        self.n_total_experts = self.n_routed_experts + self.n_shared_experts
+        self.hidden_dim = config.hidden_size
+
+        self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
+        if config.use_global_scale:
+            self.global_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
+        else:
+            self.register_parameter("global_scale", None)
+        if config.use_gate_bias:
+            self.e_score_correction_bias = nn.Parameter(torch.empty(self.n_routed_experts, dtype=torch.float32))
+        else:
+            self.register_parameter("e_score_correction_bias", None)
+
+    def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        flat = hidden_states.reshape(-1, self.hidden_dim)
+        return F.linear(flat.type(torch.float32), self.weight.type(torch.float32))
+
+
+class TmlSharedExperts(nn.Module):
+    """Fused dense shared MLP (non-sink path): a single always-on expert block."""
+
+    def __init__(self, config):
+        super().__init__()
+        intermediate_size = config.n_shared_experts * config.shared_experts_size * config.moe_intermediate_size
+        self.w13_weight = nn.Parameter(torch.empty(2 * intermediate_size, config.hidden_size))
+        self.w2_weight = nn.Parameter(torch.empty(config.hidden_size, intermediate_size))
+
+    def forward(self, hidden_states):
+        gate_up = F.linear(hidden_states, self.w13_weight)
+        return F.linear(swiglu_interleaved(gate_up), self.w2_weight)
+
+
+class TmlBatchSharedExperts(nn.Module):
+    """Gated ("sink") shared experts: `n_shared_experts` parallel MLPs batched on
+    dim 0. Each expert's fp32 SwiGLU output is scaled by its per-token gamma
+    before the down-projection, then the experts are summed in fp32."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.n_shared_experts = config.n_shared_experts
+        shared_d_mlp = config.intermediate_size
+        self.w13_weight = nn.Parameter(torch.empty(config.n_shared_experts, 2 * shared_d_mlp, config.hidden_size))
+        self.w2_weight = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
+
+    def forward(self, hidden_states, gammas):
+        input_shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(-1, input_shape[-1])
+        gammas = gammas.reshape(-1, self.n_shared_experts).transpose(0, 1)  # (S, T)
+
+        expanded = hidden_states.unsqueeze(0).expand(self.n_shared_experts, -1, -1)  # (S, T, D)
+        gate_up = torch.bmm(expanded, self.w13_weight.mT)  # (S, T, 2f)
+        activated = swiglu_interleaved(gate_up).float() * gammas.unsqueeze(-1)  # (S, T, f)
+        down = torch.bmm(activated.to(gate_up.dtype), self.w2_weight.mT)  # (S, T, D)
+
+        out = down.float().sum(dim=0).to(hidden_states.dtype)  # (T, D)
+        return out.view(input_shape)
+
+
+def _logsigmoid_normalize(logits: torch.Tensor) -> torch.Tensor:
+    """Softmax in log-probability space over `logsigmoid(logits)`."""
+    log_probs = F.logsigmoid(logits)
+    return torch.exp(log_probs - torch.logsumexp(log_probs, dim=-1, keepdim=True))
+
+
+class TmlMoE(nn.Module):
+    """Gate -> routed experts (+ shared experts), TML flavour."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.gate = TmlTopkRouter(config)
+        self.experts = TmlExperts(config)
+
+        self.n_shared_experts = config.n_shared_experts
+        self.shared_expert_sink = config.shared_expert_sink
+        self.top_k = config.num_experts_per_tok
+        self.route_scale = config.route_scale
+        self.norm_after_topk = config.norm_after_topk
+        self.gate_activation = config.gate_activation
+
+        if config.n_shared_experts > 0:
+            if config.shared_expert_sink:
+                self.shared_experts = TmlBatchSharedExperts(config)
+            else:
+                self.shared_experts = TmlSharedExperts(config)
         else:
             self.shared_experts = None
 
+    def forward(self, hidden_states) -> torch.Tensor:
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        router_logits = self.gate(hidden_states)
+        topk_indices, topk_weights, shared_gammas = self.route_tokens_to_experts(router_logits)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights.type_as(hidden_states)).view(
+            *orig_shape
+        )
 
-class TmlMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
+        if self.shared_experts is not None:
+            if self.shared_expert_sink:
+                hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
+            else:
+                hidden_states = hidden_states + self.shared_experts(residuals)
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+        return hidden_states
+
+    def route_tokens_to_experts(self, router_logits):
+        n_shared = self.gate.n_shared_experts  # nonzero only in sink mode
+        if self.gate_activation == "sigmoid":
+            scores = router_logits.sigmoid()
+        else:
+            scores = router_logits.softmax(dim=-1, dtype=torch.float32)
+
+        routed_scores = scores[..., :-n_shared] if n_shared > 0 else scores
+        if self.gate.e_score_correction_bias is not None:
+            scores_for_choice = routed_scores + self.gate.e_score_correction_bias
+        else:
+            scores_for_choice = routed_scores
+        topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
+
+        if self.norm_after_topk:
+            if n_shared > 0:
+                routed_logits = router_logits[..., :-n_shared]
+                shared_logits = router_logits[..., -n_shared:]
+                topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
+            else:
+                topk_logits = router_logits.gather(-1, topk_indices)
+            if self.gate_activation == "sigmoid":
+                topk_weights = _logsigmoid_normalize(topk_logits)
+            else:
+                topk_weights = topk_logits.softmax(dim=-1, dtype=torch.float32)
+        else:
+            topk_weights = routed_scores.gather(-1, topk_indices)
+
+        topk_weights = topk_weights * self.route_scale
+        if self.gate.global_scale is not None:
+            topk_weights = topk_weights * self.gate.global_scale
+
+        shared_gammas = None
+        if self.shared_expert_sink and n_shared > 0:
+            shared_gammas = topk_weights[..., -n_shared:].contiguous()
+            topk_weights = topk_weights[..., : self.top_k].contiguous()
+
+        return topk_indices, topk_weights, shared_gammas
 
 
 class TmlDecoderLayer(GradientCheckpointingLayer):
@@ -453,12 +597,8 @@ class TmlDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = TmlRMSNorm(config.hidden_size, config.rms_norm_eps)
         # Maybe use_conv is always `True`, check it!
         self.layer_type = config.layer_types[layer_idx]
-        self.attn_sconv = (
-            TmlShortConvolution(config.hidden_size, config.sconv_kernel_size) if config.use_sconv else None
-        )
-        self.mlp_sconv = (
-            TmlShortConvolution(config.hidden_size, config.sconv_kernel_size) if config.use_sconv else None
-        )
+        self.attn_sconv = TmlShortConvolution(config.hidden_size, config.sconv_kernel_size)
+        self.mlp_sconv = TmlShortConvolution(config.hidden_size, config.sconv_kernel_size)
 
     def forward(
         self,
@@ -480,15 +620,13 @@ class TmlDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        if self.attn_sconv is not None:
-            hidden_states = self.attn_sconv(hidden_states)
+        hidden_states = self.attn_sconv(hidden_states)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        if self.mlp_sconv is not None:
-            hidden_states = self.mlp_sconv(hidden_states)
+        hidden_states = self.mlp_sconv(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -518,8 +656,6 @@ class TmlPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, TmlRMSNorm):
             module.weight.data.fill_(1.0)
-        elif isinstance(module, TmlMoEGate):
-            module.weight.data.normal_(mean=0.0, std=std)
 
 
 def compute_log_scaling_tau(position_ids: torch.Tensor, floor: int | None, alpha: float) -> torch.Tensor | None:

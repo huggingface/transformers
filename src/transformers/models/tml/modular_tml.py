@@ -28,7 +28,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ..deepseek_v3 import DeepseekV3MLP, DeepseekV3MoE, DeepseekV3TopkRouter
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MLP, DeepseekV3MoE
+from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4TopKRouter
 from ..gemma3.modeling_gemma3 import (
     Gemma3CausalLMOutputWithPast,
     Gemma3ForConditionalGeneration,
@@ -48,43 +49,31 @@ class TmlTextConfig(PreTrainedConfig):
     model_type = "tml_text"
     base_config_key = "text_config"
 
-    vocab_size: int = 151936
-    hidden_size: int = 4096
-    num_hidden_layers: int = 48
-    num_attention_heads: int = 32
+    vocab_size: int = 201024
+    hidden_size: int = 6144
+    num_hidden_layers: int = 66
+    num_attention_heads: int = 64
     num_key_value_heads: int = 8
     head_dim: int = 128
-    swa_num_attention_heads: int | None = None
-    swa_num_key_value_heads: int | None = None
-    swa_head_dim: int | None = None
-    sliding_window_size: int = 4096
+    swa_num_attention_heads: int = 64
+    swa_num_key_value_heads: int = 16
+    swa_head_dim: int = 128
+    sliding_window_size: int = 512
     layer_types: list[int] | None = None
-    partial_rotary_factor: int | None = None
-    rel_extent: float = 10000.0
-    rope_theta: float = 10000.0
+    rope_parameters: dict | None = None  # dont forget partial_rotary_factor
     log_scaling_n_floor: int | None = None
     log_scaling_alpha: float = 1.0
     rms_norm_eps: float = 1e-6
-    use_embed_norm: bool = True
-    q_bias: bool = False
-    o_bias: bool = False
-    use_sconv: bool = False
     sconv_kernel_size: int = 4
     mlp_layer_types: list[int] | None = None
-    dense_intermediate_size: int = 14336
-    use_global_scale: bool = False
+    intermediate_size: int = 24576
     hidden_act: str = "silu"
     # MoE
-    moe_intermediate_size: int = 2048
-    num_experts: int = 128
-    num_experts_per_tok: int = 8
-    num_shared_experts: int = 1
-    moe_router_type: str = "softmax"
-    moe_router_n_group: int = 8
-    moe_router_topk_group: int = 4
-    moe_router_use_bias_correction: bool = False
-    moe_norm_topk_prob: bool = True
-    inference_moe_w13_interleaved: bool = True
+    moe_intermediate_size: int = 3072
+    n_routed_experts: int = 256
+    num_experts_per_tok: int = 6
+    n_shared_experts: int = 2
+
     logits_mup_width_multiplier: float = 24.0
     rms_norm_eps_moe_gate: float = 1e-6
     attention_dropout: float = 0.0
@@ -94,12 +83,10 @@ class TmlTextConfig(PreTrainedConfig):
     eos_token_id: int | None = 2
 
     def __post_init__(self, **kwargs):
-        self.swa_num_attention_heads = self.swa_num_attention_heads or self.num_attention_heads
-        self.swa_num_key_value_heads = self.swa_num_key_value_heads or self.num_key_value_heads
-        self.swa_head_dim = self.swa_head_dim or self.head_dim
-
         if self.layer_types is None:
-            self.layer_types = ["full_attention"] * self.num_hidden_layers
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % 6) else "full_attention" for i in range(self.num_hidden_layers)
+            ]
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] * self.num_hidden_layers
         super().__post_init__(**kwargs)
@@ -111,7 +98,7 @@ class TmlAudioConfig(PreTrainedConfig):
 
     n_mel_bins: int = 80
     mel_vocab_size: int = 256
-    text_hidden_size: int | None = None
+    text_hidden_size: int = 6144
     rms_norm_eps: float = 1e-6
 
 
@@ -120,7 +107,7 @@ class TmlVisionConfig(PreTrainedConfig):
     base_config_key = "vision_config"
 
     vision_encoder_type: str = "hmlp"
-    text_hidden_size: int | None = None
+    text_hidden_size: int = 6144
     patch_size: int = 14
     num_channels: int = 3
     hidden_size: int = 1024
@@ -161,6 +148,8 @@ class TmlConfig(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
+        self.vision_config.text_hidden_size = self.text_config.hidden_size
+        self.audio_config.text_hidden_size = self.text_config.hidden_size
         super().__post_init__(**kwargs)
 
 
@@ -170,6 +159,37 @@ class TmlModelOutputWithPast(Gemma3ModelOutputWithPast):
 
 class TmlCausalLMOutputWithPast(Gemma3CausalLMOutputWithPast):
     pass
+
+
+def compute_log_scaling_tau(position_ids: torch.Tensor, floor: int | None, alpha: float) -> torch.Tensor | None:
+    """ "logn"-style per-position attention-logit scale.
+
+    tau = alpha * log(max(pos + 1, floor)); multiplies attention scores so
+    scores don't blow up at positions far beyond the trained context length.
+    Returns None if `floor` is None (feature disabled), matching the
+    SGLang call site which only invokes this when
+    `config.log_scaling_n_floor is not None`.
+    """
+    if floor is None:
+        return None
+    pos = (position_ids + 1).clamp(min=floor).to(torch.float32)
+    return alpha * torch.log(pos)
+
+
+def swiglu_interleaved(gate_up: torch.Tensor) -> torch.Tensor:
+    """SwiGLU over an *interleaved* fused gate/up tensor, computed in fp32.
+
+    `gate_up[..., 0::2]` are gate channels, `gate_up[..., 1::2]` up channels.
+    """
+    input_dtype = gate_up.dtype
+    gate_up = gate_up.float()
+    return (F.silu(gate_up[..., 0::2]) * gate_up[..., 1::2]).to(input_dtype)
+
+
+def _logsigmoid_normalize(logits: torch.Tensor) -> torch.Tensor:
+    """Softmax in log-probability space over `logsigmoid(logits)`."""
+    log_probs = F.logsigmoid(logits)
+    return torch.exp(log_probs - torch.logsumexp(log_probs, dim=-1, keepdim=True))
 
 
 class TmlRMSNorm(LlamaRMSNorm):
@@ -206,21 +226,6 @@ class TmlShortConvolution(nn.Module):
         return x.transpose(1, 2)
 
 
-def compute_log_scaling_tau(position_ids: torch.Tensor, floor: int | None, alpha: float) -> torch.Tensor | None:
-    """ "logn"-style per-position attention-logit scale.
-
-    tau = alpha * log(max(pos + 1, floor)); multiplies attention scores so
-    scores don't blow up at positions far beyond the trained context length.
-    Returns None if `floor` is None (feature disabled), matching the
-    SGLang call site which only invokes this when
-    `config.log_scaling_n_floor is not None`.
-    """
-    if floor is None:
-        return None
-    pos = (position_ids + 1).clamp(min=floor).to(torch.float32)
-    return alpha * torch.log(pos)
-
-
 class TmlRotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
@@ -237,11 +242,11 @@ class TmlAttention(LlamaAttention):
         self.attention_dropout = config.attention_dropout
         self.sliding_window = config.sliding_window_size if self.is_local_attn else None
 
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.q_bias)
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.r_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=config.o_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
 
     def _apply_r_gate(self, attn_output: torch.Tensor, hidden_states: torch.Tensor, shape: tuple) -> torch.Tensor:
         # best-effort "receptance" gate: r = sigmoid(W_r x), applied
@@ -294,56 +299,173 @@ class TmlAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class TmlDenseMLP(Phi3MLP):
+class TmlMLP(Phi3MLP):
     def __init__(self, config: TmlTextConfig):
         super().__init__(config)
-        self.global_scale = 1.0 / math.sqrt(config.intermediate_size) if config.use_global_scale else 1.0
+        self.global_scale = 1.0 / math.sqrt(config.intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         out = super().forward(hidden_states)
-        return out * self.global_scale if self.global_scale != 1.0 else out
+        return out * self.global_scale
 
 
-class TmlMoEGate(DeepseekV3TopkRouter):
-    def __init__(self, config: TmlTextConfig):
-        super().__init__(config)
-        self.router_type = config.moe_router_type
-        if not config.moe_router_use_bias_correction:
-            self.e_score_correction_bias = None
+class TmlExperts(DeepseekV4Experts):
+    """Routed experts. Inherits the 3D-parameter dispatch loop and the
+    `gate_up_proj` / `down_proj` parameters verbatim; only the activation differs
+    (interleaved + fp32, and no swiglu clamp)."""
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        if self.router_type == "sigmoid_grouped":
-            return super().forward(hidden_states)
-
-        # flat softmax top-k fallback
-        logits = F.linear(hidden_states.to(torch.float32), self.weight.to(torch.float32))
-        scores = logits.softmax(dim=-1)
-        topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1)
-        if self.norm_topk_prob:
-            topk_weight = topk_weight / (topk_weight.sum(dim=-1, keepdim=True) + 1e-20)
-        return topk_idx, topk_weight.to(hidden_states.dtype)
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        return swiglu_interleaved(gate_up)
 
 
-class TmlMoEExpertMLP(DeepseekV3MLP):
-    pass
+class TmlTopkRouter(DeepseekV4TopKRouter):
+    """Flat top-k router. No group-limited selection. Shared experts, in "sink"
+    mode, occupy the *last* `n_shared_experts` columns and are always active; the
+    additive selection bias applies to routed columns only. `forward` returns the
+    raw logits — renormalization happens in the MoE block."""
+
+    def __init__(self, config):
+        nn.Module.__init__(self)
+        self.n_routed_experts = config.n_routed_experts
+        self.n_shared_experts = config.n_shared_experts if config.shared_expert_sink else 0
+        self.n_total_experts = self.n_routed_experts + self.n_shared_experts
+        self.hidden_dim = config.hidden_size
+
+        self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
+        if config.use_global_scale:
+            self.global_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
+        else:
+            self.register_parameter("global_scale", None)
+        if config.use_gate_bias:
+            self.e_score_correction_bias = nn.Parameter(torch.empty(self.n_routed_experts, dtype=torch.float32))
+        else:
+            self.register_parameter("e_score_correction_bias", None)
+
+    def forward(self, hidden_states):
+        flat = hidden_states.reshape(-1, self.hidden_dim)
+        return F.linear(flat.type(torch.float32), self.weight.type(torch.float32))
+
+
+class TmlSharedExperts(DeepseekV3MLP):
+    """Fused dense shared MLP (non-sink path): a single always-on expert block."""
+
+    def __init__(self, config):
+        nn.Module.__init__(self)
+        intermediate_size = config.n_shared_experts * config.shared_experts_size * config.moe_intermediate_size
+        self.w13_weight = nn.Parameter(torch.empty(2 * intermediate_size, config.hidden_size))
+        self.w2_weight = nn.Parameter(torch.empty(config.hidden_size, intermediate_size))
+
+    def forward(self, hidden_states):
+        gate_up = F.linear(hidden_states, self.w13_weight)
+        return F.linear(swiglu_interleaved(gate_up), self.w2_weight)
+
+
+class TmlBatchSharedExperts(nn.Module):
+    """Gated ("sink") shared experts: `n_shared_experts` parallel MLPs batched on
+    dim 0. Each expert's fp32 SwiGLU output is scaled by its per-token gamma
+    before the down-projection, then the experts are summed in fp32."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.n_shared_experts = config.n_shared_experts
+        shared_d_mlp = config.intermediate_size
+        self.w13_weight = nn.Parameter(torch.empty(config.n_shared_experts, 2 * shared_d_mlp, config.hidden_size))
+        self.w2_weight = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
+
+    def forward(self, hidden_states, gammas):
+        input_shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(-1, input_shape[-1])
+        gammas = gammas.reshape(-1, self.n_shared_experts).transpose(0, 1)  # (S, T)
+
+        expanded = hidden_states.unsqueeze(0).expand(self.n_shared_experts, -1, -1)  # (S, T, D)
+        gate_up = torch.bmm(expanded, self.w13_weight.mT)  # (S, T, 2f)
+        activated = swiglu_interleaved(gate_up).float() * gammas.unsqueeze(-1)  # (S, T, f)
+        down = torch.bmm(activated.to(gate_up.dtype), self.w2_weight.mT)  # (S, T, D)
+
+        out = down.float().sum(dim=0).to(hidden_states.dtype)  # (T, D)
+        return out.view(input_shape)
 
 
 class TmlMoE(DeepseekV3MoE):
-    def __init__(self, config: TmlTextConfig):
-        super().__init__(config)
-        self.gate = TmlMoEGate(config)
-        self.experts = nn.ModuleList(
-            [
-                TmlMoEExpertMLP(config, intermediate_size=config.moe_intermediate_size)
-                for _ in range(config.n_routed_experts)
-            ]
-        )
-        if config.n_shared_experts is not None and config.n_shared_experts > 0:
-            self.shared_experts = TmlMoEExpertMLP(
-                config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-            )
+    """Gate -> routed experts (+ shared experts), TML flavour."""
+
+    def __init__(self, config):
+        nn.Module.__init__(self)
+        self.config = config
+        self.gate = TmlTopkRouter(config)
+        self.experts = TmlExperts(config)
+
+        self.n_shared_experts = config.n_shared_experts
+        self.shared_expert_sink = config.shared_expert_sink
+        self.top_k = config.num_experts_per_tok
+        self.route_scale = config.route_scale
+        self.norm_after_topk = config.norm_after_topk
+        self.gate_activation = config.gate_activation
+
+        if config.n_shared_experts > 0:
+            if config.shared_expert_sink:
+                self.shared_experts = TmlBatchSharedExperts(config)
+            else:
+                self.shared_experts = TmlSharedExperts(config)
         else:
             self.shared_experts = None
+
+    def route_tokens_to_experts(self, router_logits):
+        n_shared = self.gate.n_shared_experts  # nonzero only in sink mode
+        if self.gate_activation == "sigmoid":
+            scores = router_logits.sigmoid()
+        else:
+            scores = router_logits.softmax(dim=-1, dtype=torch.float32)
+
+        routed_scores = scores[..., :-n_shared] if n_shared > 0 else scores
+        if self.gate.e_score_correction_bias is not None:
+            scores_for_choice = routed_scores + self.gate.e_score_correction_bias
+        else:
+            scores_for_choice = routed_scores
+        topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
+
+        if self.norm_after_topk:
+            if n_shared > 0:
+                routed_logits = router_logits[..., :-n_shared]
+                shared_logits = router_logits[..., -n_shared:]
+                topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
+            else:
+                topk_logits = router_logits.gather(-1, topk_indices)
+            if self.gate_activation == "sigmoid":
+                topk_weights = _logsigmoid_normalize(topk_logits)
+            else:
+                topk_weights = topk_logits.softmax(dim=-1, dtype=torch.float32)
+        else:
+            topk_weights = routed_scores.gather(-1, topk_indices)
+
+        topk_weights = topk_weights * self.route_scale
+        if self.gate.global_scale is not None:
+            topk_weights = topk_weights * self.gate.global_scale
+
+        shared_gammas = None
+        if self.shared_expert_sink and n_shared > 0:
+            shared_gammas = topk_weights[..., -n_shared:].contiguous()
+            topk_weights = topk_weights[..., : self.top_k].contiguous()
+
+        return topk_indices, topk_weights, shared_gammas
+
+    def forward(self, hidden_states):
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        router_logits = self.gate(hidden_states)
+        topk_indices, topk_weights, shared_gammas = self.route_tokens_to_experts(router_logits)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights.type_as(hidden_states)).view(
+            *orig_shape
+        )
+
+        if self.shared_experts is not None:
+            if self.shared_expert_sink:
+                hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
+            else:
+                hidden_states = hidden_states + self.shared_experts(residuals)
+
+        return hidden_states
 
 
 class TmlDecoderLayer(Glm4MoeLiteDecoderLayer):
@@ -351,12 +473,8 @@ class TmlDecoderLayer(Glm4MoeLiteDecoderLayer):
         super().__init__(config, layer_idx)
         # Maybe use_conv is always `True`, check it!
         self.layer_type = config.layer_types[layer_idx]
-        self.attn_sconv = (
-            TmlShortConvolution(config.hidden_size, config.sconv_kernel_size) if config.use_sconv else None
-        )
-        self.mlp_sconv = (
-            TmlShortConvolution(config.hidden_size, config.sconv_kernel_size) if config.use_sconv else None
-        )
+        self.attn_sconv = TmlShortConvolution(config.hidden_size, config.sconv_kernel_size)
+        self.mlp_sconv = TmlShortConvolution(config.hidden_size, config.sconv_kernel_size)
 
     def forward(
         self,
@@ -378,15 +496,13 @@ class TmlDecoderLayer(Glm4MoeLiteDecoderLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        if self.attn_sconv is not None:
-            hidden_states = self.attn_sconv(hidden_states)
+        hidden_states = self.attn_sconv(hidden_states)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        if self.mlp_sconv is not None:
-            hidden_states = self.mlp_sconv(hidden_states)
+        hidden_states = self.mlp_sconv(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -416,8 +532,6 @@ class TmlPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, TmlRMSNorm):
             module.weight.data.fill_(1.0)
-        elif isinstance(module, TmlMoEGate):
-            module.weight.data.normal_(mean=0.0, std=std)
 
 
 class TmlTextModel(Glm4MoeLiteModel):

@@ -26,43 +26,31 @@ class TmlTextConfig(PreTrainedConfig):
     model_type = "tml_text"
     base_config_key = "text_config"
 
-    vocab_size: int = 151936
-    hidden_size: int = 4096
-    num_hidden_layers: int = 48
-    num_attention_heads: int = 32
+    vocab_size: int = 201024
+    hidden_size: int = 6144
+    num_hidden_layers: int = 66
+    num_attention_heads: int = 64
     num_key_value_heads: int = 8
     head_dim: int = 128
-    swa_num_attention_heads: int | None = None
-    swa_num_key_value_heads: int | None = None
-    swa_head_dim: int | None = None
-    sliding_window_size: int = 4096
+    swa_num_attention_heads: int = 64
+    swa_num_key_value_heads: int = 16
+    swa_head_dim: int = 128
+    sliding_window_size: int = 512
     layer_types: list[int] | None = None
-    partial_rotary_factor: int | None = None
-    rel_extent: float = 10000.0
-    rope_theta: float = 10000.0
+    rope_parameters: dict | None = None  # dont forget partial_rotary_factor
     log_scaling_n_floor: int | None = None
     log_scaling_alpha: float = 1.0
     rms_norm_eps: float = 1e-6
-    use_embed_norm: bool = True
-    q_bias: bool = False
-    o_bias: bool = False
-    use_sconv: bool = False
     sconv_kernel_size: int = 4
     mlp_layer_types: list[int] | None = None
-    dense_intermediate_size: int = 14336
-    use_global_scale: bool = False
+    intermediate_size: int = 24576
     hidden_act: str = "silu"
     # MoE
-    moe_intermediate_size: int = 2048
-    num_experts: int = 128
-    num_experts_per_tok: int = 8
-    num_shared_experts: int = 1
-    moe_router_type: str = "softmax"
-    moe_router_n_group: int = 8
-    moe_router_topk_group: int = 4
-    moe_router_use_bias_correction: bool = False
-    moe_norm_topk_prob: bool = True
-    inference_moe_w13_interleaved: bool = True
+    moe_intermediate_size: int = 3072
+    n_routed_experts: int = 256
+    num_experts_per_tok: int = 6
+    n_shared_experts: int = 2
+
     logits_mup_width_multiplier: float = 24.0
     rms_norm_eps_moe_gate: float = 1e-6
     attention_dropout: float = 0.0
@@ -72,12 +60,10 @@ class TmlTextConfig(PreTrainedConfig):
     eos_token_id: int | None = 2
 
     def __post_init__(self, **kwargs):
-        self.swa_num_attention_heads = self.swa_num_attention_heads or self.num_attention_heads
-        self.swa_num_key_value_heads = self.swa_num_key_value_heads or self.num_key_value_heads
-        self.swa_head_dim = self.swa_head_dim or self.head_dim
-
         if self.layer_types is None:
-            self.layer_types = ["full_attention"] * self.num_hidden_layers
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % 6) else "full_attention" for i in range(self.num_hidden_layers)
+            ]
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] * self.num_hidden_layers
         super().__post_init__(**kwargs)
@@ -89,7 +75,7 @@ class TmlAudioConfig(PreTrainedConfig):
 
     n_mel_bins: int = 80
     mel_vocab_size: int = 256
-    text_hidden_size: int | None = None
+    text_hidden_size: int = 6144
     rms_norm_eps: float = 1e-6
 
 
@@ -98,7 +84,7 @@ class TmlVisionConfig(PreTrainedConfig):
     base_config_key = "vision_config"
 
     vision_encoder_type: str = "hmlp"
-    text_hidden_size: int | None = None
+    text_hidden_size: int = 6144
     patch_size: int = 14
     num_channels: int = 3
     hidden_size: int = 1024
@@ -139,6 +125,8 @@ class TmlConfig(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
+        self.vision_config.text_hidden_size = self.text_config.hidden_size
+        self.audio_config.text_hidden_size = self.text_config.hidden_size
         super().__post_init__(**kwargs)
 
 
