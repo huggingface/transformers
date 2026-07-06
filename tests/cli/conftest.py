@@ -15,8 +15,6 @@ import sys
 
 import pytest
 
-# Since huggingface_hub 1.22, `typer_factory` returns a click command group (`HFCliTyperGroup`),
-# which `typer.testing.CliRunner` cannot drive (it expects a `typer.Typer` instance).
 from click.testing import CliRunner
 
 import transformers.cli.transformers
