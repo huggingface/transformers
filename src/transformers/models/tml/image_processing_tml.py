@@ -18,7 +18,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_utils import SizeDict, ImageInput,validate_preprocess_arguments, PILImageResampling
+from ...image_utils import ImageInput, PILImageResampling, SizeDict, validate_preprocess_arguments
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
@@ -45,7 +45,6 @@ class TmlImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
-    size = None
     default_to_square = False
     do_convert_rgb = True
     do_resize = True
@@ -79,7 +78,7 @@ class TmlImageProcessor(TorchvisionBackend):
 
         if size.height != size.width:
             raise ValueError(f"Can resize only to square size but got {size}")
-    
+
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
@@ -92,7 +91,7 @@ class TmlImageProcessor(TorchvisionBackend):
             size=size,
             resample=resample,
         )
-        
+
     def preprocess(
         self,
         images: ImageInput,
@@ -116,8 +115,10 @@ class TmlImageProcessor(TorchvisionBackend):
         num_patches: list[int] = []
         for image in images:
             image_patches = divide_to_patches(image, size.height)
-            image_patches = [im.float() for im in image_patches] # so we can pad with -1.0
-            image_patches = self.pad(image_patches, pad_size=SizeDict(height=size.height, width=size.width), fill_value=-1.0)
+            image_patches = [im.float() for im in image_patches]  # so we can pad with -1.0
+            image_patches = self.pad(
+                image_patches, pad_size=SizeDict(height=size.height, width=size.width), fill_value=-1.0
+            )
             image_patches = torch.stack(image_patches, dim=0)
             image_patches = self.rescale_and_normalize(
                 image_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std

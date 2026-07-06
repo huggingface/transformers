@@ -136,9 +136,15 @@ def _build_checkpoint_conversion_mapping():
     mapping = {
         "tml_mm_model": [
             WeightRenaming(source_patterns=r"visual", target_patterns=r"vision_tower"),
-            WeightRenaming(source_patterns=r"visual.layers.linear_(\d+)", target_patterns=r"vision_tower.encoder_layers.\1.projection"),
-            WeightRenaming(source_patterns=r"visual.layers.norm_(\d+)", target_patterns=r"vision_tower.encoder_layers.\1.layer_norm"),
-            WeightRenaming(source_patterns=r"visual.layers", target_patterns=r"vision_tower.encoder_layers"),
+            WeightRenaming(
+                source_patterns=r"vision_tower.layers.linear_(\d+)",
+                target_patterns=r"vision_tower.encoder_layers.\1.projection",
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_tower.layers.norm_(\d+)",
+                target_patterns=r"vision_tower.encoder_layers.\1.layer_norm",
+            ),
+            WeightRenaming(source_patterns=r"vision_tower.layers", target_patterns=r"vision_tower.encoder_layers"),
             WeightRenaming(source_patterns=r"unembed.weight", target_patterns=r"lm_head.weight"),
             WeightRenaming(source_patterns=r"audio.", target_patterns=r"audio_tower."),
             WeightRenaming(source_patterns=r"^embed.weight", target_patterns=r"language_model.embed_tokens.weight"),

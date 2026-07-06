@@ -643,19 +643,6 @@ class TmlPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
 
-    def _init_weights(self, module):
-        std = self.config.get_text_config().initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, TmlRMSNorm):
-            module.weight.data.fill_(1.0)
-
 
 def compute_log_scaling_tau(position_ids: torch.Tensor, floor: int | None, alpha: float) -> torch.Tensor | None:
     """ "logn"-style per-position attention-logit scale.
@@ -672,6 +659,20 @@ def compute_log_scaling_tau(position_ids: torch.Tensor, floor: int | None, alpha
     return alpha * torch.log(pos)
 
 
+class TmlTextNormedWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by applying norm on text input ids.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, eps: float = 1e-06):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_norm = TmlRMSNorm(embedding_dim, eps=eps)
+
+    def forward(self, input_ids: torch.Tensor):
+        embeds = super().forward(input_ids)
+        return self.embed_norm(embeds)
+
+
 @auto_docstring
 class TmlTextModel(TmlPreTrainedModel):
     config: TmlTextConfig
@@ -681,14 +682,15 @@ class TmlTextModel(TmlPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = TmlTextNormedWordEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, eps=config.rms_norm_eps
+        )
         self.layers = nn.ModuleList(
             [TmlDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = TmlRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.embed_norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.embedding_multiplier = config.embedding_multiplier
 
         # Initialize weights and apply final processing
@@ -712,9 +714,6 @@ class TmlTextModel(TmlPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) / self.embedding_multiplier
-
-        if self.embed_norm is not None:
-            inputs_embeds = self.embed_norm(inputs_embeds)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -770,6 +769,7 @@ class TmlAudioModel(TmlPreTrainedModel):
 
         embedding_indices = torch.arange(self.n_mel_bins) * self.mel_vocab_size
         self.register_buffer("embedding_indices", embedding_indices.unsqueeze(0), persistent=False)
+        self.post_init()
 
     def forward(self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         if input_features.shape[1] != self.n_mel_bins:
@@ -845,7 +845,9 @@ def prime_factors(number: int) -> list[int]:
     return factors
 
 
-def plan_out_scales(temporal_patch_size: int, patch_size: int, n_layers: int, n_channels: int, device='cpu') -> torch.LongTensor:
+def plan_out_scales(
+    temporal_patch_size: int, patch_size: int, n_layers: int, n_channels: int, device="cpu"
+) -> torch.LongTensor:
     """
     Plan out the dimensions for each layer in the HMLP encoder.
 
@@ -875,8 +877,8 @@ def plan_out_scales(temporal_patch_size: int, patch_size: int, n_layers: int, n_
     h = torch.cumprod(torch.tensor(prime_factors(patch_size)[::-1], device=device), dim=0)
     t = torch.cumprod(torch.tensor(prime_factors(temporal_patch_size)[::-1], device=device), dim=0)
 
-    h_ch = torch.ceil(h**2 * n_channels/ 64).int() * 64
-    t_ch = torch.ceil(h[-1]**2 * n_channels * t).int() * 64
+    h_ch = torch.ceil(h**2 * n_channels / 64).int() * 64
+    t_ch = torch.ceil(h[-1] ** 2 * n_channels * t).int() * 64
 
     base = torch.tensor([[1, 1, 1, n_channels]], device=device)
     spatial = torch.stack([torch.ones_like(h), h, h, h_ch], dim=1)
@@ -886,7 +888,9 @@ def plan_out_scales(temporal_patch_size: int, patch_size: int, n_layers: int, n_
     size_reduction = torch.prod(scales[:, :-1], dim=1).float()
 
     total_elements = patch_size * patch_size * temporal_patch_size * n_channels
-    log_ideal_scales = torch.linspace(0, torch.log(torch.tensor(total_elements, device=device)), n_layers + 1, device=device)
+    log_ideal_scales = torch.linspace(
+        0, torch.log(torch.tensor(total_elements, device=device)), n_layers + 1, device=device
+    )
     cost_matrix = torch.abs(log_ideal_scales.unsqueeze(1) - torch.log(size_reduction).unsqueeze(0))
 
     if n_layers >= scales.shape[0]:
@@ -933,6 +937,7 @@ class TmlVisionModel(TmlPreTrainedModel):
             )
 
         self.final_norm = TmlRMSNorm(config.text_hidden_size)
+        self.post_init()
 
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         num_patches = pixel_values.shape[0]
@@ -1005,11 +1010,9 @@ class TmlModel(TmlPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TmlModelOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1077,7 +1080,7 @@ class TmlModel(TmlPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
 
         return TmlModelOutputWithPast(

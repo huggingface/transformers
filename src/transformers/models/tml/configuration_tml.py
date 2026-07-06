@@ -36,7 +36,7 @@ class TmlTextConfig(PreTrainedConfig):
     swa_num_attention_heads: int = 64
     swa_num_key_value_heads: int = 16
     swa_head_dim: int = 128
-    sliding_window_size: int = 512
+    sliding_window: int = 512
     layer_types: list[int] | None = None
     rope_parameters: dict | None = None  # dont forget partial_rotary_factor
     max_position_embeddings: int = 131072
@@ -111,8 +111,8 @@ class TmlConfig(PreTrainedConfig):
     text_config: TmlTextConfig | dict | None = None
     audio_config: TmlAudioConfig | dict | None = None
     vision_config: TmlVisionConfig | dict | None = None
-    image_token_id: int | None = None
-    audio_token_id: int | None = None
+    image_token_id: int = 200005
+    audio_token_id: int = 200020
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):

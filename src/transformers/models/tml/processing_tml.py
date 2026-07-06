@@ -36,11 +36,15 @@ class TmlProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        self.image_token = "<|content_image|>" # tokenizer.image_token
-        self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0] # tokenizer.image_token_id
-        self.audio_token = "<|content_audio|>" # tokenizer.audio_token
-        self.audio_token_id = tokenizer.encode(self.audio_token, add_special_tokens=False)[0] # tokenizer.audio_token_id
-        self.eoa_token_id = "<|audio_end|>" # tokenizer.eoa_token_id  # where is it used???
+        self.image_token = "<|content_image|>"  # tokenizer.image_token
+        self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[
+            0
+        ]  # tokenizer.image_token_id
+        self.audio_token = "<|content_audio|>"  # tokenizer.audio_token
+        self.audio_token_id = tokenizer.encode(self.audio_token, add_special_tokens=False)[
+            0
+        ]  # tokenizer.audio_token_id
+        self.eoa_token_id = "<|audio_end|>"  # tokenizer.eoa_token_id  # where is it used???
 
         super().__init__(
             feature_extractor=feature_extractor,
