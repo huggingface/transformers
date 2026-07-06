@@ -47,7 +47,7 @@ class TestBatchGeneration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model = AutoModelForCausalLM.from_pretrained(
-            "meta-llama/Llama-3.2-3b-Instruct", dtype="bfloat16", device_map="auto"
+            "meta-llama/Llama-3.2-3b-Instruct", dtype="bfloat16", device_map="cuda"
         ).eval()
 
         cls.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", padding_side="left")

@@ -31,8 +31,8 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -295,6 +295,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -465,7 +466,7 @@ class OlmoHybridRotaryEmbedding(nn.Module):
         return inv_freq, attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -705,8 +706,6 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             else FusedRMSNormGated(
                 self.head_v_dim,
                 eps=1e-5,
-                device=torch.cuda.current_device(),
-                dtype=config.dtype if config.dtype is not None else torch.get_default_dtype(),
             )
         )
 
@@ -719,6 +718,8 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 "Falling back to torch implementation. To install, follow: "
                 "https://github.com/fla-org/flash-linear-attention#installation"
             )
+
+        self.layer_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -839,7 +840,6 @@ class OlmoHybridAttentionDecoderLayer(GradientCheckpointingLayer):
         self.mlp = OlmoHybridMLP(config)
         self.post_attention_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layer_type = "full_attention"
 
     def forward(
         self,
@@ -879,7 +879,6 @@ class OlmoHybridLinearAttentionDecoderLayer(GradientCheckpointingLayer):
         self.mlp = OlmoHybridMLP(config)
         self.input_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layer_type = "linear_attention"
         self.linear_attn = OlmoHybridGatedDeltaNet(config, layer_idx=layer_idx)
 
     def forward(
@@ -925,6 +924,8 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
         "attentions": OlmoHybridAttention,
     }
     _is_stateful = True
+    # Uses a custom ``OlmoHybridDynamicCache``; StaticCache compatibility hasn't been wired up here.
+    _can_compile_fullgraph = False
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -957,6 +958,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             ]
         )
         self.norm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # Released ckpt don't use any ROPE and have  it set to `None`
         self.rotary_emb = (
             OlmoHybridRotaryEmbedding(config=config)
             if getattr(config, "rope_parameters", None) is not None
@@ -993,27 +995,32 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        linear_attn_mask = self._update_linear_attn_mask(attention_mask, past_key_values)
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
         # RoPE or NoPE
         position_embeddings = self.rotary_emb(hidden_states, position_ids) if self.rotary_emb is not None else None
 
         for i, decoder_layer in enumerate(self.layers):
-            layer_mask = linear_attn_mask if self.config.layer_types[i] == "linear_attention" else causal_mask
             layer_position_embeddings = position_embeddings if self.config.layer_types[i] == "full_attention" else None
 
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=layer_position_embeddings,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -1027,28 +1034,12 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             past_key_values=past_key_values,
         )
 
-    def _update_linear_attn_mask(self, attention_mask, past_key_values):
-        """
-        NOTE: Left-padding is used for linear attention mask.
-        No need for zeroing states when
-            1. Cached forward
-            2. Attending to all inputs
-        """
-        linear_attn_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state()) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
-            linear_attn_mask = None
-        return linear_attn_mask
-
 
 @auto_docstring
 class OlmoHybridForCausalLM(OlmoHybridPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)
