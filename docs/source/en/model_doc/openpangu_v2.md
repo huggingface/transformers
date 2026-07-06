@@ -69,6 +69,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] OpenPanguV2Config
 
+## OpenPanguV2Tokenizer
+
+[[autodoc]] OpenPanguV2Tokenizer
+
 ## OpenPanguV2Model
 
 [[autodoc]] OpenPanguV2Model

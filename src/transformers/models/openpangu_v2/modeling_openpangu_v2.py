@@ -27,7 +27,6 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from transformers.cache_utils import Cache
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -35,7 +34,7 @@ from transformers.processing_utils import Unpack
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -245,10 +244,6 @@ class mHCModule(nn.Module):
             phi_output_hidden_size = (self.num_stream + 2) * self.num_stream
             self.branch_alpha = nn.Parameter(torch.empty(3, dtype=torch.bfloat16))
             self.branch_beta = nn.Parameter(torch.empty(self.num_stream * (self.num_stream + 2), dtype=torch.bfloat16))
-            # self.branch_alpha_post = nn.Parameter(torch.empty(1, dtype=torch.bfloat16))
-            # self.branch_alpha_res = nn.Parameter(torch.empty(1, dtype=torch.bfloat16))
-            # self.branch_beta_post = nn.Parameter(torch.empty(self.num_stream, dtype=torch.bfloat16))
-            # self.branch_beta_res = nn.Parameter(torch.empty(self.num_stream * self.num_stream, dtype=torch.bfloat16))
         else:
             phi_output_hidden_size = self.num_stream
             self.branch_alpha_pre = nn.Parameter(torch.empty(1, dtype=torch.bfloat16))
@@ -294,12 +289,6 @@ class mHCModule(nn.Module):
         """
         if self.merge_layer_only_pre:
             return x
-
-        # B, S, _ = x.shape
-        # n = self.num_stream
-        # res_shared = residual.view(B, S, n, -1)
-        # y = torch.matmul(h_res.transpose(-1, -2), res_shared.to(h_res.dtype))
-        # y += h_post.unsqueeze(-1) * x.unsqueeze(-2)
 
         y = h_post.unsqueeze(-1) * x.unsqueeze(-2) + torch.sum(
             h_res.unsqueeze(-1) * residual.unflatten(dim=-1, sizes=(self.num_stream, -1)).unsqueeze(-2), dim=-3
@@ -977,19 +966,6 @@ class OpenPanguV2DecoderLayer(GradientCheckpointingLayer):
             self.pre_mlp_layernorm = OpenPanguV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
             self.post_mlp_layernorm = OpenPanguV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        # self.use_mome = (layer_idx == 0 or layer_idx == config.num_hidden_layers - 1) and config.router_sliding_window > 0
-        # if self.use_mome:
-        #     self.merge_conv = torch.nn.Conv1d(
-        #         config.hidden_size,
-        #         config.hidden_size,
-        #         config.router_sliding_window,
-        #         groups=config.hidden_size,
-        #         bias=False,
-        #     )
-        #     self.window_buffer = WindowBuffer(
-        #         config.router_sliding_window, self.merge_conv.forward
-        #     )
-
         block_post_layernorm_hidden_size = config.hidden_size
         self.use_mhc = config.use_mhc
         if self.use_mhc:
@@ -1039,9 +1015,6 @@ class OpenPanguV2DecoderLayer(GradientCheckpointingLayer):
 
         # Fully Connected
         residual = hidden_states
-
-        # if self.use_mome:
-        #     hidden_states = self.window_buffer(hidden_states)
 
         if self.use_mhc:
             hidden_states, h_post, h_res = self.mlp_mhc_module.hc_pre(hidden_states)

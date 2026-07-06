@@ -41,7 +41,7 @@ class OpenPanguV2Tokenizer(TokenizersBackend):
         tokenizer_file: str | None = None,
         bos_token: str = "<|pangu_text_start|>",
         eos_token: str = "<|pangu_text_end|>",
-        unk_token: str = None,
+        unk_token: str | None = None,
         add_bos_token: bool = True,
         add_eos_token: bool = False,
         add_prefix_space: bool = False,
