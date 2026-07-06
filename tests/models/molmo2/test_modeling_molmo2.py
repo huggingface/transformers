@@ -417,15 +417,10 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                if param.requires_grad and "class_embedding" not in name:
+                if param.requires_grad:
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-                if "class_embedding" in name:
-                    self.assertTrue(
-                        -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
@@ -500,6 +495,7 @@ class Molmo2IntegrationTest(unittest.TestCase):
         ]
 
     def tearDown(self):
+        super().tearDown()
         cleanup(torch_device, gc_collect=True)
 
     def build_inputs(self):
@@ -629,6 +625,7 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
         ]
 
     def tearDown(self):
+        super().tearDown()
         cleanup(torch_device, gc_collect=True)
 
     def build_inputs(self):
@@ -736,6 +733,7 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
         ]
 
     def tearDown(self):
+        super().tearDown()
         cleanup(torch_device, gc_collect=True)
 
     def build_inputs(self):

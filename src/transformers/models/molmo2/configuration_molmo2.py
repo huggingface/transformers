@@ -39,10 +39,6 @@ class Molmo2VitConfig(PreTrainedConfig):
         Size of each image patch.
     image_num_pos (`int`, *optional*, defaults to 577):
         Number of positional embeddings for the image.
-    float32_attention (`bool`, *optional*, defaults to `True`):
-        Whether to compute vision attention scores in float32 for compatibility with the original checkpoint.
-    attn_implementation (`str`, *optional*):
-        Attention implementation serialized by the original checkpoint config.
     """
 
     model_type = "molmo2"
@@ -61,14 +57,7 @@ class Molmo2VitConfig(PreTrainedConfig):
     image_num_pos: int = 577
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
-    float32_attention: bool = True
     initializer_range: float = 0.02
-    attn_implementation: str | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.attn_implementation is not None:
-            kwargs["attn_implementation"] = self.attn_implementation
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
@@ -79,14 +68,10 @@ class Molmo2AdapterConfig(PreTrainedConfig):
         Indices of ViT layers to extract features from.
     pooling_attention_mask (`bool`, *optional*, defaults to `False`):
         Whether to use attention mask during pooling.
-    float32_attention (`bool`, *optional*, defaults to `True`):
-        Whether to compute adapter attention scores in float32 for compatibility with the original checkpoint.
     text_hidden_size (`int`, *optional*, defaults to 3584):
         Hidden size of the text model (used for projection).
     image_feature_dropout (`float`, *optional*, defaults to 0.0):
         Dropout rate for image features.
-    attn_implementation (`str`, *optional*):
-        Attention implementation serialized by the original checkpoint config.
     """
 
     model_type = "molmo2"
@@ -100,18 +85,11 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     head_dim: int = 72
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
-    float32_attention: bool = True
     hidden_act: str = "silu"
     intermediate_size: int = 18944
     text_hidden_size: int = 3584
     image_feature_dropout: float = 0.0
     initializer_range: float = 0.02
-    attn_implementation: str | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.attn_implementation is not None:
-            kwargs["attn_implementation"] = self.attn_implementation
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
@@ -137,8 +115,6 @@ class Molmo2TextConfig(PreTrainedConfig):
         RoPE parameters for the model.
     norm_after (`bool`, *optional*, defaults to `False`):
         Whether to apply layer normalization after the attention/FFN blocks instead of before.
-    attn_implementation (`str`, *optional*):
-        Attention implementation serialized by the original checkpoint config.
     """
 
     model_type = "molmo2_text"
@@ -178,11 +154,8 @@ class Molmo2TextConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     use_cache: bool = True
     tie_word_embeddings: bool = False
-    attn_implementation: str | None = None
 
     def __post_init__(self, **kwargs):
-        if self.attn_implementation is not None:
-            kwargs["attn_implementation"] = self.attn_implementation
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)
@@ -264,9 +237,6 @@ class Molmo2Config(PreTrainedConfig):
             self.vit_config.num_hidden_layers = last_layer_needed
 
         super().__post_init__(**kwargs)
-        for subconfig in (self.vit_config, self.adapter_config, self.text_config):
-            if getattr(subconfig, "attn_implementation", None) is not None:
-                subconfig._attn_implementation = subconfig.attn_implementation
 
 
 __all__ = [

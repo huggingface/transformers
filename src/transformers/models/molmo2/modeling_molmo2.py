@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional
@@ -42,7 +40,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_molmo2 import Molmo2AdapterConfig, Molmo2Config, Molmo2TextConfig, Molmo2VitConfig
 
@@ -116,6 +114,18 @@ class Molmo2VisionMLP(nn.Module):
         return hidden_states
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -139,19 +149,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-# Copied from transformers.models.llama.modeling_llama.repeat_kv
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 class Molmo2GQAAttention(nn.Module):
@@ -195,60 +192,21 @@ class Molmo2GQAAttention(nn.Module):
         key_states = key_states.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        target_dtype = query_states.dtype
-        if getattr(self.config, "float32_attention", False):
-            query_states = query_states.float()
-            key_states = key_states.float()
-            if self.config._attn_implementation == "sdpa" and not torch.is_autocast_enabled():
-                value_states = value_states.float()
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        dropout = 0.0 if not self.training else self.attention_dropout
-        if self.config._attn_implementation == "eager":
-            key_states = repeat_kv(key_states, self.num_key_value_groups)
-            value_states = repeat_kv(value_states, self.num_key_value_groups)
-            attn_weights = torch.matmul(query_states / math.sqrt(query_states.size(-1)), key_states.transpose(2, 3))
-            if attention_mask is not None:
-                # The image pooling adapter passes a boolean keep-mask (valid patches); exclude the
-                # invalid ones with -inf to match the SDPA path. A float mask is already additive.
-                if attention_mask.dtype == torch.bool:
-                    attn_weights = attn_weights.masked_fill(~attention_mask, torch.finfo(attn_weights.dtype).min)
-                else:
-                    attn_weights = attn_weights + attention_mask
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
+        )
 
-            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-            attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=self.training)
-            attn_output = torch.matmul(attn_weights.to(value_states.dtype), value_states)
-            attn_output = attn_output.transpose(1, 2).contiguous()
-        elif self.config._attn_implementation == "sdpa":
-            key_states = repeat_kv(key_states, self.num_key_value_groups)
-            value_states = repeat_kv(value_states, self.num_key_value_groups)
-            attn_output = F.scaled_dot_product_attention(
-                query_states,
-                key_states,
-                value_states,
-                attn_mask=attention_mask,
-                is_causal=False,
-                dropout_p=dropout,
-            )
-            attn_output = attn_output.transpose(1, 2).contiguous()
-            attn_weights = None
-        else:
-            attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-                self.config._attn_implementation, eager_attention_forward
-            )
-
-            attn_output, attn_weights = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask,
-                is_causal=self.is_causal,
-                scaling=self.scaling,
-                dropout=dropout,
-            )
-
-        attn_output = attn_output.to(target_dtype)
         attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim).contiguous()
         attn_output = self.out_proj(attn_output)
 
@@ -436,7 +394,10 @@ class Molmo2VisionBackbone(PreTrainedModel):
         to_pool = to_pool * valid.to(to_pool.dtype)[..., None]
 
         if self.pooling_attention_mask:
-            attn_mask = valid.reshape(-1, 1, 1, valid.shape[-1])
+            keep_mask = valid.reshape(-1, 1, 1, valid.shape[-1])
+            attn_mask = torch.zeros_like(keep_mask, dtype=to_pool.dtype).masked_fill_(
+                ~keep_mask, torch.finfo(to_pool.dtype).min
+            )
             denom = valid.float().sum(-1)
             denom = torch.where(denom == 0, 1, denom)
             query = to_pool.sum(-2, keepdim=True) / denom[:, None, None].to(to_pool.dtype)
@@ -804,7 +765,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
+    @merge_with_config_defaults
     @capture_outputs
     def forward(
         self,
@@ -816,8 +777,6 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1017,8 +976,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Molmo2ModelOutputWithPast:
-        use_cache = use_cache if use_cache is not None else self.config.text_config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1122,10 +1079,10 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from ... import AutoProcessor, Molmo2ForConditionalGeneration
+        >>> from transformers import AutoProcessor, Molmo2ForConditionalGeneration
 
-        >>> model = Molmo2ForConditionalGeneration.from_pretrained("...")
-        >>> processor = AutoProcessor.from_pretrained("...")
+        >>> model = Molmo2ForConditionalGeneration.from_pretrained("allenai/Molmo2-8B")
+        >>> processor = AutoProcessor.from_pretrained("allenai/Molmo2-8B")
 
         >>> prompt = "What's the content of the image?"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
