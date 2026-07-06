@@ -11,7 +11,6 @@ Usage:
 import argparse
 import re
 import subprocess
-import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent
@@ -60,16 +59,14 @@ DEFAULT_TEST_FILES = [
 ]
 
 
-def run_pytest(test_file: str, python: str) -> tuple[str, float]:
-    """Run pytest --tb=no --durations=0 on one file, return (output, wall_seconds)."""
+def run_pytest(test_file: str, python: str) -> str:
+    """Run pytest --tb=no --durations=0 on one file, return combined stdout+stderr."""
     print(f"  running {test_file} ...", flush=True)
-    t0 = time.perf_counter()
     result = subprocess.run(
         [python, "-m", "pytest", test_file, "--tb=no", "--durations=0"],
         cwd=REPO_ROOT, capture_output=True, text=True,
     )
-    wall = time.perf_counter() - t0
-    return result.stdout + result.stderr, wall
+    return result.stdout + result.stderr
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +84,9 @@ MEM_ROW_RE = re.compile(
 DUR_RE = re.compile(
     r"^\s*([\d.]+)s\s+\w+\s+(tests/\S+)"
 )
+
+# pytest summary line: "===== 42 passed in 43.03s =====" or "===== 1 failed, 41 passed in 43.03s ====="
+PYTEST_TIME_RE = re.compile(r"in ([\d.]+)s\s*=+\s*$")
 
 
 def parse_memory_table(output: str) -> list[dict]:
@@ -114,17 +114,26 @@ def parse_memory_table(output: str) -> list[dict]:
 
 
 def parse_durations(output: str) -> dict[str, float]:
-    """Parse per-test durations from --durations=0 output.
-
-    Lines look like: '0.14s call     tests/models/.../test_foo.py::Cls::method'
-    They appear without a section header, directly before the final summary line.
-    """
+    """Parse per-test durations from --durations=0 output."""
     durations: dict[str, float] = {}
     for line in output.splitlines():
         m = DUR_RE.match(line)
         if m:
             durations[m.group(2).replace("\\", "/")] = float(m.group(1))
     return durations
+
+
+def parse_pytest_time(output: str) -> float:
+    """Extract the total pytest-reported time from the final summary line.
+
+    e.g. '====== 42 passed in 43.03s ======' -> 43.03
+    Returns 0.0 if not found.
+    """
+    for line in reversed(output.splitlines()):
+        m = PYTEST_TIME_RE.search(line)
+        if m:
+            return float(m.group(1))
+    return 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -154,11 +163,11 @@ def main() -> None:
 
     all_rows: list[dict] = []
     all_durations: dict[str, float] = {}
-    # wall-clock time per test file (from subprocess elapsed time)
+    # pytest-reported total time per test file (from final summary line)
     file_wall_times: dict[str, float] = {}
 
     for test_file in test_files:
-        output, wall = run_pytest(test_file, python)
+        output = run_pytest(test_file, python)
         rows = parse_memory_table(output)
         durations = parse_durations(output)
 
@@ -167,7 +176,7 @@ def main() -> None:
 
         all_rows.extend(rows)
         all_durations.update(durations)
-        file_wall_times[test_file] = wall
+        file_wall_times[test_file] = parse_pytest_time(output)
 
     if not all_rows:
         print("\nNo memory-usage table found in any output.")
