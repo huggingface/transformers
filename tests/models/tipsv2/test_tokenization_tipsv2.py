@@ -60,7 +60,9 @@ class Tipsv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         # Test 3: Round-trip decode produces expected text
-        decoded_text = tokenizer.decode(self.integration_expected_token_ids, clean_up_tokenization_spaces=False)
+        decoded_text = tokenizer.decode(
+            self.integration_expected_token_ids_do_lower_case, clean_up_tokenization_spaces=False
+        )
         self.assertEqual(
             decoded_text,
             self.integration_expected_decoded_text_do_lower_case,
