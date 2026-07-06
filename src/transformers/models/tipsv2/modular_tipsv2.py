@@ -737,7 +737,6 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
 
@@ -757,7 +756,6 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         return self.vision_model(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
-            return_dict=True,
             **kwargs,
         )
 
