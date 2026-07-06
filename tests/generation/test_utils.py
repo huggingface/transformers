@@ -18,6 +18,7 @@ import copy
 import gc
 import inspect
 import random
+import sys
 import tempfile
 import unittest
 import warnings
@@ -1368,6 +1369,67 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 atol = rtol = 1e-5
             assert_similar_generate_outputs(outputs, outputs_cached, atol=atol, rtol=rtol)
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+
+    @pytest.mark.generate
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
+        """
+        Recurrent (linear-attention / short-conv) layers must zero padding out of their state on
+        *continued* forwards too, not only on the first one. Splitting a left-padded batch into a
+        first forward plus a cached continuation must therefore match the single full forward.
+        Regression test for #47086.
+        """
+        for model_class in self.all_generative_model_classes:
+            # This fix is about the recurrent-layer mask hybrid models build via
+            # `create_recurrent_attention_mask`, so only run for models that use it. Purely recurrent
+            # models (Mamba/RWKV/...) mask padding on their own inline path and are out of scope here.
+            model_module = sys.modules.get(model_class.__module__)
+            if model_module is None or not hasattr(model_module, "create_recurrent_attention_mask"):
+                self.skipTest(reason=f"{model_class.__name__} does not use create_recurrent_attention_mask")
+
+            set_seed(42)
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            if config.is_encoder_decoder:
+                self.skipTest(reason="Written for decoder-only recurrent models")
+
+            model = model_class(config).to(torch_device).eval()
+            vocab_size = config.get_text_config().vocab_size
+            # An ordinary token id: padding is defined by the attention mask, not the token value. A random
+            # init zeroes the `padding_idx` embedding row, which would hide the bug if we padded with it.
+            pad_token_id = 7
+
+            turn1_len, turn2_len, pad_len = 4, 4, 2
+            turn1 = ids_tensor((2, turn1_len), vocab_size)
+            turn2 = ids_tensor((2, turn2_len), vocab_size)
+            turn2[1, :pad_len] = pad_token_id
+            attention_mask = torch.ones(2, turn1_len + turn2_len, dtype=torch.long, device=torch_device)
+            attention_mask[1, turn1_len : turn1_len + pad_len] = 0
+            position_ids = (attention_mask.cumsum(-1) - 1).clamp(min=0)
+
+            with torch.no_grad():
+                # single full forward of the padded batch is the ground truth
+                single = model(
+                    input_ids=torch.cat([turn1, turn2], dim=-1),
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                ).logits
+                # same batch, but the padded segment arrives as a continuation on top of the turn-1 cache
+                out1 = model(
+                    input_ids=turn1,
+                    attention_mask=attention_mask[:, :turn1_len],
+                    position_ids=position_ids[:, :turn1_len],
+                    use_cache=True,
+                )
+                out2 = model(
+                    input_ids=turn2,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids[:, turn1_len:],
+                    past_key_values=out1.past_key_values,
+                    use_cache=True,
+                )
+
+            # Tight tolerance on purpose: the fixed residual is fp-floor (~1e-7) while the unmasked-padding
+            # bug diverges by ~1e-3, so an MoE-style relaxation would swallow exactly what we test for.
+            torch.testing.assert_close(out2.logits[:, -1], single[:, -1], rtol=1e-4, atol=1e-5)
 
     @pytest.mark.generate
     def test_generate_continue_from_inputs_embeds(self):
