@@ -41,7 +41,9 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     video_text_kwargs_max_length = 600
     video_text_kwargs_override_max_length = 550
     video_unstructured_max_length = 600
-    image_unstructured_max_length = 100  # MiniCPM expands image to ~70 tokens
+    # Default 76 is too small: MiniCPM expands <image> to ~70 tokens, then with surrounding text tokens
+    # we exceed 76, truncation cuts through image tokens, and _check_special_mm_tokens raises a mismatch error.
+    image_unstructured_max_length = 100
 
     @classmethod
     def _setup_test_attributes(cls, processor):

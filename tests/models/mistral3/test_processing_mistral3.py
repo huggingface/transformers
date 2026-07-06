@@ -261,7 +261,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_processor_returns_full_length_batches(self):
         # to avoid https://github.com/huggingface/transformers/issues/34204
-        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
         prompt_string = [
             "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",
         ] * 5

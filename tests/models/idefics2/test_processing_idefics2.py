@@ -62,10 +62,13 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {"image_seq_len": 2}
 
-    @unittest.skip("Batch padding order depends on tokenization lengths which differ with tiny tokenizer")
     def test_process_interleaved_images_prompts_no_image_splitting(self):
-        processor = self.get_processor()
+        processor = self.get_processor(use_tiny_ckpt=False)
         tokenizer = processor.tokenizer
+        bos_token_id = tokenizer.convert_tokens_to_ids(tokenizer.bos_token)
+        image_token_id = tokenizer.convert_tokens_to_ids(processor.image_token)
+        fake_image_token_id = tokenizer.convert_tokens_to_ids(processor.fake_image_token)
+        image_seq_len = processor.image_seq_len
 
         processor.image_processor.do_image_splitting = False
 
@@ -83,7 +86,7 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # fmt: off
         tokenized_sentence = tokenizer(text_str, add_special_tokens=False)
-        expected_input_ids = [[self.bos_token_id] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + tokenized_sentence["input_ids"]]
+        expected_input_ids = [[bos_token_id] + [fake_image_token_id] + [image_token_id] * image_seq_len + [fake_image_token_id] + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
         self.assertEqual(inputs["pixel_values"].shape, (1, 1, 3, 653, 980))
@@ -106,8 +109,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: off
         tokenized_sentence_1 = tokenizer(text_str_1, add_special_tokens=False)
         tokenized_sentence_2 = tokenizer(text_str_2, add_special_tokens=False)
-        expected_input_ids_1 = [self.bos_token_id] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + tokenized_sentence_1["input_ids"]
-        expected_input_ids_2 = [self.bos_token_id] + tokenized_sentence_2["input_ids"] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id]
+        expected_input_ids_1 = [bos_token_id] + [fake_image_token_id] + [image_token_id] * image_seq_len + [fake_image_token_id] + tokenized_sentence_1["input_ids"]
+        expected_input_ids_2 = [bos_token_id] + tokenized_sentence_2["input_ids"] + [fake_image_token_id] + [image_token_id] * image_seq_len + [fake_image_token_id] + [image_token_id] * image_seq_len + [fake_image_token_id]
         # Pad the first input to match the second input
         pad_len = len(expected_input_ids_2) - len(expected_input_ids_1)
         padded_expected_input_ids_1 = [0] * pad_len + expected_input_ids_1

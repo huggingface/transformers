@@ -77,6 +77,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def prepare_video_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy videos."""
+        # 2 frames instead of 8: with 8 frames the expanded video token sequence exceeds the max_length
+        # used in truncation tests, truncation cuts through video tokens, and _check_special_mm_tokens
+        # raises a mismatch error.
         video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 2
         if batch_size is None:
             return [[video_input]]
