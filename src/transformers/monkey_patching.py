@@ -344,12 +344,13 @@ def patch_output_recorders(model: nn.Module) -> None:
 
     for submodule in model.modules():
         # When it is present, _can_record_outputs is a dict w/ layer_name as keys and recorder as values. A recorder is
-        # an OutputRecorder or a module class. Sometimes, there is a tuple or list of recorders instead of just one.
+        # an OutputRecorder or a module class. Sometimes, there is a list of recorders instead of just one.
         output_to_recorders = getattr(submodule, "_can_record_outputs", None)
         if isinstance(output_to_recorders, dict):
             for output, recorders in output_to_recorders.items():
-                recorders = recorders if isinstance(recorders, (tuple, list)) else [recorders]
-                for recorder in recorders:
+                is_single = not isinstance(recorders, list)
+                recorders = [recorders] if is_single else list(recorders)
+                for i, recorder in enumerate(recorders):
                     if isinstance(recorder, OutputRecorder):
                         # Check if target class matches any registered pattern or exact name
                         replacement_class = _find_replacement_class(recorder.target_class.__name__, mapping)
@@ -359,6 +360,7 @@ def patch_output_recorders(model: nn.Module) -> None:
                         # Check if class type matches any registered pattern or exact name
                         replacement_class = _find_replacement_class(recorder.__name__, mapping)
                         if replacement_class is not None:
-                            submodule._can_record_outputs[output] = replacement_class
+                            recorders[i] = replacement_class
                     else:
                         logger.warning(f"Unknown recorder type: {type(recorder).__name__}. Skipping patch.")
+                submodule._can_record_outputs[output] = recorders[0] if is_single else recorders
