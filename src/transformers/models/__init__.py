@@ -366,6 +366,7 @@ if TYPE_CHECKING:
     from .pvt import *
     from .pvt_v2 import *
     from .qianfan_ocr import *
+    from .quatfit1 import *
     from .qwen2 import *
     from .qwen2_5_omni import *
     from .qwen2_5_vl import *

@@ -77,8 +77,8 @@ def build_config_mapping_names() -> tuple[dict, dict]:
     # `glob.glob` is filesystem-order dependent — sort to make the output deterministic.
     all_files = sorted(glob.glob("src/transformers/models/**/configuration_*.py", recursive=True))
     for config_path in all_files:
-        module_name = config_path.split("/")[-2]
-        with open(config_path, "r") as f:
+        module_name = config_path.replace("\\", "/").split("/")[-2]
+        with open(config_path, "r", encoding="utf-8") as f:
             content = f.read()
 
         tree = ast.parse(content)
@@ -132,7 +132,7 @@ def build_processor_mapping(
         processor_name = None
 
         if os.path.exists(f"src/transformers/models/{module}/{processor_filename}_{module}.py"):
-            with open(f"src/transformers/models/{module}/{processor_filename}_{module}.py", "r") as f:
+            with open(f"src/transformers/models/{module}/{processor_filename}_{module}.py", "r", encoding="utf-8") as f:
                 content = f.read()
 
             tree = ast.parse(content)
@@ -279,7 +279,8 @@ def main(overwrite: bool):
     # Read existing file content if available
     old_content = ""
     if os.path.exists(AUTO_FILENAME):
-        old_content = open(AUTO_FILENAME, "r").read()
+        with open(AUTO_FILENAME, "r", encoding="utf-8") as f:
+            old_content = f.read()
 
     config_mapping, special_mapping = get_all_config_mappings()
     all_processor_mappings = get_all_processor_mappings(config_mapping=config_mapping)
@@ -297,11 +298,12 @@ def main(overwrite: bool):
     # Dirty hack to sort and apply ruff to the file content, for easier matching
     with tempfile.TemporaryDirectory() as temp_folder:
         temp_filename = os.path.join(temp_folder, "temp.py")
-        with open(temp_filename, "w") as temp_file:
+        with open(temp_filename, "w", encoding="utf-8") as temp_file:
             temp_file.write(new_content)
 
         run_ruff_and_sort(temp_filename)
-        new_content = open(temp_filename, "r").read()
+        with open(temp_filename, "r", encoding="utf-8") as f:
+            new_content = f.read()
 
     if old_content != new_content:
         if not overwrite:
@@ -320,7 +322,7 @@ def main(overwrite: bool):
                 f"Diff (on disk → regenerated):\n{diff}"
             )
         else:
-            with open(AUTO_FILENAME, "w") as f:
+            with open(AUTO_FILENAME, "w", encoding="utf-8") as f:
                 f.write(new_content)
 
 
