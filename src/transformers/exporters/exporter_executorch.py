@@ -1184,6 +1184,30 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
 
 
 @register_fx_program_fix("executorch")
+def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
+    """Drop ``_assert_scalar`` / ``_assert_tensor_metadata`` runtime asserts before lowering.
+
+    ``_assert_scalar`` lowers a ``torch._check`` on an unbacked symint (e.g. the image-token
+    count in ``get_placeholder_mask``) into a ``cast_symbool_to_symint`` + ``eq`` chain whose
+    ``Piecewise`` result the ``_ModuleStackTracer`` used by ``to_edge_transform_and_lower``'s
+    decomposition pass cannot proxy (``... is not tracked with proxy``). The range facts these
+    asserts encode survive on ``exported_program.range_constraints`` (further capped by
+    ``_fix_range_constraints``), so dropping the nodes (and the now-dead symint feeders) is safe.
+    """
+    for module in exported_program.graph_module.modules():
+        if not isinstance(module, torch.fx.GraphModule):
+            continue
+        for node in list(module.graph.nodes):
+            if node.op == "call_function" and node.target in (
+                torch.ops.aten._assert_tensor_metadata.default,
+                torch.ops.aten._assert_scalar.default,
+            ):
+                module.graph.erase_node(node)
+        module.graph.eliminate_dead_code()
+        module.recompile()
+
+
+@register_fx_program_fix("executorch")
 def _fix_missing_placeholder_vals(exported_program: ExportedProgram) -> None:
     """Ensure parameter/buffer/lifted-constant placeholders have a tensor ``meta["val"]``.
 

@@ -120,7 +120,7 @@ class OpenVINOExporter(DynamoExporter):
         with torch.no_grad(), patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
 
-        _drop_metadata_asserts(exported_program.graph_module)
+        _drop_runtime_asserts(exported_program.graph_module)
         # Run OV's own decomposition pass up front and decode the RESULT — handing the
         # ``ExportedProgram`` to ``convert_model`` would re-run it internally, regenerating node
         # names and discarding every fix applied below.
@@ -565,20 +565,28 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
 _OV_NAME_OK = re.compile(r"_\d+$")
 
 
-def _drop_metadata_asserts(graph_module) -> None:
-    """Drop ``_assert_tensor_metadata`` nodes before the decomposition replay.
+def _drop_runtime_asserts(graph_module) -> None:
+    """Drop ``_assert_tensor_metadata`` / ``_assert_scalar`` runtime asserts before the replay.
 
-    These asserts re-check trace-time dtypes/devices and fail the replay once other stages
-    have legitimately changed them. Scalar asserts are deliberately KEPT at this point — they
-    carry the ``torch._check`` range facts (``u >= 0``) that unbacked-symint guards inside the
-    replay rely on (splinter) — and are removed post-decomposition by ``_fix_drop_assert_ops``.
+    ``_assert_tensor_metadata`` re-checks trace-time dtypes/devices and fails the replay once
+    other stages have legitimately changed them. ``_assert_scalar`` lowers a ``torch._check``
+    on an unbacked symint (e.g. the image-token count in ``get_placeholder_mask``) into a
+    ``cast_symbool_to_symint`` + ``eq`` chain whose ``Piecewise`` result OV's ``_ModuleStackTracer``
+    cannot proxy, crashing the replay (``... is not tracked with proxy``). The range facts these
+    asserts encode survive on ``exported_program.range_constraints``, so dropping the nodes (and
+    the now-dead symint feeders via ``eliminate_dead_code``) is safe. ``_fix_drop_assert_ops``
+    still removes any that reappear post-decomposition.
     """
     for module in graph_module.modules():
         if not isinstance(module, torch.fx.GraphModule):
             continue
         for node in list(module.graph.nodes):
-            if node.op == "call_function" and node.target is torch.ops.aten._assert_tensor_metadata.default:
+            if node.op == "call_function" and node.target in (
+                torch.ops.aten._assert_tensor_metadata.default,
+                torch.ops.aten._assert_scalar.default,
+            ):
                 module.graph.erase_node(node)
+        module.graph.eliminate_dead_code()
         module.recompile()
 
 
@@ -906,17 +914,28 @@ def _fix_scatter_reduce(gm, node):
         k_shape = [1] * (ndim + 1)
         k_shape[d] = -1
         with gm.graph.inserting_before(node):
+            # ``k_size`` is symbolic under dynamic shapes (e.g. BLT's ``max_num_patches``); baking
+            # the ``SymInt`` as an ``arange`` literal makes OV decode it as a malformed inlined
+            # constant. Feed the dimension through a ``sym_size`` node so it stays a real Range input.
+            arange_size = k_size if isinstance(k_size, int) else gm.graph.call_function(
+                torch.ops.aten.sym_size.int, args=(self_arg, d)
+            )
             arange = gm.graph.call_function(
-                torch.ops.aten.arange.default, args=(k_size,), kwargs={"device": self_val.device}
+                torch.ops.aten.arange.default, args=(arange_size,), kwargs={"device": self_val.device}
             )
             k_range = gm.graph.call_function(torch.ops.aten.view.default, args=(arange, k_shape))
             index_unsq = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(index, d))
             mask = gm.graph.call_function(torch.ops.aten.eq.Tensor, args=(index_unsq, k_range))
             src_unsq = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(src, d))
-            masked = gm.graph.call_function(torch.ops.aten.where.ScalarOther, args=(mask, src_unsq, min_value))
+            # OV's frontend has no ``where.ScalarOther`` translation, so materialise the scalar
+            # branches as 0-dim tensors and use ``where.self`` (broadcasts the same way).
+            scalar_kwargs = {"dtype": src_val.dtype, "device": src_val.device}
+            min_tensor = gm.graph.call_function(torch.ops.aten.scalar_tensor.default, args=(min_value,), kwargs=scalar_kwargs)
+            masked = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, src_unsq, min_tensor))
             maxes = gm.graph.call_function(torch.ops.aten.amax.default, args=(masked, [d + 1]))
             any_match = gm.graph.call_function(torch.ops.aten.any.dim, args=(mask, d + 1))
-            result = gm.graph.call_function(torch.ops.aten.where.ScalarOther, args=(any_match, maxes, 0.0))
+            zero_tensor = gm.graph.call_function(torch.ops.aten.scalar_tensor.default, args=(0.0,), kwargs=scalar_kwargs)
+            result = gm.graph.call_function(torch.ops.aten.where.self, args=(any_match, maxes, zero_tensor))
             result.meta.update(node.meta)
         node.replace_all_uses_with(result)
         gm.graph.erase_node(node)
