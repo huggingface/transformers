@@ -2119,6 +2119,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return True
 
     @classmethod
+    @functools.lru_cache  # safe because this is a class method, not a method
     def _can_set_experts_implementation(cls) -> bool:
         """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source as a
         heuristic, which avoids maintaining yet another property flag.
@@ -2277,6 +2278,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 submodule is not self
                 and isinstance(submodule, PreTrainedModel)
                 and submodule.config.__class__ != self.config.__class__
+                and submodule._can_set_experts_implementation()  # avoids bugs when text_model has MoEs but encoder no
             ):
                 # Set the experts on the submodule
                 sub_implementation = requested_implementation
