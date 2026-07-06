@@ -36,26 +36,17 @@ from .configuration_tipsv2_dpt import Tipsv2DptConfig
 @dataclass
 class Tipsv2DptOutput(ModelOutput):
     r"""
-    Args:
-        predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-            Predicted depth for each pixel.
-        normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
-            Raw normal map predictions (unnormalized).
-        segmentation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, height, width)`):
-            Classification scores for each pixel.
-
-            <Tip warning={true}>
-
-            The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
-            to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
-            original image size as post-processing. You should always check your logits shape and resize as needed.
-
-            </Tip>
-
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Hidden states of the backbone.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Attention weights of the backbone.
+    predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+        Predicted depth for each pixel.
+    normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+        Raw normal map predictions (unnormalized).
+    segmentation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, height, width)`):
+        Classification scores for each pixel.
+        <Tip warning={true}>
+        The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
+        to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
+        original image size as post-processing. You should always check your logits shape and resize as needed.
+        </Tip>
     """
 
     predicted_depth: torch.FloatTensor | None = None
