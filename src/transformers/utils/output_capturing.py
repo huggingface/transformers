@@ -266,16 +266,7 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                         collected_outputs[key] = collected_outputs[key][:-1]
                         collected_outputs[key].append(outputs.last_hidden_state)
 
-                    outputs[key] = tuple(collected_outputs[key])
-                elif key == "attentions":
-                    # In this case, the second item are cross attentions
-                    if isinstance(capturable_flags[key], list) and len(capturable_flags[key]) == 2:
-                        outputs[key] = tuple(collected_outputs[key][0::2])
-                        outputs["cross_" + key] = tuple(collected_outputs[key][1::2])
-                    else:
-                        outputs[key] = tuple(collected_outputs[key])
-                else:
-                    outputs[key] = tuple(collected_outputs[key])
+                outputs[key] = tuple(collected_outputs[key])
 
             if return_dict is False:
                 outputs = outputs.to_tuple()
