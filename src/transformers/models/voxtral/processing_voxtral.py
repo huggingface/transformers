@@ -22,6 +22,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -85,13 +86,12 @@ class VoxtralProcessor(ProcessorMixin):
 
         super().__init__(feature_extractor, tokenizer)
 
+    @requires(backends=("torch",))
     def _retrieve_input_features(self, audio, max_source_positions, **kwargs):
         """
         Handles specific logic of Voxtral expected input features: audio arrays should be padded to next multiple of 480000 (duration is a multiple of 30s), see VoxtralProcessorKwargs' default audio_kwargs.
         Then mel input features are extracted and stacked along batch dimension, splitting into chunks of max_source_positions.
         """
-        requires_backends(self, ["torch"])
-
         input_features_list = []
         for audio_array in audio:
             audio_inputs = self.feature_extractor(audio_array, **kwargs)
@@ -250,6 +250,7 @@ class VoxtralProcessor(ProcessorMixin):
         return BatchFeature(data=out, tensor_type=output_kwargs["text_kwargs"].get("return_tensors", None))
 
     # TODO: @eustlb, this should be moved to mistral_common + testing
+    @requires(backends=("mistral-common",))
     def apply_transcription_request(
         self,
         audio: str | list[str] | AudioInput,
@@ -296,8 +297,6 @@ class VoxtralProcessor(ProcessorMixin):
             format (`str`, `list[str]`, *optional*):
                 The format of the audio, necessary if is provided as `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`.
         """
-        requires_backends(self, ["mistral-common"])
-
         output_kwargs = self._merge_kwargs(
             VoxtralProcessorKwargs,
             **kwargs,
