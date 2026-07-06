@@ -17,10 +17,12 @@ import inspect
 import tempfile
 import unittest
 from functools import cached_property
+from unittest.mock import patch
 
 from parameterized import parameterized
 
 from transformers import Tipsv2Config, Tipsv2TextConfig, Tipsv2VisionConfig
+from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
@@ -32,6 +34,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
+from ... import test_modeling_common
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -182,15 +185,30 @@ class Tipsv2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_eager_matches_sdpa_inference(self, *args):
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
-    @unittest.skip(
-        "Tipsv2VisionModel reverse loading fails because conversion mapping requires different patterns depending on config.use_swiglu_ffn"
-    )
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
         # Depending on config.use_swiglu_ffn, module names are different. They are mlp.fc1/mlp.fc2 in one case and
         # mlp.weights_in/mlp.weights_out in the other. This results in only one of the two weight conversions matching
-        # for each model type, resulting in the test failure as it expects all weight converters to match. This doesn't
+        # for each model type, resulting in the test failing as it expects all weight converters to match. This doesn't
         # affect the model's ability to load and save weights correctly.
-        pass
+        # Because we only use config.use_swiglu_ffn=False in the tests, we patch get_model_conversion_mapping to drop
+        # the swiglu-only FFN renamings.
+
+        def get_model_conversion_mapping_without_swiglu_ffn(*args, **kwargs):
+            dropped_targets = {".mlp.weights_in.", ".mlp.weights_out."}
+            return [
+                conversion
+                for conversion in get_model_conversion_mapping(*args, **kwargs)
+                if not dropped_targets.intersection(conversion._original_target_patterns)
+            ]
+
+        with patch.object(
+            test_modeling_common,
+            "get_model_conversion_mapping",
+            get_model_conversion_mapping_without_swiglu_ffn,
+        ):
+            super().test_reverse_loading_mapping(
+                check_keys_were_modified=check_keys_were_modified, skip_base_model=skip_base_model
+            )
 
 
 @require_torch

@@ -1514,19 +1514,50 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"normals_head\.normals_head\.", "normals_decoder.head."),
             WeightRenaming(r"segmentation_head\.segmentation_head\.", "segmentation_decoder.head."),
         ],
+        "Tipsv2DptForDepthEstimation": [
+            WeightRenaming("vision_encoder", "backbone"),
+            WeightRenaming(
+                r"depth_head\.reassemble\.readout_projects\.(\d+)",
+                r"neck.reassemble_stage.readout_projects.\1.layers.0",
+            ),
+            WeightRenaming(
+                r"depth_head\.reassemble\.out_projections\.(\d+)\.", r"neck.reassemble_stage.layers.\1.projection."
+            ),
+            WeightRenaming(
+                r"depth_head\.reassemble\.resize_layers\.(\d+)\.", r"neck.reassemble_stage.layers.\1.resize."
+            ),
+            WeightRenaming(
+                r"depth_head\.fusion_blocks\.(\d+)\.out_conv\.", r"neck.fusion_stage.layers.\1.projection."
+            ),
+            WeightRenaming(
+                r"depth_head\.fusion_blocks\.(\d+)\.main_unit\.conv1\.",
+                r"neck.fusion_stage.layers.\1.residual_layer2.convolution1.",
+            ),
+            WeightRenaming(
+                r"depth_head\.fusion_blocks\.(\d+)\.main_unit\.conv2\.",
+                r"neck.fusion_stage.layers.\1.residual_layer2.convolution2.",
+            ),
+            WeightRenaming(
+                r"depth_head\.fusion_blocks\.(\d+)\.residual_unit\.conv1\.",
+                r"neck.fusion_stage.layers.\1.residual_layer1.convolution1.",
+            ),
+            WeightRenaming(
+                r"depth_head\.fusion_blocks\.(\d+)\.residual_unit\.conv2\.",
+                r"neck.fusion_stage.layers.\1.residual_layer1.convolution2.",
+            ),
+            WeightRenaming(r"depth_head\.convs", "neck.convs"),
+            WeightRenaming(r"depth_head\.project", "decoder.project"),
+            WeightRenaming(r"depth_head\.depth_head\.", "decoder.head."),
+        ],
     }
 
-    mapping["Tipsv2DptForDepthEstimation"] = mapping["tipsv2_dpt"] + [
-        WeightRenaming(r"depth_neck", "neck"),
-        WeightRenaming(r"depth_decoder", "decoder"),
+    mapping["Tipsv2DptForNormalEstimation"] = [
+        WeightRenaming(renaming.source_patterns[0].replace("depth", "normals"), renaming.target_patterns[0])
+        for renaming in mapping["Tipsv2DptForDepthEstimation"]
     ]
-    mapping["Tipsv2DptForNormalEstimation"] = mapping["tipsv2_dpt"] + [
-        WeightRenaming(r"normals_neck", "neck"),
-        WeightRenaming(r"normals_decoder", "decoder"),
-    ]
-    mapping["Tipsv2DptForSemanticSegmentation"] = mapping["tipsv2_dpt"] + [
-        WeightRenaming(r"segmentation_neck", "neck"),
-        WeightRenaming(r"segmentation_decoder", "decoder"),
+    mapping["Tipsv2DptForSemanticSegmentation"] = [
+        WeightRenaming(renaming.source_patterns[0].replace("depth", "segmentation"), renaming.target_patterns[0])
+        for renaming in mapping["Tipsv2DptForDepthEstimation"]
     ]
 
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
