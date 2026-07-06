@@ -917,8 +917,10 @@ def _fix_scatter_reduce(gm, node):
             # ``k_size`` is symbolic under dynamic shapes (e.g. BLT's ``max_num_patches``); baking
             # the ``SymInt`` as an ``arange`` literal makes OV decode it as a malformed inlined
             # constant. Feed the dimension through a ``sym_size`` node so it stays a real Range input.
-            arange_size = k_size if isinstance(k_size, int) else gm.graph.call_function(
-                torch.ops.aten.sym_size.int, args=(self_arg, d)
+            arange_size = (
+                k_size
+                if isinstance(k_size, int)
+                else gm.graph.call_function(torch.ops.aten.sym_size.int, args=(self_arg, d))
             )
             arange = gm.graph.call_function(
                 torch.ops.aten.arange.default, args=(arange_size,), kwargs={"device": self_val.device}
@@ -930,11 +932,15 @@ def _fix_scatter_reduce(gm, node):
             # OV's frontend has no ``where.ScalarOther`` translation, so materialise the scalar
             # branches as 0-dim tensors and use ``where.self`` (broadcasts the same way).
             scalar_kwargs = {"dtype": src_val.dtype, "device": src_val.device}
-            min_tensor = gm.graph.call_function(torch.ops.aten.scalar_tensor.default, args=(min_value,), kwargs=scalar_kwargs)
+            min_tensor = gm.graph.call_function(
+                torch.ops.aten.scalar_tensor.default, args=(min_value,), kwargs=scalar_kwargs
+            )
             masked = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, src_unsq, min_tensor))
             maxes = gm.graph.call_function(torch.ops.aten.amax.default, args=(masked, [d + 1]))
             any_match = gm.graph.call_function(torch.ops.aten.any.dim, args=(mask, d + 1))
-            zero_tensor = gm.graph.call_function(torch.ops.aten.scalar_tensor.default, args=(0.0,), kwargs=scalar_kwargs)
+            zero_tensor = gm.graph.call_function(
+                torch.ops.aten.scalar_tensor.default, args=(0.0,), kwargs=scalar_kwargs
+            )
             result = gm.graph.call_function(torch.ops.aten.where.self, args=(any_match, maxes, zero_tensor))
             result.meta.update(node.meta)
         node.replace_all_uses_with(result)

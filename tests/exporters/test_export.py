@@ -97,15 +97,16 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         ),
         "Sam2Model": "Same Hiera-backbone dynamic-shape budget overrun as `Sam2VisionModel`.",
     },
-    # ExecuTorch — lowering failures grouped by root cause; see the first entry of each
-    # `Same ... as` chain for the full description.
+    # ExecuTorch, every variant.
     "executorch": {
         "GroundingDinoModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
     },
+    # ExecuTorch, generate path only.
     "executorch.generate": {},
+    # ExecuTorch, dynamic-shape only.
     "executorch.dynamic": {
         "BigBirdModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "BigBirdForPreTraining": "Same `timeout` failure as `BigBirdModel`.",
@@ -141,8 +142,10 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "Wav2Vec2BertForAudioFrameClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
         "Wav2Vec2BertForXVector": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
     },
-    # OpenVINO, every variant (currently empty — populated as we sweep).
+    # OpenVINO, every variant.
     "openvino": {},
+    # OpenVINO, generate path only.
+    "openvino.generate": {},
     # OpenVINO, dynamic-shape only.
     "openvino.dynamic": {},
 }
