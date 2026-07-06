@@ -25,6 +25,7 @@ from ...configuration_utils import PreTrainedConfig
 class TmlTextConfig(PreTrainedConfig):
     model_type = "tml_text"
     base_config_key = "text_config"
+    attribute_map = {"embedding_multiplier": "logits_mup_width_multiplier"}
 
     vocab_size: int = 201024
     hidden_size: int = 6144
@@ -38,6 +39,7 @@ class TmlTextConfig(PreTrainedConfig):
     sliding_window_size: int = 512
     layer_types: list[int] | None = None
     rope_parameters: dict | None = None  # dont forget partial_rotary_factor
+    max_position_embeddings: int = 131072
     log_scaling_n_floor: int | None = None
     log_scaling_alpha: float = 1.0
     rms_norm_eps: float = 1e-6
@@ -77,6 +79,7 @@ class TmlAudioConfig(PreTrainedConfig):
     mel_vocab_size: int = 256
     text_hidden_size: int = 6144
     rms_norm_eps: float = 1e-6
+    initializer_range: float = 0.02
 
 
 class TmlVisionConfig(PreTrainedConfig):
@@ -91,6 +94,7 @@ class TmlVisionConfig(PreTrainedConfig):
     num_hidden_layers: int = 24
     num_attention_heads: int = 16
     rms_norm_eps: float = 1e-6
+    initializer_range: float = 0.02
 
 
 class TmlConfig(PreTrainedConfig):
@@ -109,7 +113,7 @@ class TmlConfig(PreTrainedConfig):
     image_token_id: int | None = None
     audio_token_id: int | None = None
 
-    def __post_init_(self, **kwargs):
+    def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
             self.audio_config = self.sub_configs["audio_config"](**self.audio_config)
         elif self.audio_config is None:

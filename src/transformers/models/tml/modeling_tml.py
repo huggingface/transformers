@@ -296,8 +296,11 @@ class TmlAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
+        self.is_local_attn = config.layer_types[self.layer_idx] == "sliding_attention"
         self.head_dim = config.swa_head_dim if self.is_local_attn else config.head_dim
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.num_heads = config.swa_num_attention_heads if self.is_local_attn else config.num_attention_heads
+        self.num_key_value_heads = config.swa_num_key_value_heads if self.is_local_attn else config.num_key_value_heads
+        self.sliding_window = config.sliding_window_size if self.is_local_attn else None
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
@@ -306,11 +309,6 @@ class TmlAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
-        self.is_local_attn = config.layer_types[self.layer_idx] == "sliding_attention"
-
-        self.num_heads = config.swa_num_attention_heads if self.is_local_attn else config.num_attention_heads
-        self.num_key_value_heads = config.swa_num_key_value_heads if self.is_local_attn else config.num_key_value_heads
-        self.sliding_window = config.sliding_window_size if self.is_local_attn else None
         self.r_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
 
     def forward(
@@ -917,7 +915,7 @@ class TmlVisionModel(TmlPreTrainedModel):
             shuffle_mult = (
                 (end_scale[0] // start_scale[0]) * (end_scale[1] // start_scale[1]) * (end_scale[2] // start_scale[2])
             )
-            output_dim = config.text_hidden_dim if i == config.num_hidden_layers - 1 else end_scale[3]
+            output_dim = config.text_hidden_size if i == config.num_hidden_layers - 1 else end_scale[3]
             hw_fold = end_scale[1] // start_scale[1]
             t_fold = end_scale[0] // start_scale[0]
             self.encoder_layers.append(
