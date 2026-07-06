@@ -189,7 +189,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
         return ["num_audio_tokens"]
 
     @property
-    def audio_ids(self):
+    def audio_token_ids(self):
         return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
 
 

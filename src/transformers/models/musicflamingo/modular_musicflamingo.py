@@ -145,7 +145,7 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         return self.audio_bos_token + self.audio_token * num_audio_tokens + self.audio_eos_token
 
     @property
-    def audio_ids(self):
+    def audio_token_ids(self):
         return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
 
     def apply_transcription_request(self, *args, **kwargs):
