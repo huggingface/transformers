@@ -138,7 +138,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
         for attention_chunk_size, expected_mask in expected_masks.items():
             torch.testing.assert_close(mask[attention_chunk_size], expected_mask[None, None])
 
-    def test_single_attention_pattern_name_returns_same_mask_mapping(self):
+    def test_masks_for_generate_keys_attribute_value_masks_by_pattern(self):
         config = tiny_gpt_oss_config(
             layer_types=["sliding_attention"] * 4,
             per_layer_config={0: {"sliding_window": 16}, 1: {"sliding_window": 8}},
@@ -153,10 +153,9 @@ class TestHeterogeneousMasking(unittest.TestCase):
             past_key_values=DynamicCache(config=config),
         )
 
-        # Existing model code selects a layer's mask by pattern name, so the attribute-value masks must also
-        # answer the shared-pattern lookup, returning themselves.
-        self.assertIsInstance(attention_masks, AttentionMasksByAttributeValue)
-        self.assertIs(attention_masks["sliding_attention"], attention_masks)
-        self.assertEqual(set(attention_masks.keys()), {32, 16, 8})
-        with self.assertRaises(KeyError):
-            attention_masks["full_attention"]
+        # Model code selects a layer's mask from the result by pattern name, then the layer resolves the
+        # attribute-value masks by its own attribute value.
+        self.assertEqual(set(attention_masks), {"sliding_attention"})
+        sliding_masks = attention_masks["sliding_attention"]
+        self.assertIsInstance(sliding_masks, AttentionMasksByAttributeValue)
+        self.assertEqual(set(sliding_masks.keys()), {32, 16, 8})

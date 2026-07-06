@@ -28,23 +28,6 @@ class AttentionMasksByAttributeValue(dict[Hashable, Any]):
     """Attention masks selected by the value of a per-layer config attribute."""
 
 
-class _SinglePatternAttentionMasks(AttentionMasksByAttributeValue):
-    """Attribute-value masks that also support lookup by their shared attention pattern, returning `self`.
-
-    This lets existing model code that selects a layer's mask by pattern name resolve masks without
-    heterogeneity-specific branches.
-    """
-
-    def __init__(self, attention_pattern: str) -> None:
-        super().__init__()
-        self._attention_pattern = attention_pattern
-
-    def __getitem__(self, key: Hashable) -> Any:
-        if key == self._attention_pattern:
-            return self
-        return super().__getitem__(key)
-
-
 def create_attention_masks_by_attribute_value(
     create_mask_fn: Callable,
     attribute_name: str,
@@ -52,12 +35,7 @@ def create_attention_masks_by_attribute_value(
     *args: Any,
     **kwargs: Any,
 ) -> AttentionMasksByAttributeValue:
-    layer_patterns = set(getattr(config, "layer_types", ()))
-    attention_masks = (
-        _SinglePatternAttentionMasks(next(iter(layer_patterns)))
-        if len(layer_patterns) == 1
-        else AttentionMasksByAttributeValue()
-    )
+    attention_masks = AttentionMasksByAttributeValue()
     attribute_value_to_layer_indices: dict[Hashable, list[int]] = defaultdict(list)
     for layer_idx in range(config.num_hidden_layers):
         layer_config = config.per_layer_config[layer_idx]
