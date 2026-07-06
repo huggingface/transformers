@@ -14,7 +14,14 @@
 
 import io
 
-from ...utils import auto_docstring, is_mistral_common_available, is_soundfile_available, is_torch_available, logging
+from ...utils import (
+    auto_docstring,
+    is_mistral_common_available,
+    is_soundfile_available,
+    is_torch_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_torch_available():
@@ -83,6 +90,8 @@ class VoxtralProcessor(ProcessorMixin):
         Handles specific logic of Voxtral expected input features: audio arrays should be padded to next multiple of 480000 (duration is a multiple of 30s), see VoxtralProcessorKwargs' default audio_kwargs.
         Then mel input features are extracted and stacked along batch dimension, splitting into chunks of max_source_positions.
         """
+        requires_backends(self, ["torch"])
+
         input_features_list = []
         for audio_array in audio:
             audio_inputs = self.feature_extractor(audio_array, **kwargs)
@@ -287,6 +296,8 @@ class VoxtralProcessor(ProcessorMixin):
             format (`str`, `list[str]`, *optional*):
                 The format of the audio, necessary if is provided as `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`.
         """
+        requires_backends(self, ["mistral-common"])
+
         output_kwargs = self._merge_kwargs(
             VoxtralProcessorKwargs,
             **kwargs,
@@ -328,6 +339,7 @@ class VoxtralProcessor(ProcessorMixin):
                 load_audio_as(el, return_format="buffer", force_mono=True, sampling_rate=sampling_rate) for el in audio
             ]
         else:
+            requires_backends(self, ["soundfile"])
             audio = make_list_of_audio(audio)
             if len(audio) != len(format):
                 raise ValueError(

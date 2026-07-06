@@ -26,6 +26,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
+from ...utils.import_utils import requires
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
@@ -105,6 +106,7 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class MusicFlamingoProcessor(AudioFlamingo3Processor):
     def __init__(
