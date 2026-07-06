@@ -368,7 +368,7 @@ class Tipsv2DptFeaturesToDepth(nn.Module):
 @auto_docstring
 class Tipsv2DptPreTrainedModel(PreTrainedModel):
     config: Tipsv2DptConfig
-    base_model_prefix = "tipsv2_dpt"
+    base_model_prefix = "backbone"
     main_input_name = "pixel_values"
     input_modalities = ["image"]
     supports_gradient_checkpointing = True
