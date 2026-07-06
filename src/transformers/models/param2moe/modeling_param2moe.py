@@ -22,8 +22,8 @@ from collections.abc import Callable
 from typing import Optional
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -89,43 +89,38 @@ class Param2MoENaiveMoe(nn.Module):
 
 
 class Param2MoETopkRouter(nn.Module):
+    """
+    DeepseekV3-style grouped top-k router for Param2MoE.
+
+    Returns a 3-tuple ``(router_logits, router_scores, router_indices)`` so that
+    ``RouterParallel._prepare_output_fn`` can correctly intercept and remap
+    expert indices to local EP ranks during Expert Parallel inference.
+
+    ``self.num_experts`` is set explicitly so that ``RouterParallel`` can read it
+    via ``getattr(mod, "num_experts", None)`` without relying on config lookup.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.n_routed_experts = config.n_routed_experts
-
+        self.num_experts = config.n_routed_experts  # required by RouterParallel for EP
+        self.top_k = config.num_experts_per_tok
+        self.n_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.routed_scaling_factor = config.routed_scaling_factor
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
         self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        # raw logits: [num_tokens, n_routed_experts], float32 for numerical stability
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        return router_logits
 
-
-class Param2MoESparseMoeBlock(nn.Module):
-    """
-    A mixed expert module containing shared experts.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.experts = Param2MoENaiveMoe(config)
-        self.gate = Param2MoETopkRouter(config)
-        self.shared_experts = Param2MoEMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-        )
-        self.n_routed_experts = config.n_routed_experts
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.top_k = config.num_experts_per_tok
-
-    def route_tokens_to_experts(self, router_logits):
-        router_logits = router_logits.sigmoid()
-        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
+        # Grouped top-k routing (DeepseekV3-style with correction bias)
+        router_scores = router_logits.sigmoid()
+        router_logits_for_choice = router_scores + self.e_score_correction_bias
         group_scores = (
             router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
             .topk(2, dim=-1)[0]
@@ -140,21 +135,47 @@ class Param2MoESparseMoeBlock(nn.Module):
             .reshape(-1, self.n_routed_experts)
         )
         scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = router_logits.gather(1, topk_indices)
+        router_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        router_scores_topk = router_scores.gather(1, router_indices)
         if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
+            denominator = router_scores_topk.sum(dim=-1, keepdim=True) + 1e-20
+            router_scores_topk = router_scores_topk / denominator
+        router_scores_topk = router_scores_topk * self.routed_scaling_factor
+
+        # 3-tuple required by RouterParallel._prepare_output_fn for EP dispatch
+        return router_logits, router_scores_topk, router_indices
+
+
+class Param2MoESparseMoeBlock(nn.Module):
+    """
+    Mixed expert module containing shared experts (DeepseekV3-style MoE block).
+
+    Uses ``Param2MoETopkRouter`` which returns ``(logits, scores, indices)``.
+    Under Expert Parallel, ``RouterParallel._prepare_output_fn`` intercepts the
+    gate output and masks non-local expert scores/indices before they reach
+    ``self.experts`` — the forward signature is identical for EP and non-EP paths.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.experts = Param2MoENaiveMoe(config)
+        self.gate = Param2MoETopkRouter(config)
+        self.shared_experts = Param2MoEMLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
 
     def forward(self, hidden_states):
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states_flat = hidden_states.view(-1, hidden_states.shape[-1])
+
+        # gate returns (router_logits, router_scores, router_indices).
+        # Under EP, RouterParallel remaps indices to local range before this
+        # unpacking — no special-casing needed here.
+        _, router_scores, router_indices = self.gate(hidden_states_flat)
+
+        hidden_states = self.experts(hidden_states_flat, router_indices, router_scores).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 

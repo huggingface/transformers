@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
@@ -24,11 +26,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3MoE,
-    DeepseekV3NaiveMoe,
-    DeepseekV3TopkRouter,
-)
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3NaiveMoe
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaPreTrainedModel,
@@ -169,12 +167,96 @@ class Param2MoENaiveMoe(DeepseekV3NaiveMoe):
     pass
 
 
-class Param2MoETopkRouter(DeepseekV3TopkRouter):
-    pass
+class Param2MoETopkRouter(nn.Module):
+    """
+    DeepseekV3-style grouped top-k router for Param2MoE.
+
+    Returns a 3-tuple ``(router_logits, router_scores, router_indices)`` so that
+    ``RouterParallel._prepare_output_fn`` can correctly intercept and remap
+    expert indices to local EP ranks during Expert Parallel inference.
+
+    ``self.num_experts`` is set explicitly so that ``RouterParallel`` can read it
+    via ``getattr(mod, "num_experts", None)`` without relying on config lookup.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.n_routed_experts = config.n_routed_experts
+        self.num_experts = config.n_routed_experts  # required by RouterParallel for EP
+        self.top_k = config.num_experts_per_tok
+        self.n_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        # raw logits: [num_tokens, n_routed_experts], float32 for numerical stability
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+
+        # Grouped top-k routing (DeepseekV3-style with correction bias)
+        router_scores = router_logits.sigmoid()
+        router_logits_for_choice = router_scores + self.e_score_correction_bias
+        group_scores = (
+            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .reshape(-1, self.n_routed_experts)
+        )
+        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
+        router_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        router_scores_topk = router_scores.gather(1, router_indices)
+        if self.norm_topk_prob:
+            denominator = router_scores_topk.sum(dim=-1, keepdim=True) + 1e-20
+            router_scores_topk = router_scores_topk / denominator
+        router_scores_topk = router_scores_topk * self.routed_scaling_factor
+
+        # 3-tuple required by RouterParallel._prepare_output_fn for EP dispatch
+        return router_logits, router_scores_topk, router_indices
 
 
-class Param2MoESparseMoeBlock(DeepseekV3MoE):
-    pass
+class Param2MoESparseMoeBlock(nn.Module):
+    """
+    Mixed expert module containing shared experts (DeepseekV3-style MoE block).
+
+    Uses ``Param2MoETopkRouter`` which returns ``(logits, scores, indices)``.
+    Under Expert Parallel, ``RouterParallel._prepare_output_fn`` intercepts the
+    gate output and masks non-local expert scores/indices before they reach
+    ``self.experts`` — the forward signature is identical for EP and non-EP paths.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.experts = Param2MoENaiveMoe(config)
+        self.gate = Param2MoETopkRouter(config)
+        self.shared_experts = Param2MoEMLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
+
+    def forward(self, hidden_states):
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        hidden_states_flat = hidden_states.view(-1, hidden_states.shape[-1])
+
+        # gate returns (router_logits, router_scores, router_indices).
+        # Under EP, RouterParallel remaps indices to local range before this
+        # unpacking — no special-casing needed here.
+        _, router_scores, router_indices = self.gate(hidden_states_flat)
+
+        hidden_states = self.experts(hidden_states_flat, router_indices, router_scores).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
 
 
 class Param2MoEMLP(Qwen2MoeMLP):
