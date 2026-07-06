@@ -31,8 +31,8 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.audio_token = processor.audio_token
 
     def test_can_load_various_tokenizers(self):
-        processor = Qwen2AudioProcessor.from_pretrained(self.full_tmpdirname)
-        tokenizer = AutoTokenizer.from_pretrained(self.full_tmpdirname)
+        processor = Qwen2AudioProcessor.from_pretrained(self.tmpdirname)
+        tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
         self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     def test_tokenizer_integration(self):

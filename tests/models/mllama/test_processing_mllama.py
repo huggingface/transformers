@@ -230,6 +230,8 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_process_interleaved_images_prompts_image_splitting(self):
         processor = self.get_processor(use_tiny_ckpt=False)
+        # Read token IDs from the full processor rather than self.* attributes, which are set from the
+        # tiny processor in _setup_test_attributes and would have different IDs.
         image_token_id = processor.image_token_id
         bos_token_id = processor.tokenizer.bos_token_id
         pad_token_id = processor.tokenizer.pad_token_id
