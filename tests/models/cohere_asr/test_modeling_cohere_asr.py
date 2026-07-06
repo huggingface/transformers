@@ -176,7 +176,11 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.config_tester.run_common_tests()
 
     def test_training_loss_no_double_shift(self):
-        # forward shifts labels into decoder_input_ids, so loss must be plain CE against the labels (no second shift)
+        # contrary to the llama-like approach where labels == input_ids and ForCausalLMLoss
+        # shifts internally so logits[i] predicts labels[i+1], here forward already right-shifts labels
+        # into decoder_input_ids via shift_tokens_right (which also prepends decoder_start_token_id)
+        # (whisper legacy paradigm). The loss must therefore be a plain CE against the
+        # (unshifted) labels; using self.loss_function/ForCausalLMLoss would shift a second time.
         from torch.nn import CrossEntropyLoss
 
         config = self.model_tester.get_config()
