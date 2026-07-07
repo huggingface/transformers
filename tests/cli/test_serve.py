@@ -1868,7 +1868,9 @@ class TestToolCallUnit(unittest.TestCase):
         every closed `<tool_call>...</tool_call>` materializing immediately.
         """
         template = next(v for k, v in _RESPONSE_TEMPLATE_FALLBACKS.items() if "qwen2" in k)
-        parser = ResponseParser(template)
+        # The fed text below is the complete generated message (no separate prompt), so opt out
+        # of prefix-aware parsing explicitly with prefix="".
+        parser = ResponseParser(template, prefix="")
 
         # 1. A partial tool call (before close) yields no ToolCall.
         partial_items = response_events_to_chunks(parser.feed('<tool_call>\n{"name": "get_weather"'))
