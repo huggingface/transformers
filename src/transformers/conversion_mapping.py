@@ -1527,6 +1527,7 @@ def _build_checkpoint_conversion_mapping():
                     "k_proj.weight",
                     "v_proj.weight",
                 ],
+                operations=[Chunk(dim=0)],
             ),
             WeightConverter(
                 source_patterns="qkv_proj.bias",
@@ -1535,6 +1536,7 @@ def _build_checkpoint_conversion_mapping():
                     "k_proj.bias",
                     "v_proj.bias",
                 ],
+                operations=[Chunk(dim=0)],
             ),
         ],
         "UnlimitedOcrTextModel": [
