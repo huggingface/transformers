@@ -431,6 +431,19 @@ class ImageTransformsTester(unittest.TestCase):
         # fmt: on
         self.assertTrue(np.allclose(expected_image, pad(image, 1)))
 
+        # `padding` given as a (before, after) pair must accept NumPy integers,
+        # not only Python `int` (padding amounts are commonly computed from array shapes).
+        self.assertTrue(np.allclose(pad(image, (2, 1)), pad(image, (np.int64(2), np.int64(1)))))
+
+        # `constant_values` given as a (before, after) pair of floats must be accepted,
+        # matching its documented `Iterable[float]` type.
+        self.assertTrue(
+            np.allclose(
+                pad(image, 1, constant_values=(0.5, 1.0)),
+                pad(image, 1, constant_values=((0.5, 1.0), (0.5, 1.0))),
+            )
+        )
+
         # Test the left and right of each axis is padded (pad_left, pad_right)
         # fmt: off
         expected_image = np.array(

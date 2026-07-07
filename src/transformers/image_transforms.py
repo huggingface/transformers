@@ -721,10 +721,13 @@ def pad(
             values = ((values, values), (values, values))
         elif isinstance(values, tuple) and len(values) == 1:
             values = ((values[0], values[0]), (values[0], values[0]))
-        elif isinstance(values, tuple) and len(values) == 2 and isinstance(values[0], int):
-            values = (values, values)
         elif isinstance(values, tuple) and len(values) == 2 and isinstance(values[0], tuple):
             pass
+        elif isinstance(values, tuple) and len(values) == 2:
+            # (before, after) pair of scalars applied to both axes. Accept any
+            # scalar here (e.g. Python/NumPy ints for `padding`, floats for
+            # `constant_values`), not just Python `int`.
+            values = (values, values)
         else:
             raise ValueError(f"Unsupported format: {values}")
 
