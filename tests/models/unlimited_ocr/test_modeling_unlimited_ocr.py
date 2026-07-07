@@ -123,7 +123,6 @@ class UnlimitedOcrVisionText2TextModelTester(VLMModelTester):
 class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = UnlimitedOcrVisionText2TextModelTester
     test_all_params_have_gradient = False
-    test_torch_exportable = False
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
