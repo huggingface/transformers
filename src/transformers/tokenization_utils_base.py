@@ -1409,6 +1409,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         """
         return self.convert_tokens_to_ids(self.all_special_tokens)
 
+    @property
     def _set_model_specific_special_tokens(self, special_tokens: dict[str, str | AddedToken]):
         """
         Adds new model-specific special tokens (e.g., for multimodal models).
