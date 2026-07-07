@@ -192,5 +192,12 @@ class MusicFlamingoProcessor(ProcessorMixin):
     def audio_token_ids(self):
         return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
 
+    # Alias for BC
+    @property
+    def audio_ids(self):
+        """Deprecated alias for `audio_token_ids`; will be removed in a future release."""
+        logger.warning_once("`audio_ids` is deprecated; please use `audio_token_ids` instead.")
+        return self.audio_token_ids
+
 
 __all__ = ["MusicFlamingoProcessor"]
