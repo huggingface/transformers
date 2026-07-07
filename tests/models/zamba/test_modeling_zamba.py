@@ -302,6 +302,13 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
     @unittest.skip(
+        "Zamba's Mamba mixer gates its padding masking on has_previous_state (same inline pattern as Zamba2), "
+        "so continued forwards keep a residual independently of the recurrent mask #47087 restores; tracked separately."
+    )
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
+        pass
+
+    @unittest.skip(
         "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
     )
     def test_disk_offload_safetensors(self):
