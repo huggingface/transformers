@@ -1278,7 +1278,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
          to either:
              - A module class (e.g., `LlamaDecoderLayer`), using default index conventions:
                  * index = 0 for a key that contains "hidden_states" (e.g. "hidden_states" or "vision_hidden_states")
-                 * index=  1 for any other key: "attentions", "cross_attentions", etc.
+                 * index = 1 for any other key: "attentions", "cross_attentions", etc.
              - A class name as a string, when the class is not importable at declaration time.
              - An `OutputRecorder(...)` with `target_class`, optional `index`, and `layer_name`.
              - A list of any of the above, to record outputs from several module types under one key.

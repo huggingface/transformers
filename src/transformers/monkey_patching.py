@@ -347,7 +347,7 @@ def patch_output_recorders(model: nn.Module) -> None:
         # When it is present, _can_record_outputs is a dict w/ output names as keys and recorder as values. A recorder
         # is an OutputRecorder, a module class or the name of one. Sometimes, there is a list of recorders instead.
         output_to_recorders = getattr(submodule, "_can_record_outputs", None)
-        if isinstance(output_to_recorders, dict):
+        if output_to_recorders is not None:
             for output, recorders in output_to_recorders.items():
                 is_single = not isinstance(recorders, list)
                 recorders = [recorders] if is_single else list(recorders)
