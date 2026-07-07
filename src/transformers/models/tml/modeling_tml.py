@@ -36,8 +36,19 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.import_utils import is_causal_conv1d_available
+from ...utils.output_capturing import capture_outputs
 from .configuration_tml import TmlAudioConfig, TmlConfig, TmlTextConfig, TmlVisionConfig
+
+
+if is_causal_conv1d_available():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+else:
+    causal_conv1d_update, causal_conv1d_fn = None, None
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(
@@ -105,29 +116,6 @@ class TmlRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class TmlShortConvolution(nn.Module):
-    """Causal depthwise short convolution with a residual connection, `y = conv(x) + x`
-    (sglang `ShortConvolution` with `use_residual=True` and no activation).
-
-    NOTE: stateless for now — cached decoding needs the last `kernel_size - 1`
-    pre-convolution inputs carried in the cache.
-    """
-
-    def __init__(self, hidden_size: int, kernel_size: int):
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.kernel_size = kernel_size
-        self.weight = nn.Parameter(torch.empty(hidden_size, 1, kernel_size))
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = F.pad(hidden_states, (self.kernel_size - 1, 0))
-        conv_out = F.conv1d(hidden_states, self.weight, groups=self.hidden_size)
-        return conv_out.transpose(1, 2) + residual
-
 
 class TmlRelativeLogits(nn.Module):
     """hidden states conditioned relative position bias. `proj` is a trained bank of bias-vs-distance profiles; each token's
@@ -494,6 +482,123 @@ class TmlMoE(nn.Module):
         return topk_indices, topk_weights, shared_gammas
 
 
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
+
+
+def torch_causal_conv1d_update(
+    hidden_states,
+    conv_state,
+    weight,
+    bias=None,
+    activation=None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = F.silu(out[:, :, -seq_len:])
+    out = out.to(hidden_states.dtype)
+    return out
+
+
+class TmlShortConvolution(nn.Module):
+    def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int):
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.activation = None # just hardcode for now
+
+        self.conv1d = nn.Conv1d(
+            in_channels=hidden_size,
+            out_channels=hidden_size,
+            kernel_size=conv_kernel_size,
+            groups=hidden_size,
+            padding=conv_kernel_size - 1,
+            bias=False,
+        )
+
+        self.causal_conv1d_fn = causal_conv1d_fn
+        self.causal_conv1d_update = causal_conv1d_update or torch_causal_conv1d_update
+
+        if not (causal_conv1d_fn is not None and causal_conv1d_update is not None):
+            logger.warning_once(
+                "The fast path is not available because one of the required library is not installed. Falling back to "
+                "torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and"
+                " https://github.com/Dao-AILab/causal-conv1d"
+            )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        # Keep the computation in fp32
+        orig_dtype = hidden_states.dtype
+        hidden_states = hidden_states.float()
+
+        residual = hidden_states
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        seq_len = hidden_states.shape[1]
+        hidden_states = hidden_states.transpose(1, 2)
+
+        # We have cached `conv_state` to continue from. The two cached modes
+        # (single-token decode and chunk-tokens continuation) share the state read here; they only
+        # diverge in how the conv input is assembled and which kernel consumes the states below
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+
+        # getting projected states from cache if it exists
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
+
+        if use_precomputed_states and seq_len == 1:
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+            hidden_states = self.causal_conv1d_update(
+                hidden_states,
+                conv_state,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
+            )
+        else:
+            # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
+            if use_precomputed_states:
+                # Cached chunked-tokens decode: prepend the cached conv context so the causal conv
+                # sees the correct left-context rather than zero-padding. Dropped from the output
+                # at the end of this branch.
+                hidden_states = torch.cat([conv_state, hidden_states], dim=-1)
+            if cache_params is not None:
+                new_conv_state = F.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
+                cache_params.update_conv_state(new_conv_state, self.layer_idx)
+            if self.causal_conv1d_fn is not None:
+                hidden_states = self.causal_conv1d_fn(
+                    x=hidden_states,
+                    weight=self.conv1d.weight.squeeze(1),
+                    bias=self.conv1d.bias,
+                    activation=self.activation,
+                    seq_idx=kwargs.get("seq_idx"),
+                )
+            else:
+                hidden_states = self.conv1d(hidden_states)[:, :, : hidden_states.shape[-1]]
+            if use_precomputed_states:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = (hidden_states + residual).to(dtype=orig_dtype)
+        return hidden_states
+
+
 class TmlDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: TmlTextConfig, layer_idx: int):
         super().__init__()
@@ -509,8 +614,8 @@ class TmlDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = TmlRMSNorm(config.hidden_size, config.rms_norm_eps)
         # Maybe use_conv is always `True`, check it!
         self.layer_type = config.layer_types[layer_idx]
-        self.attn_sconv = TmlShortConvolution(config.hidden_size, config.sconv_kernel_size)
-        self.mlp_sconv = TmlShortConvolution(config.hidden_size, config.sconv_kernel_size)
+        self.attn_sconv = TmlShortConvolution(config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx)
+        self.mlp_sconv = TmlShortConvolution(config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx)
 
     def forward(
         self,
@@ -522,6 +627,7 @@ class TmlDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        hidden_states = self.attn_sconv(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -558,6 +664,7 @@ class TmlPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = False
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
+    _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv"]
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range

@@ -164,8 +164,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"attn\.k_sconv", target_patterns=r"self_attn.k_sconv"),
             WeightRenaming(source_patterns=r"attn\.v_sconv", target_patterns=r"self_attn.v_sconv"),
             WeightRenaming(source_patterns=r"attn\.rel_logits_proj", target_patterns=r"self_attn.rel_logits_proj"),
-            WeightRenaming(source_patterns=r"mlp_norm.weight", target_patterns=r"post_attention_layernorm.weight"),
-            WeightRenaming(source_patterns=r"attn_norm.weight", target_patterns=r"input_layernorm.weight"),
+            WeightRenaming(source_patterns=r"attn_sconv", target_patterns=r"attn_sconv.conv1d"),
+            WeightRenaming(source_patterns=r"mlp_sconv", target_patterns=r"mlp_sconv.conv1d"),
+            WeightRenaming(source_patterns=r"mlp_norm ", target_patterns=r"post_attention_layernorm "),
+            WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm "),
         ],
         "gemma4_unified": [
             WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),

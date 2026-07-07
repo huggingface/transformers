@@ -46,8 +46,8 @@ class TmlTextConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     max_position_embeddings: int = 131072
     rms_norm_eps: float = 1e-6
-    sconv_kernel_size: int = 4
-    mlp_layer_types: list[str] | None = None
+    conv_kernel_size: int = 4
+    mlp_layer_types: list[int] | None = None
     intermediate_size: int = 24576
     hidden_act: str = "silu"
     # MoE
