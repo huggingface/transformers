@@ -507,7 +507,8 @@ class MtpLayerStack(PreTrainedModel):
 
         # Get the number of layers in the checkpoint
         num_mtp_layers = main_model.config.get_text_config().num_mtp_layers
-        with ContextManagers(cls.get_init_context(main_model.config.dtype)):
+        contexts = cls.get_init_context(main_model.config.dtype, False, False, None)
+        with ContextManagers(contexts):
             mtp_model = cls(main_model, num_mtp_layers)
 
         # Now, let's scan the index to obtain the mtp-specific files and weights
