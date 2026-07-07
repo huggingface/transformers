@@ -1048,14 +1048,6 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
-    # The compressor's rolling-window buffer / compressed-entries / overlap state
-    # lives on the per-layer cache (:class:`DeepseekV4HCACache` /
-    # :class:`DeepseekV4CSACache`) and isn't compatible with :class:`StaticCache`
-    # — that path would hand the compressor a :class:`StaticSlidingWindowLayer`
-    # with no `store_compression_weights` method. Disabling fullgraph compile
-    # keeps generation tests on the dynamic cache build that does dispatch to
-    # V4's own cache layers.
-    _can_compile_fullgraph = False
     _keep_in_fp32_modules_strict = [
         "attn_hc",
         "ffn_hc",
