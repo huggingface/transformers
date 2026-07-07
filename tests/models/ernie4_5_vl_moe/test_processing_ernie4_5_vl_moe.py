@@ -296,7 +296,7 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             min_frames=3,  # default is 16
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 720)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 768)
 
         # Load with `fps` arg
         fps = 1

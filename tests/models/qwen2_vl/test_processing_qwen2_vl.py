@@ -189,7 +189,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 360)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 384)
 
         # Load with `fps` arg
         fps = 1
@@ -201,7 +201,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 360)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 384)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):

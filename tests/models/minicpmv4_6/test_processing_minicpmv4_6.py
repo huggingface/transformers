@@ -278,7 +278,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         # 3 frames are inferred from input video's length and FPS, so can be hardcoded
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 129472)
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 14112)
 
         # When `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
         fps = 10
@@ -295,7 +295,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 1424192)
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 155232)
 
         # Load without any arg should load the whole video
         out_dict_with_video = processor.apply_chat_template(
@@ -306,7 +306,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 129472)
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 14112)
 
         # Load video as a list of frames (i.e. images).
         # NOTE: each frame should have same size because we assume they come from one video
