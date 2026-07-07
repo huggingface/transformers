@@ -369,7 +369,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "<video>\nAre there any cyan objects that enter the scene?\nno",
             "<video>\nAre there any red spheres that enter the scene?\nno",
         ]
-        frames = torch.ones((4, 448, 448, 3), dtype=torch.float32)
+        frames = torch.ones((4, 20, 20, 3), dtype=torch.float32)
         videos = [frames, frames]
 
         processor = self.get_processor()
@@ -378,7 +378,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
             padding=True,
             videos=videos[:batch_size],
-            videos_kwargs={"size": (448, 448)},
+            videos_kwargs={"size": (20, 20)},
         )
 
         actual_num_frames = inputs.pixel_values.shape[0]
