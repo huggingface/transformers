@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
@@ -20,6 +19,10 @@ from .base import HfQuantizer
 
 if is_torch_available():
     import torch
+
+    from ..core_model_loading import WeightConverter
+    from ..integrations.compressed_tensors import DecompressExperts
+
 
 logger = logging.get_logger(__name__)
 
@@ -160,75 +163,116 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         return True
 
     def get_weight_conversions(self):
-        """Reshape the FP8 ``weight_scale`` for plain ``nn.Linear`` modules.
+        """Return the weight conversions for the checkpoint.
 
-        The weight stays in FP8; we only reshape ``weight_scale`` (keeping the
-        checkpoint name) so the layer runs through :class:`CompressedTensorsFP8Linear`.
+        FP8 kernel path: reshape the FP8 ``weight_scale`` for plain ``nn.Linear``
+        modules. The weight stays in FP8; we only reshape ``weight_scale`` (keeping
+        the checkpoint name) so the layer runs through
+        :class:`CompressedTensorsFP8Linear`.
+
+        Default compressed-tensors path: dequantize MoE experts through
+        :class:`DecompressExperts`.
         """
-        if not self.use_fp8_kernel or not self.pre_quantized:
-            return []
+        if self.use_fp8_kernel and self.pre_quantized:
+            from ..integrations.compressed_tensors_fp8 import CompressedTensorsScaleConvert
 
-        from ..core_model_loading import WeightConverter
-        from ..integrations.compressed_tensors_fp8 import CompressedTensorsScaleConvert
+            return [
+                WeightConverter(
+                    source_patterns=["weight_scale"],
+                    target_patterns=["weight_scale"],
+                    operations=[CompressedTensorsScaleConvert()],
+                ),
+            ]
 
-        return [
+        # Only models that have already been quantized can be loaded atm, so we can
+        # assume that if `hasattr(self, hf_quantizer)` and `has_moe_conversion(self)` and `is_moe_proj_in_config_scheme`
+        # then it needs special dequantization for MoE projections
+        # NOTE: MoE conversion should happen AFTER decompression! Already hardcoded in conversion
+        dequant_conversions = [
             WeightConverter(
-                source_patterns=["weight_scale"],
-                target_patterns=["weight_scale"],
-                operations=[CompressedTensorsScaleConvert()],
+                source_patterns=[
+                    r".weight_packed$",
+                    r".weight_scale$",
+                    r".weight_shape$",
+                ],
+                target_patterns=r"weight",
+                operations=[DecompressExperts(self)],
             ),
         ]
+        return dequant_conversions
 
     def update_weight_conversions(self, weight_conversions):
-        """Walk the model-provided conversion pipeline so FP8 scales are handled
-        alongside their weights.
+        """Walk the model-provided conversion pipeline so scales/packed weights are
+        handled alongside their weights.
 
-        Plain ``nn.Linear`` weights are handled by the generic converter from
-        :meth:`get_weight_conversions` (kept in FP8 by default, or dequantized to
-        BF16 when ``dequantize=True``).
+        FP8 kernel path: plain ``nn.Linear`` weights are handled by the generic
+        converter from :meth:`get_weight_conversions` (kept in FP8 by default, or
+        dequantized to BF16 when ``dequantize=True``). For models whose converters
+        *merge* weights (e.g. MoE experts via a ``MergeModulelist`` / concat op),
+        the merged tensor cannot be an FP8 ``nn.Linear`` and is therefore not
+        replaced by :class:`CompressedTensorsFP8Linear`. For each such converter we
+        anchor the weight patterns, attach the sibling ``*.weight_scale`` sources to
+        the same bucket, and prepend a :class:`CompressedTensorsFp8Dequantize` op so
+        the per-expert (weight, scale) pairs are folded into BF16 *before* the merge
+        / concat ops collapse the per-expert structure.
 
-        For models whose converters *merge* weights (e.g. MoE experts via a
-        ``MergeModulelist`` / concat op), the merged tensor cannot be an FP8
-        ``nn.Linear`` and is therefore not replaced by
-        :class:`CompressedTensorsFP8Linear`. For each such converter we anchor the
-        weight patterns, attach the sibling ``*.weight_scale`` sources to the same
-        bucket, and prepend a :class:`CompressedTensorsFp8Dequantize` op so the
-        per-expert (weight, scale) pairs are folded into BF16 *before* the merge /
-        concat ops collapse the per-expert structure.
+        Default compressed-tensors path: MoE expert converters get their packed
+        weight / scale / shape sources attached and a :class:`DecompressExperts` op
+        prepended so the experts are decompressed before any merge.
         """
-        if not self.use_fp8_kernel or not self.pre_quantized:
-            return weight_conversions + self.get_weight_conversions()
+        if self.use_fp8_kernel and self.pre_quantized:
+            from ..integrations.compressed_tensors_fp8 import CompressedTensorsFp8Dequantize
 
-        from ..core_model_loading import WeightConverter
-        from ..integrations.compressed_tensors_fp8 import CompressedTensorsFp8Dequantize
+            updated: list = []
+            for conv in weight_conversions:
+                # Only WeightConverter has ``.operations`` to extend; WeightRenaming
+                # rules just pass through untouched.
+                if not isinstance(conv, WeightConverter):
+                    updated.append(conv)
+                    continue
+
+                weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
+                if weight_sources:
+                    logger.warning_once(
+                        "Some FP8 weights (e.g. merged MoE experts) cannot be kept in FP8 because they are "
+                        "fused into a single parameter; they will be dequantized to the model dtype. Only "
+                        "dense / attention / router layers benefit from the FP8 kernels."
+                    )
+                    anchored_weight = [p + "$" for p in weight_sources]
+                    scale_sources = [p[: -len(".weight")] + ".weight_scale$" for p in weight_sources]
+                    other = [p for p in conv.source_patterns if not p.endswith(".weight")]
+                    new_sources = anchored_weight + scale_sources + other
+                    new_ops = [CompressedTensorsFp8Dequantize()] + list(conv.operations)
+                    conv = WeightConverter(
+                        source_patterns=new_sources,
+                        target_patterns=conv._original_target_patterns,
+                        operations=new_ops,
+                    )
+                updated.append(conv)
+
+            # Generic fallback for plain nn.Linear FP8 weights (kept in FP8).
+            updated.extend(self.get_weight_conversions())
+            return updated
 
         updated: list = []
         for conv in weight_conversions:
-            # Only WeightConverter has ``.operations`` to extend; WeightRenaming
-            # rules just pass through untouched.
-            if not isinstance(conv, WeightConverter):
+            # Only WeightConverter for experts have ``.operations`` to extend with the dequant op
+            if not isinstance(conv, WeightConverter) or any("experts" not in p for p in conv.source_patterns):
                 updated.append(conv)
                 continue
-
             weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
             if weight_sources:
-                logger.warning_once(
-                    "Some FP8 weights (e.g. merged MoE experts) cannot be kept in FP8 because they are "
-                    "fused into a single parameter; they will be dequantized to the model dtype. Only "
-                    "dense / attention / router layers benefit from the FP8 kernels."
-                )
-                anchored_weight = [p + "$" for p in weight_sources]
-                scale_sources = [p[: -len(".weight")] + ".weight_scale$" for p in weight_sources]
+                packed_weight = [p + "_packed$" for p in weight_sources]
+                scale_sources = [p + "_scale$" for p in weight_sources]
+                shape_sources = [p + "_shape$" for p in weight_sources]
                 other = [p for p in conv.source_patterns if not p.endswith(".weight")]
-                new_sources = anchored_weight + scale_sources + other
-                new_ops = [CompressedTensorsFp8Dequantize()] + list(conv.operations)
+                new_sources = packed_weight + scale_sources + shape_sources + other
+                new_ops = [DecompressExperts(self)] + list(conv.operations)
                 conv = WeightConverter(
                     source_patterns=new_sources,
                     target_patterns=conv._original_target_patterns,
                     operations=new_ops,
                 )
             updated.append(conv)
-
-        # Generic fallback for plain nn.Linear FP8 weights (kept in FP8).
         updated.extend(self.get_weight_conversions())
         return updated
