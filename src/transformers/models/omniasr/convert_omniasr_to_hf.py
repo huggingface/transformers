@@ -85,7 +85,7 @@ from transformers import (
     OmniASRForConditionalGeneration,
     OmniASRForCTC,
     OmniASRLLMConfig,
-    OmniASRModel,
+    OmniASRSpeechEncoder,
     logging,
 )
 from transformers.models.omniasr.processing_omniasr import OmniASRProcessor
@@ -97,24 +97,27 @@ logger = logging.get_logger(__name__)
 
 
 # TODO change to state dict mapping like in newer models
-encoder_convert_list = [
-    # OmniASRFeatureEncoder
-    ("encoder_frontend.feature_extractor.layers", "encoder.feature_extractor.conv_layers"),
-    # OmniASRFeatureProjection
-    ("encoder_frontend.post_extract_layer_norm", "encoder.feature_projection.layer_norm"),
-    ("encoder_frontend.model_dim_proj", "encoder.feature_projection.projection"),
-    # OmniASREncoder
-    ("encoder_frontend.pos_encoder.conv", "encoder.encoder.pos_conv_embed.conv"),
-    ("encoder.layers", "encoder.encoder.layers"),
-    # Order matters: specific patterns before general ones
-    ("self_attn_layer_norm", "layer_norm"),
-    ("self_attn.output_proj", "attention.out_proj"),
-    ("self_attn", "attention"),  # General mapping for all attention projections (k_proj, q_proj, v_proj)
-    ("ffn_layer_norm", "final_layer_norm"),
-    ("ffn.inner_proj", "feed_forward.intermediate_dense"),
-    ("ffn.output_proj", "feed_forward.output_dense"),
-    ("encoder.layer_norm", "encoder.encoder.layer_norm"),
-]
+def get_encoder_convert_list(target_attr="encoder"):
+    # `target_attr` is the HF attribute path holding the audio encoder:
+    # "encoder" for OmniASRForCTC/OmniASRSpeechEncoder, "model.encoder" for OmniASRForConditionalGeneration.
+    return [
+        # OmniASRFeatureEncoder
+        ("encoder_frontend.feature_extractor.layers", f"{target_attr}.feature_extractor.conv_layers"),
+        # OmniASRFeatureProjection
+        ("encoder_frontend.post_extract_layer_norm", f"{target_attr}.feature_projection.layer_norm"),
+        ("encoder_frontend.model_dim_proj", f"{target_attr}.feature_projection.projection"),
+        # OmniASREncoder
+        ("encoder_frontend.pos_encoder.conv", f"{target_attr}.encoder.pos_conv_embed.conv"),
+        ("encoder.layers", f"{target_attr}.encoder.layers"),
+        # Order matters: specific patterns before general ones
+        ("self_attn_layer_norm", "layer_norm"),
+        ("self_attn.output_proj", "attention.out_proj"),
+        ("self_attn", "attention"),  # General mapping for all attention projections (k_proj, q_proj, v_proj)
+        ("ffn_layer_norm", "final_layer_norm"),
+        ("ffn.inner_proj", "feed_forward.intermediate_dense"),
+        ("ffn.output_proj", "feed_forward.output_dense"),
+        ("encoder.layer_norm", f"{target_attr}.encoder.layer_norm"),
+    ]
 
 
 ctc_convert_list = [
@@ -122,18 +125,21 @@ ctc_convert_list = [
 ]
 
 llm_convert_list = [
-    ("final_proj", "language_model.lm_head"),
-    ("encoder_proj", "multi_modal_projector"),
+    # `final_proj` -> `lm_head` stays top-level on OmniASRForConditionalGeneration, everything else lives
+    # under the `OmniASRModel` base model (exposed as `model` on OmniASRForConditionalGeneration).
+    ("final_proj", "lm_head"),
+    ("encoder_proj", "model.multi_modal_projector"),
+    ("lang_embeddings", "model.lang_embeddings"),
     # LLaMA decoder - order matters! More specific patterns first
-    ("llama_decoder.layers", "language_model.model.layers"),
+    ("llama_decoder.layers", "model.language_model.layers"),
     ("self_attn.output_proj", "self_attn.o_proj"),
     ("ffn.gate_proj", "mlp.gate_proj"),
     ("ffn.inner_proj", "mlp.up_proj"),
     ("ffn.output_proj", "mlp.down_proj"),
     ("self_attn_layer_norm", "input_layernorm"),
     ("ffn_layer_norm", "post_attention_layernorm"),
-    ("llama_decoder.layer_norm", "language_model.model.norm"),
-    ("text_frontend", "language_model.model.embed_tokens"),
+    ("llama_decoder.layer_norm", "model.language_model.norm"),
+    ("text_frontend", "model.language_model.embed_tokens"),
 ]
 
 
@@ -186,13 +192,13 @@ def _convert_model(original_model, hf_model, encoder_convert_list, decoder_conve
         head_dim = 512
         for k in list(state_dict.keys()):
             # Only permute decoder Q/K weights, not encoder weights
-            if "language_model.model.layers" in k and ".self_attn.q_proj.weight" in k:
+            if "language_model.layers" in k and ".self_attn.q_proj.weight" in k:
                 weight = state_dict[k]
                 dim1, dim2 = weight.shape
                 state_dict[k] = weight.view(num_heads, head_dim // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
                 if verbose:
                     print(f"Permuted {k} for RoPE: {weight.shape} -> {state_dict[k].shape}")
-            elif "language_model.model.layers" in k and ".self_attn.k_proj.weight" in k:
+            elif "language_model.layers" in k and ".self_attn.k_proj.weight" in k:
                 weight = state_dict[k]
                 dim1, dim2 = weight.shape
                 state_dict[k] = (
@@ -479,7 +485,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     elif "W2V" in model_card:
         # TODO not working
         config = OmniASREncoderConfig(**encoder_config.to_dict())
-        hf_model = OmniASRModel(config)
+        hf_model = OmniASRSpeechEncoder(config)
     else:
         raise ValueError(f"Unsupported model type, got {model_card}")
     hf_model.to(device).to(dtype)
@@ -493,8 +499,12 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     # TODO check w2v2 only model
     if "CTC" in model_card:
         decoder_convert_list = ctc_convert_list
+        encoder_convert_list = get_encoder_convert_list(target_attr="encoder")
     elif "LLM" in model_card:
         decoder_convert_list = llm_convert_list
+        encoder_convert_list = get_encoder_convert_list(target_attr="model.encoder")
+    else:
+        encoder_convert_list = get_encoder_convert_list(target_attr="encoder")
     hf_model = _convert_model(original_model, hf_model, encoder_convert_list, decoder_convert_list)
     hf_model.remove_weight_norm()
 

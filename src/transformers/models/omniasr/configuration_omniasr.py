@@ -215,13 +215,13 @@ class OmniASREncoderConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import OmniASREncoderConfig, OmniASREncoder
+    >>> from transformers import OmniASREncoderConfig, OmniASRSpeechEncoder
 
     >>> # Initializing an OmniASR encoder configuration
     >>> configuration = OmniASREncoderConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = OmniASREncoder(configuration)
+    >>> model = OmniASRSpeechEncoder(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
