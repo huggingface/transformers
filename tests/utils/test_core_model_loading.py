@@ -261,7 +261,8 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                                           |  +-- w1 (2) + w3 (2) concatenated
                                           +-- num_experts
 
-        The conversion (without FSDP) is: load all expert w1/w3 tensors,
+        The conversion (without FSDP) is: load all expert w1/w3 tensors
+        (if TP, loads all experts but each experts is sharded across ranks. If EP, loads only the experts this rank owns),
         MergeModulelist(dim=0) stacks experts, Concatenate(dim=1) joins w1+w3.
 
         With FSDP, Shard(0) splits the expert dim across ranks. Rank 0 owns
