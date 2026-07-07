@@ -82,18 +82,20 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_inputs.append(np.random.randint(255, size=(h, w, 3), dtype=np.uint8))
 
         # Idefics3 checkpoints aren't supported on purpose. Idefics3 encodes special row/col
-        # tokens are several token ids ebcause they aren't added in `special_token_ids`. Thus
+        # tokens as several token ids because they aren't added in `special_token_ids`. Thus
         # we can't correctly infer which tokens in input ids are used as placeholders for image/row/col!
+        # Use the tiny SmolVLM processor (same architecture) instead of loading the full model each iteration.
+        base_processor = self.processor_class.from_pretrained(
+            "hf-internal-testing/tiny-processor-smolvlm",
+            add_bos_token=True,
+            add_eos_token=False,
+            padding_side="left",
+            image_seq_len=2,
+        )
         for do_image_splitting in [False, True]:
             with self.subTest(do_image_splitting=do_image_splitting):
-                processor = self.processor_class.from_pretrained(
-                    "HuggingFaceTB/SmolVLM-256M-Instruct",
-                    add_bos_token=True,
-                    add_eos_token=False,
-                    padding_side="left",
-                    image_seq_len=2,
-                    do_image_splitting=do_image_splitting,
-                )
+                processor = base_processor
+                processor.image_processor.do_image_splitting = do_image_splitting
 
                 text = [f"This is an image {processor.image_token}"] * len(image_inputs)
                 inputs = processor(
