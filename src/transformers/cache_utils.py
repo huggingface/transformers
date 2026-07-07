@@ -1492,7 +1492,7 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dic
     if hasattr(config, "num_kv_shared_layers"):
         layer_types = layer_types[: -config.num_kv_shared_layers]
 
-    # In this case,
+    # In this case, we need to pass the config as well to properly __init__ the layer classes
     if "heavily_compressed_attention" in layer_types or "compressed_sparse_attention" in layer_types:
         layer_kwargs["config"] = config
 
