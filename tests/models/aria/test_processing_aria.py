@@ -33,8 +33,8 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Optionally: prepare_processor_dict() for custom processor kwargs.
 
     processor_class = AriaProcessor
+    # Tiny processor created with make_tiny_processor.py from "m-ric/Aria_hf_2"
     tiny_model_id = "hf-internal-testing/tiny-processor-aria"
-    model_id = "m-ric/Aria_hf_2"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
