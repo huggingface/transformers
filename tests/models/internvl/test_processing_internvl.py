@@ -32,6 +32,8 @@ if is_torch_available():
 class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InternVLProcessor
     videos_input_name = "pixel_values"
+    # Tiny processor created with make_tiny_processor.py from "OpenGVLab/InternVL3-1B-hf"
+    tiny_model_id = "hf-internal-testing/tiny-processor-internvl"
 
     @classmethod
     def _setup_image_processor(cls):
@@ -61,16 +63,6 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
         )
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        return tokenizer_class.from_pretrained("OpenGVLab/InternVL3-1B-hf", padding_side="left")
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
 
     @unittest.skip("InternVL requires text")
     def test_video_processor_defaults(self):
@@ -382,6 +374,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(
             text=texts[:batch_size],
             return_tensors="pt",
+            padding=True,
             videos=videos[:batch_size],
             videos_kwargs={"size": (448, 448)},
         )

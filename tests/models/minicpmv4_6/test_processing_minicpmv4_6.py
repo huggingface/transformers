@@ -35,11 +35,16 @@ if is_torch_available():
 @require_torchvision
 class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MiniCPMV4_6Processor
-    model_id = "openbmb/MiniCPM-V-4_6"
+    # Use tiny repos to avoid loading the full 248k-vocab tokenizer (~308 MB)
+    # Tiny processor created with make_tiny_processor.py from "openbmb/MiniCPM-V-4_6"
+    tiny_model_id = "hf-internal-testing/tiny-processor-minicpmv4_6"
 
     video_text_kwargs_max_length = 600
     video_text_kwargs_override_max_length = 550
     video_unstructured_max_length = 600
+    # Default 76 is too small: MiniCPM expands <image> to ~70 tokens, then with surrounding text tokens
+    # we exceed 76, truncation cuts through image tokens, and _check_special_mm_tokens raises a mismatch error.
+    image_unstructured_max_length = 100
 
     @classmethod
     def _setup_test_attributes(cls, processor):

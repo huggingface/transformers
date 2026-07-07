@@ -34,14 +34,12 @@ if is_torch_available():
 @require_torchvision
 class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3VLProcessor
-    model_id = "Qwen/Qwen3-VL-235B-A22B-Instruct"
+    # Use tiny repos to avoid loading the full 151k-vocab tokenizer (~327 MB)
+    # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen3-VL-235B-A22B-Instruct"
+    tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_vl"
     video_unstructured_max_length = 870
     video_text_kwargs_max_length = 870
     video_text_kwargs_override_max_length = 870
-
-    @classmethod
-    def _setup_from_pretrained(cls, model_id, **kwargs):
-        return super()._setup_from_pretrained(model_id, patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28, **kwargs)
 
     @classmethod
     def _setup_test_attributes(cls, processor):
