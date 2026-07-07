@@ -136,6 +136,7 @@ class DtensorShardOperation:
 
             has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
             # finally fetch from the disk only the slices
+            # finally fetch from the disk only the slices
             if has_strided_shard:
                 # Multi-interval dim: read each piece separately, then concatenate.
                 return self._slice_and_cat(source, intervals_by_dim, device, dtype)
