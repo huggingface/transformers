@@ -378,7 +378,7 @@ class MtpLayerStack(PreTrainedModel):
         )
 
         # Embedding/head/rotary are shared with the main model
-        self.tie_with_main_model()
+        self.tie_with_main_model(main_model)
 
         self.post_init()
 
