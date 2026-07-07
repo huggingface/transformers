@@ -178,30 +178,28 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): "image [383, 87, 497, 171]\ntitle [333",
+                ("cpu", None): "image [383, 87, 497, 171]\ntitle [333",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_torch_accelerator
-    def test_small_model_integration_test_document_parsing_grounding(self):
+    def test_small_model_integration_test_document_parsing_no_skip_special_tokens(self):
         model = UnlimitedOcrForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device).eval()
         image = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
             )
         )
-        inputs = self.processor(
-            images=image,
-            text="<image>document parsing.",
-            return_tensors="pt",
-        ).to(model.device)
+        inputs = self.processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
         with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
             generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False)
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): "<|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>title [333",
+                ("cpu", None): "<|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>title [333",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
@@ -238,6 +236,10 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                     "image [383, 87, 497, 171]\ntitle [333",
                     "header [53, 23, 365, 41]Advanced Template and Styl",
                 ],
+                ("cpu", None): [
+                    "image [383, 87, 497, 171]\ntitle [333",
+                    "header [53, 23, 365, 41]Advanced Template and Styl",
+                ],
             }
         ).get_expectation()
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
@@ -270,6 +272,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): "<PAGE>image [382, 87, 489, 174]\n",
+                ("cpu", None): "<PAGE>image [382, 87, 489, 174]\n",
             }
         ).get_expectation()
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
