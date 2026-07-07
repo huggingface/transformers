@@ -1409,7 +1409,52 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         """
         return self.convert_tokens_to_ids(self.all_special_tokens)
 
-    def _set_model_specific_special_tokens(self, special_tokens: dict[str, str | AddedToken]):
+    def _set_model_specific_special_tokens(self, special_tokens):
+        """
+        Adds model-specific special tokens.
+
+        Supports both:
+        - New format:
+                {
+                    "image_token": "<image>",
+                    "audio_token": "<audio>"
+                }
+
+        - Legacy format:
+                ["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"]
+        """
+
+        # ------------------------------
+        # Backward compatibility
+        # ------------------------------
+        if isinstance(special_tokens, list):
+            special_tokens = {
+                f"extra_special_token_{i}": token
+                for i, token in enumerate(special_tokens)
+            }
+
+        if not isinstance(special_tokens, dict):
+            raise TypeError(
+                f"`special_tokens` must be a dict or list, "
+                f"but got {type(special_tokens).__name__}."
+            )
+
+        # Register new token names
+        self.SPECIAL_TOKENS_ATTRIBUTES.extend(
+            key
+            for key in special_tokens.keys()
+            if key not in self.SPECIAL_TOKENS_ATTRIBUTES
+        )
+
+        # Store tokens
+        for key, value in special_tokens.items():
+            if isinstance(value, (str, AddedToken)):
+                self._special_tokens_map[key] = value
+            else:
+                raise TypeError(
+                    f"Special token '{key}' must be a str or AddedToken, "
+                    f"got {type(value).__name__}."
+                )
         """
         Adds new model-specific special tokens (e.g., for multimodal models).
 
