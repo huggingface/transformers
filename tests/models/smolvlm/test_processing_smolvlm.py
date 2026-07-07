@@ -63,15 +63,16 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
-        # max_image_tiles=1 forces 1×1 tile split regardless of image size, avoiding the
-        # 4×4=17-tile splits that 64×64 square images otherwise trigger (too slow in splitting tests).
-        # max_image_size stays at 512 so test_process_interleaved_images_prompts_* shapes are correct.
-        return image_processor_class.from_pretrained(cls.tiny_model_id, max_image_tiles=1)
+        # size={"longest_edge": 1024} = 2×512 → 2×2 tile split + 1 global = 5 tiles for square images,
+        # instead of the default 2048 which gives 4×4=17 tiles (too slow in splitting tests).
+        # max_image_size stays at 512 so tile shapes in test_process_interleaved_images_prompts_* are correct.
+        return image_processor_class.from_pretrained(cls.tiny_model_id, size={"longest_edge": 1024})
 
     @classmethod
     def _setup_video_processor(cls):
         video_processor_class = cls._get_component_class_from_processor("video_processor")
-        # max_image_size default is 364; use 64 to reduce video frame tensor size in tests.
+        # Image processor stays at max_image_size=512 (required by test_process_interleaved_images_prompts_*).
+        # max_image_size=64 here only affects video frame tensor size in tests.
         return video_processor_class.from_pretrained(cls.tiny_model_id, max_image_size={"longest_edge": 64})
 
     @staticmethod
@@ -193,10 +194,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components, **processor_kwargs)
 
         # Test that a single image is processed correctly
-        # max_image_tiles=1 forces 1×1 split + 1 global = 2 tiles total
+        # size=1024=2×512 → 2×2 split + 1 global = 5 tiles total for square images
         inputs = processor(images=self.image1)
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 2, 3, 512, 512))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 2, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 5, 3, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 5, 512, 512))
         # fmt: on
         self.maxDiff = None
 
@@ -208,12 +209,12 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # fmt: off
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 1, 1)
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 2, 2)
         expected_input_ids_1 = [split_image1_tokens + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids_1)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids_1[0])])
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 2, 3, 512, 512))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 2, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 5, 3, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 5, 512, 512))
         # fmt: on
 
         # Test that batch is correctly processed
@@ -233,10 +234,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenized_sentence_1 = processor.tokenizer(text_str_1, add_special_tokens=False)
         tokenized_sentence_2 = processor.tokenizer(text_str_2, add_special_tokens=False)
 
-        # max_image_tiles=1: 1×1 split per image = 2 tiles each; batch max = max(2, 4) = 4
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 1, 1)
-        split_image2_tokens = self.get_split_image_expected_tokens(processor, 1, 1)
-        split_image3_tokens = self.get_split_image_expected_tokens(processor, 1, 1)
+        # 2×2 split per image = 5 tiles each; batch max = max(5, 10) = 10
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 2, 2)
+        split_image2_tokens = self.get_split_image_expected_tokens(processor, 2, 2)
+        split_image3_tokens = self.get_split_image_expected_tokens(processor, 2, 2)
         expected_input_ids_1 = split_image1_tokens + tokenized_sentence_1["input_ids"]
         expected_input_ids_2 = tokenized_sentence_2["input_ids"] + split_image2_tokens + split_image3_tokens
         # Pad the first input to match the second input
@@ -250,8 +251,8 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs["attention_mask"],
             [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)]
         )
-        self.assertEqual(np.array(inputs['pixel_values']).shape, (2, 4, 3, 512, 512))
-        self.assertEqual(np.array(inputs['pixel_attention_mask']).shape, (2, 4, 512, 512))
+        self.assertEqual(np.array(inputs['pixel_values']).shape, (2, 10, 3, 512, 512))
+        self.assertEqual(np.array(inputs['pixel_attention_mask']).shape, (2, 10, 512, 512))
         # fmt: on
 
     def test_add_special_tokens_processor(self):
@@ -264,7 +265,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: off
         inputs = processor(text=text, images=self.image1, add_special_tokens=False)
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 1, 1)
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 2, 2)
         expected_input_ids = [tokenized_sentence["input_ids"] + split_image1_tokens]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
 
@@ -295,6 +296,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.idefics2.test_processing_idefics2.Idefics2ProcessorTest.test_process_interleaved_images_prompts_image_error
     def test_process_interleaved_images_prompts_image_error(self):
+        import time
         processor = self.get_processor()
 
         text = [
@@ -302,39 +304,55 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "In this other sentence we try some good things",
         ]
         images = [[self.image1], [self.image2]]
+        t0 = time.perf_counter(); _err = None
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
+        print(f"\n[error_test] case 1 (no <image>, 2 imgs): {time.perf_counter()-t0:.3f}s")
         images = [[self.image1], []]
+        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
+        print(f"[error_test] case 2 (no <image>, 1+empty): {time.perf_counter()-t0:.3f}s")
 
         text = [
             "This is a test sentence.<image>",
             "In this other sentence we try some good things<image>",
         ]
         images = [[self.image1], [self.image2, self.image3]]
+        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
+        print(f"[error_test] case 3 (1 token each, 1+2 imgs): {time.perf_counter()-t0:.3f}s")
         images = [[], [self.image2]]
+        t0 = time.perf_counter()
         with self.assertRaises((ValueError, IndexError)):
             processor(text=text, images=images, padding=True)
+        print(f"[error_test] case 4 (empty+1 img): {time.perf_counter()-t0:.3f}s")
         images = [self.image1, self.image2, self.image3]
+        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
+        print(f"[error_test] case 5 (flat list 3 imgs): {time.perf_counter()-t0:.3f}s")
         images = [self.image1]
+        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
+        print(f"[error_test] case 6 (flat list 1 img): {time.perf_counter()-t0:.3f}s")
 
         text = [
             "This is a test sentence.",
             "In this other sentence we try some good things<image>",
         ]
         images = [[self.image1], []]
+        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
+        print(f"[error_test] case 7 (mixed, 1+empty): {time.perf_counter()-t0:.3f}s")
         images = [self.image1, self.image2]
+        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
+        print(f"[error_test] case 8 (mixed, flat 2 imgs): {time.perf_counter()-t0:.3f}s")
 
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
