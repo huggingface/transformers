@@ -28,6 +28,7 @@ if is_torch_available():
 @require_vision
 class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AyaVisionProcessor
+    # Tiny processor created with make_tiny_processor.py from "CohereForAI/aya-vision-8b"
     tiny_model_id = "hf-internal-testing/tiny-processor-aya_vision"
 
     @classmethod
