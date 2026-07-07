@@ -129,9 +129,9 @@ class DtensorShardOperation:
                 intervals = intervals_by_dim[dim_idx]
                 for placement, rank, world_size in planned_ops:
                     if placement.is_shard():
-                        intervals = self._apply_contiguous_shard(intervals, rank, world_size)
+                        intervals = self._compute_contiguous_slice(intervals, rank, world_size)
                     else:
-                        intervals = self._apply_strided_shard(intervals, rank, world_size, placement.split_factor)
+                        intervals = self._compute_strided_slice(intervals, rank, world_size, placement.split_factor)
                 intervals_by_dim[dim_idx] = intervals
 
             has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
@@ -177,7 +177,7 @@ class DtensorShardOperation:
         for source_dim, planned_ops in enumerate(planned_ops_by_source_dim):
             intervals = intervals_by_source_dim[source_dim]
             for rank, world_size in planned_ops:
-                intervals = self._apply_contiguous_shard(intervals, rank, world_size)
+                intervals = self._compute_contiguous_slice(intervals, rank, world_size)
             intervals_by_source_dim[source_dim] = intervals
 
         slice_parts = []
@@ -187,7 +187,7 @@ class DtensorShardOperation:
 
         return source[tuple(slice_parts)].to(device=device, dtype=dtype)
 
-    def _apply_strided_shard(
+    def _compute_strided_slice(
         self, intervals: list[tuple[int, int]], rank: int, world_size: int, split_factor: int
     ) -> list[tuple[int, int]]:
         local_intervals = []
@@ -214,7 +214,7 @@ class DtensorShardOperation:
 
         return local_intervals
 
-    def _apply_contiguous_shard(
+    def _compute_contiguous_slice(
         self, intervals: list[tuple[int, int]], rank: int, world_size: int
     ) -> list[tuple[int, int]]:
         # We apply contiguous sharding to a list of intervals. Two cases:
