@@ -458,9 +458,7 @@ visible from the public `export()` API, but the most common things to know:
 - `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`;
   for `ExecutorchExporter` with the XNNPACK backend, the exporter swaps MoE experts to
   `batched_mm` because XNNPACK has no `_grouped_mm.out` kernel.
-- A short list of models (`EXPORT_SKIP_MODEL_CLASSES`) is skipped from the export sweep when
-  the model itself is fundamentally non-exportable; each entry carries a TODO with the
-  model-side change needed.
+- Not every architecture exports cleanly yet — a few hit data-dependent control flow that can't be vectorised, or exceed practical export time under dynamic shapes. When that happens the failure surfaces at `export()` time with a concrete error, not silently.
 
 <details>
 <summary>Export pipeline — internals (per-backend stages and how to extend)</summary>
@@ -543,22 +541,6 @@ The split is intentional:
 - **Exporter patch** if the issue is a single backend's lowering bug — a missing ONNX
   translation, an ORT validation quirk, an FX decomposition that emits a dead op. Keep the
   workaround in the exporter and the modeling code stays clean.
-
-### Known upstream workarounds
-
-A small number of model classes hit confirmed bugs in `onnxscript`'s graph optimizer
-(constant folding crashing on `SplitToSequence`, FPN initialisers being dropped). For those,
-ONNX optimisation is selectively disabled via
-[`ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES`](https://github.com/huggingface/transformers/blob/main/tests/exporters/test_utils.py)
-in the test suite — each entry is annotated with the upstream issue it works around. This
-list is **expected to shrink** as upstream bugs land; it is not an extension point for
-arbitrary skipping, and new entries should reference a specific upstream bug.
-
-A second list, [`EXPORT_SKIP_MODEL_CLASSES`](https://github.com/huggingface/transformers/blob/main/tests/exporters/test_utils.py),
-opts a handful of model classes out of the entire export sweep when the model itself is
-fundamentally non-exportable as-is (data-dependent control flow that can't be vectorised,
-modules treated as forward arguments, …). Same expectations: every entry carries a TODO
-naming the underlying model change needed; the list should shrink, not grow.
 
 </details>
 

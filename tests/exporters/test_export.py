@@ -61,14 +61,7 @@ from transformers.testing_utils import (
 
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
-    "all": {
-        "VideoMAEForPreTraining": (
-            "The reconstruction-loss path indexes `videos_patch[bool_masked_pos]` (a boolean "
-            "index → data-dependent unbacked count) and compares its shape against `logits`, which "
-            "`torch.export` can't guard (`Eq(u2 // 13, u3)`). Only the pretraining head hits this; "
-            "`VideoMAEModel` / `VideoMAEForVideoClassification` export fine."
-        ),
-    },
+    "all": {},
     # Any backend (incl. plain `torch.export`), dynamic-shape variant only.
     "dynamic": {
         "Sam2Model": (
@@ -90,25 +83,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         ),
     },
     # ONNX, every variant.
-    "onnx": {
-        "CHMv2ForDepthEstimation": (
-            "`run_decompositions` retraces through aot_autograd which emits a `detach_(alias(...))` "
-            "pair the functional-graph assertion rejects (independent of any source `.detach()` — "
-            "verified). Torch export works. TODO: file upstream `torch.export` issue."
-        ),
-    },
+    "onnx": {},
     # ONNX, generate path only.
     "onnx.generate": {},
     # ONNX, dynamic-shape only.
     "onnx.dynamic": {
-        "GroundingDinoModel": (
-            "Same `detach_(alias(...))` retrace bug as CHMv2, but only triggered under dynamic "
-            "shapes — `aot_autograd`'s decomposition pipeline emits the detach itself (verified "
-            "by guarding all three modeling-side detaches with `if self.training`). Static works."
-        ),
-        "GroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
-        "MMGroundingDinoModel": "Same as `GroundingDinoModel`.",
-        "MMGroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
         "SwinModel": (
             "Shifted-window attention on symbolic H/W: `torch.export` + onnxscript exceed the "
             "1000s test timeout under dynamic shapes (static exports fine)."
@@ -131,6 +110,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
     # ExecuTorch, every variant.
     "executorch": {
+        "VideoMAEForPreTraining": (
+            "Torch/ONNX/OpenVINO export fine (a `torch._check` states the logits/labels masked-token "
+            "count invariant), but ExecuTorch edge-lowering still fails on the decoder's data-dependent "
+            "negative slice `hidden_states[:, -return_token_num:]` — `aten.slice_copy`'s meta raises "
+            "`GuardOnDataDependentSymNode` on the symbolic masked-token count."
+        ),
         "GroundingDinoModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",

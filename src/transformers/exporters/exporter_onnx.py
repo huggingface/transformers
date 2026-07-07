@@ -210,9 +210,12 @@ def _patch_where(original):
         if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor) and x.dtype != y.dtype:
             y = y.to(x.dtype)
         elif isinstance(x, torch.Tensor) and isinstance(y, (int, float, bool)):
-            y = torch.tensor(y, dtype=x.dtype, device=x.device)
+            # `full_like` (a traced op) rather than `torch.tensor(...)` (a fresh leaf constant): the
+            # latter, if materialised during `run_decompositions`' retrace, becomes an unregistered
+            # `_tensor_constant` → `alias` → `detach_` that trips aot's functional-graph assertion.
+            y = torch.full_like(x, y)
         elif isinstance(y, torch.Tensor) and isinstance(x, (int, float, bool)):
-            x = torch.tensor(x, dtype=y.dtype, device=y.device)
+            x = torch.full_like(y, x)
         if x is None and y is None:
             return original(condition)
         elif y is None:
