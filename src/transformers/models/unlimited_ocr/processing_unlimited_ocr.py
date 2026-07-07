@@ -70,11 +70,11 @@ class UnlimitedOcrProcessor(ProcessorMixin):
                 )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> TextInput:
-        size = self.image_processor.size["height"]
+        size = max(self.image_processor.size["height"], self.image_processor.size["width"])
         tile_size = self.image_processor.tile_size
 
-        num_queries_global = math.ceil(size / self.patch_size / self.downsample_ratio)
-        num_queries_local = math.ceil(tile_size / self.patch_size / self.downsample_ratio)
+        num_queries_global = math.ceil(size // self.patch_size / self.downsample_ratio)
+        num_queries_local = math.ceil(tile_size // self.patch_size / self.downsample_ratio)
 
         num_columns = int(image_inputs["patches_grid"][image_idx][0])
         num_rows = int(image_inputs["patches_grid"][image_idx][1])
