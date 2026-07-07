@@ -142,12 +142,23 @@ def recursively_install_hooks(
 
     # Potentially install the hook on current `parent_module`
     for key, specs in capture_tasks:
-        # The second check is for multimodals where only backbone layer suffix is available
-        if (specs.target_class is not None and isinstance(parent_module, specs.target_class)) or (
-            specs.class_name is not None and module_name.endswith(specs.class_name)
-        ):
-            if specs.layer_name is not None and specs.layer_name not in module_name:
-                continue
+
+        # Check if the spec matches the target class
+        match_target_class = specs.target_class is not None and isinstance(parent_module, specs.target_class)
+        # This check is for multimodals where only backbone layer suffix is available
+        match_class_name = specs.class_name is not None and module_name.endswith(specs.class_name)
+        if match_target_class or match_class_name:
+
+            # If the spec has a specified layer name, check it
+            if specs.layer_name is not None:
+                # Format the target layer name to have one dot on both sides
+                target_layer_name = specs.layer_name.strip(".")
+                target_layer_name = "." + target_layer_name + "."
+                # Match it against the module name (with a trailing dot to match in case the target is trailing)
+                matches = target_layer_name in module_name + "."
+                if not matches:
+                    continue
+
             install_output_capuring_hook(parent_module, key, specs.index, specs.capture_initial_hidden_state)
 
 
