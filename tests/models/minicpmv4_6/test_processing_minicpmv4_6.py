@@ -47,6 +47,15 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     image_unstructured_max_length = 100
 
     @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        # Default scale_resolution=448 with max_slice_nums=9 produces up to 21 MB pixel_values per image.
+        # Use scale_resolution=64 with max_slice_nums=1 for tests — shape[0]==1 assertion still passes.
+        return image_processor_class.from_pretrained(
+            cls.tiny_model_id, scale_resolution=64, max_slice_nums=1
+        )
+
+    @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
