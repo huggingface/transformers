@@ -1475,16 +1475,13 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dic
     From a `config`, extract the layer types if not present already, as well as the kwargs needed to initialize
     the corresponding layer caches.
     """
-    layer_kwargs = {}
     layer_types = getattr(config, "layer_types", None)
     # If `layer_types` is not explicitly provided, infer it from config fields
     if layer_types is None:
         if getattr(config, "sliding_window", None) is not None:
             layer_types = ["sliding_attention" for _ in range(config.num_hidden_layers)]
-            layer_kwargs["sliding_window"] = config.sliding_window
         elif getattr(config, "attention_chunk_size", None) is not None:
             layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
-            layer_kwargs["sliding_window"] = config.attention_chunk_size
         else:
             layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
 
@@ -1492,6 +1489,12 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dic
     if hasattr(config, "num_kv_shared_layers"):
         layer_types = layer_types[: -config.num_kv_shared_layers]
 
+    # Prepare additional kwargs that may be needed to __init__ the cache layers
+    layer_kwargs = {}
+    if "sliding_attention" in layer_types:
+        layer_kwargs["sliding_window"] = config.sliding_window
+    if "chunked_attention" in layer_types:
+        layer_kwargs["sliding_window"] = config.attention_chunk_size
     # In this case, we need to pass the config as well to properly __init__ the layer classes
     if "heavily_compressed_attention" in layer_types or "compressed_sparse_attention" in layer_types:
         layer_kwargs["config"] = config
