@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_sliding_window_causal_mask
+from ...masking_utils import create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_rope_utils import dynamic_rope_update
@@ -317,12 +317,12 @@ class RecurrentGemmaRglru(nn.Module):
             torch.empty([self.num_attention_heads, self.block_width, self.block_width])
         )
         self.recurrent_gate_bias = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width]))
-        self.recurrent_states = None
 
     def forward(
         self,
         activations: torch.Tensor,
         position_ids: torch.Tensor,
+        recurrent_states: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, lru_width = activations.shape
         reset = position_ids[:, :, None] == 0
@@ -354,10 +354,9 @@ class RecurrentGemmaRglru(nn.Module):
             hidden_states=normalized_x,
             recurrent_gate=recurrent_gate,
             reset=reset,
-            recurrent_states=self.recurrent_states,
+            recurrent_states=recurrent_states,
         )
-        self.recurrent_states = recurrent_states
-        return hidden_states
+        return hidden_states, recurrent_states
 
     # TODO refactor
     def _rnn_scan(
@@ -415,6 +414,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
 
     def __init__(self, config: RecurrentGemmaConfig, layer_idx: int):
         super().__init__()
+        self.layer_idx = layer_idx
         self.lru_width = config.lru_width
         self.hidden_size = config.hidden_size
         self.linear_y = nn.Linear(in_features=config.hidden_size, out_features=config.lru_width)
@@ -431,18 +431,15 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         self.rg_lru = RecurrentGemmaRglru(config)
         self.act_fn = ACT2FN[config.hidden_activation]
 
-        self.conv1d_state = None
-
     def forward(
         self,
         input_states: torch.Tensor,
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        use_cache: bool = True,
+        past_key_values: Cache | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, None]:
         _, seq_len, _ = input_states.shape
-        batch_size = input_states.shape[0]
 
         y_branch = self.linear_y(input_states)
         y_branch = self.act_fn(y_branch)
@@ -450,41 +447,30 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         x_branch = self.linear_x(input_states)
         x_branch = x_branch.transpose(1, 2)
 
-        if use_cache:
-            # Check if cache needs initialization (None or batch size mismatch)
-            if self.conv1d_state is None or self.conv1d_state.shape[0] != batch_size:
-                self.conv1d_state = torch.zeros(
-                    (batch_size, self.hidden_size, self.conv1d_width - 1),
-                    device=input_states.device,
-                    dtype=input_states.dtype,
-                )
-                self.rg_lru.recurrent_states = torch.zeros(
-                    (batch_size, self.lru_width), device=input_states.device, dtype=torch.float32
-                )
+        use_cache = past_key_values is not None
+        use_precomputed_states = use_cache and past_key_values.has_previous_state(self.layer_idx)
 
-            if position_ids.shape[1] != 1:  # prefill
-                self.conv1d_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
+        if use_cache:
+            if not use_precomputed_states:  # prefill
+                conv_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
+                past_key_values.update_conv_state(conv_state, self.layer_idx)
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
             else:  # decoding
-                conv_state = torch.cat((self.conv1d_state, x_branch), -1)
+                conv_state = torch.cat((past_key_values.layers[self.layer_idx].conv_states, x_branch), -1)
                 x_branch = torch.sum(conv_state * self.conv_1d.weight[:, 0, :], dim=-1) + self.conv_1d.bias
                 x_branch = x_branch.unsqueeze(-1)
-                self.conv1d_state = conv_state[:, :, 1:]
+                past_key_values.update_conv_state(conv_state[:, :, 1:], self.layer_idx)
         else:
-            self.conv1d_state = None
-            self.rg_lru.recurrent_states = None
             x_branch = self.conv_1d(x_branch)[..., :seq_len]
 
-        x_branch = self.rg_lru(x_branch.transpose(1, 2), position_ids)
+        recurrent_states = past_key_values.layers[self.layer_idx].recurrent_states if use_precomputed_states else None
+        x_branch, recurrent_states = self.rg_lru(x_branch.transpose(1, 2), position_ids, recurrent_states)
+        if use_cache:
+            past_key_values.update_recurrent_state(recurrent_states, self.layer_idx)
 
         hidden_states = x_branch * y_branch
         hidden_states = self.linear_out(hidden_states)
         return hidden_states, None
-
-    def _setup_cache(self, batch, device, dtype):
-        # recurrent_states always computed in full precision
-        self.rg_lru.recurrent_states = torch.zeros((batch, self.lru_width), device=device, dtype=torch.float32)
-        self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width - 1), device=device, dtype=dtype)
 
 
 TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaAttention}
@@ -521,7 +507,6 @@ class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
         activations: torch.Tensor,
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        use_cache: bool | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -532,7 +517,6 @@ class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
             inputs_normalized,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            use_cache=use_cache,
             past_key_values=past_key_values,
             **kwargs,
         )
@@ -618,20 +602,6 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)
 
-    def _setup_cache(self, config, batch, device, dtype):
-        layers = getattr(self, "model", self).layers
-        for layer in layers:
-            if hasattr(layer.temporal_block, "_setup_cache"):
-                layer.temporal_block._setup_cache(batch, device, dtype)
-
-
-def _get_seq_length(self, layer_idx: int = 0) -> int:
-    return self.layers[self.first_attention_layer].get_seq_length()
-
-
-def _get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
-    return self.layers[self.first_attention_layer].get_mask_sizes(query_length)
-
 
 @auto_docstring
 class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
@@ -675,36 +645,31 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         hidden_states = inputs_embeds
 
         if use_cache and past_key_values is None:
-            self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
             past_key_values = DynamicCache(config=self.config)
-
-        # Hack because the mamba layer indices will stay empty in `past_key_values`, and we want `get_seq_length` and
-        # `get_mask_sizes` to use the first attention layer by default for the mask function to create correct masks
-        if past_key_values is not None:
-            past_key_values.first_attention_layer = self.config.layers_block_type.index("attention")
-            # bound new methods to this instance only
-            past_key_values.get_seq_length = _get_seq_length.__get__(past_key_values)
-            past_key_values.get_mask_sizes = _get_mask_sizes.__get__(past_key_values)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_sliding_window_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         hidden_states = hidden_states * self.normalizer.type(hidden_states.dtype)
 
         for i, residual_block in enumerate(self.layers):
-            hidden_states = residual_block(
-                hidden_states, position_ids, causal_mask, use_cache, past_key_values, **kwargs
-            )
+            causal_mask = causal_mask_mapping[self.config.layer_types[i]]
+            hidden_states = residual_block(hidden_states, position_ids, causal_mask, past_key_values, **kwargs)
 
         hidden_states = self.final_norm(hidden_states)
 

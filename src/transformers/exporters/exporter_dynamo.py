@@ -675,8 +675,6 @@ _STATEFUL_CACHE_ATTRS = (
     "_prefill_len",  # glm_image (m-rope prefill length)
     "cached_rotary_positional_embedding",  # wav2vec2_bert, seamless_m4t, clvp
     "cached_sequence_length",  # wav2vec2_bert, seamless_m4t, clvp
-    "conv1d_state",  # recurrent_gemma (conv state on RecurrentGemmaRecurrentBlock)
-    "recurrent_states",  # recurrent_gemma (RG-LRU state on RecurrentGemmaRglru)
 )
 
 

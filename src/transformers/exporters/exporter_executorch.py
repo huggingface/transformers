@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import math
 import operator
+import re
 from collections.abc import MutableMapping
 from typing import Any
 
@@ -60,7 +61,14 @@ from .utils import (
 if is_torch_available():
     import torch
     from torch.export import ExportedProgram
-    from torch.fx.experimental.symbolic_shapes import guard_or_true
+    from torch.fx.experimental.symbolic_shapes import (
+        free_symbols,
+        free_unbacked_symbols,
+        guard_or_false,
+        guard_or_true,
+        statically_known_true,
+    )
+    from torch.fx.passes.infra.pass_base import PassResult
     from torch.nn.attention import SDPBackend, sdpa_kernel
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
@@ -73,9 +81,19 @@ if is_executorch_available():
     from executorch.backends.cuda.cuda_backend import CudaBackend
     from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
     from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+    from executorch.backends.xnnpack.serialization.xnnpack_graph_schema import (  # type: ignore[import-not-found]
+        XNNStaticReshape,
+        XNode,
+    )
+    from executorch.backends.xnnpack.utils.utils import get_input_node
     from executorch.exir.capture._config import EdgeCompileConfig
+    from executorch.exir.dialects._ops import ops as exir_ops
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
+    from executorch.exir.passes.replace_view_copy_with_view_pass import _VIEW_OP, _is_view_copy, _ViewSpec
+    from executorch.exir.passes.spec_prop_pass import _is_mutable_buffer
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
+    from executorch.exir.sym_util import eval_expr
+    from executorch.exir.tensor import determine_tensor_dynanism
 
 
 logger = logging.get_logger(__name__)
@@ -367,7 +385,6 @@ def _patch_scaled_dot_product_attention(original):
     (both batch ``u0``) with plain broadcasting, so no ``Eq(u0, 1)`` guard is needed and no SDPA
     node survives to be re-decomposed.
     """
-    from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
 
     def _has_unbacked_batch(t):
         # True when ``t``'s batch dim is a data-dependent (unbacked, ``u*``) SymInt.
@@ -489,7 +506,6 @@ def _patch_eval_upper_bound(original):
     — the same trace-proportional heuristic ``_fix_range_constraints`` applies to the
     per-symbol ranges — so planned buffers stay proportional to the sampled inputs.
     """
-    from executorch.exir.sym_util import eval_expr
 
     def patch(maybe_symint):
         if isinstance(maybe_symint, int):
@@ -514,7 +530,6 @@ def _patch_remove_empty_tensors_from_cat(_original):
     either way at trace time. Using ``guard_or_true`` keeps unbacked-shape
     inputs conservatively (the pass is purely an optimisation).
     """
-    from executorch.exir.dialects._ops import ops as exir_ops
 
     def patch(self, graph_module, cat_node):
         pruned = [arg for arg in cat_node.args[0] if guard_or_true(arg.meta["val"].numel() != 0)]
@@ -575,7 +590,6 @@ def _patch_dim_order_from_stride(_original):
     so the sort still produces *a* dim order when the comparison is unbacked —
     the exact order on unbacked dims doesn't affect correctness, just memory layout.
     """
-    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true
 
     def patch(stride):
         for s in stride:
@@ -609,7 +623,6 @@ def _patch_update_placeholder_tensor_specs(_original):
     (``val`` is ``None``) and the assignment raises ``AttributeError``. Skip
     ``None`` specs so user inputs aren't mis-marked const.
     """
-    from executorch.exir.passes.spec_prop_pass import _is_mutable_buffer
 
     def patch(self, exported_program, graph_module):
         sig = exported_program.graph_signature
@@ -678,8 +691,6 @@ def _view_replaceable_nodes(graph_module):
     base``. Those nodes must stay ``view_copy`` (an out-variant copy op, always correct) —
     only the storage-sharing optimisation is skipped for them.
     """
-    from executorch.exir.passes.replace_view_copy_with_view_pass import _is_view_copy
-    from executorch.exir.tensor import determine_tensor_dynanism
 
     for node in graph_module.graph.nodes:
         if _is_view_copy(node) and all(user.op != "output" for user in node.users):
@@ -697,8 +708,6 @@ def _view_replaceable_nodes(graph_module):
 def _patch_replace_view_copy_with_view_call(_original):
     """Replacement for ``ReplaceViewCopyWithViewPass.call`` that only replaces ``view_copy``
     nodes whose shape dynamism matches their base's — see ``_view_replaceable_nodes``."""
-    from executorch.exir.passes.replace_view_copy_with_view_pass import _VIEW_OP, _ViewSpec
-    from torch.fx.passes.infra.pass_base import PassResult
 
     def patch(self, graph_module):
         n_replaced = 0
@@ -781,12 +790,6 @@ def _make_squeeze_define_node(original):
     where both batch and time are dynamic). Replace the strict check with a no-op when
     the dynamic-dim count is preserved across the squeeze.
     """
-    from executorch.backends.xnnpack.serialization.xnnpack_graph_schema import (  # type: ignore[import-not-found]
-        XNNStaticReshape,
-        XNode,
-    )
-    from executorch.backends.xnnpack.utils.utils import get_input_node
-    from torch.fx.experimental.symbolic_shapes import free_symbols
 
     def patch(self, node, xnn_graph, vals_to_ids, debug_handle):
         self.define_nodes_tensor_inputs_outputs(node, xnn_graph, vals_to_ids)
@@ -1115,6 +1118,37 @@ def _patch_unsafe_adjust_original_program(original):
     return patch
 
 
+@register_patch(
+    "executorch",
+    "executorch.backends.xnnpack.serialization.xnnpack_graph_serialize._flatc_compile",
+)
+def _patch_flatc_compile_nonfinite(original):
+    """Rewrite non-finite float literals in the XNNPACK delegate JSON before ``flatc``.
+
+    XNNPACK serializes its delegate graph via ``json.dumps``, which emits non-finite floats as the
+    bare tokens ``-Infinity`` / ``Infinity`` / ``NaN`` — not part of the flatbuffers JSON grammar, so
+    ``flatc`` fails with ``cannot parse value starting with: -``. MiniMaxM3's lightning-indexer block
+    padding (``F.pad(scores, ..., value=float("-inf"))``) lowers to a ``constant_pad_nd`` whose
+    ``-inf`` ``padding_value`` hits this. Swap the tokens for flatbuffers' own ``-inf`` / ``inf`` /
+    ``nan`` (parsed to the identical IEEE value) so the exact ``-inf`` semantics are preserved.
+    """
+
+    def patch(output_dir, schema_path, json_path):
+        with open(json_path) as f:
+            data = f.read()
+        # Lookbehind/lookahead on JSON delimiters so only bare numeric literals match (quoted
+        # strings are bounded by `"` and never touched).
+        fixed = re.sub(r"(?<=[:\[,\s])-Infinity(?=[,\]}\s])", "-inf", data)
+        fixed = re.sub(r"(?<=[:\[,\s])Infinity(?=[,\]}\s])", "inf", fixed)
+        fixed = re.sub(r"(?<=[:\[,\s])NaN(?=[,\]}\s])", "nan", fixed)
+        if fixed != data:
+            with open(json_path, "w") as f:
+                f.write(fixed)
+        return original(output_dir, schema_path, json_path)
+
+    return patch
+
+
 @register_patch("executorch", "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict")
 def _patch_squeeze_node_visitors(original):
     """Swap the squeeze/unsqueeze visitor entries in ``_node_visitor_dict`` with subclasses
@@ -1390,4 +1424,40 @@ def _fix_sym_pow_as_mul(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
                 running.meta["val"] = running_val
     node.replace_all_uses_with(running)
     gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("executorch")
+def _fix_negative_slice_start(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Rewrite a data-dependent negative slice start into its positive ``dim_size + start`` form.
+
+    A negative slice on an unbacked length (VideoMAE's decoder keeps only the masked tokens via
+    ``hidden_states[:, -return_token_num:]``, ``return_token_num`` being the symbolic masked-patch
+    count) records ``start = -(u // 2)``. ``to_edge_transform_and_lower`` re-runs ``slice_forward``'s
+    meta, whose ``if start_val < 0`` guard can't be decided on a size-like symbol
+    (``GuardOnDataDependentSymNode``). Replace the start with ``sym_size(input, dim) + start`` — for a
+    tail slice this is the (size-like, hence provably ``>= 0``) number of leading elements, so the
+    guard is statically false. Drop the stale ``unbacked_bindings``: the output length is now a
+    computable expression, not the fresh unbacked symbol ``run_decompositions`` recorded.
+    """
+
+    if node.target not in (torch.ops.aten.slice.Tensor, torch.ops.aten.slice_copy.Tensor) or len(node.args) < 3:
+        return False
+    start = node.args[2]
+    if not isinstance(start, torch.fx.Node):
+        return False
+    start_val = start.meta.get("val")
+    if not isinstance(start_val, torch.SymInt) or statically_known_true(start_val >= 0):
+        return False
+    input_node, dim = node.args[0], node.args[1]
+    input_val = input_node.meta.get("val")
+    if not isinstance(input_val, torch.Tensor):
+        return False
+    with gm.graph.inserting_before(node):
+        size_node = gm.graph.call_function(torch.ops.aten.sym_size.int, (input_node, dim))
+        size_node.meta["val"] = input_val.shape[dim]
+        add_node = gm.graph.call_function(operator.add, (size_node, start))
+        add_node.meta["val"] = input_val.shape[dim] + start_val
+    node.args = (*node.args[:2], add_node, *node.args[3:])
+    node.meta.pop("unbacked_bindings", None)
     return True

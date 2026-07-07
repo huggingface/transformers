@@ -72,16 +72,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "Sam2VisionModel": "Same Hiera-backbone dynamic-shape `timeout` as `Sam2Model`.",
     },
     # Every backend, generate path only.
-    "generate": {
-        "RecurrentGemmaForCausalLM": (
-            "Keeps RG-LRU/conv state as plain module attributes (not a `Cache` passed via "
-            "`past_key_values`), so the state cannot be a graph input/output — the exported "
-            "decode step computes from zero-initialized state and its logits diverge from eager "
-            "(prefill exports and matches). "
-            "TODO: migrate the state to `LinearAttentionLayer` entries in `past_key_values` "
-            "(the qwen3_next / Mamba pattern)."
-        ),
-    },
+    "generate": {},
     # ONNX, every variant.
     "onnx": {},
     # ONNX, generate path only.
@@ -110,24 +101,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
     # ExecuTorch, every variant.
     "executorch": {
-        "VideoMAEForPreTraining": (
-            "Torch/ONNX/OpenVINO export fine (a `torch._check` states the logits/labels masked-token "
-            "count invariant), but ExecuTorch edge-lowering still fails on the decoder's data-dependent "
-            "negative slice `hidden_states[:, -return_token_num:]` — `aten.slice_copy`'s meta raises "
-            "`GuardOnDataDependentSymNode` on the symbolic masked-token count."
-        ),
         "GroundingDinoModel": ("Lowering exceeds the test timeout under dynamic shapes."),
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
     },
     # ExecuTorch, generate path only.
-    "executorch.generate": {
-        "MiniMaxM3SparseForConditionalGeneration": (
-            "`flatc` schema compilation fails when serializing the ExecuTorch program for the MoE "
-            "decoder generate graph."
-        ),
-    },
+    "executorch.generate": {},
     # ExecuTorch, dynamic-shape only.
     "executorch.dynamic": {
         "BigBirdModel": ("Lowering exceeds the test timeout under dynamic shapes."),
