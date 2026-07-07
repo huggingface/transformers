@@ -688,23 +688,6 @@ def propagate_args_to_deepspeed(accelerator, args, auto_find_batch_size=False):
     ds_plugin.hf_ds_config.trainer_config_process(args, auto_find_batch_size)
 
 
-def _aggregate_weighted_sp_loss(losses_per_rank, good_tokens_per_rank):
-    """
-    Aggregate per-rank losses weighted by valid token counts without Python conditionals on CUDA tensors.
-
-    Zero-token ranks are excluded from the weighted sum. Using ``torch.where`` instead of a Python ``if``
-    preserves that behavior while avoiding host sync, and also prevents NaNs on zero-token ranks from
-    polluting the total (see https://github.com/huggingface/transformers/issues/47068).
-    """
-    losses_stacked = torch.stack(losses_per_rank)
-    good_tokens_stacked = torch.stack(good_tokens_per_rank)
-    mask = good_tokens_stacked > 0
-    safe_losses = torch.where(mask, losses_stacked, torch.zeros_like(losses_stacked))
-    total_loss = (safe_losses * good_tokens_stacked).sum()
-    total_good_tokens = good_tokens_stacked.sum()
-    return total_loss / total_good_tokens.clamp(min=1)
-
-
 def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     """
     Computes the loss under sequence parallelism with `sp_backend="deepspeed"` and `sp_size > 1`.
@@ -750,6 +733,12 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     # special dealing with SFT that has prompt tokens that aren't used in loss computation
     good_tokens = (inputs["shift_labels"] != -100).view(-1).sum()
     good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
-    loss = _aggregate_weighted_sp_loss(losses_per_rank, good_tokens_per_rank)
+    losses_stacked = torch.stack(losses_per_rank)
+    good_tokens_stacked = torch.stack(good_tokens_per_rank)
+    mask = good_tokens_stacked > 0
+    safe_losses = torch.where(mask, losses_stacked, torch.zeros_like(losses_stacked))
+    total_loss = (safe_losses * good_tokens_stacked).sum()
+    total_good_tokens = good_tokens_stacked.sum()
+    loss = total_loss / total_good_tokens.clamp(min=1)
 
     return (loss, outputs) if return_outputs else loss
