@@ -593,7 +593,7 @@ class TmlShortConvolution(nn.Module):
     def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
-        self.activation = None
+        self.activation = None # just hardcode for now
 
         self.conv1d = nn.Conv1d(
             in_channels=hidden_size,
@@ -621,6 +621,10 @@ class TmlShortConvolution(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        # Keep the computation in fp32
+        orig_dtype = hidden_states.dtype
+        hidden_states = hidden_states.float()
+
         residual = hidden_states
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         seq_len = hidden_states.shape[1]
@@ -668,7 +672,8 @@ class TmlShortConvolution(nn.Module):
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states + residual
+        hidden_states = (hidden_states + residual).to(dtype=orig_dtype)
+        return hidden_states
 
 
 class TmlDecoderLayer(GradientCheckpointingLayer):
@@ -701,6 +706,7 @@ class TmlDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        hidden_states = self.attn_sconv(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -733,6 +739,7 @@ class TmlPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
+    _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv"]
 
 
 def compute_log_scaling_tau(position_ids: torch.Tensor, floor: int | None, alpha: float) -> torch.Tensor | None:
