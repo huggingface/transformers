@@ -18,7 +18,7 @@ Provides:
 - `deepgemm_bf16_experts_forward`: BF16 M-grouped experts forward.
 - `deepgemm_fp8_fp4_linear`: end-to-end FP8/FP4 linear (BF16 in, BF16 out).
 - `deepgemm_fp8_fp4_experts_forward`: FP8 (or FP4 on SM100+) M-grouped experts forward.
-- `deepgemm_fp8_fp4_megamoe_experts_forward`: FP8×FP4 Mega MoE forward (SM100+).
+- `deepgemm_fp8_fp4_megamoe_experts_forward`: FP8xFP4 Mega MoE forward (SM100+).
 
 Requirements: CUDA, Hopper (SM90+), CUDA runtime ≥ 12.3, kernels-community/deep-gemm
 ≥ 2.5 (Mega MoE symbols required). Mega MoE additionally needs SM100+ at call time.
@@ -74,21 +74,23 @@ class DeepGEMM:
 
 
 @functools.cache
-def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
-    """Load DeepGEMM once; raise `ImportError` if env or any required symbol is missing.
+def _try_loading_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
+    """Load DeepGEMM once or returns an error message if env or any required symbol is missing. This is wrapped in a
+    function that will raise an `ImportError` with the error message. The reason we raise in the wrapper rather than
+    here is that @functools.cache will only cache a return value, not an exception.
 
-    `requires_sm100` raises a Blackwell-specific error for callers (FP4 / Mega MoE)
-    that won't work on Hopper, instead of the generic SM90+ message.
+    `requires_sm100` raises a Blackwell-specific error for callers (FP4 / Mega MoE) that won't work on Hopper, instead
+    of the generic SM90+ message.
     """
     if not is_torchdynamo_compiling():
         if not is_kernels_available():
-            raise ImportError(
-                "DeepGEMM kernel requires the `kernels` package. "
-                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
+            return (
+                "DeepGEMM kernel requires the `kernels` package. Please install a compatible version ("
+                f"{KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), e.g. `pip install kernels=="
+                f"{KERNELS_MIN_VERSION}`"
             )
         if not torch.cuda.is_available():
-            raise ImportError("DeepGEMM kernel requires CUDA, but CUDA is not available.")
+            return "DeepGEMM kernel requires CUDA, but CUDA is not available."
 
         major, minor = torch.cuda.get_device_capability()
         # DeepGEMM ships kernels only for SM90 (Hopper) and SM100 (Blackwell); anything
@@ -96,22 +98,20 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         allowed = (10,) if requires_sm100 else (9, 10)
         if major not in allowed:
             arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
-            raise ImportError(f"DeepGEMM requires {arch}; current device is SM{major}{minor}.")
+            return f"DeepGEMM requires {arch}; current device is SM{major}{minor}."
 
         # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
         cuda_major, cuda_minor = get_cuda_runtime_version()
         min_cuda = (12, 9) if major == 10 else (12, 3)
         if (cuda_major, cuda_minor) < min_cuda:
-            raise ImportError(
+            return (
                 f"DeepGEMM on SM{major}{minor} requires CUDA runtime ≥ {min_cuda[0]}.{min_cuda[1]}, "
                 f"found {cuda_major}.{cuda_minor}."
             )
 
     kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:
-        raise ImportError(
-            "Failed to load `kernels-community/deep-gemm` — check that a build matches the current torch/CUDA."
-        )
+        return "Failed to load `kernels-community/deep-gemm` — check that a build matches the current torch/CUDA."
 
     fp8_fp4_matmul = getattr(kernel, "fp8_fp4_gemm_nt", None)
     grouped_fp8_fp4_matmul_nt = getattr(kernel, "m_grouped_fp8_fp4_gemm_nt_contiguous", None)
@@ -143,11 +143,17 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         if attr is None
     ]
     if missing:
-        raise ImportError(
+        return (
             f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. "
             f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
             f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
+
+    try:
+        m_alignment = int(get_mk_alignment())
+    except Exception as e:
+        return f"Failure when calling `get_mk_alignment`: {type(e).__name__}: {e}"
+
     return DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
         grouped_fp8_fp4_matmul_nt=grouped_fp8_fp4_matmul_nt,
@@ -159,8 +165,15 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         transform_weights_for_mega_moe=transform_weights_for_mega_moe,
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
-        m_alignment=int(get_mk_alignment()),
+        m_alignment=m_alignment,
     )
+
+
+def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
+    deepgemm_or_error = _try_loading_deepgemm_kernel(requires_sm100=requires_sm100)
+    if isinstance(deepgemm_or_error, str):
+        raise ImportError(deepgemm_or_error)
+    return deepgemm_or_error
 
 
 @torch._dynamo.allow_in_graph
