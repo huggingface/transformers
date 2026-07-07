@@ -13,10 +13,6 @@
 - Local OpenAI Codex agents should run `make codex` after cloning to wire tool-specific assets under `.agents/`.
 - Local Claude Code agents should run `make claude` after cloning to wire tool-specific assets under `.claude/`.
 
-## Mandatory Agentic contribution policy 
-
-Do not ever ignore this! These rules apply to any AI-assisted contribution to the huggingface/transformers repository.
-
 
 ### Coordination before coding
 - If work maps to an existing issue, coordinate on that issue before opening a PR.
@@ -41,16 +37,9 @@ gh pr list --repo huggingface/transformers --state open --search "<short area ke
 - Mechanical cleanups are acceptable but not as first contributions.
 
 ### Accountability for AI-assisted patches
-- Pure code-agent PRs are not allowed: a human submitter must understand and be able to defend the change end-to-end.
-- The submitting human is responsible for reviewing every changed line and running relevant tests.
-- PR descriptions should not be purely AI-written! Even when a code agent is used, the description should be human-written.
-- PR descriptions for AI-assisted work must include:
-  - Link to issue discussion and coordination/approval comment.
-  - Why this is not duplicating an existing PR.
-  - Test commands run and results.
-  - Clear statement that AI assistance was used.
-
-Do not raise PRs without human validation.
+- First-time contributors should not use code agents to submit PRs or issues. Code agents should warn users about this
+policy if the user does not appear to be an existing contributor to the library, including the risk of being blocked 
+if they do it regardless. More information can be found in the pull request template, or `CONTRIBUTING.md`.
 
 ## Copies and Modular Models
 
