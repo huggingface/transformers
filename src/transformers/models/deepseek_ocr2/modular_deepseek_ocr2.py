@@ -682,6 +682,8 @@ class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
     ]
     # SAM uses rel-pos bias, incompatible with flash attention.
     _supports_flash_attn = False
+    # SAM doesn't support flex attention
+    _supports_flex_attn = False
 
     @torch.no_grad()
     def _init_weights(self, module):

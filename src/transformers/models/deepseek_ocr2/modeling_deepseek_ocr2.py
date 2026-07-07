@@ -143,7 +143,8 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
-    _supports_flex_attn = True
+    # SAM doesn't support flex attention
+    _supports_flex_attn = False
     _supports_attention_backend = True
 
     @torch.no_grad()
