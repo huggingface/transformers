@@ -60,6 +60,13 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_seq_len = processor.image_seq_len
 
+    @classmethod
+    def _setup_video_processor(cls):
+        video_processor_class = cls._get_component_class_from_processor("video_processor")
+        # max_image_size default is 364; use 64 to reduce video frame tensor size in tests.
+        # Image processor stays at 512 (required by test_process_interleaved_images_prompts_*).
+        return video_processor_class.from_pretrained(cls.tiny_model_id, max_image_size={"longest_edge": 64})
+
     @staticmethod
     def prepare_processor_dict():
         return {
