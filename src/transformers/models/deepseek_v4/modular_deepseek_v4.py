@@ -154,10 +154,10 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         `position_ids` so prefill -> decode -> prefill stays consistent.
     """
 
-    layer_type = "heavily_compressed_attention"
+    _layer_type = "heavily_compressed_attention"
 
-    def __init__(self, config: "DeepseekV4Config"):
-        super().__init__(config)
+    def __init__(self, config: "DeepseekV4Config", **kwargs):
+        super().__init__(sliding_window=config.sliding_window)
         self.compress_rate = config.compress_rates["heavily_compressed_attention"]
         self.buffer_kv: dict[str, torch.Tensor | None] = {"compressor": None}
         self.buffer_gate: dict[str, torch.Tensor | None] = {"compressor": None}
@@ -234,9 +234,9 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
     again. That's what `overlap_kv[name]` / `overlap_gate[name]` persist.
     """
 
-    layer_type = "compressed_sparse_attention"
+    _layer_type = "compressed_sparse_attention"
 
-    def __init__(self, config: "DeepseekV4Config"):
+    def __init__(self, config: "DeepseekV4Config", **kwargs):
         super().__init__(config)
         self.compress_rate = config.compress_rates["compressed_sparse_attention"]
         self.buffer_kv["indexer"] = None
