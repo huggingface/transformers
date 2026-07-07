@@ -446,6 +446,12 @@ class UnlimitedOcrCausalLMOutputWithPast(DeepseekOcr2CausalLMOutputWithPast):
 
 
 class UnlimitedOcrPreTrainedModel(DeepseekOcr2PreTrainedModel):
+    _no_split_modules = [
+        "UnlimitedOcrEncoderLayer",
+        "UnlimitedOcrSamVisionLayer",
+        "UnlimitedOcrTextDecoderLayer",
+    ]
+
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
