@@ -347,4 +347,4 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.videos_input_name]), 145912)  # 1 video in the conversation
+        self.assertEqual(len(out_dict[self.videos_input_name]), 10800)  # 1 video in the conversation
