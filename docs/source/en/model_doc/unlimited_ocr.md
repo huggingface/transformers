@@ -35,7 +35,7 @@ This model was contributed by [guarin](https://huggingface.co/guarin).
 The original code can be found [here](https://github.com/baidu/Unlimited-OCR).
 
 > [!TIP]
-> Unlimited-OCR supports two inference configurations: the default "gundam" mode uses 640x640 tiles with dynamic cropping for high-resolution documents, and "base" mode uses a single 1024x1024 global view for standard-resolution inputs. Gundam mode is enabled by default via the image processor (`crop_to_patches=True`).
+> Unlimited-OCR supports two inference configurations: the default "gundam" mode uses 640x640 tiles with dynamic cropping for high-resolution documents, and "base" mode uses a single 1024x1024 global view for standard-resolution inputs. To enable base mode set `crop_to_patches=False`.
 
 > [!TIP]
 > For multi-page documents, pass all page images together with one `<image>` token per page in the text prompt. The model processes all pages jointly within a single context window.
@@ -52,8 +52,25 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", device_map="auto")
 processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
 
-image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
 inputs = processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
+
+output = model.generate(**inputs, max_new_tokens=4096)
+processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+# "R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\nName/Phone Ext. : (...)"
+```
+
+Pass multiple images and prompts at once for batch processing.
+
+```python
+from transformers import AutoProcessor, AutoModelForImageTextToText
+
+model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", device_map="auto")
+processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
+
+image1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
+image2 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_receipt.jpeg"
+inputs = processor(images=[image1, image2], text=["<image>document parsing.", "<image>document parsing."], return_tensors="pt").to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=4096)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
@@ -71,8 +88,8 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", device_map="auto")
 processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
 
-page1 = Image.open("page1.png")
-page2 = Image.open("page2.png")
+page1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
+page2 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_receipt.jpeg"
 num_pages = 2
 
 inputs = processor(
@@ -84,6 +101,7 @@ inputs = processor(
 
 output = model.generate(**inputs, max_new_tokens=32768)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+# 
 ```
 
 </hfoption>
