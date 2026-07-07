@@ -44,7 +44,8 @@ if is_torch_available():
 @require_torchvision
 class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5OmniProcessor
-    model_id = "Qwen/Qwen2.5-Omni-7B"
+    # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen2.5-Omni-7B"
+    tiny_model_id = "hf-internal-testing/tiny-processor-qwen2_5_omni"
 
     video_unstructured_max_length = 690
     video_text_kwargs_max_length = 690
@@ -54,14 +55,14 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class.from_pretrained(
-            cls.model_id, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
+            cls.tiny_model_id, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
         )
 
     @classmethod
     def _setup_video_processor(cls):
         video_processor_class = cls._get_component_class_from_processor("video_processor")
         return video_processor_class.from_pretrained(
-            cls.model_id, size={"shortest_edge": 12 * 12, "longest_edge": 28 * 28}
+            cls.tiny_model_id, size={"shortest_edge": 12 * 12, "longest_edge": 28 * 28}
         )
 
     def prepare_audio_inputs(self, batch_size: int = 3):

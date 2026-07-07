@@ -198,7 +198,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
                 }
             ],
         }
-        self.assertEqual(tokenizer.parse_response(model_out), expected)
+        self.assertEqual(tokenizer.parse_response(model_out, prefix=""), expected)
 
     def test_token_id_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -208,9 +208,9 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", '
             '"parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
         )
-        parsed = tokenizer.parse_response(model_out)
+        parsed = tokenizer.parse_response(model_out, prefix="")
         tokenized = tokenizer(model_out).input_ids
-        self.assertEqual(tokenizer.parse_response(tokenized), parsed)
+        self.assertEqual(tokenizer.parse_response(tokenized, prefix=""), parsed)
 
     def test_batched_response(self):
         """A batch of responses (list of strings or list of token-id sequences) returns one parsed
@@ -227,16 +227,16 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "tool_b", '
             '"parameters": {"y": "2"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
         )
-        single_a = tokenizer.parse_response(out_a)
-        single_b = tokenizer.parse_response(out_b)
+        single_a = tokenizer.parse_response(out_a, prefix="")
+        single_b = tokenizer.parse_response(out_b, prefix="")
         self.assertNotEqual(single_a, single_b)
         # A list of strings is parsed as a batch, one dict per item.
-        self.assertEqual(tokenizer.parse_response([out_a, out_b]), [single_a, single_b])
+        self.assertEqual(tokenizer.parse_response([out_a, out_b], prefix=""), [single_a, single_b])
         # Batched token-id input (list of token-id sequences) parses the same way.
         ids = [tokenizer(out_a).input_ids, tokenizer(out_b).input_ids]
-        self.assertEqual(tokenizer.parse_response(ids), [single_a, single_b])
+        self.assertEqual(tokenizer.parse_response(ids, prefix=""), [single_a, single_b])
         # A single-item batch returns a one-element list, not a bare dict.
-        self.assertEqual(tokenizer.parse_response([out_a]), [single_a])
+        self.assertEqual(tokenizer.parse_response([out_a], prefix=""), [single_a])
 
     def test_explicit_template_schema_detection(self):
         """An explicit new-style template passed as `schema=` is routed to the response-template
@@ -248,11 +248,13 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", '
             '"parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
         )
-        expected = parse_response(model_out, cohere_template)
+        expected = parse_response(model_out, cohere_template, prefix="")
         # Detected via the canonical `version` marker...
-        self.assertEqual(tokenizer.parse_response(model_out, schema={"version": 1, **cohere_template}), expected)
+        self.assertEqual(
+            tokenizer.parse_response(model_out, schema={"version": 1, **cohere_template}, prefix=""), expected
+        )
         # ...and via `fields` when the template omits `version`.
-        self.assertEqual(tokenizer.parse_response(model_out, schema=cohere_template), expected)
+        self.assertEqual(tokenizer.parse_response(model_out, schema=cohere_template, prefix=""), expected)
 
     def test_cohere(self):
         model_out = (
@@ -261,7 +263,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             '"parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
         )
         self.assertEqual(
-            parse_response(model_out, cohere_template),
+            parse_response(model_out, cohere_template, prefix=""),
             {
                 "role": "assistant",
                 "thinking": "I should call a tool.",
@@ -286,7 +288,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             '<tool_call>\n{"name": "get_current_temperature", "arguments": {"location": "Paris"}}\n</tool_call>\n</s>'
         )
         self.assertEqual(
-            parse_response(model_out, ernie_template),
+            parse_response(model_out, ernie_template, prefix=""),
             {
                 "role": "assistant",
                 "thinking": (
@@ -320,7 +322,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             "have!\n</response>\n</s>"
         )
         self.assertEqual(
-            parse_response(model_out, ernie_template),
+            parse_response(model_out, ernie_template, prefix=""),
             {
                 "role": "assistant",
                 "content": (
@@ -352,7 +354,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             'to=functions.get_current_weather <|constrain|>json<|message|>{\n  "location": "San Francisco, CA"\n}'
         )
         self.assertEqual(
-            parse_response(model_out, gpt_oss_template),
+            parse_response(model_out, gpt_oss_template, prefix=""),
             {
                 "role": "assistant",
                 "thinking": (
@@ -380,7 +382,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             "<|end|><|start|>assistant<|channel|>final<|message|>2"
         )
         self.assertEqual(
-            parse_response(model_out, gpt_oss_template),
+            parse_response(model_out, gpt_oss_template, prefix=""),
             {
                 "role": "assistant",
                 "content": "2",
@@ -400,7 +402,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             'just want to chat, feel free to let me know!"}}</tool_call>'
         )
         self.assertEqual(
-            parse_response(model_out, smollm_template),
+            parse_response(model_out, smollm_template, prefix=""),
             {
                 "role": "assistant",
                 "thinking": (
@@ -431,7 +433,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_smollm_tool_call_no_thinking(self):
         model_out = '<tool_call>{"name": "get_weather", "arguments": {"city": "Paris"}}</tool_call>'
         self.assertEqual(
-            parse_response(model_out, smollm_template),
+            parse_response(model_out, smollm_template, prefix=""),
             {
                 "role": "assistant",
                 "tool_calls": [
@@ -449,7 +451,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             "Some content about gravity goes here but I'm cutting it off to make this shorter!"
         )
         self.assertEqual(
-            parse_response(model_out, smollm_template),
+            parse_response(model_out, smollm_template, prefix=""),
             {
                 "role": "assistant",
                 "content": "Some content about gravity goes here but I'm cutting it off to make this shorter!",
@@ -469,7 +471,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             "<parameter=temp_units>\ncelsius\n</parameter>\n</function>\n</tool_call>"
         )
         self.assertEqual(
-            parse_response(model_out, qwen3_template),
+            parse_response(model_out, qwen3_template, prefix=""),
             {
                 "role": "assistant",
                 "tool_calls": [
@@ -495,7 +497,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             'unit:<|"|>celsius<|"|>}<tool_call|><|tool_response>'
         )
         self.assertEqual(
-            parse_response(model_out, gemma4_template),
+            parse_response(model_out, gemma4_template, prefix=""),
             {
                 "role": "assistant",
                 "thinking": (
@@ -522,7 +524,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             'struct_value:{foo:<|"|>bar<|"|>}}<tool_call|>'
         )
         self.assertEqual(
-            parse_response(model_out, gemma4_template),
+            parse_response(model_out, gemma4_template, prefix=""),
             {
                 "role": "assistant",
                 "thinking": "Let me call the tool.",
@@ -559,7 +561,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             },
         }
         with self.assertRaises(ValueError) as cm:
-            parse_response("no response here", template_spec)
+            parse_response("no response here", template_spec, prefix="")
         self.assertIn("content", str(cm.exception))
 
     def test_int_content_parser(self):
@@ -574,7 +576,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
                 },
             },
         }
-        self.assertEqual(parse_response("<n>42</n>", template_spec), {"role": "assistant", "count": 42})
+        self.assertEqual(parse_response("<n>42</n>", template_spec, prefix=""), {"role": "assistant", "count": 42})
 
     def test_kv_lines_parser(self):
         template_spec = {
@@ -589,7 +591,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             },
         }
         self.assertEqual(
-            parse_response("<meta>name: alice\nage: 30</meta>", template_spec),
+            parse_response("<meta>name: alice\nage: 30</meta>", template_spec, prefix=""),
             {"role": "assistant", "metadata": {"name": "alice", "age": "30"}},
         )
 
@@ -678,7 +680,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         }
         for opener, closer in (("<a>", "</a>"), ("<bb>", "</bb>"), ("<a>", "</bb>")):
             self.assertEqual(
-                parse_response(f"{opener}hi{closer}", template_spec),
+                parse_response(f"{opener}hi{closer}", template_spec, prefix=""),
                 {"role": "assistant", "x": "hi"},
             )
 
@@ -694,7 +696,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
                 "content": {"close": ["<turn|>", "<|tool_response>", "<eos>"], "content": "text"},
             },
         }
-        parser = ResponseParser(template_spec)
+        parser = ResponseParser(template_spec, prefix="")
         plain = "x" * 32
         flushed: list[str] = []
         for ch in parser.feed(plain):
@@ -714,7 +716,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
                 "x": {"open": "<x>", "close": ["END", "ENDX"], "content": "text"},
             },
         }
-        parser = ResponseParser(template_spec)
+        parser = ResponseParser(template_spec, prefix="")
         # "<x>hiEND" mid-stream: don't commit the close yet — "ENDX" might be coming.
         events = parser.feed("<x>hiEND")
         self.assertEqual([e for e in events if e["type"] == "region_close"], [])
@@ -734,7 +736,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
                 "fields": {"x": {"open": bad_open, "close": "</x>", "content": "text"}},
             }
             with self.assertRaises(ValueError):
-                parse_response("<x>hi</x>", spec)
+                parse_response("<x>hi</x>", spec, prefix="")
 
     def test_field_without_close_runs_to_end_of_stream(self):
         """A field with no `close`/`close_pattern` stays open until end-of-stream, capturing
@@ -745,7 +747,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             "fields": {"content": {"open": "<resp>", "content": "text"}},
         }
         self.assertEqual(
-            parse_response("<resp>hello world", spec),
+            parse_response("<resp>hello world", spec, prefix=""),
             {"role": "assistant", "content": "hello world"},
         )
 
@@ -836,10 +838,10 @@ class ResponseEventStreamTest(unittest.TestCase):
         output must equal the whole-string parse. Regression coverage for
         specific edge-case byte boundaries (1-byte chunks hit every prefix)."""
         for name, tmpl, text in _STREAMING_FIXTURES:
-            expected = parse_response(text, tmpl)
+            expected = parse_response(text, tmpl, prefix="")
             for step in (1, 2, 3, 5, 7, 13, 31):
                 with self.subTest(fixture=name, step=step):
-                    streamer = ResponseParser(tmpl)
+                    streamer = ResponseParser(tmpl, prefix="")
                     for chunk in _chunk_fixed(text, step):
                         streamer.feed(chunk)
                     message, _ = streamer.finalize()
@@ -851,10 +853,10 @@ class ResponseEventStreamTest(unittest.TestCase):
         reproduce."""
         rng = random.Random(0xC0DE_5EED)
         for name, tmpl, text in _STREAMING_FIXTURES:
-            expected = parse_response(text, tmpl)
+            expected = parse_response(text, tmpl, prefix="")
             for trial in range(30):
                 with self.subTest(fixture=name, trial=trial):
-                    streamer = ResponseParser(tmpl)
+                    streamer = ResponseParser(tmpl, prefix="")
                     for chunk in _chunk_random(text, rng):
                         streamer.feed(chunk)
                     message, _ = streamer.finalize()
@@ -871,7 +873,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         for name, tmpl, text in _STREAMING_FIXTURES:
             for trial in range(10):
                 with self.subTest(fixture=name, trial=trial):
-                    streamer = ResponseParser(tmpl)
+                    streamer = ResponseParser(tmpl, prefix="")
                     all_events: list[dict] = []
                     for chunk in _chunk_random(text, rng):
                         all_events.extend(streamer.feed(chunk))
@@ -910,7 +912,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         is delivered only in region_close."""
         # Single representative case with a long text region and a JSON region.
         text = _STREAMING_FIXTURES[0][2]  # cohere fixture
-        streamer = ResponseParser(cohere_template)
+        streamer = ResponseParser(cohere_template, prefix="")
         events: list[dict] = []
         for ch in text:  # 1-byte chunks hit the most anchor boundaries
             events.extend(streamer.feed(ch))
@@ -969,7 +971,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         }
         text = '<t>hello world</t><n>42</n><j>{"a": 1, "b": 2}</j><x><name=foo><age=10></x><kv>k1: v1\nk2: v2</kv>'
         # Drive byte-by-byte to maximise chunk count.
-        streamer = ResponseParser(spec)
+        streamer = ResponseParser(spec, prefix="")
         events: list[dict] = []
         for ch in text:
             events.extend(streamer.feed(ch))
@@ -1009,18 +1011,18 @@ class ResponseEventStreamTest(unittest.TestCase):
             "<|start|>assistant<|channel|>commentary to=functions.get_current_weather "
             '<|constrain|>json<|message|>{"location": "San Francisco, CA"}<|call|>'
         )
-        expected = parse_response(text, gpt_oss_template)
+        expected = parse_response(text, gpt_oss_template, prefix="")
         # Sanity: the whole-string parse really does recover the tool call.
         self.assertEqual(len(expected["tool_calls"]), 1)
         self.assertEqual(expected["tool_calls"][0]["function"]["name"], "get_current_weather")
-        streamer = ResponseParser(gpt_oss_template)
+        streamer = ResponseParser(gpt_oss_template, prefix="")
         for ch in text:  # one byte at a time -- the worst case for the old heuristic
             streamer.feed(ch)
         message, _ = streamer.finalize()
         self.assertEqual(message, expected)
 
     def test_feed_after_finalize_raises(self):
-        streamer = ResponseParser(smollm_template)
+        streamer = ResponseParser(smollm_template, prefix="")
         streamer.feed("<think>x</think>")
         streamer.finalize()
         with self.assertRaises(RuntimeError):
@@ -1029,7 +1031,7 @@ class ResponseEventStreamTest(unittest.TestCase):
             streamer.finalize()
 
     def test_empty_input_streams_cleanly(self):
-        streamer = ResponseParser(smollm_template)
+        streamer = ResponseParser(smollm_template, prefix="")
         self.assertEqual(streamer.feed(""), [])
         result, final_events = streamer.finalize()
         # Only the default fields should remain; nothing else is required.
@@ -1147,15 +1149,15 @@ class PrefixAndTruncationTest(unittest.TestCase):
         clean = {"role": "assistant", "content": "Hello there!"}
         # The supported guard: pass the prompt as prefix= so history is truncated off the prefix.
         self.assertEqual(parse_response(gen, spec, prefix=prompt), clean)
-        # Pure generation parses cleanly with no prefix.
-        self.assertEqual(parse_response(gen, spec), clean)
+        # Pure generation parses cleanly with the explicit no-prefix opt-out (prefix="").
+        self.assertEqual(parse_response(gen, spec, prefix=""), clean)
         # An anchor inside the response is treated as content, never as a history boundary:
         # gpt-oss re-emits `<|start|>assistant` between channels, and that content survives.
         gpt_oss_gen = (
             "<|channel|>analysis<|message|>thinking<|end|><|start|>assistant<|channel|>final<|message|>answer"
         )
         self.assertEqual(
-            parse_response(gpt_oss_gen, gpt_oss_template),
+            parse_response(gpt_oss_gen, gpt_oss_template, prefix=""),
             {"role": "assistant", "thinking": "thinking", "content": "answer"},
         )
 
