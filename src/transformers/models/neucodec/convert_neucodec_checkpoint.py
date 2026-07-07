@@ -14,9 +14,11 @@
 
 import argparse
 import re
+import tempfile
 
 import torch
 import torch.nn as nn
+from huggingface_hub import create_branch, upload_folder
 
 from transformers import (
     AutoConfig,
@@ -241,6 +243,8 @@ def convert_checkpoint(
     checkpoint_path,
     pytorch_dump_folder_path=None,
     repo_id=None,
+    repo_subfolder=None,
+    revision=None,
 ):
     # NeuCodec ships a bare `pytorch_model.bin` state dict with no accompanying `config.json` (only a `meta.yaml`
     # tracking downloads), so the architecture hyperparameters below are hardcoded from
@@ -289,8 +293,20 @@ def convert_checkpoint(
 
     if repo_id:
         print("Pushing to the hub...")
-        feature_extractor.push_to_hub(repo_id)
-        model.push_to_hub(repo_id)
+        if revision:
+            # `upload_folder`/`create_commit` (unlike `push_to_hub`) don't create a missing branch on their own.
+            create_branch(repo_id=repo_id, branch=revision, exist_ok=True)
+        if repo_subfolder:
+            # `push_to_hub` always writes to the repo root, so for a subfolder destination (e.g. keeping the
+            # original, non-HF checkpoint at the repo root while adding a converted copy alongside it) save
+            # locally first and upload that folder to `repo_subfolder`.
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir)
+                feature_extractor.save_pretrained(tmp_dir)
+                upload_folder(repo_id=repo_id, folder_path=tmp_dir, path_in_repo=repo_subfolder, revision=revision)
+        else:
+            feature_extractor.push_to_hub(repo_id, revision=revision)
+            model.push_to_hub(repo_id, revision=revision)
 
 
 """
@@ -303,10 +319,17 @@ Conversion example usage:
 # download model weights
 wget https://huggingface.co/neuphonic/neucodec/resolve/main/pytorch_model.bin -P /raid/eric/neucodec_original
 
-# run conversion
+# run conversion, first pushing to a test branch to sanity-check the result before touching `main`
 python src/transformers/models/neucodec/convert_neucodec_checkpoint.py \
     --checkpoint_path /raid/eric/neucodec_original/pytorch_model.bin \
-    --push_to_hub bezzam/neucodec
+    --push_to_hub neuphonic/neucodec \
+    --revision test-hf-conversion
+
+# once verified, push to the repo root on `main` (config.json / model.safetensors sit alongside the existing
+# pytorch_model.bin / meta.yaml without conflict, see `--repo_subfolder` for isolating them in a subfolder instead)
+python src/transformers/models/neucodec/convert_neucodec_checkpoint.py \
+    --checkpoint_path /raid/eric/neucodec_original/pytorch_model.bin \
+    --push_to_hub neuphonic/neucodec
 ```
 
 """
@@ -317,10 +340,26 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
+    parser.add_argument(
+        "--repo_subfolder",
+        default=None,
+        type=str,
+        help="Subfolder of `--push_to_hub` to upload the converted model to, leaving the repo root untouched "
+        "(e.g. the original, non-HF checkpoint). If unset, uploads to the repo root as usual.",
+    )
+    parser.add_argument(
+        "--revision",
+        default=None,
+        type=str,
+        help="Branch of `--push_to_hub` to upload the converted model to (created if it doesn't exist yet), e.g. "
+        "for testing on a branch before merging to `main`. If unset, uploads to `main`.",
+    )
 
     args = parser.parse_args()
     convert_checkpoint(
         args.checkpoint_path,
         args.pytorch_dump_folder_path,
         args.push_to_hub,
+        args.repo_subfolder,
+        args.revision,
     )
