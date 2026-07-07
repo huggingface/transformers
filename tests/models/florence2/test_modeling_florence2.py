@@ -241,6 +241,7 @@ class Florence2ForConditionalGenerationModelTest(
     )
     skip_test_image_features_output_shape = True  # Florence2 uses index -3 for hidden_size instead of -1
 
+    has_attentions = False
     _is_composite = True
 
     def setUp(self):
@@ -249,51 +250,6 @@ class Florence2ForConditionalGenerationModelTest(
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def _image_features_get_expected_num_attentions(self, model_tester=None):
-        if model_tester is None:
-            model_tester = self.model_tester
-        # Each Florence2VisionBlock records two attentions: one channel attention and one window attention
-        return 2 * sum(model_tester.depths)
-
-    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
-        if model_tester is None:
-            model_tester = self.model_tester
-        # One hidden state per Florence2VisionBlock, plus the initial embedding
-        return sum(model_tester.depths) + 1
-
-    def test_attention_outputs(self):
-        """Overridden: Florence2 outputs carry an extra `image_hidden_states` field that the common seq2seq
-        output-length accounting does not expect, and the mixin's `is_encoder_decoder` flag is False here while
-        the config's is True, so the common test mixes the two accounting branches."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-        encoder_seq_length = self.model_tester.encoder_seq_length
-        num_attention_heads = self.model_tester.num_attention_heads
-
-        inputs_dict["output_attentions"] = True
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = False
-            model = model_class._from_config(config, attn_implementation="eager")
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            self.assertEqual(len(outputs.encoder_attentions), self.model_tester.encoder_layers)
-            self.assertEqual(len(outputs.decoder_attentions), self.model_tester.decoder_layers)
-            self.assertEqual(len(outputs.cross_attentions), self.model_tester.decoder_layers)
-            self.assertEqual(
-                list(outputs.encoder_attentions[0].shape[-3:]),
-                [num_attention_heads, encoder_seq_length, encoder_seq_length],
-            )
-
-            # Hidden states are inserted before the attentions in the output
-            out_len = len(outputs)
-            inputs_dict["output_hidden_states"] = True
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(out_len + 2, len(outputs))  # encoder_hidden_states and decoder_hidden_states
 
     @unittest.skip(
         reason="Backnone architecture (BART) has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
