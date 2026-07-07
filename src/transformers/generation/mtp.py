@@ -25,8 +25,8 @@ from ..cache_utils import Cache
 from ..conversion_mapping import get_model_conversion_mapping
 from ..core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
 from ..masking_utils import create_causal_mask
-from ..modeling_utils import LoadStateDictConfig, PreTrainedModel, _get_resolved_checkpoint_files, local_torch_dtype
-from ..utils import logging
+from ..modeling_utils import LoadStateDictConfig, PreTrainedModel, _get_resolved_checkpoint_files
+from ..utils import ContextManagers, logging
 from ..utils.loading_report import log_state_dict_report
 
 
@@ -76,6 +76,8 @@ class MtpLayer(nn.Module):
 
 
 class MtpLayerStack(PreTrainedModel):
+    # These act as dummy values, that are properly set on the upstream model (without it, instantiating this model would
+    # fail on an existing model's config where the attn is already set to a custom value)
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_flash_attn = True
@@ -88,10 +90,10 @@ class MtpLayerStack(PreTrainedModel):
         super().__init__(main_model.config.get_text_config())
         self.num_mtp_layers = num_mtp_layers
         # Infer the type of the layers based on the main model
-        layer_cls = type(main_model.base_model.layers[0])
+        layer_cls = type(main_model.base_model.layers[-1])
         norm_cls = next(
             type(module)
-            for name, module in main_model.base_model.layers[0].named_modules()  # type: ignore
+            for name, module in main_model.base_model.layers[-1].named_modules()  # type: ignore
             if "norm" in name
         )
 
@@ -103,13 +105,18 @@ class MtpLayerStack(PreTrainedModel):
             ]
         )
 
-        # The embeddings and head are shared between main model and each MTP layer
+        # Embedding/head/rotary are shared with the main model
+        self.tie_with_main_model()
+
+        self.post_init()
+
+    def tie_with_main_model(self, main_model: PreTrainedModel):
+        """Tie the embedding/head/rotary layer with the main model."""
+        # The embeddings and head are shared between main model and MTP layers
         self.embed_tokens = main_model.get_input_embeddings()
         self.shared_head = main_model.lm_head
         # Use the same rotary class (it only has non-persistent buffers)
         self.rotary_emb = main_model.base_model.rotary_emb
-
-        self.post_init()
 
     def forward(
         self,
@@ -219,8 +226,7 @@ class MtpLayerStack(PreTrainedModel):
 
         # Get the number of layers in the checkpoint
         num_mtp_layers = main_model.config.get_text_config().num_mtp_layers
-        # Since we need to share some modules, let's not instantiate on meta device, but we still need the dtype context
-        with local_torch_dtype(main_model.config.dtype, cls.__name__):
+        with ContextManagers(cls.get_init_context(main_model.config.dtype)):
             mtp_model = cls(main_model, num_mtp_layers)
 
         # Now, let's scan the index to obtain the mtp-specific files and weights
@@ -269,12 +275,15 @@ class MtpLayerStack(PreTrainedModel):
             ),
             tp_plan=None,
         )
-        # Maybe remove the shared head/embedding from unexpected
-        mtp_model._adjust_missing_and_unexpected_keys(loading_info)
-
         # finally close all opened file pointers
         for k in all_pointer:
             k.__exit__(None, None, None)
+
+        # Maybe remove the shared head/embedding from unexpected
+        mtp_model._adjust_missing_and_unexpected_keys(loading_info)
+
+        # Retie the embedding/head/rotary with the external main model
+        mtp_model.tie_with_main_model(main_model)
 
         log_state_dict_report(
             model=mtp_model,
