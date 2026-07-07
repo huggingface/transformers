@@ -214,7 +214,7 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 180)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 144)
 
         # Load with `fps` arg
         fps = 1
