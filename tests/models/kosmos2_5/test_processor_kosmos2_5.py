@@ -237,10 +237,6 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(inputs["input_ids"][0]), 76)
 
-    @unittest.skip(
-        "Integration test: loads full microsoft/kosmos-2.5 processor and checks golden pixel values. "
-        "Requires ~120 MB and the full microsoft/kosmos-2.5 checkpoint."
-    )
     @require_torch
     def test_full_processor(self):
         url = url_to_local_path("https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png")
