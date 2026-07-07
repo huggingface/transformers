@@ -1491,7 +1491,7 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dic
 
     # Prepare additional kwargs that may be needed to __init__ the cache layers
     layer_kwargs = {}
-    if "sliding_attention" in layer_types:
+    if "sliding_attention" in layer_types or "hybrid_sliding" in layer_types:
         layer_kwargs["sliding_window"] = config.sliding_window
     if "chunked_attention" in layer_types:
         layer_kwargs["sliding_window"] = config.attention_chunk_size
