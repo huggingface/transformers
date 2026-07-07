@@ -14,6 +14,8 @@
 import sys
 
 import pytest
+import typer
+import typer.main
 from click.testing import CliRunner
 
 import transformers.cli.transformers
@@ -21,6 +23,10 @@ import transformers.cli.transformers
 
 @pytest.fixture
 def cli():
+    app = transformers.cli.transformers.app
+    if isinstance(app, typer.Typer):
+        app = typer.main.get_command(app)
+
     def _cli_invoke(*args):
         runner = CliRunner()
 
@@ -33,7 +39,7 @@ def cli():
         sys.stdout.close = _noop
         sys.stderr.close = _noop
         try:
-            return runner.invoke(transformers.cli.transformers.app, list(args), catch_exceptions=False)
+            return runner.invoke(app, list(args), catch_exceptions=False)
         finally:
             sys.stdout.close = old_out_close
             sys.stderr.close = old_err_close
