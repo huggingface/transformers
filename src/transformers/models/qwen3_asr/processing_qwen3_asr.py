@@ -16,7 +16,7 @@ import unicodedata
 
 import numpy as np
 
-from ...audio_utils import AudioInput, load_audio, make_list_of_audio_chat_template, prepare_prompt_input
+from ...audio_utils import AudioInput, make_list_of_audio_chat_template, prepare_prompt_input
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
@@ -539,41 +539,18 @@ class Qwen3ASRProcessor(ProcessorMixin):
             messages.append({"role": "user", "content": [_audio_content_item(audio_item)]})
             conversations.append(messages)
 
-        # Following the original implementation, the language is forced by prefilling the assistant
-        # turn with "language <NAME><asr_text>" so that the model only generates the transcription.
-        if self._template_renders_assistant_turns():
-            for messages, lang in zip(conversations, languages):
-                prefill = f"language {lang}<asr_text>" if lang is not None else ""
-                messages.append({"role": "assistant", "content": [{"type": "text", "text": prefill}]})
-            return self.apply_chat_template(
-                conversations,
-                tokenize=True,
-                return_dict=True,
-                continue_final_message=True,
-                **kwargs,
-            )
-
-        # Legacy chat templates (before assistant-turn rendering was added) cannot express the
-        # prefill, so splice the forced-language suffix into the rendered text manually.
-        text = self.apply_chat_template(conversations, tokenize=False, add_generation_prompt=True)
-        text = [
-            rendered if lang is None else f"{rendered}language {lang}<asr_text>"
-            for rendered, lang in zip(text, languages)
-        ]
-
-        sampling_rate = kwargs.get(
-            "sampling_rate", kwargs.get("audio_kwargs", {}).get("sampling_rate", self.feature_extractor.sampling_rate)
+        # The language is forced by prefilling the assistant turn with "language <NAME><asr_text>"
+        # so that the model only generates the transcription text in the desired language
+        for messages, lang in zip(conversations, languages):
+            prefill = f"language {lang}<asr_text>" if lang is not None else ""
+            messages.append({"role": "assistant", "content": [{"type": "text", "text": prefill}]})
+        return self.apply_chat_template(
+            conversations,
+            tokenize=True,
+            return_dict=True,
+            continue_final_message=True,
+            **kwargs,
         )
-        audio_arrays = [load_audio(item, sampling_rate=sampling_rate) for item in audio_items]
-        return self(text=text, audio=audio_arrays, **kwargs)
-
-    def _template_renders_assistant_turns(self) -> bool:
-        """Whether the chat template renders assistant turns (needed for the forced-language prefill)."""
-        sentinel = "assistant-turn-probe"
-        rendered = self.apply_chat_template(
-            [[{"role": "assistant", "content": [{"type": "text", "text": sentinel}]}]], tokenize=False
-        )[0]
-        return sentinel in rendered
 
     def decode(self, *args, return_format="raw", **kwargs):
         """
