@@ -593,6 +593,7 @@ class TmlShortConvolution(nn.Module):
     def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
+        self.activation = None
 
         self.conv1d = nn.Conv1d(
             in_channels=hidden_size,
@@ -662,7 +663,7 @@ class TmlShortConvolution(nn.Module):
                     seq_idx=kwargs.get("seq_idx"),
                 )
             else:
-                hidden_states = F.silu(self.conv1d(hidden_states)[:, :, : hidden_states.shape[-1]])
+                hidden_states = self.conv1d(hidden_states)[:, :, : hidden_states.shape[-1]]
             if use_precomputed_states:
                 hidden_states = hidden_states[:, :, -seq_len:]
 
