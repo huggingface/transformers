@@ -487,8 +487,8 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     @unittest.skip(
-        "Even with the recurrent mask restored (#47087), NemotronH's Mamba2 mixer still diverges on "
-        "continued forwards, so a separate residual remains downstream of the mask; tracked separately."
+        "NemotronH's Mamba2 mixer skips the pre-in_proj padding masking on its has_previous_state branch, so "
+        "continued forwards diverge independently of the recurrent mask #47087 restores; tracked separately."
     )
     def test_recurrent_layers_mask_padding_on_continued_forward(self):
         pass

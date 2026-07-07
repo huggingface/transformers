@@ -504,8 +504,8 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
     @unittest.skip(
-        "Even with the recurrent mask restored (#47087), Jamba's Mamba mixer keeps a small residual on "
-        "continued forwards, downstream of the mask; tracked separately."
+        "Jamba's Mamba mixer gates its padding masking on has_previous_state, so continued forwards keep a "
+        "small residual independently of the recurrent mask #47087 restores; tracked separately."
     )
     def test_recurrent_layers_mask_padding_on_continued_forward(self):
         pass

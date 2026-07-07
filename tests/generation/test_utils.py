@@ -18,7 +18,6 @@ import copy
 import gc
 import inspect
 import random
-import sys
 import tempfile
 import unittest
 import warnings
@@ -1378,30 +1377,38 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         first forward plus a cached continuation must therefore match the single full forward.
         Regression test for #47086.
         """
-        for model_class in self.all_generative_model_classes:
-            # This fix is about the recurrent-layer mask hybrid models build via
-            # `create_recurrent_attention_mask`, so only run for models that use it. Purely recurrent
-            # models (Mamba/RWKV/...) mask padding on their own inline path and are out of scope here.
-            model_module = sys.modules.get(model_class.__module__)
-            if model_module is None or not hasattr(model_module, "create_recurrent_attention_mask"):
-                self.skipTest(reason=f"{model_class.__name__} does not use create_recurrent_attention_mask")
+        # Hybrid models mix recurrent layers with regular attention and build the recurrent-layer mask via
+        # `create_recurrent_attention_mask` (the path under test). Purely recurrent models (only recurrent
+        # layer types, e.g. Mamba/RWKV) mask padding on their own inline path and are out of scope here.
+        recurrent_layer_types = {"linear_attention", "conv", "hybrid", "hybrid_sliding"}
+        attention_layer_types = {
+            "full_attention",
+            "sliding_attention",
+            "chunked_attention",
+            "hybrid",
+            "hybrid_sliding",
+        }
 
+        for model_class in self.all_generative_model_classes:
             set_seed(42)
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            if config.is_encoder_decoder:
-                self.skipTest(reason="Written for decoder-only recurrent models")
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            layer_types = set(getattr(config.get_text_config(), "layer_types", None) or ())
+            if not (layer_types & recurrent_layer_types and layer_types & attention_layer_types):
+                self.skipTest(reason=f"{model_class.__name__} is not a hybrid attention/recurrent model")
 
             model = model_class(config).to(torch_device).eval()
-            vocab_size = config.get_text_config().vocab_size
+            input_ids = inputs_dict["input_ids"][:2].to(torch_device)
             # An ordinary token id: padding is defined by the attention mask, not the token value. A random
             # init zeroes the `padding_idx` embedding row, which would hide the bug if we padded with it.
             pad_token_id = 7
 
-            turn1_len, turn2_len, pad_len = 4, 4, 2
-            turn1 = ids_tensor((2, turn1_len), vocab_size)
-            turn2 = ids_tensor((2, turn2_len), vocab_size)
+            # Split the prepared inputs into a first forward and a continuation whose row 1 is left-padded
+            seq_len = input_ids.shape[1]
+            turn1_len = seq_len // 2 + 1
+            pad_len = max(1, seq_len - turn1_len - 1)
+            turn1, turn2 = input_ids[:, :turn1_len], input_ids[:, turn1_len:].clone()
             turn2[1, :pad_len] = pad_token_id
-            attention_mask = torch.ones(2, turn1_len + turn2_len, dtype=torch.long, device=torch_device)
+            attention_mask = torch.ones_like(input_ids)
             attention_mask[1, turn1_len : turn1_len + pad_len] = 0
             position_ids = (attention_mask.cumsum(-1) - 1).clamp(min=0)
 

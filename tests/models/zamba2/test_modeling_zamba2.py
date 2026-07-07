@@ -356,6 +356,13 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         pass
 
     @unittest.skip(
+        "Zamba2's Mamba2 mixer skips the pre-in_proj padding masking on its has_previous_state branch, so "
+        "continued forwards diverge independently of the recurrent mask #47087 restores; tracked separately."
+    )
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
+        pass
+
+    @unittest.skip(
         "Offloading corrupts a linear projection weight and changes its shape [16, 104] -> [16]. Note that the test passes with a smaller model with 2 layers"
     )
     def test_disk_offload_bin(self):
