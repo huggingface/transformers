@@ -56,6 +56,7 @@ class TmlTextConfig(PreTrainedConfig):
     num_experts_per_tok: int = 6
     n_shared_experts: int = 2
     shared_expert_sink: bool = True
+    route_scale: float = 8.0
 
     logits_mup_width_multiplier: float = 24.0
     rms_norm_eps_moe_gate: float = 1e-6

@@ -346,14 +346,8 @@ class TmlTopkRouter(nn.Module):
         self.hidden_dim = config.hidden_size
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
-        if config.use_global_scale:
-            self.global_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
-        else:
-            self.register_parameter("global_scale", None)
-        if config.use_gate_bias:
-            self.e_score_correction_bias = nn.Parameter(torch.empty(self.n_routed_experts, dtype=torch.float32))
-        else:
-            self.register_parameter("e_score_correction_bias", None)
+        self.global_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
+        self.e_score_correction_bias = nn.Parameter(torch.empty(self.n_routed_experts, dtype=torch.float32))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -420,15 +414,7 @@ class TmlMoE(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.route_scale = config.route_scale
         self.norm_after_topk = config.norm_after_topk
-        self.gate_activation = config.gate_activation
-
-        if config.n_shared_experts > 0:
-            if config.shared_expert_sink:
-                self.shared_experts = TmlBatchSharedExperts(config)
-            else:
-                self.shared_experts = TmlSharedExperts(config)
-        else:
-            self.shared_experts = None
+        self.shared_experts = TmlBatchSharedExperts(config)
 
     def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
@@ -440,50 +426,26 @@ class TmlMoE(nn.Module):
             *orig_shape
         )
 
-        if self.shared_experts is not None:
-            if self.shared_expert_sink:
-                hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
-            else:
-                hidden_states = hidden_states + self.shared_experts(residuals)
-
+        hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
         return hidden_states
 
     def route_tokens_to_experts(self, router_logits):
-        n_shared = self.gate.n_shared_experts  # nonzero only in sink mode
-        if self.gate_activation == "sigmoid":
-            scores = router_logits.sigmoid()
-        else:
-            scores = router_logits.softmax(dim=-1, dtype=torch.float32)
+        scores = router_logits.sigmoid()
 
-        routed_scores = scores[..., :-n_shared] if n_shared > 0 else scores
-        if self.gate.e_score_correction_bias is not None:
-            scores_for_choice = routed_scores + self.gate.e_score_correction_bias
-        else:
-            scores_for_choice = routed_scores
+        routed_scores = scores[..., :-self.n_shared_experts]
+        scores_for_choice = routed_scores + self.gate.e_score_correction_bias
         topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
 
-        if self.norm_after_topk:
-            if n_shared > 0:
-                routed_logits = router_logits[..., :-n_shared]
-                shared_logits = router_logits[..., -n_shared:]
-                topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
-            else:
-                topk_logits = router_logits.gather(-1, topk_indices)
-            if self.gate_activation == "sigmoid":
-                topk_weights = _logsigmoid_normalize(topk_logits)
-            else:
-                topk_weights = topk_logits.softmax(dim=-1, dtype=torch.float32)
-        else:
-            topk_weights = routed_scores.gather(-1, topk_indices)
+        routed_logits = router_logits[..., :-self.n_shared_experts]
+        shared_logits = router_logits[..., -self.n_shared_experts:]
+        topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
+        topk_weights = _logsigmoid_normalize(topk_logits)
 
         topk_weights = topk_weights * self.route_scale
-        if self.gate.global_scale is not None:
-            topk_weights = topk_weights * self.gate.global_scale
+        topk_weights = topk_weights * self.gate.global_scale
 
-        shared_gammas = None
-        if self.shared_expert_sink and n_shared > 0:
-            shared_gammas = topk_weights[..., -n_shared:].contiguous()
-            topk_weights = topk_weights[..., : self.top_k].contiguous()
+        shared_gammas = topk_weights[..., -self.n_shared_experts:].contiguous()
+        topk_weights = topk_weights[..., : self.top_k].contiguous()
 
         return topk_indices, topk_weights, shared_gammas
 
