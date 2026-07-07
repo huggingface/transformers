@@ -40,7 +40,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_afmoe import AfmoeConfig
@@ -239,7 +239,7 @@ class AfmoeSparseMoeBlock(nn.Module):
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
 
         # Get routing decisions (returns flattened top-k)
-        router_logits, top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
+        _, top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
 
         # Process through shared experts
         shared_output = self.shared_experts(hidden_states_flat).view(batch_size, seq_len, hidden_dim)
@@ -503,9 +503,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = (
-        is_grouped_mm_available()
-    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     supports_gradient_checkpointing = True
 
