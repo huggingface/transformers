@@ -84,7 +84,9 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Idefics3 checkpoints aren't supported on purpose. Idefics3 encodes special row/col
         # tokens as several token ids because they aren't added in `special_token_ids`. Thus
         # we can't correctly infer which tokens in input ids are used as placeholders for image/row/col!
-        # Use the tiny SmolVLM processor (same architecture) instead of loading the full model each iteration.
+        # Use the tiny SmolVLM processor (same architecture, row/col tokens are proper special tokens).
+        # The tiny model is sufficient now that _get_num_multimodal_tokens correctly handles "\n\n"
+        # tokenization (which may differ between full and trimmed tokenizers).
         base_processor = self.processor_class.from_pretrained(
             "hf-internal-testing/tiny-processor-smolvlm",
             add_bos_token=True,
