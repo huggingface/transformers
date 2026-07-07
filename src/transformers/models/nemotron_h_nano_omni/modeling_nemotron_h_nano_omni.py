@@ -31,7 +31,7 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..nemotron_h import NemotronHForCausalLM
-from ..radio import RADIOModel
+from ..radio import RadioModel
 from .configuration_nemotron_h_nano_omni import NemotronH_Nano_Omni_Reasoning_V3_Config
 
 
@@ -211,7 +211,7 @@ class NemotronH_Nano_Omni_Reasoning_V3(PreTrainedModel):
         logger.info(f"ps_version: {self.ps_version}")
 
         self.language_model = NemotronHForCausalLM(config.llm_config)
-        self.vision_model = RADIOModel(config.vision_config)
+        self.vision_model = RadioModel(config.vision_config)
         self.vision_model.make_preprocessor_external()
 
         # 3D video patch projection. The native RADIO patch embedder is a 2D

@@ -14,7 +14,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..nemotron_h import NemotronHConfig
-from ..radio.configuration_radio import RADIOConfig
+from ..radio.configuration_radio import RadioConfig
 
 
 __all__ = ["NemotronH_Nano_Omni_Reasoning_V3_Config", "SoundConfig"]
@@ -90,9 +90,9 @@ class NemotronH_Nano_Omni_Reasoning_V3_Config(PretrainedConfig):
         super().__init__(**kwargs)
 
         if vision_config is not None:
-            self.vision_config = RADIOConfig(**vision_config)
+            self.vision_config = RadioConfig(**vision_config)
         else:
-            self.vision_config = RADIOConfig()
+            self.vision_config = RadioConfig()
 
         # Handle both cases: when loading from JSON (llm_config is dict) and when called internally by transformers (llm_config is None)
         if llm_config is not None:
