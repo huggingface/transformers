@@ -707,8 +707,8 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
     def __init__(self, max_cache_len: int, sliding_window: int):
         super().__init__(max_cache_len=max_cache_len, sliding_window=sliding_window)
-        # Keep `max_cache_len` as max value for lenght bookkeeping.
-        # The phyiscal buffer doens't exceed `prefill_length + sliding_window`.
+        # Keep `max_cache_len` as max value for length bookkeeping.
+        # The physical buffer doesn't exceed `prefill_length + sliding_window`.
         self.max_cache_len = max_cache_len
         self.sliding_window = sliding_window
         self.prefill_length: int | None = None
