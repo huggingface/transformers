@@ -27,7 +27,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 if is_vision_available():
     from transformers import LlavaOnevisionVideoProcessor, VideoPrismProcessor, VideoPrismTokenizer
 
-TENNIS_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+TENNIS_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tennis_320x240.mp4"
 NUM_FRAMES = 16
 FRAME_SIZE = 288
 

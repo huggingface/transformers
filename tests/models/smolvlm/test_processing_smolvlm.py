@@ -35,17 +35,17 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image1 = load_image(
             url_to_local_path(
-                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/statue_of_liberty_64x64.jpg"
             )
         )
         cls.image2 = load_image(
             url_to_local_path(
-                url_to_local_path("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/chicago_64x64.jpg"
             )
         )
         cls.image3 = load_image(
             url_to_local_path(
-                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/golden_gate_64x64.jpg"
             )
         )
         cls.bos_token = processor.tokenizer.bos_token
@@ -186,9 +186,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components, **processor_kwargs)
 
         # Test that a single image is processed correctly
+        # 64x64 input → 1×1 tile split + 1 global = 2 tiles total
         inputs = processor(images=self.image1)
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 13, 3, 512, 512))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 13, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 2, 3, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 2, 512, 512))
         # fmt: on
         self.maxDiff = None
 
@@ -200,12 +201,12 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # fmt: off
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 1, 1)
         expected_input_ids_1 = [split_image1_tokens + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids_1)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids_1[0])])
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 13, 3, 512, 512))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 13, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 2, 3, 512, 512))
+        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, 2, 512, 512))
         # fmt: on
 
         # Test that batch is correctly processed
@@ -225,9 +226,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenized_sentence_1 = processor.tokenizer(text_str_1, add_special_tokens=False)
         tokenized_sentence_2 = processor.tokenizer(text_str_2, add_special_tokens=False)
 
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
-        split_image2_tokens = self.get_split_image_expected_tokens(processor, 4, 4)
-        split_image3_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
+        # 64x64 inputs → 1×1 tile each = 2 tiles per image; batch max = max(2, 4) = 4
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 1, 1)
+        split_image2_tokens = self.get_split_image_expected_tokens(processor, 1, 1)
+        split_image3_tokens = self.get_split_image_expected_tokens(processor, 1, 1)
         expected_input_ids_1 = split_image1_tokens + tokenized_sentence_1["input_ids"]
         expected_input_ids_2 = tokenized_sentence_2["input_ids"] + split_image2_tokens + split_image3_tokens
         # Pad the first input to match the second input
@@ -241,8 +243,8 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs["attention_mask"],
             [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)]
         )
-        self.assertEqual(np.array(inputs['pixel_values']).shape, (2, 30, 3, 512, 512))
-        self.assertEqual(np.array(inputs['pixel_attention_mask']).shape, (2, 30, 512, 512))
+        self.assertEqual(np.array(inputs['pixel_values']).shape, (2, 4, 3, 512, 512))
+        self.assertEqual(np.array(inputs['pixel_attention_mask']).shape, (2, 4, 512, 512))
         # fmt: on
 
     def test_add_special_tokens_processor(self):
@@ -255,7 +257,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: off
         inputs = processor(text=text, images=self.image1, add_special_tokens=False)
         tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
-        split_image1_tokens = self.get_split_image_expected_tokens(processor, 3, 4)
+        split_image1_tokens = self.get_split_image_expected_tokens(processor, 1, 1)
         expected_input_ids = [tokenized_sentence["input_ids"] + split_image1_tokens]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
 
