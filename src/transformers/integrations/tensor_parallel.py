@@ -1189,7 +1189,8 @@ class RouterParallel(TensorParallelLayer):
                 f"The number of experts must be divisible by number of ep_size: {num_experts} % {ep_size} != 0"
             )
         num_local_experts = num_experts // ep_size
-        router_logits, router_scores, router_indices = outputs
+        # Some routers return extra tensors after the standard logits/scores/indices, e.g. zaya's router state.
+        router_logits, router_scores, router_indices, *extra_outputs = outputs
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)
         router_indices = router_indices.masked_fill(non_local_mask, -1)
@@ -1199,7 +1200,7 @@ class RouterParallel(TensorParallelLayer):
         else:
             router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
         router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
-        return router_logits, router_scores, router_indices
+        return router_logits, router_scores, router_indices, *extra_outputs
 
     def shard_tensor(
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None

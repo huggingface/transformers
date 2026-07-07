@@ -30,10 +30,13 @@ from transformers.core_model_loading import (
     Concatenate,
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
+    GroupWeightRename,
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    VisionFuseAndPermuteForRope,
+    VisionUnfuseAndPermuteForRope,
     WeightConverter,
     WeightRenaming,
     build_glob_alternation,
@@ -213,6 +216,18 @@ class DummyMLP(nn.Module):
     def __init__(self):
         super().__init__()
         self.down_proj = DummyParamModule((2, 2))
+
+
+class DummyModelWithNorm(PreTrainedModel):
+    base_model_prefix = "model"
+    config: PreTrainedConfig
+
+    def __init__(self, config, add_extra_moe=False):
+        super().__init__(config)
+        self.model = DummyTopModel(add_extra_moe)
+        self.norm1 = nn.LayerNorm(16)
+        self.norm2 = nn.LayerNorm(16)
+        self.post_init()
 
 
 class DummyRoot(PreTrainedModel):
@@ -626,6 +641,49 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             context={"quantization_config": quantizer.quantization_config},
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
+
+    def test_fp8_ue8m0_quantize_dequantize_round_trip(self):
+        # ``scale_fmt="ue8m0"`` rounds weight_scale_inv to a power of two; the weight has to be
+        # quantized with that same rounded scale, or ``weight * weight_scale_inv`` at dequant
+        # disagrees with the scale the weight was divided by (a silent per-block error up to an octave).
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
+
+        if not hasattr(torch, "float8_e8m0fnu"):
+            self.skipTest("ue8m0 storage requires torch.float8_e8m0fnu")
+
+        quantizer = SimpleNamespace(
+            quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="ue8m0")
+        )
+        torch.manual_seed(0)
+        weight = torch.randn(128, 128, dtype=torch.float32)
+
+        quantized = Fp8Quantize(quantizer)._quantize_one("layer.weight", weight)
+        recovered = Fp8Dequantize(quantizer)._dequantize_one(
+            quantized["layer.weight"], quantized["layer.weight_scale_inv"], output_dtype=torch.float32
+        )
+        rel_err = ((recovered - weight).abs().sum() / weight.abs().sum()).item()
+        self.assertLess(rel_err, 5e-2)  # fp8 round-trip is ~2e-2; a scale mismatch inflates it past 0.2
+
+    def test_fp8_float_scale_fmt_quantization_unchanged(self):
+        # The ue8m0 reordering must leave the default scale_fmt="float" path bit-identical to the
+        # original single-division formula (scales = _FP8_MAX / max_abs). Any divergence only shows
+        # on rare fp32-ULP block maxima, so scan many random 128x128 blocks rather than one.
+        from transformers.integrations.finegrained_fp8 import _FP8_DTYPE, _FP8_MAX, _FP8_MIN, Fp8Quantize
+
+        quantizer = Fp8Quantize(
+            SimpleNamespace(quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="float"))
+        )
+        for seed in range(100):
+            torch.manual_seed(seed)
+            weight = torch.randn(128, 128, dtype=torch.float32)
+            out = quantizer._quantize_one("layer.weight", weight)
+            scales = _FP8_MAX / weight.abs().amax()
+            ref_q = torch.clamp(weight * scales, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+            ref_inv = (1.0 / scales).to(torch.float32).reshape(1, 1)
+            self.assertTrue(torch.equal(out["layer.weight"], ref_q), f"float weight diverged at seed {seed}")
+            self.assertTrue(
+                torch.equal(out["layer.weight_scale_inv"], ref_inv), f"float scale diverged at seed {seed}"
+            )
 
     def test_scoped_renaming_does_not_leak_to_sibling_or_parent(self):
         """scope_prefix gates a WeightRenaming to keys under one submodel only —
@@ -1086,6 +1144,90 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
 
 class TestConversionMapping(unittest.TestCase):
+    def test_unfuse_and_permute_rope(self):
+        vision_config = PreTrainedConfig(hidden_size=16, head_dim=8, num_attention_heads=2)
+        config = PreTrainedConfig(vision_config=vision_config)
+        qkv_weight = torch.randn(3 * vision_config.hidden_size, vision_config.hidden_size, dtype=torch.float32)
+
+        q_proj, k_proj, v_proj = torch.chunk(qkv_weight, 3, dim=0)
+
+        q_proj = q_proj.view(
+            vision_config.num_attention_heads, vision_config.head_dim // 2, 2, vision_config.hidden_size
+        )
+        q_proj = q_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
+
+        k_proj = k_proj.view(
+            vision_config.num_attention_heads, vision_config.head_dim // 2, 2, vision_config.hidden_size
+        )
+        k_proj = k_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
+
+        unfuse = VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
+        fuse = VisionFuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])
+
+        unfused_output = unfuse.convert({"qkv": [qkv_weight]}, ["qkv"], ["q_proj", "k_proj", "v_proj"], config=config)
+        fused_output = fuse.convert(
+            {k: [v] for k, v in unfused_output.items()}, ["q_proj", "k_proj", "v_proj"], ["qkv"], config=config
+        )
+
+        torch.testing.assert_close(unfused_output["v_proj"], v_proj)
+        torch.testing.assert_close(unfused_output["q_proj"], q_proj)
+        torch.testing.assert_close(unfused_output["k_proj"], k_proj)
+        torch.testing.assert_close(fused_output["qkv"], qkv_weight)
+
+    def test_group_weight_rename(self):
+        model = DummyModelWithNorm(PreTrainedConfig())
+
+        bad_serialized_checkpoints = {
+            k.replace("norm1", "norm0").replace("norm2", "norm1"): v.clone() for k, v in model.state_dict().items()
+        }
+        weight_mapping = [
+            GroupWeightRename(
+                source_patterns=[r"norm0", r"norm1"],
+                target_patterns=[r"norm1", r"norm2"],
+            )
+        ]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
     def test_conv3d_linear_conversion_ops(self):
         weight_name = "patch_embed.proj.weight"
         kernel_size = (2, 2, 2)
