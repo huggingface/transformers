@@ -313,11 +313,12 @@ def patch_output_recorders(model: nn.Module) -> None:
     in custom ways.
 
     Note:
-        The `_can_record_outputs` attribute is a class-level attribute that maps output names to either:
-        - `OutputRecorder` instances that have a `target_class` attribute
-        - Class types directly
+        The `_can_record_outputs` attribute is a class-level attribute that maps output names to an
+        `OutputRecorder` instance, a module class, a class name formatted as a string, or a list of those.
 
-        This function patches both cases to use the replacement classes from the monkey patch registry.
+        This function patches all these forms to use the replacement classes from the monkey patch registry.
+        Since the attribute is class-level, patches apply to every instances of the class, including the ones that could
+        be created after the patch mapping is cleared.
 
     Args:
         model (`nn.Module`):
@@ -343,8 +344,8 @@ def patch_output_recorders(model: nn.Module) -> None:
         return
 
     for submodule in model.modules():
-        # When it is present, _can_record_outputs is a dict w/ layer_name as keys and recorder as values. A recorder is
-        # an OutputRecorder or a module class. Sometimes, there is a list of recorders instead of just one.
+        # When it is present, _can_record_outputs is a dict w/ output names as keys and recorder as values. A recorder
+        # is an OutputRecorder, a module class or the name of one. Sometimes, there is a list of recorders instead.
         output_to_recorders = getattr(submodule, "_can_record_outputs", None)
         if isinstance(output_to_recorders, dict):
             for output, recorders in output_to_recorders.items():
@@ -353,14 +354,18 @@ def patch_output_recorders(model: nn.Module) -> None:
                 for i, recorder in enumerate(recorders):
                     if isinstance(recorder, OutputRecorder):
                         # Check if target class matches any registered pattern or exact name
-                        replacement_class = _find_replacement_class(recorder.target_class.__name__, mapping)
+                        name = recorder.class_name if recorder.target_class is None else recorder.target_class.__name__
+                        replacement_class = _find_replacement_class(name, mapping)
                         if replacement_class is not None:
                             recorder.target_class = replacement_class
-                    elif isinstance(recorder, type):
+                    elif isinstance(recorder, (str, type)):
                         # Check if class type matches any registered pattern or exact name
-                        replacement_class = _find_replacement_class(recorder.__name__, mapping)
+                        name = recorder if isinstance(recorder, str) else recorder.__name__
+                        replacement_class = _find_replacement_class(name, mapping)
                         if replacement_class is not None:
                             recorders[i] = replacement_class
                     else:
-                        logger.warning(f"Unknown recorder type: {type(recorder).__name__}. Skipping patch.")
+                        logger.warning(
+                            f"Unknown recorder type: {type(recorder).__name__} with value {recorder}. Skipping patch."
+                        )
                 submodule._can_record_outputs[output] = recorders[0] if is_single else recorders

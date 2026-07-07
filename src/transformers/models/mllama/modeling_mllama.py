@@ -791,6 +791,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         # Cross-attention is a layer type here, not a second attention inside each layer (unlike in BigBird, etc.). So
         # layers listed in `config.cross_attention_layers` attend to vision instead of self-attending, and `attentions`
         # holds one tensor per layer, self or cross depending on the layer type (matching `hidden_states` above).
+        # Mllama captures everything under the `attentions` key for BC reasons.
         "attentions": [MllamaTextSelfAttention, MllamaTextCrossAttention],
     }
 

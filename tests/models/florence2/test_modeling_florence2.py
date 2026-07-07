@@ -250,19 +250,15 @@ class Florence2ForConditionalGenerationModelTest(
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def _image_features_get_expected_num_attentions(
-        self, model_tester: Florence2VisionText2TextModelTester | None = None
-    ) -> int:
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
         if model_tester is None:
-            model_tester: Florence2VisionText2TextModelTester = self.model_tester
+            model_tester = self.model_tester
         # Each Florence2VisionBlock records two attentions: one channel attention and one window attention
         return 2 * sum(model_tester.depths)
 
-    def _image_features_get_expected_num_hidden_states(
-        self, model_tester: Florence2VisionText2TextModelTester | None = None
-    ) -> int:
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         if model_tester is None:
-            model_tester: Florence2VisionText2TextModelTester = self.model_tester
+            model_tester = self.model_tester
         # One hidden state per Florence2VisionBlock, plus the initial embedding
         return sum(model_tester.depths) + 1
 
@@ -275,8 +271,8 @@ class Florence2ForConditionalGenerationModelTest(
         encoder_seq_length = self.model_tester.encoder_seq_length
         num_attention_heads = self.model_tester.num_attention_heads
 
+        inputs_dict["output_attentions"] = True
         for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             model = model_class._from_config(config, attn_implementation="eager")
             model.to(torch_device)
