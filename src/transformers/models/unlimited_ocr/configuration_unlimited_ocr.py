@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -70,7 +70,7 @@ class UnlimitedOcrSamVisionConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.downsample_channels is None:
             self.downsample_channels = [512, 1024]
-        return PretrainedConfig.__post_init__(self, **kwargs)
+        return super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
@@ -141,7 +141,7 @@ class UnlimitedOcrVisionConfig(PreTrainedConfig):
         elif isinstance(self.encoder_config, dict):
             self.encoder_config = self.sub_configs["encoder_config"](**self.encoder_config)
 
-        PretrainedConfig.__post_init__(self, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
@@ -297,7 +297,7 @@ class UnlimitedOcrConfig(PreTrainedConfig):
             self.text_config = text_config_cls(**text_kwargs)
         elif isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
-        PretrainedConfig.__post_init__(self, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = [
