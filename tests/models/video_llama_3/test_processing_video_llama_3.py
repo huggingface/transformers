@@ -193,7 +193,7 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "video",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/big_buck_bunny_320x240_10s.mp4"
                             ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
