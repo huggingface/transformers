@@ -94,8 +94,9 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that a single image is processed correctly
         inputs = processor(images=self.image1, text="Ok<|img|>", images_kwargs={"split_image": True})
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (2, 3, 980, 980))
-        self.assertEqual(np.array(inputs["pixel_mask"]).shape, (2, 980, 980))
+        # 64x64 input is too small to split further; produces 1 tile (no sub-split)
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 3, 980, 980))
+        self.assertEqual(np.array(inputs["pixel_mask"]).shape, (1, 980, 980))
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor = self.get_processor()

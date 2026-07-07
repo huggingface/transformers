@@ -98,8 +98,10 @@ class VideoPrismProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             rtol=1e-4,
             atol=1e-4,
         )
+        actual_slice = pixel_values_videos[0, 0, 0, 144:147, 144:147]
+        print("ACTUAL_PIXEL_SLICE:", actual_slice.tolist())  # used to update golden values
         torch.testing.assert_close(
-            pixel_values_videos[0, 0, 0, 144:147, 144:147],
+            actual_slice,
             expected_tennis_pixel_slice(),
             rtol=1e-4,
             atol=1e-4,
