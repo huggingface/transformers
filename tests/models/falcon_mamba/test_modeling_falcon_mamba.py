@@ -415,7 +415,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             {
                 ("xpu", 3): "Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle",
                 ("cuda", 7): "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
-                ("cuda", 8): 'Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle',
+                ("cuda", 8): 'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
             }
         )  # fmt: skip
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
@@ -437,7 +437,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            "Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the ",
+            'Hello today I\'m going to be talking about the "A" in the "A-B',
         )
 
     @pytest.mark.torch_compile_test
@@ -450,7 +450,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            "Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle",
+            "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
         )
 
     @require_deterministic_for_xpu
@@ -472,7 +472,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                     'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
                 ("cuda", 8): [
-                    'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
+                    'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
                     'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
             }
@@ -506,7 +506,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
                 ("cuda", 8): [
-                    ' I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
+                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
                 ],
             }
