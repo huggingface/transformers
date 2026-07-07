@@ -49,6 +49,8 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
         Number of expert groups for group-based top-k routing.
     topk_group (`int`, *optional*, defaults to 1):
         Number of groups selected per token in group-based top-k routing.
+    num_mtp_layers (<fill_type>):
+        <fill_docstring>
     head_dim (`int`, *optional*, defaults to 192):
         Dimension of query and key heads.
     v_head_dim (`int`, *optional*, defaults to 128):

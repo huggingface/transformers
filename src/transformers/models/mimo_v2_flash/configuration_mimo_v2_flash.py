@@ -34,6 +34,8 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         Number of expert groups for group-based top-k routing.
     topk_group (`int`, *optional*, defaults to 1):
         Number of groups selected per token in group-based top-k routing.
+    num_mtp_layers (<fill_type>):
+        <fill_docstring>
     head_dim (`int`, *optional*, defaults to 192):
         Dimension of query and key heads.
     v_head_dim (`int`, *optional*, defaults to 128):
@@ -74,6 +76,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
+        "num_mtp_layers": "num_nextn_predict_layers",
     }
 
     # Overrides from Glm4MoeConfig
@@ -102,6 +105,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = None
     pad_token_id: int | None = None
+    num_mtp_layers: int = 1
     # MiMo-V2-Flash specific
     head_dim: int = 192
     v_head_dim: int = 128

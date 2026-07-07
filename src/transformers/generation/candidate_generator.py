@@ -26,7 +26,6 @@ from ..pytorch_utils import prune_linear_layer
 from ..utils import ModelOutput, is_sklearn_available
 from .configuration_utils import GenerationConfig
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
-from .mtp import MtpLayerStack
 
 
 if is_sklearn_available():
@@ -1435,6 +1434,8 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         model_kwargs: dict[str, Any],
         logits_processor: Optional["LogitsProcessorList"] = None,
     ):
+        from ..modeling_layers import MtpLayerStack
+
         self.num_mtp_layers = getattr(main_model.config.get_text_config(), "num_mtp_layers", None)
         if self.num_mtp_layers is None:
             raise ValueError(
