@@ -23,44 +23,24 @@ _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_de
 logger = logging.get_logger(__name__)
 
 
-# Registry mapping ``config.layer_types[i]`` -> the dynamic cache layer class to build for
-# that layer. ``DynamicCache.__init__`` consults this mapping when a ``config`` is provided
-# so models with custom layer types (e.g. DeepSeek-V4's CSA / HCA) can register their own
-# cache-layer subclass and stop needing a model-specific ``Cache`` subclass.
-#
-# A cache layer subclass with a class attribute ``layer_type = "..."`` auto-registers via
-# ``CacheLayerMixin.__init_subclass__``. Each registered class must accept a
-# ``PreTrainedConfig`` (the decoder text config) as the only positional argument.
-LAYER_TYPE_CACHE_MAPPING: dict[str, type] = {}
-
-# Parallel registry for the *static* implementation of a custom layer type, consulted by
-# ``StaticCache``. A ``StaticLayer`` subclass with a ``layer_type`` registers here instead of in
-# ``LAYER_TYPE_CACHE_MAPPING`` (constructed with ``max_cache_len=...``), so a single ``layer_type``
-# can have both a dynamic and a static cache layer (e.g. M3's sparse-attention indexer cache).
-LAYER_TYPE_STATIC_CACHE_MAPPING: dict[str, type] = {}
-
-
 class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
     is_compileable = False
     supports_early_init = True
-    # Subclasses can set ``layer_type`` to auto-register themselves in
-    # ``LAYER_TYPE_CACHE_MAPPING`` at import time (used by ``DynamicCache`` to dispatch
-    # per-layer cache classes from ``config.layer_types``).
-    layer_type: str | None = None
+    # Subclasses can set `_layer_type` to auto-register themselves in the mappings, if the class definition lives in a modeling
+    # file instead of this file. This allows to update the mapping only when the modeling file is imported, which simplifies imports
+    _layer_type: str | None = None
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        layer_type = cls.__dict__.get("layer_type", None)
-        if layer_type is not None:
-            static_base = globals().get("StaticLayer")
-            if static_base is not None and issubclass(cls, static_base):
-                LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type] = cls
+        if cls._layer_type is not None:
+            if issubclass(cls, StaticLayer):
+                STATIC_LAYER_TYPE_MAPPING[cls._layer_type] = cls
             else:
-                LAYER_TYPE_CACHE_MAPPING[layer_type] = cls
+                DYNAMIC_LAYER_TYPE_MAPPING[cls._layer_type] = cls
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.keys: torch.Tensor | None = None
         self.values: torch.Tensor | None = None
         self.is_initialized = False
@@ -136,9 +116,6 @@ class DynamicLayer(CacheLayerMixin):
     """
 
     is_sliding = False
-
-    def __init__(self, config: PreTrainedConfig | None = None):
-        super().__init__()
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
@@ -218,14 +195,8 @@ class DynamicSlidingWindowLayer(DynamicLayer):
 
     is_sliding = True
 
-    def __init__(self, config: PreTrainedConfig | None = None, sliding_window: int | None = None):
+    def __init__(self, sliding_window: int, **kwargs):
         super().__init__()
-        # Accept either a config (registry-style construction via LAYER_TYPE_CACHE_MAPPING)
-        # or a raw ``sliding_window`` int (legacy callers).
-        if sliding_window is None:
-            if config is None:
-                raise ValueError("Either `config` or `sliding_window` must be provided.")
-            sliding_window = getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
         self.sliding_window = sliding_window
         self.cumulative_length = 0
         self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
@@ -306,11 +277,8 @@ class DynamicIndexedLayer(DynamicLayer):
     The indexer key cache stores a tensor of shape `[batch_size, seq_len, index_head_dim]` (3D, single-head).
     """
 
-    # Auto-registers in ``LAYER_TYPE_CACHE_MAPPING`` so ``DynamicCache`` dispatches DSA layers here.
-    layer_type = "deepseek_sparse_attention"
-
-    def __init__(self, config: PreTrainedConfig | None = None):
-        super().__init__(config)
+    def __init__(self, **kwargs):
+        super().__init__()
         self.indexer_keys: torch.Tensor | None = None
         self.is_indexer_initialized: bool = False
 
@@ -386,7 +354,7 @@ class StaticLayer(CacheLayerMixin):
     is_compileable = True
     is_sliding = False
 
-    def __init__(self, max_cache_len: int):
+    def __init__(self, max_cache_len: int, **kwargs):
         super().__init__()
         self.max_cache_len = max_cache_len
         # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
@@ -494,7 +462,7 @@ class StaticSlidingWindowLayer(StaticLayer):
 
     is_sliding = True
 
-    def __init__(self, max_cache_len: int, sliding_window: int):
+    def __init__(self, max_cache_len: int, sliding_window: int, **kwargs):
         effective_max_cache_len = min(sliding_window, max_cache_len)
         super().__init__(max_cache_len=effective_max_cache_len)
         # Here, to avoid data-dependent control flows, we also need to use a python int to keep track of the cumulative length
@@ -616,7 +584,7 @@ class StaticIndexedLayer(StaticLayer):
     The indexer key cache stores a tensor of shape `[batch_size, max_cache_len, index_head_dim]` (3D, single-head).
     """
 
-    def __init__(self, max_cache_len: int):
+    def __init__(self, max_cache_len: int, **kwargs):
         super().__init__(max_cache_len=max_cache_len)
         self.indexer_keys: torch.Tensor | None = None
         self.is_indexer_initialized: bool = False
@@ -869,7 +837,7 @@ class LinearAttentionCacheLayerMixin(ABC):
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.conv_states: torch.Tensor | None = None
         self.recurrent_states: torch.Tensor | None = None
         self.is_conv_states_initialized = False
@@ -930,9 +898,6 @@ class LinearAttentionCacheLayerMixin(ABC):
 
 
 class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
-    def __init__(self, config: PreTrainedConfig | None = None):
-        super().__init__()
-
     def lazy_initialization(
         self, conv_states: torch.Tensor | None = None, recurrent_states: torch.Tensor | None = None
     ) -> None:
@@ -1012,7 +977,7 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
     # The dynamic Attention part makes it non-compileable
     is_compileable = False
 
-    def __init__(self, config: PreTrainedConfig | None = None):
+    def __init__(self, **kwargs):
         DynamicLayer.__init__(self)
         LinearAttentionLayer.__init__(self)
 
@@ -1047,8 +1012,8 @@ class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, Dynami
     # The dynamic sliding attention part makes it non-compileable
     is_compileable = False
 
-    def __init__(self, config: PreTrainedConfig | None = None):
-        DynamicSlidingWindowLayer.__init__(self, config)
+    def __init__(self, sliding_window: int, **kwargs):
+        DynamicSlidingWindowLayer.__init__(self, sliding_window=sliding_window)
         LinearAttentionLayer.__init__(self)
 
     def lazy_initialization(self, *args, **kwargs) -> None:
@@ -1070,27 +1035,36 @@ class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, Dynami
         DynamicSlidingWindowLayer.reorder_cache(self, beam_idx)
 
 
-# Pre-register the standard layer types (some classes are shared between multiple types,
-# e.g. ``DynamicSlidingWindowLayer`` covers both ``"sliding_attention"`` and
-# ``"chunked_attention"`` — those need an explicit map entry rather than the
-# auto-registration via ``CacheLayerMixin.__init_subclass__``).
-LAYER_TYPE_CACHE_MAPPING.update(
-    {
-        "full_attention": DynamicLayer,
-        # From a cache point of view, sliding and chunked are the same in how they should behave;
-        # only the mask differs.
-        "sliding_attention": DynamicSlidingWindowLayer,
-        "chunked_attention": DynamicSlidingWindowLayer,
-        # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
-        # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state.
-        "conv": LinearAttentionLayer,
-        "moe": LinearAttentionLayer,
-        "linear_attention": LinearAttentionLayer,
-        # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
-        "hybrid": LinearAttentionAndFullAttentionLayer,
-        "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
-    }
-)
+# Mappings from layer_type to layer cache class
+DYNAMIC_LAYER_TYPE_MAPPING = {
+    "full_attention": DynamicLayer,
+    # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
+    "sliding_attention": DynamicSlidingWindowLayer,
+    "chunked_attention": DynamicSlidingWindowLayer,
+    # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
+    # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state
+    "conv": LinearAttentionLayer,
+    "moe": LinearAttentionLayer,
+    "linear_attention": LinearAttentionLayer,
+    # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
+    "hybrid": LinearAttentionAndFullAttentionLayer,
+    "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
+    # More exotic implementations
+    "deepseek_sparse_attention": DynamicIndexedLayer,
+}
+# Same but for StaticCache
+STATIC_LAYER_TYPE_MAPPING = {
+    "full_attention": StaticLayer,
+    # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
+    "sliding_attention": StaticSlidingWindowLayer,
+    "chunked_attention": StaticSlidingWindowLayer,
+    # LinearAttention layers are considered both static and dynamic (they are static, but are used as-is for any cache type)
+    "conv": LinearAttentionLayer,
+    "moe": LinearAttentionLayer,
+    "linear_attention": LinearAttentionLayer,
+    # More exotic implementations
+    "deepseek_sparse_attention": StaticIndexedLayer,
+}
 
 
 class Cache:
@@ -1496,6 +1470,39 @@ class Cache:
         return self.batch_size
 
 
+def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dict]:
+    """
+    From a `config`, extract the layer types if not present already, as well as the kwargs needed to initialize
+    the corresponding layer caches.
+    """
+    layer_types = getattr(config, "layer_types", None)
+    # If `layer_types` is not explicitly provided, infer it from config fields
+    if layer_types is None:
+        if getattr(config, "sliding_window", None) is not None:
+            layer_types = ["sliding_attention" for _ in range(config.num_hidden_layers)]
+        elif getattr(config, "attention_chunk_size", None) is not None:
+            layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
+        else:
+            layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
+
+    # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
+    num_kv_shared_layers = getattr(config, "num_kv_shared_layers", None)
+    if num_kv_shared_layers is not None and num_kv_shared_layers > 0:
+        layer_types = layer_types[: -config.num_kv_shared_layers]
+
+    # Prepare additional kwargs that may be needed to __init__ the cache layers
+    layer_kwargs = {}
+    if "sliding_attention" in layer_types or "hybrid_sliding" in layer_types:
+        layer_kwargs["sliding_window"] = config.sliding_window
+    if "chunked_attention" in layer_types:
+        layer_kwargs["sliding_window"] = config.attention_chunk_size
+    # In this case, we need to pass the config as well to properly __init__ the layer classes
+    if "heavily_compressed_attention" in layer_types or "compressed_sparse_attention" in layer_types:
+        layer_kwargs["config"] = config
+
+    return layer_types, layer_kwargs
+
+
 class DynamicCache(Cache):
     """
     A cache that grows dynamically as more tokens are generated. This is the default for generative models.
@@ -1550,24 +1557,9 @@ class DynamicCache(Cache):
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
             decoder_config = config.get_text_config(decoder=True)
-            sliding_window = getattr(decoder_config, "sliding_window", None) or getattr(
-                decoder_config, "attention_chunk_size", None
-            )
-            layer_types = getattr(decoder_config, "layer_types", None)
-            if layer_types is None:
-                layer_types = []
-                for _ in range(decoder_config.num_hidden_layers):
-                    if sliding_window is not None:
-                        layer_types.append("sliding_attention")
-                    else:
-                        layer_types.append("full_attention")
-            # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
-            if hasattr(decoder_config, "num_kv_shared_layers"):
-                layer_types = layer_types[: -decoder_config.num_kv_shared_layers]
-
-            for layer_type in layer_types:
-                cache_cls = LAYER_TYPE_CACHE_MAPPING.get(layer_type, DynamicLayer)
-                layers.append(cache_cls(decoder_config))
+            layer_types, layer_kwargs = get_layer_types_and_kwargs(decoder_config)
+            # Dispatch the layer types
+            layers = [DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
 
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
@@ -1651,56 +1643,10 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
-        config = config.get_text_config(decoder=True)
-        layer_types = getattr(config, "layer_types", None)
-        # If `layer_types` is not explicitly provided, infer if the model is fully sliding
-        if layer_types is None:
-            if getattr(config, "sliding_window", None) is not None:
-                layer_types = ["sliding_attention" for _ in range(config.num_hidden_layers)]
-            elif getattr(config, "attention_chunk_size", None) is not None:
-                layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
-            else:
-                layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
-        # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
-        num_kv_shared_layers = getattr(config, "num_kv_shared_layers", 0)
-        if num_kv_shared_layers > 0:
-            layer_types = layer_types[:-num_kv_shared_layers]
-
-        sliding_layer_types = {
-            name
-            for name, cls in LAYER_TYPE_CACHE_MAPPING.items()
-            if isinstance(cls, type) and issubclass(cls, DynamicSlidingWindowLayer) and name != "chunked_attention"
-        }
-        layers = []
-        for layer_type in layer_types:
-            if layer_type == "chunked_attention":
-                # From a cache point of view, both sliding and chunked are the same in how they should behave and how many
-                # states they should return - only the mask changes to make them different at the end!
-                layer = StaticSlidingWindowLayer(
-                    max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size
-                )
-            # Custom layer types (e.g. M3's sparse-attention indexer cache, R-SWA's reference sliding window)
-            # that registered a static variant. Checked before the generic sliding branch below so a custom
-            # static layer whose dynamic counterpart subclasses `DynamicSlidingWindowLayer` (and thus appears in
-            # `sliding_layer_types`) is not silently downgraded to a plain `StaticSlidingWindowLayer`.
-            elif layer_type in LAYER_TYPE_STATIC_CACHE_MAPPING:
-                static_layer_cls = LAYER_TYPE_STATIC_CACHE_MAPPING[layer_type]
-                if issubclass(static_layer_cls, StaticSlidingWindowLayer):
-                    layer = static_layer_cls(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
-                else:
-                    layer = static_layer_cls(max_cache_len=max_cache_len)
-            elif layer_type in sliding_layer_types:
-                layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
-            # Recurrent-state-only layers — linear-attention, conv, MoE — share the same static cache class.
-            elif layer_type in ("linear_attention", "conv", "moe"):
-                layer = LinearAttentionLayer()
-            elif layer_type == "deepseek_sparse_attention":
-                # Static / compile-friendly indexed layer (preallocated indexer key cache).
-                layer = StaticIndexedLayer(max_cache_len=max_cache_len)
-            else:
-                layer = StaticLayer(max_cache_len=max_cache_len)
-            layers.append(layer)
-
+        layer_types, layer_kwargs = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
+        layer_kwargs["max_cache_len"] = max_cache_len
+        # Dispatch the layer types
+        layers = [STATIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
 
