@@ -50,7 +50,7 @@ print("Input waveform shape:", inputs["input_values"].shape)
 # encoder and decoder
 audio_codes = model.encode(**inputs).audio_codes
 print("Audio codes shape:", audio_codes.shape)
-# Audio codes shape: torch.Size([1, 1, 293])
+# Audio codes shape: torch.Size([1, 1, 292])
 audio_values = model.decode(audio_codes).audio_values
 print("Audio values shape:", audio_values.shape)
 
