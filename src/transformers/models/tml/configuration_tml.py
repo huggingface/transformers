@@ -93,8 +93,8 @@ class TmlAudioConfig(PreTrainedConfig):
 class TmlVisionConfig(PreTrainedConfig):
     model_type = "tml_vision"
     base_config_key = "vision_config"
+    attribute_map = {"num_hidden_layers": "n_layers"}
 
-    vision_encoder_type: str = "hmlp"
     text_hidden_size: int = 6144
     patch_size: int = 14
     num_channels: int = 3

@@ -64,7 +64,7 @@ class TmlTextConfig(PreTrainedConfig):
     sliding_window_size: int = 512
     # for ref: 16 is the dim of the relative states (so small)
     # and we clamp beyond 1024
-    d_rel: int = 16 
+    d_rel: int = 16
     rel_extent: int = 1024
     local_layer_ids: list[int] | None = None
     layer_types: list[str] | None = None

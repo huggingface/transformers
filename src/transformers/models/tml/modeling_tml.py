@@ -37,7 +37,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import is_causal_conv1d_available
 from ...utils.output_capturing import capture_outputs
 from .configuration_tml import TmlAudioConfig, TmlConfig, TmlTextConfig, TmlVisionConfig
@@ -116,6 +116,7 @@ class TmlRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
 
 class TmlRelativeLogits(nn.Module):
     """hidden states conditioned relative position bias. `proj` is a trained bank of bias-vs-distance profiles; each token's
@@ -206,8 +207,12 @@ class TmlAttention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.r_proj = nn.Linear(config.hidden_size, self.num_heads * config.d_rel, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
-        self.k_sconv = TmlShortConvolution(self.num_key_value_heads * self.head_dim, config.sconv_kernel_size)
-        self.v_sconv = TmlShortConvolution(self.num_key_value_heads * self.head_dim, config.sconv_kernel_size)
+        self.k_sconv = TmlShortConvolution(
+            self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx
+        )
+        self.v_sconv = TmlShortConvolution(
+            self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx
+        )
         self.q_norm = TmlRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = TmlRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.rel_logits_proj = TmlRelativeLogits(config.d_rel, self.rel_extent)
@@ -232,10 +237,12 @@ class TmlAttention(nn.Module):
         key_states = self.k_norm(key_states.view(hidden_shape)).transpose(1, 2)
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
+        past_length = 0 if past_key_values is None else past_key_values.get_seq_length(self.layer_idx)
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         kv_length = key_states.shape[-2]
+        cache_position = torch.arange(kv_length, device=hidden_states.device) + past_length
         key_positions = torch.arange(kv_length, device=cache_position.device) + cache_position[-1] + 1 - kv_length
         relative_states = relative_states.view(*input_shape, self.num_heads, -1)
         position_bias = self.rel_logits_proj(relative_states, cache_position, key_positions)
@@ -664,7 +671,7 @@ class TmlPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = False
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
-    _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv"]
+    _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv", "k_sconv", "v_sconv"]
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
@@ -678,12 +685,25 @@ class TmlPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, TmlRMSNorm):
             module.weight.data.fill_(1.0)
-        elif isinstance(module, TmlShortConvolution):
-            module.weight.data.normal_(mean=0.0, std=std)
         elif isinstance(module, TmlRelativeLogits):
             module.proj.data.normal_(mean=0.0, std=std)
 
 
+class TmlTextNormedWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by applying norm on text input ids.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, eps: float = 1e-06):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_norm = TmlRMSNorm(embedding_dim, eps=eps)
+
+    def forward(self, input_ids: torch.Tensor):
+        embeds = super().forward(input_ids)
+        return self.embed_norm(embeds)
+
+
+@auto_docstring
 class TmlTextModel(TmlPreTrainedModel):
     config: TmlTextConfig
 
@@ -691,16 +711,23 @@ class TmlTextModel(TmlPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+
+        self.embed_tokens = TmlTextNormedWordEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, eps=config.rms_norm_eps
+        )
         self.layers = nn.ModuleList(
             [TmlDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.embed_norm = TmlRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.embedding_multiplier = config.embedding_multiplier
         self.gradient_checkpointing = False
+        self.embedding_multiplier = config.embedding_multiplier
+
+        # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -717,19 +744,16 @@ class TmlTextModel(TmlPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) / self.embedding_multiplier
 
-        if self.embed_norm is not None:
-            inputs_embeds = self.embed_norm(inputs_embeds)
-
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        cache_position = torch.arange(
-            past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-        )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            ).unsqueeze(0)
 
+        # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
@@ -749,7 +773,6 @@ class TmlTextModel(TmlPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.layer_type],
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -792,12 +815,14 @@ class TmlAudioModel(TmlPreTrainedModel):
 
 
 class TmlVisionEncoderLayer(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, t_fold: int, hw_fold: int):
+    def __init__(self, input_dim: int, output_dim: int, t_fold: int, hw_fold: int, add_norm: bool):
         super().__init__()
         self.projection = nn.Linear(input_dim, output_dim, bias=False)
-        self.layer_norm = TmlRMSNorm(output_dim)
+        if add_norm:
+            self.layer_norm = TmlRMSNorm(output_dim)
         self.hw_fold = hw_fold
         self.t_fold = t_fold
+        self.add_norm = add_norm
 
     def fold_timespace_to_depth(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
@@ -820,8 +845,9 @@ class TmlVisionEncoderLayer(nn.Module):
             hidden_states = self.fold_timespace_to_depth(hidden_states)
 
         hidden_states = self.projection(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = F.gelu(hidden_states)
+        if self.add_norm:
+            hidden_states = self.layer_norm(hidden_states)
+            hidden_states = F.gelu(hidden_states)
         return hidden_states
 
 
@@ -874,8 +900,8 @@ def plan_out_scales(
     h = torch.cumprod(torch.tensor(prime_factors(patch_size)[::-1], device=device), dim=0)
     t = torch.cumprod(torch.tensor(prime_factors(temporal_patch_size)[::-1], device=device), dim=0)
 
-    h_ch = torch.ceil(h**2 / 64).int() * 64 * n_channels
-    t_ch = (h_ch[-1] if len(h_ch) else 64 * n_channels) * t
+    h_ch = torch.ceil(h**2 * n_channels / 64).int() * 64
+    t_ch = torch.ceil(h[-1] ** 2 * n_channels * t).int() * 64
 
     base = torch.tensor([[1, 1, 1, n_channels]], device=device)
     spatial = torch.stack([torch.ones_like(h), h, h, h_ch], dim=1)
@@ -925,16 +951,24 @@ class TmlVisionModel(TmlPreTrainedModel):
             t_fold = end_scale[0] // start_scale[0]
             self.encoder_layers.append(
                 TmlVisionEncoderLayer(
-                    input_dim=start_scale[3] * shuffle_mult, output_dim=output_dim, hw_fold=hw_fold, t_fold=t_fold
+                    input_dim=start_scale[3] * shuffle_mult,
+                    output_dim=output_dim,
+                    hw_fold=hw_fold,
+                    t_fold=t_fold,
+                    add_norm=i != config.num_hidden_layers - 1,
                 )
             )
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        self.final_norm = TmlRMSNorm(config.text_hidden_size)
+        self.post_init()
+
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         num_patches = pixel_values.shape[0]
         hidden_states = pixel_values
         for layer in self.encoder_layers:
             hidden_states = layer(hidden_states=hidden_states)
 
+        hidden_states = self.final_norm(hidden_states)
         hidden_states = hidden_states.reshape(num_patches, -1)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
