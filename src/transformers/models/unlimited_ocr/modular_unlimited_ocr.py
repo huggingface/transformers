@@ -1028,11 +1028,13 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
 
         batch_size = pixel_values.shape[0]
 
+        pixel_values = pixel_values.to(self.vision_tower.dtype)
         global_vision_outputs = self.vision_tower(pixel_values, **kwargs)
         global_features = self.multi_modal_projector(global_vision_outputs.last_hidden_state)
 
         local_outputs = {}
         if pixel_values_local is not None:
+            pixel_values_local = pixel_values_local.to(self.vision_tower.dtype)
             local_vision_outputs = self.vision_tower(pixel_values_local, **kwargs)
             all_local_features = self.multi_modal_projector(local_vision_outputs.last_hidden_state)
             per_image_local = torch.split(all_local_features, num_local_patches, dim=0)

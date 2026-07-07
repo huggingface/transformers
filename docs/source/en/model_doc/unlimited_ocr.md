@@ -57,10 +57,11 @@ inputs = processor(images=image, text="<image>document parsing.", return_tensors
 
 output = model.generate(**inputs, max_new_tokens=4096)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-# "R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\nName/Phone Ext. : (...)"
+# image [383, 87, 497, 171]\ntext [333, 201, 558, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
 ```
 
-Pass multiple images and prompts at once for batch processing.
+For batch processing, pass multiple images and prompts at once. Set `padding=True` for the processor
+if images have different sizes.
 
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
@@ -70,11 +71,21 @@ processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
 
 image1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
 image2 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_receipt.jpeg"
-inputs = processor(images=[image1, image2], text=["<image>document parsing.", "<image>document parsing."], return_tensors="pt").to(model.device)
+inputs = processor(
+    images=[image1, image2],
+    text=["<image>document parsing.", "<image>document parsing."],
+    padding=True,
+    return_tensors="pt",
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=4096)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-# "R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\nName/Phone Ext. : (...)"
+# image [383, 87, 497, 171]\ntext [333, 201, 558, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
+```
+
+Set `skip_special_tokens=False` to wrap all detections and region types in `<|det|>...<|/det|>` markers. This if useful for further post-processing of the output which will look like this:
+```
+<|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>text [333, 201, 558, 230]<|/det|>R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
 ```
 
 <hfoption id="Multi-page OCR">
@@ -101,7 +112,7 @@ inputs = processor(
 
 output = model.generate(**inputs, max_new_tokens=32768)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-# 
+# <PAGE>image [382, 87, 489, 174]\ntitle [333, 201, 556, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SCLUTION FORM...
 ```
 
 </hfoption>
