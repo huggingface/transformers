@@ -552,6 +552,7 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 
 class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
     _can_record_outputs = {"hidden_states": DeepseekOcr2SamVisionLayer, "attentions": DeepseekOcr2SamVisionAttention}
+    _input_embed_layer = "patch_embed"
 
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
@@ -584,9 +585,6 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
         self.gradient_checkpointing = False
         self.proj = DeepseekOcr2SamVisionProj(config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.patch_embed
 
     @merge_with_config_defaults
     @capture_outputs

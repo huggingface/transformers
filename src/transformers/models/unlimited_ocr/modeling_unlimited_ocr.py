@@ -570,6 +570,7 @@ class UnlimitedOcrSamVisionProj(nn.Module):
 
 class UnlimitedOcrSamVisionEncoder(UnlimitedOcrPreTrainedModel):
     _can_record_outputs = {"hidden_states": UnlimitedOcrSamVisionLayer, "attentions": UnlimitedOcrSamVisionAttention}
+    _input_embed_layer = "patch_embed"
 
     def __init__(self, config: UnlimitedOcrSamVisionConfig):
         super().__init__(config)
@@ -602,9 +603,6 @@ class UnlimitedOcrSamVisionEncoder(UnlimitedOcrPreTrainedModel):
         self.gradient_checkpointing = False
         self.proj = UnlimitedOcrSamVisionProj(config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.patch_embed
 
     @merge_with_config_defaults
     @capture_outputs
