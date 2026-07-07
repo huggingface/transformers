@@ -1413,20 +1413,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         """
         Adds model-specific special tokens.
 
-        Supports both:
-        - New format:
-                {
-                    "image_token": "<image>",
-                    "audio_token": "<audio>"
-                }
-
-        - Legacy format:
-                ["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"]
+        Supports legacy tokenizer configs where `special_tokens`
+        may be provided as a list.
         """
 
-        # ------------------------------
-        # Backward compatibility
-        # ------------------------------
         if isinstance(special_tokens, list):
             special_tokens = {
                 f"extra_special_token_{i}": token
@@ -1435,41 +1425,24 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if not isinstance(special_tokens, dict):
             raise TypeError(
-                f"`special_tokens` must be a dict or list, "
-                f"but got {type(special_tokens).__name__}."
+                "`special_tokens` must be a dictionary or a list, "
+                f"got {type(special_tokens).__name__}."
             )
 
-        # Register new token names
         self.SPECIAL_TOKENS_ATTRIBUTES.extend(
             key
-            for key in special_tokens.keys()
+            for key in special_tokens
             if key not in self.SPECIAL_TOKENS_ATTRIBUTES
         )
 
-        # Store tokens
         for key, value in special_tokens.items():
-            if isinstance(value, (str, AddedToken)):
-                self._special_tokens_map[key] = value
-            else:
+            if not isinstance(value, (str, AddedToken)):
                 raise TypeError(
                     f"Special token '{key}' must be a str or AddedToken, "
                     f"got {type(value).__name__}."
                 )
-        """
-        Adds new model-specific special tokens (e.g., for multimodal models).
 
-        These tokens are added to the named special tokens map and will be saved in tokenizer config.
-        For example: if the model tokenizer is multimodal, we can support special image or audio tokens.
-
-        Args:
-            special_tokens: Dictionary of {token_name: token_value}
-        """
-        self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + list(special_tokens.keys())
-        for key, value in special_tokens.items():
-            if isinstance(value, (str, AddedToken)):
-                self._special_tokens_map[key] = value
-            else:
-                raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
+            self._special_tokens_map[key] = value
 
     @property
     def added_tokens_decoder(self) -> dict[int, AddedToken]:
