@@ -29,7 +29,7 @@ class CacheLayerMixin(ABC):
     is_compileable = False
     supports_early_init = True
     # Subclasses can set `layer_type` to auto-register themselves in the mappings, if the class definition lives in a modeling
-    # file instead of this file. This allows to update the mapping only when the modeling file is imported, which simplify imports
+    # file instead of this file. This allows to update the mapping only when the modeling file is imported, which simplifies imports
     _layer_type: str | None = None
 
     def __init_subclass__(cls, **kwargs):
