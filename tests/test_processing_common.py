@@ -151,20 +151,19 @@ class ProcessorTesterMixin:
             cls._setup_test_attributes(tiny_processor)
             tiny_processor.save_pretrained(cls.tmpdirname)
 
-            cls.full_tmpdirname = tempfile.mkdtemp()
-            # If model_id is specified, load components from that model
+            # If model_id is specified, load the full processor into full_tmpdirname.
+            # If model_id is None, no full processor is needed: full_tmpdirname stays None,
+            # and get_processor(use_tiny_ckpt=False) will fall back to tmpdirname (tiny).
             if cls.model_id is not None:
+                cls.full_tmpdirname = tempfile.mkdtemp()
                 full_processor = cls._setup_from_pretrained(cls.model_id)
-            else:
-                # Otherwise, create generic components
-                full_processor = cls._setup_from_components()
-            # TODO: make this more robust. We intentionally do NOT call _setup_test_attributes(full_processor)
-            # here because it would overwrite the class attributes already set from tiny_processor (e.g.
-            # image_token, video_token, audio_token). We assume these special tokens are identical between
-            # the tiny and full processor — but this is not guaranteed: if the tiny tokenizer is built
-            # differently (e.g. missing special tokens or using different token strings), cls.image_token
-            # etc. will silently reflect the wrong values for tests that use the full processor.
-            full_processor.save_pretrained(cls.full_tmpdirname)
+                # TODO: make this more robust. We intentionally do NOT call _setup_test_attributes(full_processor)
+                # here because it would overwrite the class attributes already set from tiny_processor (e.g.
+                # image_token, video_token, audio_token). We assume these special tokens are identical between
+                # the tiny and full processor — but this is not guaranteed: if the tiny tokenizer is built
+                # differently (e.g. missing special tokens or using different token strings), cls.image_token
+                # etc. will silently reflect the wrong values for tests that use the full processor.
+                full_processor.save_pretrained(cls.full_tmpdirname)
         else:
             # No tiny_model_id: tmpdirname holds the only processor.
             # If model_id is specified, load components from that model
