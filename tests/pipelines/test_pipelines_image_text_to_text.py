@@ -245,11 +245,12 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             temperature=0.7,
             top_p=0.8,
             padding=True,
+            max_length=12,
         )
 
-        self.assertEqual({"padding": True}, preprocess_params)
+        self.assertEqual({"padding": True, "max_length": 12}, preprocess_params)
         self.assertEqual(
-            {"do_sample": True, "temperature": 0.7, "top_p": 0.8},
+            {"do_sample": True, "temperature": 0.7, "top_p": 0.8, "max_length": 12},
             forward_params["generate_kwargs"],
         )
 

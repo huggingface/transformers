@@ -16,7 +16,7 @@ import enum
 from typing import Any, Union, overload
 
 from ..generation import GenerationConfig
-from ..processing_utils import ProcessingKwargs, Unpack
+from ..processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorChatTemplateKwargs, TextKwargs, Unpack
 from ..utils import (
     add_end_docstrings,
     is_torch_available,
@@ -41,7 +41,14 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 IMAGE_TOKEN = "<image>"
-_GENERATION_CONFIG_KWARGS = set(GenerationConfig().to_dict())
+_PREPROCESS_KWARGS = (
+    set(TextKwargs.__annotations__)
+    | set(ImagesKwargs.__annotations__)
+    | set(ProcessorChatTemplateKwargs.__annotations__)
+    | {"common_kwargs", "images_kwargs", "processor_kwargs", "text_kwargs"}
+)
+# `max_length` is both a processing and generation kwarg, matching TextGenerationPipeline.
+_PREPROCESS_KWARGS.discard("max_length")
 
 
 class ReturnType(enum.Enum):
@@ -149,12 +156,12 @@ class ImageTextToTextPipeline(Pipeline):
         postprocess_params = {}
 
         # Preprocess params
-        direct_generate_kwargs = {}
-        for key, value in kwargs.items():
-            if key in _GENERATION_CONFIG_KWARGS:
-                direct_generate_kwargs[key] = value
-            else:
-                preprocess_params[key] = value
+        direct_generate_kwargs = dict(kwargs)
+        for key in list(direct_generate_kwargs):
+            if key in _PREPROCESS_KWARGS:
+                preprocess_params[key] = direct_generate_kwargs.pop(key)
+        if "max_length" in direct_generate_kwargs:
+            preprocess_params["max_length"] = direct_generate_kwargs["max_length"]
         if timeout is not None:
             preprocess_params["timeout"] = timeout
         if continue_final_message is not None:

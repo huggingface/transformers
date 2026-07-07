@@ -21,7 +21,15 @@ import numpy as np
 from ..audio_utils import AudioInput
 from ..generation import GenerationConfig
 from ..image_utils import ImageInput
-from ..processing_utils import ProcessingKwargs, Unpack
+from ..processing_utils import (
+    AudioKwargs,
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorChatTemplateKwargs,
+    TextKwargs,
+    Unpack,
+    VideosKwargs,
+)
 from ..utils import (
     add_end_docstrings,
     is_torch_available,
@@ -44,7 +52,16 @@ if is_vision_available():
 
 logger = logging.get_logger(__name__)
 
-_GENERATION_CONFIG_KWARGS = set(GenerationConfig().to_dict())
+_PREPROCESS_KWARGS = (
+    set(TextKwargs.__annotations__)
+    | set(ImagesKwargs.__annotations__)
+    | set(VideosKwargs.__annotations__)
+    | set(AudioKwargs.__annotations__)
+    | set(ProcessorChatTemplateKwargs.__annotations__)
+    | {"audio_kwargs", "common_kwargs", "images_kwargs", "processor_kwargs", "text_kwargs", "videos_kwargs"}
+)
+# `max_length` is both a processing and generation kwarg, matching TextGenerationPipeline.
+_PREPROCESS_KWARGS.discard("max_length")
 
 
 class ReturnType(enum.Enum):
@@ -170,12 +187,12 @@ class AnyToAnyPipeline(Pipeline):
         postprocess_params = {}
 
         # Preprocess params
-        direct_generate_kwargs = {}
-        for key, value in kwargs.items():
-            if key in _GENERATION_CONFIG_KWARGS:
-                direct_generate_kwargs[key] = value
-            else:
-                preprocess_params[key] = value
+        direct_generate_kwargs = dict(kwargs)
+        for key in list(direct_generate_kwargs):
+            if key in _PREPROCESS_KWARGS:
+                preprocess_params[key] = direct_generate_kwargs.pop(key)
+        if "max_length" in direct_generate_kwargs:
+            preprocess_params["max_length"] = direct_generate_kwargs["max_length"]
         if timeout is not None:
             preprocess_params["timeout"] = timeout
         if continue_final_message is not None:
@@ -197,7 +214,10 @@ class AnyToAnyPipeline(Pipeline):
         if generation_mode is not None and generation_mode != "text":
             forward_kwargs["generate_kwargs"]["generation_mode"] = generation_mode
         # Qwen-Omni models need to know the origin of audio, to align mm position ids
-        if kwargs.get("load_audio_from_video") and re.search(r"qwen\domni", self.model.__class__.__name__.lower()):
+        if preprocess_params.get("load_audio_from_video") and re.search(
+            r"qwen\domni",
+            self.model.__class__.__name__.lower(),
+        ):
             forward_kwargs["generate_kwargs"]["use_audio_in_video"] = True
         if stop_sequence is not None:
             if isinstance(stop_sequence, str):
