@@ -140,24 +140,6 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(
-        reason="UnlimitedOcrVisionModel uses `self.query_*.weight` directly, causing device mismatch when offloading."
-    )
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(
-        reason="UnlimitedOcrVisionModel uses `self.query_*.weight` directly, causing device mismatch when offloading."
-    )
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(
-        reason="UnlimitedOcrVisionModel uses `self.query_*.weight` directly, causing device mismatch when offloading."
-    )
-    def test_disk_offload_safetensors(self):
-        pass
-
     def _image_features_prepare_config_and_inputs(self):
         config, inputs_dict = super()._image_features_prepare_config_and_inputs()
         # `get_image_features` returns the concatenation of the SAM feature map and the CLIP encoder output as
