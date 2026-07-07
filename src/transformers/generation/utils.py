@@ -2168,6 +2168,8 @@ class GenerationMixin(ContinuousMixin):
                 "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "
                 "If you experience any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
             )
+            # We replace every "grouped_mm" with "batched_mm" in the experts implementation, but leave other values unchanged.
+            # This is meant to be safe if for whatever reason a model has multiple submodules with different experts implementations.
             self.set_experts_implementation(
                 {k: "batched_mm" if v == "grouped_mm" else v for k, v in original_experts_implementation.items()}
             )
