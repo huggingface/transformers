@@ -597,8 +597,8 @@ def _process_flash_attention_kwargs(
     softcap: float | None = None,
     deterministic: bool | None = None,
     s_aux: torch.Tensor | None = None,
-    max_seqlen_q: int | None = None,
-    max_seqlen_k: int | None = None,
+    max_seqlen_q: int | torch.IntTensor | None = None,
+    max_seqlen_k: int | torch.IntTensor | None = None,
     supports_mapping: dict[str, bool] | None = None,
     **kwargs,
 ):
@@ -629,9 +629,9 @@ def _process_flash_attention_kwargs(
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
         s_aux (`torch.Tensor`, *optional*):
             Attention sink auxiliary that adds a `bias` to the attention calculation via an additional head.
-        max_seqlen_q (`int`, *optional*):
+        max_seqlen_q (`Union[int, torch.IntTensor]`, *optional*):
             The maximum sequence length in the query tensor during a varlen forward.
-        max_seqlen_k (`int`, *optional*):
+        max_seqlen_k (`Union[int, torch.IntTensor]`, *optional*):
             The maximum sequence length in the key/value tensor during a varlen forward.
     Return:
         flash_kwargs (`dict`):
@@ -675,11 +675,15 @@ def _process_flash_attention_kwargs(
     # to allow torch compile to handle scalar outputs in those cases.
     same_max_seqlen = max_seqlen_q is max_seqlen_k  # to avoid 2x device syncs
     if supports_mapping["max_seqlen_q"] and max_seqlen_q is not None:
+        if not isinstance(max_seqlen_q, int) and is_tracing(max_seqlen_q):
+            max_seqlen_q = max_seqlen_q.item()
         flash_kwargs["max_seqlen_q"] = max_seqlen_q
 
     if supports_mapping["max_seqlen_k"] and max_seqlen_k is not None:
         if same_max_seqlen and flash_kwargs["max_seqlen_q"] is not None:
             max_seqlen_k = flash_kwargs["max_seqlen_q"]
+        elif not isinstance(max_seqlen_k, int) and is_tracing(max_seqlen_k):
+            max_seqlen_k = max_seqlen_k.item()
         flash_kwargs["max_seqlen_k"] = max_seqlen_k
 
     return flash_kwargs
