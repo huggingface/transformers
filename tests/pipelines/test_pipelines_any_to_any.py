@@ -17,7 +17,12 @@ import unittest
 
 import numpy as np
 
-from transformers import MODEL_FOR_MULTIMODAL_LM_MAPPING, is_vision_available
+from transformers import (
+    MODEL_FOR_MULTIMODAL_LM_MAPPING,
+    AutoProcessor,
+    is_torch_available,
+    is_vision_available,
+)
 from transformers.pipelines import AnyToAnyPipeline, pipeline
 from transformers.testing_utils import (
     Expectations,
@@ -37,6 +42,11 @@ from utils.fetch_hub_objects_for_ci import url_to_local_path
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
+
+    from transformers import Qwen2_5OmniForConditionalGeneration
 
 
 @is_pipeline_test
@@ -78,7 +88,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                 "text": f"{video_token}This video shows a ",
             },
             {
-                "video": url_to_local_path(
+                "videos": url_to_local_path(
                     "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4"
                 ),
                 "text": f"{video_token}In the video I see a ",
@@ -112,6 +122,35 @@ class AnyToAnyPipelineTests(unittest.TestCase):
 
         return pipe, examples
 
+    def test_pipeline_forwards_direct_videos_keyword(self):
+        processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration"
+        )
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration"
+        )
+        model.generate_kwargs = None
+
+        def generate(input_ids=None, **kwargs):
+            model.generate_kwargs = kwargs
+            token = torch.full((input_ids.shape[0], 1), 42, dtype=input_ids.dtype, device=input_ids.device)
+            return torch.cat([input_ids, token], dim=1)
+
+        model.generate = generate
+        pipe = AnyToAnyPipeline(model=model, processor=processor, max_new_tokens=1)
+        video = np.zeros((2, 16, 16, 3), dtype=np.uint8)
+
+        outputs = pipe(
+            text=f"{processor.video_token} describe",
+            videos=video,
+            return_full_text=False,
+            processor_kwargs={"num_frames": 2},
+        )
+
+        self.assertEqual(outputs, [{"input_text": ANY(str), "generated_text": ANY(str)}])
+        self.assertIn("pixel_values_videos", model.generate_kwargs)
+        self.assertIn("video_grid_thw", model.generate_kwargs)
+
     def run_pipeline_test(self, pipe, examples):
         # Single
         outputs = pipe(examples[0])
@@ -135,6 +174,16 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                 ],
             ],
         )
+
+        video_example = next((example for example in examples if "videos" in example), None)
+        if video_example is not None:
+            outputs = pipe(text=video_example["text"], videos=video_example["videos"])
+            self.assertEqual(
+                outputs,
+                [
+                    {"input_text": ANY(str), "generated_text": ANY(str)},
+                ],
+            )
 
         # `generation_mode` raises errors when dosn't match with other params
         with self.assertRaises(ValueError):
