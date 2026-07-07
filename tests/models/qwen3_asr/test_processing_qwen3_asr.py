@@ -37,7 +37,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     def setUpClass(cls):
         cls.checkpoint = "Qwen/Qwen3-ASR-0.6B-hf"
-        cls.revision = "refs/pr/3"      # TODO: set to main after merge
+        cls.revision = "refs/pr/3"  # TODO: set to main after merge
         cls.tmpdirname = tempfile.mkdtemp()
 
         processor = Qwen3ASRProcessor.from_pretrained(cls.checkpoint, revision=cls.revision)
@@ -171,3 +171,42 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_apply_chat_template_assistant_mask(self):
         self.skipTest("Qwen3ASR processor requires audio; not compatible with text-only chat template tests.")
+
+    @require_torch
+    def test_output_labels(self):
+        import torch
+
+        processor = self.get_processor()
+        audio = self.prepare_audio_inputs(batch_size=1)[0]
+
+        conversation = [
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "audio", "audio": audio}],
+                },
+                {"role": "assistant", "content": [{"type": "text", "text": "language English<asr_text>Hello world."}]},
+            ],
+        ]
+        inputs = processor.apply_chat_template(
+            conversation,
+            tokenize=True,
+            return_dict=True,
+            processor_kwargs={"output_labels": True},
+        )
+
+        self.assertIn("labels", inputs)
+        self.assertNotIn("mm_token_type_ids", inputs)
+        labels = inputs["labels"]
+        input_ids = inputs["input_ids"]
+        self.assertEqual(labels.shape, input_ids.shape)
+
+        # audio token positions (including audio bos/eos) are masked
+        audio_positions = torch.isin(input_ids, torch.tensor(processor.audio_token_ids, dtype=input_ids.dtype))
+        self.assertTrue(audio_positions.any())
+        self.assertTrue((labels[audio_positions] == -100).all())
+
+        # non-audio positions match input_ids
+        kept_positions = ~audio_positions
+        self.assertTrue(kept_positions.any())
+        self.assertTrue((labels[kept_positions] == input_ids[kept_positions]).all())

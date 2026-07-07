@@ -149,7 +149,9 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
 inputs = processor.apply_transcription_request(
-    audio, language=[None, "zh"],  # language codes ("zh") and full names ("Chinese") are both accepted
+    audio,
+    prompt=["Vocabulary: Quilter, apostle, gospel.", None],
+    language=[None, "zh"],  # language codes ("zh") and full names ("Chinese") are both accepted
 ).to(model.device, model.dtype)
 
 output_ids = model.generate(**inputs, max_new_tokens=256)

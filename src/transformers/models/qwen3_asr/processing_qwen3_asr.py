@@ -16,16 +16,12 @@ import unicodedata
 
 import numpy as np
 
-from ...audio_utils import AudioInput, load_audio, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, load_audio, make_list_of_audio_chat_template, prepare_prompt_input
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import auto_docstring, is_torch_available
+from ...utils import auto_docstring
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
-
-
-if is_torch_available():
-    import torch
 
 
 # fmt: off
@@ -452,12 +448,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             mm_token_type_ids = model_inputs.pop("mm_token_type_ids")
             labels = model_inputs["input_ids"].clone()
             labels[mm_token_type_ids != 0] = -100  # audio positions
-            for token_id in [
-                self.tokenizer.pad_token_id,
-                self.audio_bos_token_id,
-                self.audio_eos_token_id,
-            ]:
-                labels[labels == token_id] = -100
+            labels[labels == self.tokenizer.pad_token_id] = -100
             model_inputs["labels"] = labels
 
         return BatchFeature(data=model_inputs, tensor_type="pt")
@@ -532,25 +523,13 @@ class Qwen3ASRProcessor(ProcessorMixin):
             [`Qwen3ASRForConditionalGeneration.generate`].
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
-        if is_torch_available():
-            audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
+
         batch_size = len(audio_items)
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
         languages = _prepare_language_inputs(language, batch_size)
 
-        if prompt is None:
-            prompts = [None] * batch_size
-        elif isinstance(prompt, str):
-            prompts = [prompt] * batch_size
-        elif isinstance(prompt, (list, tuple)):
-            if len(prompt) != batch_size:
-                raise ValueError(
-                    f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
-                )
-            prompts = list(prompt)
-        else:
-            raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
+        prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
 
         conversations = []
         for prompt_text, audio_item in zip(prompts, audio_items):
