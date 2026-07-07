@@ -179,8 +179,9 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # contrary to the llama-like approach where labels == input_ids and ForCausalLMLoss
         # shifts internally so logits[i] predicts labels[i+1], here forward already right-shifts labels
         # into decoder_input_ids via shift_tokens_right (which also prepends decoder_start_token_id)
-        # (whisper legacy paradigm). The loss must therefore be a plain CE against the
-        # (unshifted) labels; using self.loss_function/ForCausalLMLoss would shift a second time.
+        # (whisper legacy paradigm). The loss must therefore be a CE against the (unshifted) labels:
+        # forward passes them as shift_labels so ForCausalLMLoss skips its internal shift (which
+        # would shift a second time) while keeping num_items_in_batch handling for grad accumulation.
         from torch.nn import CrossEntropyLoss
 
         config = self.model_tester.get_config()
@@ -207,6 +208,14 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 out = model(input_features=input_features, labels=lbl, use_cache=False)
             self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
             self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
+
+        # with num_items_in_batch (as passed by Trainer under gradient accumulation), the loss
+        # must be summed over tokens and divided by the global count, not mean-reduced per step
+        num_items = (padded != -100).sum()
+        with torch.no_grad():
+            out = model(input_features=input_features, labels=padded, use_cache=False, num_items_in_batch=num_items)
+        summed_ce = CrossEntropyLoss(reduction="sum")(out.logits.reshape(-1, vocab_size), padded.reshape(-1))
+        self.assertTrue(torch.allclose(out.loss, summed_ce / num_items))
 
     def test_reverse_loading_mapping(self):
         # proj_out conversion only applies to ForConditionalGeneration, not the base model
