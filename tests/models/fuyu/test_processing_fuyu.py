@@ -38,8 +38,6 @@ if is_torch_available():
 class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = FuyuProcessor
     model_id = "adept/fuyu-8b"
-    # Fuyu uses a tokenizer with a very large vocabulary (~262K tokens), making tests slow and
-    # memory-intensive. tiny_model_id points to a trimmed tokenizer repo to keep tests lightweight.
     tiny_model_id = "hf-internal-testing/tiny-processor-fuyu"
 
     @classmethod

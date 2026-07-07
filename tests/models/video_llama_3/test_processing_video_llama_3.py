@@ -42,8 +42,8 @@ def prepare_image_inputs():
 @require_torchvision
 class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VideoLlama3Processor
+    # Tiny processor created with make_tiny_processor.py from "lkhl/VideoLLaMA3-2B-Image-HF"
     tiny_model_id = "hf-internal-testing/tiny-processor-video_llama_3"
-    model_id = "lkhl/VideoLLaMA3-2B-Image-HF"
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):

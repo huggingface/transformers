@@ -32,8 +32,8 @@ if is_torch_available():
 @require_torch
 @require_vision
 class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    # Tiny processor created with make_tiny_processor.py from "IDEA-Research/grounding-dino-base"
     tiny_model_id = "hf-internal-testing/tiny-processor-grounding_dino"
-    model_id = "IDEA-Research/grounding-dino-base"
     processor_class = GroundingDinoProcessor
     batch_size = 7
     num_queries = 5

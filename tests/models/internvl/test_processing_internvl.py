@@ -32,6 +32,7 @@ if is_torch_available():
 class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InternVLProcessor
     videos_input_name = "pixel_values"
+    # Tiny processor created with make_tiny_processor.py from "OpenGVLab/InternVL3-1B-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-internvl"
 
     @classmethod

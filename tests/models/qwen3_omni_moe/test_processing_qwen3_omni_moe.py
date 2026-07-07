@@ -45,8 +45,8 @@ if is_torch_available():
 @require_torchvision
 class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3OmniMoeProcessor
+    # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen2.5-Omni-7B"
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_omni_moe"
-    model_id = "Qwen/Qwen2.5-Omni-7B"
 
     @classmethod
     def _setup_image_processor(cls):

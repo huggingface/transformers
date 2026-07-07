@@ -21,8 +21,8 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 class DonutProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    # Tiny processor created with make_tiny_processor.py from "naver-clova-ix/donut-base"
     tiny_model_id = "hf-internal-testing/tiny-processor-donut"
-    model_id = "naver-clova-ix/donut-base"
     processor_class = DonutProcessor
 
     def test_token2json(self):

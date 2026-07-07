@@ -34,6 +34,7 @@ if is_torch_available():
 @require_torch
 class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GlmImageProcessor
+    # Tiny processor created with make_tiny_processor.py from "zai-org/GLM-Image"
     tiny_model_id = "hf-internal-testing/tiny-processor-glm_image"
 
     @classmethod
