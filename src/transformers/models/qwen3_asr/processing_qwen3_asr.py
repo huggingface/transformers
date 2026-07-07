@@ -865,5 +865,9 @@ class Qwen3ASRProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["input_features_mask"]))
 
+    @property
+    def audio_token_ids(self):
+        return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
+
 
 __all__ = ["Qwen3ASRProcessor"]
