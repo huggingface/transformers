@@ -135,6 +135,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "tml_mm_model": [
+            # Vision/Audio
             WeightRenaming(source_patterns=r"visual", target_patterns=r"vision_tower"),
             WeightRenaming(
                 source_patterns=r"vision_tower.layers.linear_(\d+)",
@@ -147,15 +148,21 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"vision_tower.layers", target_patterns=r"vision_tower.encoder_layers"),
             WeightRenaming(source_patterns=r"unembed.weight", target_patterns=r"lm_head.weight"),
             WeightRenaming(source_patterns=r"audio.", target_patterns=r"audio_tower."),
+            # LM
+            WeightRenaming(source_patterns=r"^norm.weight", target_patterns=r"language_model.norm.weight"),
             WeightRenaming(source_patterns=r"^embed.weight", target_patterns=r"language_model.embed_tokens.weight"),
             WeightRenaming(
                 source_patterns=r"^embed_norm.weight", target_patterns=r"language_model.embed_tokens.embed_norm.weight"
             ),
             WeightRenaming(source_patterns=r"model.layers", target_patterns=r"language_model.layers"),
-            WeightRenaming(source_patterns=r"mlp.experts.w13_weight", target_patterns=r"mlp.gate_up_proj.weight"),
+            # MoE
+            WeightRenaming(source_patterns=r"shared_w2_weight", target_patterns=r"w2_weight"),
+            WeightRenaming(source_patterns=r"shared_w13_weight", target_patterns=r"w13_weight"),
+            WeightRenaming(source_patterns=r"mlp.experts.w13_weight", target_patterns=r"mlp.experts.gate_up_proj"),
+            WeightRenaming(source_patterns=r"mlp.experts.w2_weight", target_patterns=r"mlp.experts.down_proj"),
             WeightRenaming(source_patterns=r"mlp.w13_dn.weight", target_patterns=r"mlp.gate_up_proj.weight"),
-            WeightRenaming(source_patterns=r"mlp.w2_md.weight ", target_patterns=r"mlp.down_proj.weight"),
-            WeightRenaming(source_patterns=r"^norm.weight", target_patterns=r"language_model.norm.weight"),
+            WeightRenaming(source_patterns=r"mlp.w2_md.weight", target_patterns=r"mlp.down_proj.weight"),
+            # Attn
             WeightRenaming(source_patterns=r"attn\.wq_du", target_patterns=r"self_attn.q_proj"),
             WeightRenaming(source_patterns=r"attn\.wk_dv", target_patterns=r"self_attn.k_proj"),
             WeightRenaming(source_patterns=r"attn\.wv_dv", target_patterns=r"self_attn.v_proj"),

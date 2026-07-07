@@ -55,6 +55,7 @@ class TmlTextConfig(PreTrainedConfig):
     n_routed_experts: int = 256
     num_experts_per_tok: int = 6
     n_shared_experts: int = 2
+    shared_expert_sink: bool = True
 
     logits_mup_width_multiplier: float = 24.0
     rms_norm_eps_moe_gate: float = 1e-6
@@ -75,7 +76,12 @@ class TmlTextConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] * self.num_hidden_layers
+            dense_mlp_idx = kwargs.pop("dense_mlp_idx", 0)
+            self.mlp_layer_types = ["dense" if i < dense_mlp_idx else "sparse" for i in range(self.num_hidden_layers)]
+
+        if kwargs.get("dense_intermediate_size") is not None:
+            self.intermediate_size = kwargs.pop("dense_intermediate_size")
+
         super().__post_init__(**kwargs)
 
 

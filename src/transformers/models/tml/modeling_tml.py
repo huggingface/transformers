@@ -304,13 +304,12 @@ class TmlExperts(nn.Module):
 
     def __init__(self, config: TmlConfig):
         super().__init__()
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.n_routed_experts
         self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.intermediate_size
+        self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
-        self.limit = config.swiglu_limit
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -366,7 +365,7 @@ class TmlSharedExperts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        intermediate_size = config.n_shared_experts * config.shared_experts_size * config.moe_intermediate_size
+        intermediate_size = config.n_shared_experts * config.moe_intermediate_size
         self.w13_weight = nn.Parameter(torch.empty(2 * intermediate_size, config.hidden_size))
         self.w2_weight = nn.Parameter(torch.empty(config.hidden_size, intermediate_size))
 
@@ -383,7 +382,7 @@ class TmlBatchSharedExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.n_shared_experts = config.n_shared_experts
-        shared_d_mlp = config.intermediate_size
+        shared_d_mlp = config.moe_intermediate_size
         self.w13_weight = nn.Parameter(torch.empty(config.n_shared_experts, 2 * shared_d_mlp, config.hidden_size))
         self.w2_weight = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
 
@@ -523,7 +522,7 @@ class TmlShortConvolution(nn.Module):
     def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
-        self.activation = None # just hardcode for now
+        self.activation = None  # just hardcode for now
 
         self.conv1d = nn.Conv1d(
             in_channels=hidden_size,
