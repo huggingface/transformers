@@ -1470,6 +1470,35 @@ class Cache:
         return self.batch_size
 
 
+def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dict]:
+    """
+    From a `config`, extract the layer types if not present already, as well as the kwargs needed to initialize
+    the corresponding layer caches.
+    """
+    layer_kwargs = {}
+    layer_types = getattr(config, "layer_types", None)
+    # If `layer_types` is not explicitly provided, infer it from config fields
+    if layer_types is None:
+        if getattr(config, "sliding_window", None) is not None:
+            layer_types = ["sliding_attention" for _ in range(config.num_hidden_layers)]
+            layer_kwargs["sliding_window"] = config.sliding_window
+        elif getattr(config, "attention_chunk_size", None) is not None:
+            layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
+            layer_kwargs["sliding_window"] = config.attention_chunk_size
+        else:
+            layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
+
+    # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
+    if hasattr(config, "num_kv_shared_layers"):
+        layer_types = layer_types[: -config.num_kv_shared_layers]
+
+    # In this case,
+    if "heavily_compressed_attention" in layer_types or "compressed_sparse_attention" in layer_types:
+        layer_kwargs["config"] = config
+
+    return layer_types, layer_kwargs
+
+
 class DynamicCache(Cache):
     """
     A cache that grows dynamically as more tokens are generated. This is the default for generative models.
@@ -1520,28 +1549,13 @@ class DynamicCache(Cache):
         offloading: bool = False,
         offload_only_non_sliding: bool = False,
     ):
+        layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
-        decoder_config = config.get_text_config(decoder=True)
-        layer_types = getattr(decoder_config, "layer_types", None)
-        # The config is usually not used, but pass it for convenience with exotic layer cache implementations
-        layer_kwargs = {"config": decoder_config}
-        # If `layer_types` is not explicitly provided, infer if the model is fully sliding
-        if layer_types is None:
-            if getattr(decoder_config, "sliding_window", None) is not None:
-                layer_types = ["sliding_attention" for _ in range(decoder_config.num_hidden_layers)]
-                layer_kwargs["sliding_window"] = decoder_config.sliding_window
-            elif getattr(decoder_config, "attention_chunk_size", None) is not None:
-                layer_types = ["chunked_attention" for _ in range(decoder_config.num_hidden_layers)]
-                layer_kwargs["sliding_window"] = decoder_config.attention_chunk_size
-            else:
-                layer_types = ["full_attention" for _ in range(decoder_config.num_hidden_layers)]
-
-            # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
-            if hasattr(decoder_config, "num_kv_shared_layers"):
-                layer_types = layer_types[: -decoder_config.num_kv_shared_layers]
-
-        # Dispatch the layer types
-        layers = [DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
+        if config is not None:
+            decoder_config = config.get_text_config(decoder=True)
+            layer_types, layer_kwargs = get_layer_types_and_kwargs(decoder_config)
+            # Dispatch the layer types
+            layers = [DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
 
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
@@ -1625,28 +1639,10 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
-        config = config.get_text_config(decoder=True)
-        layer_types = getattr(config, "layer_types", None)
-        # The config is usually not used, but pass it for convenience with exotic layer cache implementations
-        layer_kwargs = {"max_cache_len": max_cache_len, "config": config}
-        # If `layer_types` is not explicitly provided, infer if the model is fully sliding
-        if layer_types is None:
-            if getattr(config, "sliding_window", None) is not None:
-                layer_types = ["sliding_attention" for _ in range(config.num_hidden_layers)]
-                layer_kwargs["sliding_window"] = config.sliding_window
-            elif getattr(config, "attention_chunk_size", None) is not None:
-                layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
-                layer_kwargs["sliding_window"] = config.attention_chunk_size
-            else:
-                layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
-        # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
-        num_kv_shared_layers = getattr(config, "num_kv_shared_layers", 0)
-        if num_kv_shared_layers > 0:
-            layer_types = layer_types[:-num_kv_shared_layers]
-
+        layer_types, layer_kwargs = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
+        layer_kwargs["max_cache_len"] = max_cache_len
         # Dispatch the layer types
         layers = [STATIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
-
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
 
