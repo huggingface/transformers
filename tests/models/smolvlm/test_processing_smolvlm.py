@@ -28,7 +28,8 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SmolVLMProcessor
     videos_input_name = "pixel_values"
-    model_id = "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
+    # Tiny processor created with make_tiny_processor.py from "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
+    tiny_model_id = "hf-internal-testing/tiny-processor-smolvlm"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -76,7 +77,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def prepare_video_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy videos."""
-        video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
+        # 2 frames instead of 8: with 8 frames the expanded video token sequence exceeds the max_length
+        # used in truncation tests, truncation cuts through video tokens, and _check_special_mm_tokens
+        # raises a mismatch error.
+        video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 2
         if batch_size is None:
             return [[video_input]]
         return [[video_input]] * batch_size
