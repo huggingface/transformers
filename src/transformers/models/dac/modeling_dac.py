@@ -479,6 +479,7 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         if isinstance(module, nn.Conv1d):
             init.trunc_normal_(module.weight, std=0.02)
             init.constant_(module.bias, 0)
