@@ -20,7 +20,6 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchaudio.functional as AF
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -39,7 +38,7 @@ def _to_exact_int(value: float, name: str, tolerance: float = 1e-6) -> int:
 
 def _resample(samples: np.ndarray, src_sample_rate: int, sample_rate: int) -> np.ndarray:
     audio = torch.from_numpy(np.ascontiguousarray(samples, dtype=np.float32))
-    resampled = AF.resample(audio, orig_freq=src_sample_rate, new_freq=sample_rate)
+    resampled = F.resample(audio, orig_freq=src_sample_rate, new_freq=sample_rate)
     return resampled.detach().cpu().numpy().astype(np.float32, copy=False)
 
 
