@@ -1410,29 +1410,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         return self.convert_tokens_to_ids(self.all_special_tokens)
 
     def _set_model_specific_special_tokens(self, special_tokens):
-        """
-        Adds model-specific special tokens.
-
-        Supports legacy tokenizer configs where `special_tokens`
-        may be provided as a list.
-        """
-
-        if isinstance(special_tokens, list):
-            special_tokens = {
-                f"extra_special_token_{i}": token
-                for i, token in enumerate(special_tokens)
-            }
-
         if not isinstance(special_tokens, dict):
             raise TypeError(
-                "`special_tokens` must be a dictionary or a list, "
-                f"got {type(special_tokens).__name__}."
+                "`special_tokens` must be a dictionary mapping attribute names "
+                f"to token values, got {type(special_tokens).__name__}."
             )
 
         self.SPECIAL_TOKENS_ATTRIBUTES.extend(
-            key
-            for key in special_tokens
-            if key not in self.SPECIAL_TOKENS_ATTRIBUTES
+            key for key in special_tokens if key not in self.SPECIAL_TOKENS_ATTRIBUTES
         )
 
         for key, value in special_tokens.items():
