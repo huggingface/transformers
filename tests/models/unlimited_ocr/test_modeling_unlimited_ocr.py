@@ -172,6 +172,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
 
 @require_torch
 class UnlimitedOcrIntegrationTest(unittest.TestCase):
+    # TODO: change before merge
     model_id = "guarin/Unlimited-OCR"
 
     def setUp(self):
@@ -242,7 +243,6 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
             images=[image1, image2],
             text=["<image>document parsing.", "<image>document parsing."],
             return_tensors="pt",
-            padding=True,
         ).to(model.device, dtype=torch.bfloat16)
 
         with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
