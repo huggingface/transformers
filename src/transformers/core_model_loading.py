@@ -1422,24 +1422,24 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
+            # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
+            # distributed op selects whole experts. The signal is a `MergeModulelist`
+            # in the chain; it isn't always `operations[0]` (e.g. an FP8 quantizer
+            # prepends a scale-decode op), so scan the whole chain rather than just the head.
+            tensor_idx = (
+                len(mapping.collected_tensors.get(source_pattern, []))
+                if isinstance(mapping, WeightConverter)
+                and any(isinstance(op, MergeModulelist) for op in mapping.operations)
+                else None
+            )
+
             # 4. Handle TP/Dtensor sharding or device_map placement
-            future_or_tensor = None
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
+            sharding_op = None
+            materialize_device = param_device
+
             if isinstance(empty_param, DTensor):
-                tensor_idx = (
-                    len(mapping.collected_tensors.get(source_pattern, []))
-                    if isinstance(mapping, WeightConverter)
-                    and any(isinstance(op, MergeModulelist) for op in mapping.operations)
-                    else None
-                )
-                future_or_tensor = spawn_materialize(
-                    thread_pool,
-                    tensor,
-                    param_device,
-                    _dtype,
-                    sharding_op=DtensorShardOperation(empty_param),
-                    tensor_idx=tensor_idx,
-                )
+                sharding_op = DtensorShardOperation(empty_param)
             elif device_mesh and tp_plan:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
@@ -1448,27 +1448,17 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
-                    # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
-                    # distributed op selects whole experts. The signal is a `MergeModulelist`
-                    # in the chain; it isn't always `operations[0]` (e.g. an FP8 quantizer
-                    # prepends a scale-decode op), so scan the whole chain rather than just the head.
-                    shard_index = (
-                        len(mapping.collected_tensors.get(source_pattern, []))
-                        if isinstance(mapping, WeightConverter)
-                        and any(isinstance(op, MergeModulelist) for op in mapping.operations)
-                        else None
-                    )
-                    future_or_tensor = spawn_materialize(
-                        thread_pool,
-                        tensor,
-                        device_map[""],
-                        _dtype,
-                        sharding_op=mapping.distributed_operation,
-                        tensor_idx=shard_index,
-                    )
+                    sharding_op = mapping.distributed_operation
+                    materialize_device = device_map[""]
 
-            if future_or_tensor is None:
-                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
+            future_or_tensor = spawn_materialize(
+                thread_pool,
+                tensor,
+                materialize_device,
+                _dtype,
+                sharding_op=sharding_op,
+                tensor_idx=tensor_idx,
+            )
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
