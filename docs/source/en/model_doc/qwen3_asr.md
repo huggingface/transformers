@@ -164,6 +164,8 @@ for i, text in enumerate(transcriptions):
 
 Qwen3 ASR also accepts chat template inputs. The `apply_transcription_request` usage [above](#simple-transcription) is a convenience wrapper for `apply_chat_template`.
 
+The language can be forced through the chat template by *prefilling* the assistant turn with `language <NAME><asr_text>` and passing `continue_final_message=True`, which is what `apply_transcription_request` does under the hood. Note that if forcing the language, a prefill should be set for all audio in a batch (as shown below).
+
 ```python
 from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
 
@@ -171,9 +173,9 @@ model_id = "Qwen/Qwen3-ASR-1.7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
-# With context/hotwords as system message
 chat_template = [
     [
+        # Context/hotwords as system message
         {"role": "system", "content": [{"type": "text", "text": "Vocabulary: Quilter, apostle, gospel."}]},
         {
             "role": "user",
@@ -184,35 +186,9 @@ chat_template = [
                 },
             ],
         },
+        # empty prefill since forcing language in the other sample
+        {"role": "assistant", "content": [{"type": "text", "text": ""}]},
     ],
-    [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "audio",
-                    "path": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
-                },
-            ],
-        },
-    ],
-]
-
-inputs = processor.apply_chat_template(
-    chat_template, tokenize=True, return_dict=True,
-).to(model.device, model.dtype)
-
-output_ids = model.generate(**inputs, max_new_tokens=256)
-generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
-transcriptions = processor.decode(generated_ids, return_format="transcription_only")
-for text in transcriptions:
-    print(text)
-```
-
-The language can be forced through the chat template by *prefilling* the assistant turn with `language <NAME><asr_text>` and passing `continue_final_message=True`, which is what `apply_transcription_request` does under the hood:
-
-```python
-chat_template = [
     [
         {
             "role": "user",
@@ -233,7 +209,9 @@ inputs = processor.apply_chat_template(
 
 output_ids = model.generate(**inputs, max_new_tokens=256)
 generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
-print(processor.decode(generated_ids, return_format="transcription_only")[0])
+transcriptions = processor.decode(generated_ids, return_format="transcription_only")
+for text in transcriptions:
+    print(text)
 ```
 
 ### Training
