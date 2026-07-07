@@ -20,6 +20,7 @@ if is_vision_available():
 class TrOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     text_input_name = "labels"
     processor_class = TrOCRProcessor
+    # Tiny processor created with make_tiny_processor.py from "microsoft/trocr-base-handwritten"
     tiny_model_id = "hf-internal-testing/tiny-processor-trocr"
 
     def test_processor_text(self):

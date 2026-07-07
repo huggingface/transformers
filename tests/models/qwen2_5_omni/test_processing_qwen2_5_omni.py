@@ -44,8 +44,8 @@ if is_torch_available():
 @require_torchvision
 class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5OmniProcessor
+    # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen2.5-Omni-7B"
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen2_5_omni"
-    model_id = "Qwen/Qwen2.5-Omni-7B"
 
     video_unstructured_max_length = 690
     video_text_kwargs_max_length = 690

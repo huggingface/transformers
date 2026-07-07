@@ -37,8 +37,8 @@ if is_torch_available():
 @require_torchvision
 class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2VLProcessor
+    # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen2-VL-7B-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen2_vl"
-    model_id = "Qwen/Qwen2-VL-7B-Instruct"
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):

@@ -34,6 +34,7 @@ if is_torch_available():
 class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Glm4vProcessor
     # Use tiny repos to avoid loading the full 151k-vocab tokenizer (~309 MB)
+    # Tiny processor created with make_tiny_processor.py from "THUDM/GLM-4.1V-9B-Thinking"
     tiny_model_id = "hf-internal-testing/tiny-processor-glm4v"
 
     @classmethod

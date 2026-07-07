@@ -44,6 +44,7 @@ if is_vision_available():
 class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2_5Processor
     images_input_name = "flattened_patches"
+    # Tiny processor created with make_tiny_processor.py from "microsoft/kosmos-2.5"
     tiny_model_id = "hf-internal-testing/tiny-processor-kosmos2_5"
 
     @unittest.skip("Kosmos2_5Processor removes 'rows' and 'cols' from the output")

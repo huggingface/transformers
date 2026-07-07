@@ -38,6 +38,7 @@ if is_torch_available():
 class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Ernie4_5_VLMoeProcessor
     # Use tiny repos to avoid loading the full 100k-vocab tokenizer (~342 MB)
+    # Tiny processor created with make_tiny_processor.py from "hf-internal-testing/Ernie-VL-Moe-Small"
     tiny_model_id = "hf-internal-testing/tiny-processor-ernie4_5_vl_moe"
 
     def get_tokenizer(self, **kwargs):

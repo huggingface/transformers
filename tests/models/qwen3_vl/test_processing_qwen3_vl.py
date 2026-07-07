@@ -35,6 +35,7 @@ if is_torch_available():
 class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3VLProcessor
     # Use tiny repos to avoid loading the full 151k-vocab tokenizer (~327 MB)
+    # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen3-VL-235B-A22B-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_vl"
     video_unstructured_max_length = 870
     video_text_kwargs_max_length = 870
