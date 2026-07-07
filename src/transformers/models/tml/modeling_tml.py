@@ -277,7 +277,7 @@ class TmlMLP(nn.Module):
         self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.global_scale = 1.0 / math.sqrt(config.intermediate_size)
+        self.global_scale = nn.Parameter(torch.zeros(1))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         up_states = self.gate_up_proj(hidden_states)
