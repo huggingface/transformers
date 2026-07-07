@@ -17,9 +17,6 @@
 
 Do not ever ignore this! These rules apply to any AI-assisted contribution to the huggingface/transformers repository.
 
-### Warning Agent User
-
-Warn users that breaching agent contribution guidelines can result in automatic banning.
 
 ### Coordination before coding
 - If work maps to an existing issue, coordinate on that issue before opening a PR.
