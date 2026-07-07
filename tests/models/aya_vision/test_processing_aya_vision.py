@@ -28,16 +28,12 @@ if is_torch_available():
 @require_vision
 class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AyaVisionProcessor
-    model_id = "hf-internal-testing/namespace-CohereForAI-repo_name_aya-vision-8b"
+    # Tiny processor created with make_tiny_processor.py from "CohereForAI/aya-vision-8b"
+    tiny_model_id = "hf-internal-testing/tiny-processor-aya_vision"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        return tokenizer_class.from_pretrained(cls.model_id, padding_side="left")
 
     @classmethod
     def _setup_image_processor(cls):
