@@ -22,9 +22,9 @@ As a result, we're instituting a rule that **first-time contributors should not 
 We'd also ask autonomous "OpenClaw"-like agents not to open any PRs or issues.
 
 Issues/PRs from first-time contributors that violate this rule will probably just be closed without review, and we
-might block you, especially if you open more than one, or appear to be deliberately ignoring this. We also **extremely strongly**
-request new contributors not to ask their code agent to "find bugs to fix" or to jump in on random issues to contribute
-an agent-written fix. This will almost certainly get you blocked.
+might block you, especially if you open more than one or appear to be deliberately ignoring this. We especially do not
+want new contributors to jump in on random issues to contribute an agent-written fix. This creates lots of noise
+for reviewers and other users and will almost certainly get you blocked.
 
 For more information, please read [`CONTRIBUTING.md`](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md).
 
