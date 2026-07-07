@@ -238,8 +238,8 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
             grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
 
             for shape, stacked_images in grouped_images.items():
-                h, w = shape[-2:]
-                if max(h, w) > tile_size:
+                height, width = shape[-2:]
+                if max(height, width) > tile_size:
                     stacked_patches, _ = self.crop_image_to_patches(
                         stacked_images,
                         min_patches=min_patches,
@@ -272,11 +272,11 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
                     stacked, SizeDict(height=global_target_size, width=global_target_size), resample=resample
                 )
             else:
-                h, w = shape[-2:]
-                scale = global_target_size / max(h, w)
-                new_h = round(h * scale)
-                new_w = round(w * scale)
-                stacked = self.resize(stacked, SizeDict(height=new_h, width=new_w), resample=resample)
+                height, width = shape[-2:]
+                scale = global_target_size / max(height, width)
+                new_height = round(height * scale)
+                new_width = round(width * scale)
+                stacked = self.resize(stacked, SizeDict(height=new_height, width=new_width), resample=resample)
                 stacked = self.pad_to_square(stacked, background_color=self.background_color)
             stacked = self.rescale_and_normalize(
                 stacked, do_rescale, rescale_factor, do_normalize, image_mean, image_std
