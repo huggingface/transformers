@@ -1104,10 +1104,7 @@ class ContinuousMixin:
 
         # Retrieve continuous batching config, or create it if none is provided
         if continuous_batching_config is None:
-            if isinstance(getattr(gen_config, "continuous_batching_config", None), ContinuousBatchingConfig):
-                continuous_batching_config = gen_config.continuous_batching_config
-            else:
-                continuous_batching_config = ContinuousBatchingConfig()
+            continuous_batching_config = ContinuousBatchingConfig()
 
         # Create and return the manager
         return ContinuousBatchingManager(
