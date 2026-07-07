@@ -65,6 +65,14 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             cls.tiny_model_id, size={"shortest_edge": 12 * 12, "longest_edge": 28 * 28}
         )
 
+    @classmethod
+    def _setup_feature_extractor(cls):
+        feature_extractor_class = cls._get_component_class_from_processor("feature_extractor")
+        # chunk_length=30s instead of the default 300s reduces input_features from
+        # (batch, 128, 30000) to (batch, 128, 3000), cutting the audio call's peak
+        # memory from ~178 MB to ~20 MB per test.
+        return feature_extractor_class.from_pretrained(cls.tiny_model_id, chunk_length=30)
+
     def prepare_audio_inputs(self, batch_size: int = 3):
         """This function prepares a list of numpy audios."""
         audio_inputs = [np.random.rand(160000) * 2 - 1] * batch_size
