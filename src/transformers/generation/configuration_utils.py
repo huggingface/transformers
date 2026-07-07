@@ -18,7 +18,7 @@ import json
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from .. import __version__
@@ -457,9 +457,8 @@ class GenerationConfig(PushToHubMixin):
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", None)
 
-        self.continuous_batching_config = kwargs.pop("continuous_batching_config", None)
-        if isinstance(self.continuous_batching_config, dict):
-            self.continuous_batching_config = ContinuousBatchingConfig(**self.continuous_batching_config)
+        # Continuous batching config is runtime/hardware-specific and lives beside `GenerationConfig`.
+        kwargs.pop("continuous_batching_config", None)
 
         # Deprecated (moved to the Hub). TODO remove for v5
         self.low_memory = kwargs.pop("low_memory", None)
@@ -1211,7 +1210,6 @@ class GenerationConfig(PushToHubMixin):
                 # Some of our dataclasses have a custom `to_dict()` method, and we prefer it
                 if hasattr(obj, "to_dict"):
                     return obj.to_dict()
-                return {field.name: convert_dataclass_to_dict(getattr(obj, field.name)) for field in fields(obj)}
             else:
                 return obj
 

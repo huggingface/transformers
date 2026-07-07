@@ -18,6 +18,7 @@ import os
 import tempfile
 import unittest
 import warnings
+from dataclasses import asdict
 
 from huggingface_hub import create_pull_request
 from parameterized import parameterized
@@ -762,28 +763,32 @@ class GenerationConfigSerializationTest(unittest.TestCase):
         self.assertEqual(watermark.seeding_scheme, seeding_scheme)
         self.assertEqual(watermark.context_width, context_width)
 
-    def test_serialize_generation_continuous_batching_config(self):
-        """Tests that GenerationConfig serializes ContinuousBatchingConfig parameters."""
+    def test_continuous_batching_config_from_dict(self):
+        """Tests that ContinuousBatchingConfig round-trips nested CompileConfig parameters."""
         continuous_batching_config = ContinuousBatchingConfig(
             block_size=128,
             default_compile_level=2,
             varlen_compile_config=CompileConfig(dynamic=True),
             decode_compile_config=CompileConfig(mode="default"),
         )
+        new_config = ContinuousBatchingConfig(**asdict(continuous_batching_config))
+
+        self.assertEqual(new_config.block_size, 128)
+        self.assertEqual(new_config.default_compile_level, 2)
+        self.assertIsInstance(new_config.varlen_compile_config, CompileConfig)
+        self.assertTrue(new_config.varlen_compile_config.dynamic)
+        self.assertNotIn("_compile_all_devices", new_config.varlen_compile_config.to_dict())
+        self.assertIsInstance(new_config.decode_compile_config, CompileConfig)
+        self.assertEqual(new_config.decode_compile_config.mode, "default")
+
+    def test_generation_config_does_not_serialize_continuous_batching_config(self):
+        """Tests that ContinuousBatchingConfig lives beside GenerationConfig."""
+        continuous_batching_config = ContinuousBatchingConfig(block_size=128)
         generation_config = GenerationConfig(continuous_batching_config=continuous_batching_config)
 
-        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
-            generation_config.save_pretrained(tmp_dir)
-            new_config = GenerationConfig.from_pretrained(tmp_dir)
-
-        self.assertIsInstance(new_config.continuous_batching_config, ContinuousBatchingConfig)
-        self.assertEqual(new_config.continuous_batching_config.block_size, 128)
-        self.assertEqual(new_config.continuous_batching_config.default_compile_level, 2)
-        self.assertIsInstance(new_config.continuous_batching_config.varlen_compile_config, CompileConfig)
-        self.assertTrue(new_config.continuous_batching_config.varlen_compile_config.dynamic)
-        self.assertNotIn("_compile_all_devices", new_config.continuous_batching_config.varlen_compile_config.to_dict())
-        self.assertIsInstance(new_config.continuous_batching_config.decode_compile_config, CompileConfig)
-        self.assertEqual(new_config.continuous_batching_config.decode_compile_config.mode, "default")
+        self.assertFalse(hasattr(generation_config, "continuous_batching_config"))
+        self.assertNotIn("continuous_batching_config", generation_config.to_dict())
+        self.assertNotIn("continuous_batching_config", generation_config.to_json_string())
 
 
 @is_staging_test
