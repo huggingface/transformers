@@ -1494,7 +1494,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # last hidden states of only the last validated tokens
         last_hidden_states = last_hidden_states[:, :num_last_main_model_tokens].to(self.device)
 
-        candidate_ids, candidate_logits = self.mtp_model(
+        candidate_ids, candidate_logits, _ = self.mtp_model(
             input_ids=mtp_input_ids,
             last_hidden_states=last_hidden_states,
             attention_mask=mtp_attention_mask,

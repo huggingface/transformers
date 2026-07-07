@@ -88,6 +88,8 @@ class MtpLayerStack(PreTrainedModel):
 
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
         super().__init__(main_model.config.get_text_config())
+        # Make sure we have the correct loss type in case of training
+        self.loss_type = "ForCausalLM"
         self.num_mtp_layers = num_mtp_layers
         # Infer the type of the layers based on the main model
         layer_cls = type(main_model.base_model.layers[-1])
@@ -125,6 +127,7 @@ class MtpLayerStack(PreTrainedModel):
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor | None,
         past_key_values: Cache | None,
+        labels: torch.LongTensor | None = None,
         # Control how we sample the new token from each layer
         do_sample: bool = False,
         logits_processor: LogitsProcessorList | None = None,
@@ -132,15 +135,14 @@ class MtpLayerStack(PreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Sample 1 new token for each mtp layers present in this model. Note that the inputs are assumed to be
-        already sliced and correct here, i.e. if the main model just processed inputs corresponding to tokens
-        at positions [N-1, N] in the sequence, then from it you draft a new token for position N+1, and the
-        `input_ids`/`position_ids`/`attention_mask` here are assumed to correspond to data for tokens at positions
-        [N, N+1], i.e. shifted by 1 from the main model, by the newly drafted token. The `last_hidden_states` though
-        will correspond to the same as the main model, i.e. positions [N-1, N] in the sequence length dimension.
+        Sample 1 new token for each mtp layers present in this model. Note that the inputs are assumed to be already sliced and correct
+        here, i.e. if the main model just processed inputs corresponding to tokens at positions [N-1, N] in the sequence, then from it
+        you draft a new token for position N+1, and the `input_ids`/`position_ids`/`attention_mask` here are assumed to correspond to
+        data for tokens at positions [N, N+1], i.e. shifted by 1 from the main model, by the newly drafted token. The `last_hidden_states`
+        though will correspond to the same as the main model, i.e. positions [N-1, N] in the sequence length dimension.
 
-        `full_input_ids` correspond to the full sequence of `input_ids`, which is used in case we have any `logits_processor`
-        as some processors may require to check the length/value of the full previous sequence of ids.
+        `full_input_ids` correspond to the full sequence of `input_ids`, which is used in case we have any `logits_processor` as some
+        processors may require to check the length/value of the full previous sequence of ids.
         """
         batch_size = input_ids.shape[0]
 
@@ -154,7 +156,8 @@ class MtpLayerStack(PreTrainedModel):
 
         drafted_logits = []
         drafted_tokens = []
-        for mtp_layer in self.layers:
+        loss = None
+        for i, mtp_layer in enumerate(self.layers):
             # We need to recompute those every layer since they change
             inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
             position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
@@ -175,12 +178,20 @@ class MtpLayerStack(PreTrainedModel):
                 **kwargs,
             )
 
-            # Only compute logits for next drafted token
-            logits = self.shared_head(last_hidden_states[:, -1:, :])
+            # If we are not computing the loss, only compute logits for the next drafted token to save memory
+            slice_indices = slice(-1, None) if labels is None else slice(None, None)
+            logits = self.shared_head(last_hidden_states[:, slice_indices, :])
+
+            # Compute loss for current mtp layer if needed
+            if labels is not None:
+                # shift labels according to our current mtp depth
+                shift_labels = nn.functional.pad(labels, (0, i), value=-100)[..., i:].contiguous()
+                loss += self.loss_function(
+                    logits, labels, vocab_size=self.config.vocab_size, shift_labels=shift_labels, **kwargs
+                )
 
             # Append the drafted logits
             drafted_logits.append(logits)
-
             # Decode one token
             next_token_logits = logits[:, -1, :].to(device=input_ids.device)
             if logits_processor is not None and full_input_ids is not None:
@@ -203,7 +214,7 @@ class MtpLayerStack(PreTrainedModel):
 
         new_candidate_ids = torch.cat(drafted_tokens, dim=1)
         candidate_logits = torch.cat(drafted_logits, dim=1)
-        return new_candidate_ids, candidate_logits
+        return new_candidate_ids, candidate_logits, loss
 
     @classmethod
     def from_pretrained(cls, main_model: PreTrainedModel, device_map=None, **kwargs) -> MtpLayerStack:
