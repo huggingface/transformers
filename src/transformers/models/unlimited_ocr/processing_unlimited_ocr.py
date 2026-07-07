@@ -19,12 +19,8 @@
 # limitations under the License.
 import math
 
-import torch
-
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 
 
@@ -59,102 +55,19 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
-    def _expand_image_tokens(
-        self,
-        text: list[TextInput],
-        patches_grid: torch.Tensor,
-        num_local_patches: list[int] | torch.Tensor,
-    ) -> list[str]:
-        """
-        Expand each `<image>` placeholder in the text to the correct number of image tokens.
-
-        Args:
-            text (`list[str]`):
-                List of text strings, each potentially containing `<image>` placeholders.
-            num_crops_list (`list[int]`):
-                Number of crops for each image, consumed in order as `<image>` placeholders
-                are encountered across all text samples.
-
-        Returns:
-            `list[str]`: Text with expanded image token placeholders.
-        """
-        num_images = len(patches_grid)
-        total_image_tokens = sum(t.count(self.image_token) for t in text)
-        if total_image_tokens != num_images:
-            raise ValueError(
-                f"Number of `{self.image_token}` tokens in the text ({total_image_tokens}) does not match the "
-                f"number of images passed ({num_images}). Use one `{self.image_token}` placeholder per image, "
-                f"e.g. `'<image>' * len(images) + 'Multi page parsing.'`"
-            )
-
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> TextInput:
         size = self.image_processor.size["height"]
         tile_size = self.image_processor.tile_size
 
         num_queries_global = math.ceil(size / self.patch_size / self.downsample_ratio)
         num_queries_local = math.ceil(tile_size / self.patch_size / self.downsample_ratio)
 
-        crop_index = 0
-        for i in range(len(text)):
-            while self.image_token in text[i]:
-                num_columns = int(patches_grid[crop_index][0])
-                num_rows = int(patches_grid[crop_index][1])
-                num_tokens = num_queries_global * (num_queries_global + 1) + 1
-                if int(num_local_patches[crop_index]) > 0:
-                    num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
-                text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_tokens, 1)
-                crop_index += 1
-            text[i] = text[i].replace("<|placeholder|>", self.image_token)
-        return text
-
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[UnlimitedOcrProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Global view pixel values. Returned when `images` is not `None`.
-            - **pixel_values_local** -- Local patch pixel values. Returned when `images` is not `None`.
-            - **num_local_patches** -- Number of local patches per image. Returned when `images` is not `None`.
-            - **patches_grid** -- Number of patch columns and rows per image. Returned when `images` is not `None`.
-        """
-        if images is None:
-            raise ValueError("`images` are expected as arguments to a `UnlimitedOcrProcessor` instance.")
-        if text is None:
-            raise ValueError("`text` is required for `UnlimitedOcrProcessor`. Example: `'<image>\\nFree OCR.'`")
-
-        output_kwargs = self._merge_kwargs(
-            UnlimitedOcrProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if isinstance(text, str):
-            text = [text]
-        elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
-        text = text.copy()  # below lines change text in-place
-
-        image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        text = self._expand_image_tokens(text, image_inputs["patches_grid"], image_inputs["num_local_patches"])
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
-
-        return BatchFeature(
-            data={**text_inputs, **image_inputs},
-            tensor_type=return_tensors,
-        )
+        num_columns = int(image_inputs["patches_grid"][image_idx][0])
+        num_rows = int(image_inputs["patches_grid"][image_idx][1])
+        num_tokens = num_queries_global * (num_queries_global + 1) + 1
+        if int(image_inputs["num_local_patches"][image_idx]) > 0:
+            num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
+        return self.image_token * num_tokens
 
 
 __all__ = ["UnlimitedOcrProcessor"]
