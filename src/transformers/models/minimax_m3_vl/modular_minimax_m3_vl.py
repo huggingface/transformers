@@ -230,10 +230,10 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
 
 
 class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
-    layer_type = "minimax_m3_sparse"
+    _layer_type = "minimax_m3_sparse"
 
-    def __init__(self, config: PreTrainedConfig | None = None):
-        super().__init__(config)
+    def __init__(self, **kwargs):
+        super().__init__()
         self.idx_keys: torch.Tensor | None = None
 
     def update_index(self, idx_k: torch.Tensor) -> torch.Tensor:
@@ -265,9 +265,9 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
 
 
 class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
-    layer_type = "minimax_m3_sparse"
+    _layer_type = "minimax_m3_sparse"
 
-    def __init__(self, max_cache_len: int):
+    def __init__(self, max_cache_len: int, **kwargs):
         super().__init__(max_cache_len)
         self.idx_keys: torch.Tensor | None = None
         # Tensor (not int) so it can be marked as a static address for cudagraphs, like `cumulative_length`.
