@@ -287,9 +287,9 @@ class TmlMLP(nn.Module):
 
 
 def swiglu_interleaved(gate_up: torch.Tensor) -> torch.Tensor:
-    """SwiGLU over an *interleaved* fused gate/up tensor, computed in fp32.
-
-    `gate_up[..., 0::2]` are gate channels, `gate_up[..., 1::2]` up channels.
+    """
+    SwiGLU over an interleaved gate/up tensor, computed in fp32
+    Note the `[..., 0::2]` instead of `x.chunk(2)`
     """
     input_dtype = gate_up.dtype
     gate_up = gate_up.float()
@@ -314,22 +314,24 @@ class TmlExperts(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
+        final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
-            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in hit:
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
             if expert_idx == self.num_experts:
                 continue
-            top_k_pos, token_idx = torch.where(mask[expert_idx])
-            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
-            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
-
-    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        return swiglu_interleaved(gate_up)
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            current_state = nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            current_state = swiglu_interleaved(current_state)
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+        return final_hidden_states
 
 
 class TmlTopkRouter(nn.Module):
@@ -362,6 +364,7 @@ class TmlSharedExperts(nn.Module):
         intermediate_size = config.n_shared_experts * config.moe_intermediate_size
         self.w13_weight = nn.Parameter(torch.empty(2 * intermediate_size, config.hidden_size))
         self.w2_weight = nn.Parameter(torch.empty(config.hidden_size, intermediate_size))
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states):
         gate_up = F.linear(hidden_states, self.w13_weight)
@@ -379,6 +382,7 @@ class TmlBatchSharedExperts(nn.Module):
         shared_d_mlp = config.moe_intermediate_size
         self.w13_weight = nn.Parameter(torch.empty(config.n_shared_experts, 2 * shared_d_mlp, config.hidden_size))
         self.w2_weight = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, shared_d_mlp))
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states, gammas):
         input_shape = hidden_states.shape
@@ -432,19 +436,19 @@ class TmlMoE(nn.Module):
     def route_tokens_to_experts(self, router_logits):
         scores = router_logits.sigmoid()
 
-        routed_scores = scores[..., :-self.n_shared_experts]
+        routed_scores = scores[..., : -self.n_shared_experts]
         scores_for_choice = routed_scores + self.gate.e_score_correction_bias
         topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
 
-        routed_logits = router_logits[..., :-self.n_shared_experts]
-        shared_logits = router_logits[..., -self.n_shared_experts:]
+        routed_logits = router_logits[..., : -self.n_shared_experts]
+        shared_logits = router_logits[..., -self.n_shared_experts :]
         topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
         topk_weights = _logsigmoid_normalize(topk_logits)
 
         topk_weights = topk_weights * self.route_scale
         topk_weights = topk_weights * self.gate.global_scale
 
-        shared_gammas = topk_weights[..., -self.n_shared_experts:].contiguous()
+        shared_gammas = topk_weights[..., -self.n_shared_experts :].contiguous()
         topk_weights = topk_weights[..., : self.top_k].contiguous()
 
         return topk_indices, topk_weights, shared_gammas
