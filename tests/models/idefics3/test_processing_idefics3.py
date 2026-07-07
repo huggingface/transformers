@@ -69,6 +69,18 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_seq_len = processor.image_seq_len
 
+        # Pre-load the SmolVLM processor used by test_get_num_multimodal_tokens_matches_processor_call.
+        # Loaded once here to avoid repeated Hub loads in the test body. size=1024 (2×2=5 tiles)
+        # instead of default 2048 (4×4=17 tiles) to speed up image processing in the test.
+        cls._smolvlm_processor = cls.processor_class.from_pretrained(
+            "hf-internal-testing/tiny-processor-smolvlm",
+            add_bos_token=True,
+            add_eos_token=False,
+            padding_side="left",
+            image_seq_len=2,
+        )
+        cls._smolvlm_processor.image_processor.size = {"longest_edge": 1024}
+
     @staticmethod
     def prepare_processor_dict():
         return {"image_seq_len": 2}
@@ -84,16 +96,9 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Idefics3 checkpoints aren't supported on purpose. Idefics3 encodes special row/col
         # tokens as several token ids because they aren't added in `special_token_ids`. Thus
         # we can't correctly infer which tokens in input ids are used as placeholders for image/row/col!
-        # Use the tiny SmolVLM processor (same architecture, row/col tokens are proper special tokens).
-        # The tiny model is sufficient now that _get_num_multimodal_tokens correctly handles "\n\n"
-        # tokenization (which may differ between full and trimmed tokenizers).
-        base_processor = self.processor_class.from_pretrained(
-            "hf-internal-testing/tiny-processor-smolvlm",
-            add_bos_token=True,
-            add_eos_token=False,
-            padding_side="left",
-            image_seq_len=2,
-        )
+        # Use the tiny SmolVLM processor (same architecture, row/col tokens are proper special tokens),
+        # pre-loaded once in setUpClass with size=1024 (2×2 tiles) for speed.
+        base_processor = self._smolvlm_processor
         for do_image_splitting in [False, True]:
             with self.subTest(do_image_splitting=do_image_splitting):
                 processor = base_processor
