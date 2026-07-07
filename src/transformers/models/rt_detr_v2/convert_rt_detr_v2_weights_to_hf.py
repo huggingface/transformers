@@ -58,7 +58,6 @@ def get_rt_detr_v2_config(model_name: str) -> RTDetrV2Config:
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 4
-    # TODO: check this not working
     elif model_name == "rtdetr_v2_r50vd_m":
         config.hidden_expansion = 0.5
     elif model_name == "rtdetr_v2_r50vd":
@@ -86,16 +85,16 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"backbone.res_layers.(\d+).blocks.(\d+).branch2b.norm.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.layers.\2.layer.1.normalization.\3",
     r"backbone.res_layers.(\d+).blocks.(\d+).branch2c.conv.weight": r"model.backbone.model.encoder.stages.\1.layers.\2.layer.2.convolution.weight",
     r"backbone.res_layers.(\d+).blocks.(\d+).branch2c.norm.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.layers.\2.layer.2.normalization.\3",
-    r"encoder.encoder.(\d+).layers.0.self_attn.out_proj.weight": r"model.encoder.encoder.\1.layers.0.self_attn.out_proj.weight",
-    r"encoder.encoder.(\d+).layers.0.self_attn.out_proj.bias": r"model.encoder.encoder.\1.layers.0.self_attn.out_proj.bias",
-    r"encoder.encoder.(\d+).layers.0.linear1.weight": r"model.encoder.encoder.\1.layers.0.fc1.weight",
-    r"encoder.encoder.(\d+).layers.0.linear1.bias": r"model.encoder.encoder.\1.layers.0.fc1.bias",
-    r"encoder.encoder.(\d+).layers.0.linear2.weight": r"model.encoder.encoder.\1.layers.0.fc2.weight",
-    r"encoder.encoder.(\d+).layers.0.linear2.bias": r"model.encoder.encoder.\1.layers.0.fc2.bias",
-    r"encoder.encoder.(\d+).layers.0.norm1.weight": r"model.encoder.encoder.\1.layers.0.self_attn_layer_norm.weight",
-    r"encoder.encoder.(\d+).layers.0.norm1.bias": r"model.encoder.encoder.\1.layers.0.self_attn_layer_norm.bias",
-    r"encoder.encoder.(\d+).layers.0.norm2.weight": r"model.encoder.encoder.\1.layers.0.final_layer_norm.weight",
-    r"encoder.encoder.(\d+).layers.0.norm2.bias": r"model.encoder.encoder.\1.layers.0.final_layer_norm.bias",
+    r"encoder.encoder.(\d+).layers.0.self_attn.out_proj.weight": r"model.encoder.aifi.\1.layers.0.self_attn.o_proj.weight",
+    r"encoder.encoder.(\d+).layers.0.self_attn.out_proj.bias": r"model.encoder.aifi.\1.layers.0.self_attn.o_proj.bias",
+    r"encoder.encoder.(\d+).layers.0.linear1.weight": r"model.encoder.aifi.\1.layers.0.mlp.fc1.weight",
+    r"encoder.encoder.(\d+).layers.0.linear1.bias": r"model.encoder.aifi.\1.layers.0.mlp.fc1.bias",
+    r"encoder.encoder.(\d+).layers.0.linear2.weight": r"model.encoder.aifi.\1.layers.0.mlp.fc2.weight",
+    r"encoder.encoder.(\d+).layers.0.linear2.bias": r"model.encoder.aifi.\1.layers.0.mlp.fc2.bias",
+    r"encoder.encoder.(\d+).layers.0.norm1.weight": r"model.encoder.aifi.\1.layers.0.self_attn_layer_norm.weight",
+    r"encoder.encoder.(\d+).layers.0.norm1.bias": r"model.encoder.aifi.\1.layers.0.self_attn_layer_norm.bias",
+    r"encoder.encoder.(\d+).layers.0.norm2.weight": r"model.encoder.aifi.\1.layers.0.final_layer_norm.weight",
+    r"encoder.encoder.(\d+).layers.0.norm2.bias": r"model.encoder.aifi.\1.layers.0.final_layer_norm.bias",
     r"encoder.input_proj.(\d+).conv.weight": r"model.encoder_input_proj.\1.0.weight",
     r"encoder.input_proj.(\d+).norm.(.*)": r"model.encoder_input_proj.\1.1.\2",
     r"encoder.fpn_blocks.(\d+).conv(\d+).conv.weight": r"model.encoder.fpn_blocks.\1.conv\2.conv.weight",
@@ -111,8 +110,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"encoder.pan_blocks.(\d+).bottlenecks.(\d+).conv(\d+).norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.bottlenecks.\2.conv\3.norm.\4",
     r"encoder.downsample_convs.(\d+).conv.weight": r"model.encoder.downsample_convs.\1.conv.weight",
     r"encoder.downsample_convs.(\d+).norm.(weight|bias|running_mean|running_var)": r"model.encoder.downsample_convs.\1.norm.\2",
-    r"decoder.decoder.layers.(\d+).self_attn.out_proj.weight": r"model.decoder.layers.\1.self_attn.out_proj.weight",
-    r"decoder.decoder.layers.(\d+).self_attn.out_proj.bias": r"model.decoder.layers.\1.self_attn.out_proj.bias",
+    r"decoder.decoder.layers.(\d+).self_attn.out_proj.weight": r"model.decoder.layers.\1.self_attn.o_proj.weight",
+    r"decoder.decoder.layers.(\d+).self_attn.out_proj.bias": r"model.decoder.layers.\1.self_attn.o_proj.bias",
     r"decoder.decoder.layers.(\d+).cross_attn.sampling_offsets.weight": r"model.decoder.layers.\1.encoder_attn.sampling_offsets.weight",
     r"decoder.decoder.layers.(\d+).cross_attn.sampling_offsets.bias": r"model.decoder.layers.\1.encoder_attn.sampling_offsets.bias",
     r"decoder.decoder.layers.(\d+).cross_attn.attention_weights.weight": r"model.decoder.layers.\1.encoder_attn.attention_weights.weight",
@@ -125,10 +124,10 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"decoder.decoder.layers.(\d+).norm1.bias": r"model.decoder.layers.\1.self_attn_layer_norm.bias",
     r"decoder.decoder.layers.(\d+).norm2.weight": r"model.decoder.layers.\1.encoder_attn_layer_norm.weight",
     r"decoder.decoder.layers.(\d+).norm2.bias": r"model.decoder.layers.\1.encoder_attn_layer_norm.bias",
-    r"decoder.decoder.layers.(\d+).linear1.weight": r"model.decoder.layers.\1.fc1.weight",
-    r"decoder.decoder.layers.(\d+).linear1.bias": r"model.decoder.layers.\1.fc1.bias",
-    r"decoder.decoder.layers.(\d+).linear2.weight": r"model.decoder.layers.\1.fc2.weight",
-    r"decoder.decoder.layers.(\d+).linear2.bias": r"model.decoder.layers.\1.fc2.bias",
+    r"decoder.decoder.layers.(\d+).linear1.weight": r"model.decoder.layers.\1.mlp.fc1.weight",
+    r"decoder.decoder.layers.(\d+).linear1.bias": r"model.decoder.layers.\1.mlp.fc1.bias",
+    r"decoder.decoder.layers.(\d+).linear2.weight": r"model.decoder.layers.\1.mlp.fc2.weight",
+    r"decoder.decoder.layers.(\d+).linear2.bias": r"model.decoder.layers.\1.mlp.fc2.bias",
     r"decoder.decoder.layers.(\d+).norm3.weight": r"model.decoder.layers.\1.final_layer_norm.weight",
     r"decoder.decoder.layers.(\d+).norm3.bias": r"model.decoder.layers.\1.final_layer_norm.bias",
     r"decoder.decoder.layers.(\d+).cross_attn.num_points_scale": r"model.decoder.layers.\1.encoder_attn.n_points_scale",
@@ -180,32 +179,36 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_weight")
         in_proj_bias = state_dict.pop(f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.weight"] = in_proj_weight[
+        state_dict[f"model.encoder.aifi.{i}.layers.0.self_attn.q_proj.weight"] = in_proj_weight[
             :encoder_hidden_dim, :
         ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.bias"] = in_proj_bias[:encoder_hidden_dim]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.weight"] = in_proj_weight[
+        state_dict[f"model.encoder.aifi.{i}.layers.0.self_attn.q_proj.bias"] = in_proj_bias[:encoder_hidden_dim]
+        state_dict[f"model.encoder.aifi.{i}.layers.0.self_attn.k_proj.weight"] = in_proj_weight[
             encoder_hidden_dim : 2 * encoder_hidden_dim, :
         ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.bias"] = in_proj_bias[
+        state_dict[f"model.encoder.aifi.{i}.layers.0.self_attn.k_proj.bias"] = in_proj_bias[
             encoder_hidden_dim : 2 * encoder_hidden_dim
         ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.weight"] = in_proj_weight[
+        state_dict[f"model.encoder.aifi.{i}.layers.0.self_attn.v_proj.weight"] = in_proj_weight[
             -encoder_hidden_dim:, :
         ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.bias"] = in_proj_bias[-encoder_hidden_dim:]
+        state_dict[f"model.encoder.aifi.{i}.layers.0.self_attn.v_proj.bias"] = in_proj_bias[-encoder_hidden_dim:]
     # next: transformer decoder (which is a bit more complex because it also includes cross-attention)
     for i in range(config.decoder_layers):
         # read in weights + bias of input projection layer of self-attention
         in_proj_weight = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_weight")
         in_proj_bias = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
+        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[: config.d_model, :]
+        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[: config.d_model]
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[
+            config.d_model : 2 * config.d_model, :
+        ]
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[
+            config.d_model : 2 * config.d_model
+        ]
+        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-config.d_model :, :]
+        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-config.d_model :]
 
 
 # We will verify our results on an image of cute cats
@@ -229,6 +232,7 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
     model_name_to_checkpoint_url = {
         "rtdetr_v2_r18vd": "https://github.com/lyuwenyu/storage/releases/download/v0.2/rtdetrv2_r18vd_120e_coco_rerun_48.1.pth",
         "rtdetr_v2_r34vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r34vd_120e_coco_ema.pth",
+        "rtdetr_v2_r50vd_m": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r50vd_m_7x_coco_ema.pth",
         "rtdetr_v2_r50vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r50vd_6x_coco_ema.pth",
         "rtdetr_v2_r101vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r101vd_6x_coco_from_paddle.pth",
     }
@@ -300,6 +304,13 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
         )
         expected_slice_boxes = torch.tensor(
             [[0.1691, 0.1984, 0.2118], [0.2594, 0.5506, 0.4736], [0.7669, 0.4136, 0.4654]]
+        )
+    elif model_name == "rtdetr_v2_r50vd_m":
+        expected_slice_logits = torch.tensor(
+            [[-3.9034, -4.5841, -6.0783], [-4.3458, -4.4189, -6.5820], [-4.6866, -6.4057, -4.1347]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.7710, 0.4123, 0.4579], [0.2577, 0.5483, 0.4763], [0.1693, 0.1992, 0.2117]]
         )
     elif model_name == "rtdetr_v2_r50vd":
         expected_slice_logits = torch.tensor(
