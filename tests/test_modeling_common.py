@@ -120,7 +120,7 @@ from transformers.utils import (
     is_torch_fp16_available_on_device,
 )
 from transformers.utils.import_utils import get_cuda_runtime_version
-from transformers.utils.output_capturing import CompileableContextVar
+from transformers.utils.output_capturing import CompileableContextVar, OutputRecorder
 
 from .exporters.test_export import ExportTesterMixin
 from .generation.test_utils import GenerationTesterMixin
@@ -5550,12 +5550,26 @@ class ModelTesterMixin(ExportTesterMixin):
                 model = model_class(copy.deepcopy(config)).to(device=torch_device)
                 model.eval()
 
-                recordable_outputs = [
-                    (module._can_record_outputs or {}).keys()
+                recordable_output_dicts = [
+                    (module._can_record_outputs or {})
                     for module in model.modules()
                     if isinstance(module, PreTrainedModel)
                 ]
+
+                # Check that the values of _can_record_outputs are a correct recorder or a list of them
+                for recordable_output_dict in recordable_output_dicts:
+                    for value in recordable_output_dict.values():
+                        recorders = value if isinstance(value, list) else [value]
+                        for recorder in recorders:
+                            is_valid_recorder = isinstance(recorder, (str, type, OutputRecorder))
+                            self.assertTrue(is_valid_recorder, f"Invalid recorder: {recorder}")
+
+                # Extract the recorders from the recordable_output_dicts
+                recordable_outputs = [
+                    recordable_output_dict.keys() for recordable_output_dict in recordable_output_dicts
+                ]
                 recordable_outputs = set().union(*recordable_outputs)
+
                 # If we don't use the `capture_outputs` decorator, this test has no use
                 if len(recordable_outputs) == 0:
                     self.skipTest("No usage of the `capture_outputs` decorator.")
