@@ -545,7 +545,6 @@ class UnlimitedOcrVisionEncoder(CLIPVisionModel):
         super().__init__(config)
         del self.post_layernorm
 
-    @can_return_tuple
     @capture_outputs
     @auto_docstring
     def forward(self, patch_embeds: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:

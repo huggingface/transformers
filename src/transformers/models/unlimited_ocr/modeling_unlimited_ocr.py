@@ -911,7 +911,6 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
         self.encoder = UnlimitedOcrEncoder(config)
         self.post_init()
 
-    @can_return_tuple
     @capture_outputs
     @auto_docstring
     def forward(self, patch_embeds: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
