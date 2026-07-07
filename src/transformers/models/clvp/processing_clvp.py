@@ -36,6 +36,15 @@ class ClvpProcessor(ProcessorMixin):
                 "Using `raw_speech` keyword argument is deprecated when calling ClvpProcessor, instead use `audio`."
             )
         kwargs["audio"] = raw_speech
+
+        # The CLVP model relies on the *text* attention mask. When both text and audio are provided, prevent the
+        # feature extractor's audio attention mask from overriding the tokenizer's attention mask in the merged output.
+        text = args[1] if len(args) > 1 else kwargs.get("text", None)
+        if kwargs["audio"] is not None and text is not None:
+            audio_kwargs = kwargs.get("audio_kwargs", None) or {}
+            audio_kwargs.setdefault("return_attention_mask", False)
+            kwargs["audio_kwargs"] = audio_kwargs
+
         return super().__call__(*args, **kwargs)
 
 
