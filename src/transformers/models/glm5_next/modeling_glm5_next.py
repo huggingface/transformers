@@ -29,7 +29,12 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, LinearAttentionLayer
 from ...generation import GenerationMixin
-from ...integrations import lazy_load_kernel, use_experts_implementation, use_kernel_forward_from_hub
+from ...integrations import (
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub,
+    use_kernelized_func,
+)
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -39,9 +44,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
-from ...utils.import_utils import (
-    resolve_internal_import,
-)
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_glm5_next import Glm5NextConfig
 
@@ -67,6 +69,7 @@ class Glm5NextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernel_forward_from_hub("RMSNormGated")
 class Glm5NextRMSNormGated(nn.Module):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         super().__init__()
@@ -421,7 +424,14 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-def torch_causal_conv1d_update(
+# =============================================================================
+# KDA Linear Attention
+# =============================================================================
+
+
+# We reimplement it to use it via kernels, we need BC for the other models to rely on lazy load kernels
+@use_kernel_func_from_hub("causal_conv1d_update")
+def causal_conv1d_update(
     hidden_states,
     conv_state,
     weight,
@@ -439,7 +449,8 @@ def torch_causal_conv1d_update(
     return out
 
 
-def torch_causal_conv1d_fn(
+@use_kernel_func_from_hub("causal_conv1d_fn")
+def causal_conv1d_fn(
     hidden_states,
     weight,
     bias=None,
@@ -460,11 +471,6 @@ def torch_causal_conv1d_fn(
     return ACT2FN[activation](out).to(hidden_states.dtype)
 
 
-# =============================================================================
-# KDA Linear Attention
-# =============================================================================
-
-
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     """
     This function is intended to align with the l2norm implementation in the FLA library.
@@ -476,8 +482,9 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x / inv_norm
 
 
-def torch_recurrent_kimi_delta_attention(
-    query, key, value, g, beta, initial_state, output_final_state, use_qk_l2norm_in_kernel=False
+@use_kernel_func_from_hub("recurrent_kimi_delta_attention")
+def recurrent_kimi_delta_attention(
+    query, key, value, g, beta, initial_state, output_final_state, use_qk_l2norm_in_kernel=False, **kwargs,
 ):
     # calculations happen in float as states are more susceptible to rounding errors
     initial_dtype = query.dtype
@@ -521,7 +528,8 @@ def torch_recurrent_kimi_delta_attention(
     return core_attn_out.to(initial_dtype), last_recurrent_state if output_final_state else None
 
 
-def torch_chunk_kimi_delta_attention(
+@use_kernel_func_from_hub("chunk_kimi_delta_attention")
+def chunk_kimi_delta_attention(
     query,
     key,
     value,
@@ -620,6 +628,9 @@ def torch_chunk_kimi_delta_attention(
     return core_attn_out, last_recurrent_state
 
 
+@use_kernelized_func(
+    [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
+)
 class Glm5NextLinearAttention(nn.Module):
     """Kimi-style KDA (Kimi Linear Attention) for GLM-5-Next."""
 
@@ -664,30 +675,6 @@ class Glm5NextLinearAttention(nn.Module):
 
         self.layer_type = config.layer_types[layer_idx]
 
-        # Check kernels or torch availability
-        global causal_conv1d_update, causal_conv1d_fn, chunk_kda, recurrent_kda
-        fla = lazy_load_kernel("fla")
-        causal_conv1d_update, causal_conv1d_fn, chunk_kda, recurrent_kda = (
-            resolve_internal_import(fla, chained_path=path)
-            for path in [
-                "modules.convolution.causal_conv1d_update",
-                "modules.convolution.causal_conv1d",
-                "ops.kda.chunk.chunk_kda",
-                "ops.kda.fused_recurrent.fused_recurrent_kda",
-            ]
-        )
-
-        # TODO: fixup causal conv -> FLA always returns a tuple and needs transposed layout (T, D) not (D, T) as currently
-        # self.causal_conv1d_fn = causal_conv1d_fn or torch_causal_conv1d_fn
-        # self.causal_conv1d_update = causal_conv1d_update or torch_causal_conv1d_update
-        # TODO: kernels drift a bit which is expected, keeping torch for easier comparisons
-        # self.chunk_kimi_delta_attention = chunk_kda or torch_chunk_kimi_delta_attention
-        # self.recurrent_kimi_delta_attention = recurrent_kda or torch_recurrent_kimi_delta_attention
-        self.causal_conv1d_fn = torch_causal_conv1d_fn
-        self.causal_conv1d_update = torch_causal_conv1d_update
-        self.chunk_kimi_delta_attention = torch_chunk_kimi_delta_attention
-        self.recurrent_kimi_delta_attention = torch_recurrent_kimi_delta_attention
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -719,7 +706,7 @@ class Glm5NextLinearAttention(nn.Module):
 
         # Single token decode path
         if use_precomputed_states and seq_len == 1:
-            mixed_qkv = self.causal_conv1d_update(
+            mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
                 weight=self.conv1d.weight.squeeze(1),
@@ -736,12 +723,12 @@ class Glm5NextLinearAttention(nn.Module):
                 new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
                 cache_params.update_conv_state(new_conv_state, self.layer_idx)
 
-            mixed_qkv = self.causal_conv1d_fn(
+            mixed_qkv = causal_conv1d_fn(
                 mixed_qkv,
                 weight=self.conv1d.weight.squeeze(1),
                 bias=self.conv1d.bias,
                 activation=self.activation,
-                seq_idx=kwargs.get("seq_idx"),  # TODO: cu seqlens under FLA
+                **kwargs,
             )
 
             # Cut out any tail
@@ -764,7 +751,7 @@ class Glm5NextLinearAttention(nn.Module):
 
         # KDA
         if use_precomputed_states and seq_len == 1:
-            core_attn_out, last_recurrent_state = self.recurrent_kimi_delta_attention(
+            core_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
                 query,
                 key,
                 value,
@@ -773,9 +760,10 @@ class Glm5NextLinearAttention(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
+                **kwargs,
             )
         else:
-            core_attn_out, last_recurrent_state = self.chunk_kimi_delta_attention(
+            core_attn_out, last_recurrent_state = chunk_kimi_delta_attention(
                 query,
                 key,
                 value,
@@ -784,8 +772,7 @@ class Glm5NextLinearAttention(nn.Module):
                 initial_state=recurrent_state if use_precomputed_states else None,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
-                cu_seqlens=kwargs.get("cu_seq_lens_q"),
+                **kwargs,
             )
 
         if cache_params is not None:

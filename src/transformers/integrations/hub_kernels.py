@@ -224,6 +224,21 @@ if is_kernels_available():
                     ),
                 },
             },
+            # TODO: only used locally or via AntonV/fla but locally modified as per the PR for FLA
+            "RMSNormGated": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                },
+            },
             "MegaBlocksMoeMLP": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
@@ -338,6 +353,48 @@ if is_kernels_available():
                     ),
                 },
             },
+            # TODO: only used locally or via AntonV/fla but locally modified as per the PR for FLA
+            "chunk_kimi_delta_attention": {
+                "cuda": {
+                    Mode.TRAINING: FuncRepository(
+                        repo_id="kernels-community/fla", func_name="chunk_kimi_delta_attention", version=1,
+                    ),
+                    Mode.INFERENCE: FuncRepository(
+                        repo_id="kernels-community/fla", func_name="chunk_kimi_delta_attention", version=1,
+                    ),
+                },
+            },
+            "recurrent_kimi_delta_attention": {
+                "cuda": {
+                    Mode.TRAINING: FuncRepository(
+                        repo_id="kernels-community/fla", func_name="recurrent_kimi_delta_attention", version=1,
+                    ),
+                    Mode.INFERENCE: FuncRepository(
+                        repo_id="kernels-community/fla", func_name="recurrent_kimi_delta_attention", version=1,
+                    ),
+                },
+            },
+            # TODO: merge and update path
+            "causal_conv1d_fn": {
+                "cuda": {
+                    Mode.TRAINING: FuncRepository(
+                        repo_id="kernels-staging/mamba-ssm", func_name="causal_conv1d_fn", revision="pr-994", trust_remote_code=True,
+                    ),
+                    Mode.INFERENCE: FuncRepository(
+                        repo_id="kernels-staging/mamba-ssm", func_name="causal_conv1d_fn", revision="pr-994", trust_remote_code=True,
+                    ),
+                },
+            },
+            "causal_conv1d_update": {
+                "cuda": {
+                    Mode.TRAINING: FuncRepository(
+                        repo_id="kernels-staging/mamba-ssm", func_name="causal_conv1d_update", revision="pr-994", trust_remote_code=True,
+                    ),
+                    Mode.INFERENCE: FuncRepository(
+                        repo_id="kernels-staging/mamba-ssm", func_name="causal_conv1d_update", revision="pr-994", trust_remote_code=True,
+                    ),
+                },
+            },
         }
         _KERNEL_MAPPING = _KERNEL_MAPPING | _FUNCTION_KERNEL_MAPPING
 
@@ -405,7 +462,6 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 3},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
-    "fla": {"repo_id": "AntonV/fla", "version": 1},  # TODO: kernels comm
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -513,10 +569,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             if version is None and revision is None:
                 version = 1
 
-            # TODO: remove remote kernels, need it tmp for fla
-            kernel = get_kernel(
-                repo_id, revision=revision, version=version, allow_all_kernels=ALLOW_ALL_KERNELS or True
-            )
+            kernel = get_kernel(repo_id, revision=revision, version=version, allow_all_kernels=ALLOW_ALL_KERNELS)
             mapping[kernel_name] = kernel
         except FileNotFoundError as e:
             mapping[kernel_name] = None
