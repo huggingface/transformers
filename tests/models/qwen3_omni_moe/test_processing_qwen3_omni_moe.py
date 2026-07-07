@@ -307,7 +307,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+            repo_id="hf-internal-testing/test-videos", filename="sample_demo_1_320x240.mp4", repo_type="dataset"
         )
         messages = [
             {
