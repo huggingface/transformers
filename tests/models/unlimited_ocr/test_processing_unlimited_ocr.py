@@ -16,10 +16,8 @@ class UnlimitedOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # TODO: Change before merge
     model_id = "guarin/Unlimited-OCR"
 
-    @classmethod
-    def _setup_image_processor(cls):
-        image_processor_class = cls._get_component_class_from_processor("image_processor")
-        image_processor = image_processor_class()
-        image_processor.size = {"height": 64, "width": 64}
-        image_processor.tile_size = 512
-        return image_processor
+    # Defaults from mixin are too small as a single image expands to 273 image tokens
+    # for this checkpoint (size=1024)
+    image_text_kwargs_max_length = 320
+    image_text_kwargs_override_max_length = 310
+    image_unstructured_max_length = 300
