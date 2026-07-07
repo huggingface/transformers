@@ -24,9 +24,10 @@ from ...utils.import_utils import is_serve_available
 
 
 if is_serve_available():
-    from fastapi import FastAPI, Request
+    from fastapi import Depends, FastAPI, HTTPException, Request
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
+    from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 if TYPE_CHECKING:
     from .chat_completion import ChatCompletionHandler
@@ -49,6 +50,7 @@ def build_server(
     transcription_handler: "TranscriptionHandler",
     generation_state: GenerationState,
     enable_cors: bool = False,
+    admin_api_key: str | None = None,
 ) -> "FastAPI":
     """Build and return a configured FastAPI application.
 
@@ -116,10 +118,15 @@ def build_server(
     async def audio_transcriptions(request: Request):
         return await transcription_handler.handle_request(request)
 
-    @app.post("/load_model")
-    async def load_model(body: dict):
-        from fastapi import HTTPException
+    _bearer = HTTPBearer(auto_error=False)
 
+    async def _check_admin_key(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)):
+        if admin_api_key is not None:
+            if credentials is None or credentials.credentials != admin_api_key:
+                raise HTTPException(status_code=401, detail="Unauthorized")
+
+    @app.post("/load_model")
+    async def load_model(body: dict, _: None = Depends(_check_admin_key)):
         model = body.get("model")
         if model is None:
             raise HTTPException(status_code=422, detail="Missing `model` field in the request body.")
@@ -129,7 +136,7 @@ def build_server(
         )
 
     @app.post("/reset")
-    def reset():
+    def reset(_: None = Depends(_check_admin_key)):
         model_manager.shutdown()
         return JSONResponse({"status": "ok"})
 
