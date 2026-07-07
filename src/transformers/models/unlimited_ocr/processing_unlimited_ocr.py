@@ -19,6 +19,7 @@
 # limitations under the License.
 import math
 
+from ...image_utils import make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
@@ -54,6 +55,19 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         self.downsample_ratio = downsample_ratio
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
+
+    def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
+        super().validate_inputs(images=images, text=text, **kwargs)
+        if text is not None and images is not None:
+            if isinstance(text, str):
+                text = [text]
+            n_tokens = sum(sample.count(self.image_token) for sample in text)
+            n_images = len(make_flat_list_of_images(images))
+            if n_tokens != n_images:
+                raise ValueError(
+                    f"Number of {self.image_token} tokens in text ({n_tokens}) does not match "
+                    f"number of images ({n_images})."
+                )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> TextInput:
         size = self.image_processor.size["height"]
