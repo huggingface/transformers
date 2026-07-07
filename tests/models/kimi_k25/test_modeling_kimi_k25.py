@@ -184,22 +184,6 @@ class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    @unittest.skip("Error on MoE kernels, FIXME")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("Error on MoE kernels, FIXME")
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
-    @unittest.skip("Error on MoE kernels, FIXME")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Error on MoE kernels, FIXME")
-    def test_generate_with_static_cache(self):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("DeepseekV3 backbone is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
