@@ -118,7 +118,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "video",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tennis_320x240.mp4"
                             ),
                         },
                         {"type": "text", "text": "What type of shot is the man performing?"},
