@@ -1510,7 +1510,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"blocks\.(\d+)\.attn\.", r"layers.\1.attn."),
             WeightRenaming(r"blocks\.(\d+)\.mlp\.", r"layers.\1.mlp."),
             WeightRenaming(r"patch_embed\.proj\.", "patch_embed.projection."),
-            WeightRenaming(r"pos_embed", "pos_embed"),
             WeightRenaming(r"neck\.0\.", "neck.conv1."),
             WeightRenaming(r"neck\.1\.", "neck.layer_norm1."),
             WeightRenaming(r"neck\.2\.", "neck.conv2."),
