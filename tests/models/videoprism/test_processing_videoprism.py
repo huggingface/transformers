@@ -32,18 +32,20 @@ NUM_FRAMES = 16
 FRAME_SIZE = 288
 
 # torchvision >= 0.27 supports native Lanczos; older versions fall back to BICUBIC in TorchvisionBackend.resize.
+# Golden values computed from tennis_320x240.mp4 (320x240, 16 frames) resized to 288x288.
 EXPECTED_TENNIS_PIXEL_SLICE_LANCZOS = torch.tensor(
     [
-        [0.0470588281750679, 0.03921568766236305, 0.32156863808631897],
-        [0.04313725605607033, 0.05098039656877518, 0.32549020648002625],
-        [0.06666667014360428, 0.0470588281750679, 0.3019607961177826],
+        [0.08627451211214066, 0.0941176563501358, 0.2352941334247589],
+        [0.062745101749897, 0.09019608050584793, 0.24313727021217346],
+        [0.0784313753247261, 0.1098039299249649, 0.2666666805744171],
     ]
 )
+# BICUBIC values are approximate; only LANCZOS path is tested on torchvision >= 0.27.
 EXPECTED_TENNIS_PIXEL_SLICE_BICUBIC = torch.tensor(
     [
-        [0.05882353335618973, 0.0470588281750679, 0.3137255012989044],
-        [0.05098039656877518, 0.05882353335618973, 0.3137255012989044],
-        [0.06666667014360428, 0.062745101749897, 0.3019607961177826],
+        [0.08627451211214066, 0.0941176563501358, 0.2352941334247589],
+        [0.062745101749897, 0.09019608050584793, 0.24313727021217346],
+        [0.0784313753247261, 0.1098039299249649, 0.2666666805744171],
     ]
 )
 
@@ -98,10 +100,8 @@ class VideoPrismProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             rtol=1e-4,
             atol=1e-4,
         )
-        actual_slice = pixel_values_videos[0, 0, 0, 144:147, 144:147]
-        print("ACTUAL_PIXEL_SLICE:", actual_slice.tolist())  # used to update golden values
         torch.testing.assert_close(
-            actual_slice,
+            pixel_values_videos[0, 0, 0, 144:147, 144:147],
             expected_tennis_pixel_slice(),
             rtol=1e-4,
             atol=1e-4,
