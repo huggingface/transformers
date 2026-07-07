@@ -154,6 +154,20 @@ def _try_loading_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str
     except Exception as e:
         return f"Failure when calling `get_mk_alignment`: {type(e).__name__}: {e}"
 
+    # Everything up to this point checks that the kernels can be compiled, but never run an actual compilation. This is
+    # done here to can catch a broken CUDA toolchain or version mismatch. A small call but better to fall back early on
+    # Triton rather than failing hard mid-forward.
+    if not is_torchdynamo_compiling():
+        try:
+            sf = torch.zeros(128, 1, dtype=torch.float32, device="cuda")
+            transform_sf_into_required_layout(sf, 128, 128, recipe=(1, 128))
+        except Exception as e:
+            return (
+                f"DeepGEMM failed to JIT-compile a probe kernel, which usually means a broken or version-mismatched "
+                "CUDA toolchain. Check that `CUDA_HOME` points to a complete and version-consistent CUDA toolkit. You "
+                f"can re-run with `DG_JIT_DEBUG=1` for the compiler output. Original error: {type(e).__name__}: {e}"
+            )
+
     return DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
         grouped_fp8_fp4_matmul_nt=grouped_fp8_fp4_matmul_nt,
