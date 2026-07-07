@@ -456,27 +456,57 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
         patch_tokens = outputs.vision_model_output.last_hidden_state[:, 1 + num_register_tokens :]
 
         # Tolerance of 1e-3 for vision outputs because of difference in PIL vs. torch preprocessing.
-        EXPECTED_IMAGE_EMBEDS = Expectations({("cuda", None): [0.03267, 0.02216, 0.00546, 0.01890, -0.05426]})
+        EXPECTED_IMAGE_EMBEDS = Expectations(
+            {
+                ("cuda", None): [0.03267, 0.02216, 0.00546, 0.01890, -0.05426],
+                ("cpu", None): [0.03267, 0.02216, 0.00546, 0.01890, -0.05426],
+            }
+        )
         expected_image_embeds = torch.tensor(EXPECTED_IMAGE_EMBEDS.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.image_embeds[0, :5], expected_image_embeds, rtol=1e-3, atol=1e-3)
 
-        EXPECTED_PATCH_TOKENS = Expectations({("cuda", None): [0.25287, -0.01092, -0.57542, 0.09660, -0.04010]})
+        EXPECTED_PATCH_TOKENS = Expectations(
+            {
+                ("cuda", None): [0.25287, -0.01092, -0.57542, 0.09660, -0.04010],
+                ("cpu", None): [0.25287, -0.01092, -0.57542, 0.09660, -0.04010],
+            }
+        )
         expected_patch_tokens = torch.tensor(EXPECTED_PATCH_TOKENS.get_expectation(), device=torch_device)
         torch.testing.assert_close(patch_tokens[0, 0, :5], expected_patch_tokens, rtol=1e-3, atol=1e-3)
 
-        EXPECTED_TEXT_EMBEDS = Expectations({("cuda", None): [0.69319, 0.03710, 0.01194, 0.02136, -0.04281]})
+        EXPECTED_TEXT_EMBEDS = Expectations(
+            {
+                ("cuda", None): [0.69319, 0.03710, 0.01194, 0.02136, -0.04281],
+                ("cpu", None): [0.69319, 0.03710, 0.01194, 0.02136, -0.04281],
+            }
+        )
         expected_text_embeds = torch.tensor(EXPECTED_TEXT_EMBEDS.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.text_embeds[0, :5], expected_text_embeds, rtol=1e-4, atol=1e-4)
 
-        EXPECTED_LOGITS_PER_IMAGE = Expectations({("cuda", None): [31.12190, 26.99341, 20.26748, 17.55544]})
+        EXPECTED_LOGITS_PER_IMAGE = Expectations(
+            {
+                ("cuda", None): [31.12190, 26.99341, 20.26748, 17.55544],
+                ("cpu", None): [31.12190, 26.99341, 20.26748, 17.55544],
+            }
+        )
         expected_logits_per_image = torch.tensor(EXPECTED_LOGITS_PER_IMAGE.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.logits_per_image[0], expected_logits_per_image, rtol=1e-3, atol=1e-3)
 
-        EXPECTED_LOGITS_PER_TEXT = Expectations({("cuda", None): [31.12190, 26.99341, 20.26748, 17.55544]})
+        EXPECTED_LOGITS_PER_TEXT = Expectations(
+            {
+                ("cuda", None): [31.12190, 26.99341, 20.26748, 17.55544],
+                ("cpu", None): [31.12190, 26.99341, 20.26748, 17.55544],
+            }
+        )
         expected_logits_per_text = torch.tensor(EXPECTED_LOGITS_PER_TEXT.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.logits_per_text[..., 0], expected_logits_per_text, rtol=1e-3, atol=1e-3)
 
-        EXPECTED_VISION_POOLER_OUTPUT = Expectations({("cuda", None): [0.22055, 0.14960, 0.03689, 0.12756, -0.36632]})
+        EXPECTED_VISION_POOLER_OUTPUT = Expectations(
+            {
+                ("cuda", None): [0.22055, 0.14960, 0.03689, 0.12756, -0.36632],
+                ("cpu", None): [0.22055, 0.14960, 0.03689, 0.12756, -0.36632],
+            }
+        )
         expected_vision_pooler_output = torch.tensor(
             EXPECTED_VISION_POOLER_OUTPUT.get_expectation(), device=torch_device
         )
@@ -484,7 +514,12 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
             outputs.vision_model_output.pooler_output[0, :5], expected_vision_pooler_output, rtol=1e-3, atol=1e-3
         )
 
-        EXPECTED_TEXT_POOLER_OUTPUT = Expectations({("cuda", None): [12.07207, 0.64612, 0.20788, 0.37204, -0.74551]})
+        EXPECTED_TEXT_POOLER_OUTPUT = Expectations(
+            {
+                ("cuda", None): [12.07207, 0.64612, 0.20788, 0.37204, -0.74551],
+                ("cpu", None): [12.07207, 0.64612, 0.20788, 0.37204, -0.74551],
+            }
+        )
         expected_text_pooler_output = torch.tensor(EXPECTED_TEXT_POOLER_OUTPUT.get_expectation(), device=torch_device)
         torch.testing.assert_close(
             outputs.text_model_output.pooler_output[0, :5], expected_text_pooler_output, rtol=1e-4, atol=1e-4
