@@ -20,6 +20,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import datasets
 from huggingface_hub import delete_repo, snapshot_download
@@ -55,6 +56,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import direct_transformers_import, is_torch_available
 from transformers.utils import logging as transformers_logging
+from transformers.utils.chat_template_utils import Chat
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -213,10 +215,6 @@ class CommonPipelineTest(unittest.TestCase):
         # detected and wrapped as a `Chat` (one input), matching the list-of-messages behavior. Downstream
         # tokenization does not understand `Chat` for text-classification, so we short-circuit `run_single`
         # and only assert on what it receives.
-        from unittest import mock
-
-        from transformers.utils.chat_template_utils import Chat
-
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hello!"},
@@ -242,10 +240,6 @@ class CommonPipelineTest(unittest.TestCase):
     def test_chats_as_generator_wrapped_lazily(self):
         # A generator of chats (each a list of messages) is wrapped as `Chat` per item and streamed lazily,
         # rather than being materialized to a list of `Chat` up front like the list-of-chats case.
-        from unittest import mock
-
-        from transformers.utils.chat_template_utils import Chat
-
         chats = [
             [{"role": "user", "content": "Hello!"}],
             [{"role": "user", "content": "Goodbye!"}],
