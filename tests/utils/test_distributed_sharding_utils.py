@@ -294,8 +294,8 @@ class TestDtensorShardOperation(unittest.TestCase):
             else:
                 torch.testing.assert_close(shard, expected[rank], msg=f"rank {rank}")
 
-    def test_apply_strided_shard(self):
-        # Direct tests for _apply_strided_shard(intervals, rank, world_size, split_factor).
+    def test_compute_strided_slice(self):
+        # Direct tests for _compute_strided_slice(intervals, rank, world_size, split_factor).
         # Keys: (input_interval, rank, world_size, split_factor) -> expected output list.
         mesh = FakeMesh(shape=(2,), rank=0)
         op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(8,), local_shape=(4,))
@@ -313,10 +313,10 @@ class TestDtensorShardOperation(unittest.TestCase):
         }
         for (interval, rank, ws, sf), exp in expected.items():
             with self.subTest(interval=interval, rank=rank, ws=ws, sf=sf):
-                self.assertEqual(op._apply_strided_shard([interval], rank=rank, world_size=ws, split_factor=sf), exp)
+                self.assertEqual(op._compute_strided_slice([interval], rank=rank, world_size=ws, split_factor=sf), exp)
 
-    def test_apply_contiguous_shard(self):
-        # Direct tests for _apply_contiguous_shard(intervals, rank, world_size).
+    def test_compute_contiguous_slice(self):
+        # Direct tests for _compute_contiguous_slice(intervals, rank, world_size).
         # Keys: (input_intervals, rank, world_size) -> expected output list.
         mesh = FakeMesh(shape=(2,), rank=0)
         op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(8,), local_shape=(4,))
@@ -336,7 +336,7 @@ class TestDtensorShardOperation(unittest.TestCase):
         }
         for (intervals, rank, ws), exp in expected.items():
             with self.subTest(intervals=intervals, rank=rank, ws=ws):
-                self.assertEqual(op._apply_contiguous_shard(list(intervals), rank=rank, world_size=ws), exp)
+                self.assertEqual(op._compute_contiguous_slice(list(intervals), rank=rank, world_size=ws), exp)
 
     def test_slice_and_cat(self):
         # Direct tests for _slice_and_cat(source, intervals, device, dtype).
