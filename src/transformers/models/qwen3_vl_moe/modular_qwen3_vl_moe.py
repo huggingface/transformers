@@ -234,7 +234,7 @@ class Qwen3VLMoeVisionBlock(Qwen3VLVisionBlock):
 
 class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name=r"mlp\.gate", index=0),
         "hidden_states": Qwen3VLMoeVisionBlock,
         "attentions": Qwen3VLMoeVisionAttention,
     }
