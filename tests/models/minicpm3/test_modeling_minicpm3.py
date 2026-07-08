@@ -106,6 +106,7 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
             {
                 ("cuda", 8): [0.765625, 3.640625, -0.189453125, -0.8359375, -0.8359375],
                 ("cuda", (8, 6)): [0.7344, 3.6562, -0.1060, -0.8633, -0.8633],
+                ("xpu", 5): [0.9453, 3.7188, -0.2832, -0.6367, -0.6367],
             }
         )  # fmt: skip
         expected = expected_slices.get_expectation()
@@ -121,6 +122,7 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", 8): "My favourite condiment is \n[A]. ketchup \n[B]. mustard \n[C]. mayonnaise \n[D]. must",
+                ("xpu", 5): "My favourite condiment is \n[A]. ketchup \n[B]. mustard \n[C]. mayonnaise \n[D]. must",
             }
         )  # fmt: skip
         expected_text = expected_texts.get_expectation()
