@@ -535,9 +535,19 @@ def _is_packed_sequence(position_ids, batch_size):
         1. Position ids exist
         2. Flattened sequences only are supported
         3. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
+
+    `position_ids` is expected to be `[batch_size, seq_len]`, but a couple of shapes are normalized to that first:
+        - 1D `[seq_len]`, e.g. Pixtral's `position_ids_in_meshgrid`, which only makes sense for `batch_size == 1`.
+        - 3D `[num_position_axes, batch_size, seq_len]`, e.g. MRoPE. All axes share the same packing layout, so a
+          single axis is enough to judge packing without misclassifying an unpacked batch as packed.
     """
     if position_ids is None:
         return False
+
+    if position_ids.ndim == 1:
+        position_ids = position_ids.unsqueeze(0)
+    elif position_ids.ndim == 3:
+        position_ids = position_ids[0]
 
     increasing_position_sequences = (
         torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
