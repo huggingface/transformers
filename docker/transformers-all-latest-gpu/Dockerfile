@@ -84,6 +84,12 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 # For kernels
 RUN python3 -m pip install --no-cache-dir kernels
 
+# For ONNX export tests (onnxscript pulls in onnx + onnx_ir; onnxruntime validates the exported graph)
+RUN python3 -m pip install --no-cache-dir onnxscript onnxruntime
+
+# For ExecuTorch export tests
+RUN python3 -m pip install --no-cache-dir executorch
+
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av
 
