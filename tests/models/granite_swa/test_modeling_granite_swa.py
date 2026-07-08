@@ -51,6 +51,7 @@ class GraniteSWAModelTest(CausalLMModelTest, unittest.TestCase):
     @require_kernels
     @pytest.mark.flash_attn_test
     @require_torch_gpu
+    # Copied from gpt_oss (swa backend handling)
     def test_default_flash_implementation_auto_correction(self):
         """An unsupported flash implementation is auto-corrected to `_compatible_flash_implementations`."""
         from kernels import get_kernel
