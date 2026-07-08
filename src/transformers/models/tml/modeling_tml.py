@@ -28,7 +28,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicLayer, LinearAttentionCacheLayerMixin, LinearAttentionLayer
+from ...cache_utils import (
+    Cache,
+    CacheLayerMixin,
+    DynamicCache,
+    DynamicLayer,
+    DynamicSlidingWindowLayer,
+    LinearAttentionCacheLayerMixin,
+    LinearAttentionLayer,
+)
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -51,17 +59,8 @@ else:
 logger = logging.get_logger(__name__)
 
 
-class TmlConvsAndAttentionLayer(LinearAttentionCacheLayerMixin, DynamicLayer):
-    layer_type = "tml_layer"
+class TmlConvsAndAttentionLayerBase(LinearAttentionCacheLayerMixin, CacheLayerMixin):
     is_compileable = False
-
-    def __init__(self, config: TmlTextConfig | None = None):
-        DynamicLayer.__init__(self)
-
-        self.conv_caches = {}
-        for conv_idx in range(4):
-            # NOTE: we need 4 conv cache params here without recurrent states though!
-            self.conv_caches[conv_idx] = LinearAttentionLayer(config)
 
     def update_conv_state(self, conv_states: torch.Tensor, conv_idx: int, **kwargs) -> torch.Tensor:
         """
@@ -92,6 +91,18 @@ class TmlConvsAndAttentionLayer(LinearAttentionCacheLayerMixin, DynamicLayer):
         if len(args) == 0 and len(kwargs) == 1:
             self.conv_caches[kwargs.get("conv_idx", 0)].lazy_initialization(self, **kwargs)
 
+
+class TmlConvsAndSlidingAttentionLayer(TmlConvsAndAttentionLayerBase, DynamicLayer):
+    layer_type = "tml_full_attention"
+
+    def __init__(self, config: TmlTextConfig | None = None):
+        DynamicLayer.__init__(self)
+
+        self.conv_caches = {}
+        for conv_idx in range(4):
+            # NOTE: we need 4 conv cache params here without recurrent states though!
+            self.conv_caches[conv_idx] = LinearAttentionLayer(config)
+
     def offload(self):
         DynamicLayer.offload(self)
         for linear_cache in self.conv_caches.values():
@@ -110,6 +121,38 @@ class TmlConvsAndAttentionLayer(LinearAttentionCacheLayerMixin, DynamicLayer):
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
         DynamicLayer.reorder_cache(self, beam_idx)
+        for linear_cache in self.conv_caches.values():
+            linear_cache.reorder_cache(self, beam_idx)
+
+
+class TmlConvsAndFullAttentionLayer(TmlConvsAndAttentionLayerBase, DynamicSlidingWindowLayer):
+    layer_type = "tml_sliding_attention"
+
+    def __init__(self, config: TmlTextConfig | None = None):
+        DynamicSlidingWindowLayer.__init__(self, config=config)
+
+        self.conv_caches = {}
+        for conv_idx in range(4):
+            self.conv_caches[conv_idx] = LinearAttentionLayer(config)
+
+    def offload(self):
+        DynamicSlidingWindowLayer.offload(self)
+        for linear_cache in self.conv_caches.values():
+            linear_cache.offload(self)
+
+    def prefetch(self):
+        DynamicSlidingWindowLayer.prefetch(self)
+        for linear_cache in self.conv_caches.values():
+            linear_cache.prefetch(self)
+
+    def reset(self) -> None:
+        DynamicSlidingWindowLayer.reset(self)
+        for linear_cache in self.conv_caches.values():
+            linear_cache.reset(self)
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        DynamicSlidingWindowLayer.reorder_cache(self, beam_idx)
         for linear_cache in self.conv_caches.values():
             linear_cache.reorder_cache(self, beam_idx)
 

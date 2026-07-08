@@ -108,7 +108,7 @@ class TmlTextConfig(PreTrainedConfig):
         if kwargs.get("dense_intermediate_size") is not None:
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
 
-        self.cache_layer_types = ["tml_layer"] * self.num_hidden_layers
+        self.cache_layer_types = [f"tml_{layer_type}" for layer_type in self.layer_types]
         super().__post_init__(**kwargs)
 
 
