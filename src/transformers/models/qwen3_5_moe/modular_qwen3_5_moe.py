@@ -250,6 +250,7 @@ class Qwen3_5MoeModel(Qwen3_5Model):
 class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):
     config: Qwen3_5MoeTextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)

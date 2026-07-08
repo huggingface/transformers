@@ -106,6 +106,13 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
+
     vocab_size: int = 103424
     pad_token_id: int | None = None
     bos_token_id: int | None = None

@@ -48,6 +48,12 @@ class GlmOcrRMSNorm(Glm4vRMSNorm):
 
 
 class GlmOcrVisionMlp(Glm4VisionMlp):
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     def __init__(self, config, bias: bool = True):
         super().__init__(config)
         self.intermediate_size = config.intermediate_size

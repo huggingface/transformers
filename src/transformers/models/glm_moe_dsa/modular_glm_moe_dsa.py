@@ -79,6 +79,12 @@ class GlmMoeDsaConfig(DeepseekV32Config):
     >>> configuration = model.config
     ```"""
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     vocab_size: int = 154880
     hidden_size: int = 6144
     intermediate_size: int = 12288
@@ -393,7 +399,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
 
 
 class GlmMoeDsaForCausalLM(DeepseekV32ForCausalLM):
-    pass
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
 
 __all__ = [

@@ -46,6 +46,12 @@ class VaultGemmaConfig(Gemma2Config):
     use_bidirectional_attention = AttributeError()
 
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
 class VaultGemmaRMSNorm(Gemma2RMSNorm):
     pass
 

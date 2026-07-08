@@ -236,6 +236,13 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
+
     vocab_size: int = 262_208
     hidden_size: int = 2304
     intermediate_size: int = 9216

@@ -830,6 +830,7 @@ class Gemma4UnifiedVisionEmbedder(nn.Module):
     Pipeline: raw_patches → LN₁ → Dense → LN₂ → +factorized_posemb → LN₃ → RMSNorm → Linear
     """
 
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     def __init__(self, vision_config: Gemma4UnifiedVisionConfig, text_config: Gemma4UnifiedTextConfig):
         super().__init__()
         patch_dim = vision_config.model_patch_size**2 * 3  # 48*48*3 = 6912

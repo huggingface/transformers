@@ -87,6 +87,13 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
+
     vocab_size: int = 248320
     hidden_size: int = 2048
     num_hidden_layers: int = 40
