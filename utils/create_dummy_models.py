@@ -1398,6 +1398,23 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
             it.
     """
     _log_disk_usage(f"START {config_class.__name__}")
+
+    # When not keeping models, redirect all output (processors + per-arch copies) to a
+    # temporary directory so nothing accumulates on disk across model types.
+    # try/finally ensures cleanup even on early returns inside build().
+    _tmpdir = tempfile.TemporaryDirectory() if not keep_model else None
+    if _tmpdir is not None:
+        output_dir = _tmpdir.name
+
+    try:
+     return _build_inner(config_class, models_to_create, output_dir, keep_model)
+    finally:
+        _log_disk_usage(f"END   {config_class.__name__}")
+        if _tmpdir is not None:
+            _tmpdir.cleanup()
+
+
+def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
     if data["training_ds"] is None or data["testing_ds"] is None:
         ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
         data["training_ds"] = ds["train"]
@@ -1588,7 +1605,6 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
     if not result["warnings"]:
         del result["warnings"]
 
-    _log_disk_usage(f"END   {config_class.__name__}")
     return result
 
 
