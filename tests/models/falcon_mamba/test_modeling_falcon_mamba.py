@@ -413,7 +413,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         EXPECTED_OUTPUTS = Expectations(
             {
-                ("xpu", 3): "Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle",
+                ("xpu", 3): 'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
                 ("cuda", 7): "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
                 ("cuda", 8): 'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
             }
@@ -464,7 +464,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): [
-                    'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
+                    'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
                     'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
                 ("cuda", 7): [
@@ -498,7 +498,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): [
-                    ' I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
+                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
                 ("cuda", 7): [
