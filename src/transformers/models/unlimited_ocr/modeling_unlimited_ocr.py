@@ -880,7 +880,7 @@ class UnlimitedOcrEncoder(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The vision model from UNLIMITED_OCR without any head or projection on top.
+    The vision encoder from Unlimited OCR without any head or projection on top.
     """
 )
 class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
@@ -917,7 +917,7 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
 
 
 class UnlimitedOcrVisionModel(UnlimitedOcrPreTrainedModel):
-    """Vision pipeline: SAM ViT-B (with neck)"""
+    """Vision model encoding images first with SAM followed by an additional (CLIP) model."""
 
     def __init__(self, config: UnlimitedOcrVisionConfig):
         super().__init__(config)
@@ -928,6 +928,29 @@ class UnlimitedOcrVisionModel(UnlimitedOcrPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        r"""
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoConfig, AutoImageProcessor, AutoModel
+        >>> from transformers.image_utils import load_image
+
+        >>> model_id = "baidu/Unlimited-OCR"
+        >>> config = AutoConfig.from_pretrained(model_id)
+        >>> model = AutoModel.from_pretrained(model_id, config=config.vision_config, device_map="auto")
+        >>> image_processor = AutoImageProcessor.from_pretrained(model_id)
+
+        >>> image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg")
+        >>> inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # Patch tokens without class tokens (batch_size, height * width, vision_hidden_size + sam_hidden_size)
+        >>> patch_tokens = outputs.last_hidden_state
+        ```"""
+
         sam_encoder_outputs = self.sam_encoder(pixel_values, **kwargs)
         sam_hidden_states = sam_encoder_outputs.last_hidden_state
 
