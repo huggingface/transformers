@@ -109,3 +109,7 @@ class GraniteSWAModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("TP test mixin forces attn_implementation='sdpa', unsupported by GraniteSWA (sink).")
     def test_tp_generation(self):
         pass
+
+    @unittest.skip("TP test mixin forces attn_implementation='sdpa', unsupported by GraniteSWA (sink).")
+    def test_tp_generation_quantized(self):
+        pass

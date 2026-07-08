@@ -109,3 +109,17 @@ class GraniteMoeSWAModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("TP test mixin forces attn_implementation='sdpa', unsupported by GraniteMoeSWA (sink).")
     def test_tp_generation(self):
         pass
+
+    @unittest.skip("TP test mixin forces attn_implementation='sdpa', unsupported by GraniteMoeSWA (sink).")
+    def test_tp_generation_quantized(self):
+        pass
+
+    # Skipped for consistency with the prior Granite MoE models (granitemoe, granitemoeshared), which
+    # do not exercise the expert-parallel test path.
+    @unittest.skip("EP test path not exercised by the prior Granite MoE models; skipped for consistency.")
+    def test_ep_forward(self):
+        pass
+
+    @unittest.skip("EP test path not exercised by the prior Granite MoE models; skipped for consistency.")
+    def test_ep_backward(self):
+        pass
