@@ -69,12 +69,13 @@ def sdpa_attention_forward(
     # - Attention mask is not to be provided (even if it is a causal pattern)
     # - Internally, we marked this as compatible with causal, i.e. it is a decoder attention type
     #
-    # Quirks on the conditionals:
-    # - We avoid inline passing this to the SDPA function directly to support both torch.compile's dynamic shapes and
-    #   full graph options. Otherwise, dynamic shapes are prevented from compiling.
-    # - It is important to check first for the shape, otherwise compile will fail with
-    #   `argument 'is_causal' must be bool, not SymBool`.
-    is_causal = query.shape[2] > 1 and attention_mask is None and is_causal
+    # The always-concrete conditions (non-causal module / provided mask) gate the query-length check so a
+    # plain `False` short-circuits *before* touching `query.shape[2]`, which under `torch.export` can be a
+    # data-dependent `SymBool` that SDPA rejects. When causality is still possible, keeping `query.shape[2] > 1`
+    # as the first `and` operand specializes a backed symint to `bool` (a trailing operand would leak the `SymBool`).
+    is_causal = is_causal and attention_mask is None
+    if is_causal:
+        is_causal = query.shape[2] > 1 and is_causal
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
     # We convert it to a bool for the SDPA kernel that only accepts bools.
