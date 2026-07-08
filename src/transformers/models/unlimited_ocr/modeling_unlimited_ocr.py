@@ -2028,7 +2028,56 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Generati
             Number of local patches per image in the batch.
         patches_grid (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
             The patches grid `(num_columns, num_rows)` per image.
-        """
+
+        Example single-page OCR:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+
+        >>> model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
+
+        >>> image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
+        >>> inputs = processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
+
+        >>> output = model.generate(
+        ...     **inputs,
+        ...     max_new_tokens=4096,
+        ...     no_repeat_ngram_size=35,
+        ...     no_repeat_ngram_window_size=128,
+        ... )
+        >>> processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        >>> # image [383, 87, 497, 171]\ntext [333, 201, 558, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
+        ```
+
+        Example multi-page OCR:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+
+        >>> model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
+
+        >>> page1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
+        >>> page2 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_receipt.jpeg"
+        >>> num_pages = 2
+
+        >>> inputs = processor(
+        ...     images=[page1, page2],
+        ...     text="<image>" * num_pages + "Multi page parsing.",
+        ...     crop_to_patches=False,
+        ...     return_tensors="pt",
+        ... ).to(model.device)
+
+        >>> output = model.generate(
+        ...     **inputs,
+        ...     max_new_tokens=32768,
+        ...     no_repeat_ngram_size=35,
+        ...     no_repeat_ngram_window_size=1024,
+        ... )
+        >>> processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        >>> # <PAGE>image [382, 87, 489, 174]\ntitle [333, 201, 556, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SCLUTION FORM...
+        ```"""
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,

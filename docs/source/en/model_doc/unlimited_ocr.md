@@ -57,7 +57,12 @@ processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
 image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
 inputs = processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
 
-output = model.generate(**inputs, max_new_tokens=4096)
+output = model.generate(
+    **inputs,
+    max_new_tokens=4096,
+    no_repeat_ngram_size=35,
+    no_repeat_ngram_window_size=128,
+)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 # image [383, 87, 497, 171]\ntext [333, 201, 558, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
 ```
@@ -80,7 +85,12 @@ inputs = processor(
     return_tensors="pt",
 ).to(model.device)
 
-output = model.generate(**inputs, max_new_tokens=4096)
+output = model.generate(
+    **inputs,
+    max_new_tokens=4096,
+    no_repeat_ngram_size=35,
+    no_repeat_ngram_window_size=128,
+)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 # image [383, 87, 497, 171]\ntext [333, 201, 558, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
 ```
@@ -112,7 +122,12 @@ inputs = processor(
     return_tensors="pt",
 ).to(model.device)
 
-output = model.generate(**inputs, max_new_tokens=32768)
+output = model.generate(
+    **inputs,
+    max_new_tokens=32768,
+    no_repeat_ngram_size=35,
+    no_repeat_ngram_window_size=1024,
+)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 # <PAGE>image [382, 87, 489, 174]\ntitle [333, 201, 556, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SCLUTION FORM...
 ```
