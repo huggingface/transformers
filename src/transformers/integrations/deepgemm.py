@@ -260,12 +260,15 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
 
 @torch._dynamo.allow_in_graph
 def _populate_deepgemm_kernel(requires_sm100: bool = False) -> None:
-    """Warm the `_load_deepgemm_kernel` cache as an `@allow_in_graph` leaf.
+    """Warm the `_load_deepgemm_kernel` cache from an opaque graph node, so Dynamo never traces the loader.
 
-    Dynamo ignores `@functools.cache` and re-traces `_load_deepgemm_kernel`, whose cold path hits an
-    untraceable hub download (`lazy_load_kernel`) and errors under `fullgraph`. Running it as an opaque
-    leaf loads the kernel eagerly so the later traced call hits the cached fast path. Returns `None`
-    (not the `DeepGEMM` bundle): an `@allow_in_graph` return must be graph-representable.
+    Under `torch.compile`, Dynamo ignores `@functools.cache` and traces into `_load_deepgemm_kernel`,
+    whose cold path (hub download + dynamic import via `lazy_load_kernel`) is untraceable and errors under
+    `fullgraph`. `@allow_in_graph` turns the call into an opaque fx node instead — but an fx node's return
+    must be proxyable, and the `DeepGEMM` bundle of Python callables isn't (`Unsupported: torch.* op
+    returned non-Tensor`), so we can't just decorate the real loader. Hence two loaders: this one is
+    opaque, returns `None`, and only warms the cache; the real `_load_deepgemm_kernel` right after is then
+    a plain cache lookup.
     """
     _load_deepgemm_kernel(requires_sm100=requires_sm100)
 
