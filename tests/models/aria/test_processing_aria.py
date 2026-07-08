@@ -40,15 +40,17 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image1 = load_image(
             url_to_local_path(
-                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/statue_of_liberty_64x64.jpg"
             )
         )
         cls.image2 = load_image(
-            url_to_local_path("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/chicago_64x64.jpg"
+            )
         )
         cls.image3 = load_image(
             url_to_local_path(
-                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/golden_gate_64x64.jpg"
             )
         )
         cls.bos_token = "<|im_start|>"
@@ -92,8 +94,9 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that a single image is processed correctly
         inputs = processor(images=self.image1, text="Ok<|img|>", images_kwargs={"split_image": True})
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (2, 3, 980, 980))
-        self.assertEqual(np.array(inputs["pixel_mask"]).shape, (2, 980, 980))
+        # 64x64 input is too small to split further; produces 1 tile (no sub-split)
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 3, 980, 980))
+        self.assertEqual(np.array(inputs["pixel_mask"]).shape, (1, 980, 980))
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor = self.get_processor()
