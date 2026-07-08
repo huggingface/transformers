@@ -13,7 +13,23 @@
 # limitations under the License.
 import torch
 
+from ...generation.configuration_utils import GenerationConfig
 from ...generation.logits_process import LogitsProcessor
+
+
+class UnlimitedOcrGenerationConfig(GenerationConfig):
+    r"""
+    A GenerationConfig class with parameterization customized for UnlimitedOcr.
+
+    Args:
+        no_repeat_ngram_window_size (`int`, *optional*):
+            If set together with `no_repeat_ngram_size`, n-gram repetitions are blocked only within this many
+            trailing tokens instead of over the whole sequence.
+    """
+
+    def __init__(self, no_repeat_ngram_window_size: int | None = None, **kwargs):
+        super().__init__(**kwargs)
+        self.no_repeat_ngram_window_size = no_repeat_ngram_window_size
 
 
 class UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(LogitsProcessor):
@@ -55,4 +71,4 @@ class UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(LogitsProcessor):
         return scores
 
 
-__all__ = ["UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor"]
+__all__ = ["UnlimitedOcrGenerationConfig", "UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor"]

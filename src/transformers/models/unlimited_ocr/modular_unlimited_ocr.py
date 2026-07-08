@@ -71,7 +71,10 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
 )
 from ..deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor, DeepseekOcr2ProcessorKwargs
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
-from .generation_unlimited_ocr import UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor
+from .generation_unlimited_ocr import (
+    UnlimitedOcrGenerationConfig,
+    UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor,
+)
 
 
 class UnlimitedOcrImageProcessorKwargs(DeepseekOcr2ImageProcessorKwargs):
@@ -1137,6 +1140,8 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
 
 
 class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
+    generation_config_class = UnlimitedOcrGenerationConfig
+
     @can_return_tuple
     @auto_docstring
     def forward(

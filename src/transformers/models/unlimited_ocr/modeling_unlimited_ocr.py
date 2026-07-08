@@ -63,7 +63,10 @@ from .configuration_unlimited_ocr import (
     UnlimitedOcrVisionConfig,
     UnlimitedOcrVisionEncoderConfig,
 )
-from .generation_unlimited_ocr import UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor
+from .generation_unlimited_ocr import (
+    UnlimitedOcrGenerationConfig,
+    UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -1949,6 +1952,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
 @auto_docstring
 class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    generation_config_class = UnlimitedOcrGenerationConfig
 
     def __init__(self, config: UnlimitedOcrConfig):
         super().__init__(config)
