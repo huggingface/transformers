@@ -871,11 +871,9 @@ class Glm5NextAttention(GlmMoeDsaAttention):
         k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
         key_states, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
-        # Optional RoPE (only applied in the indexer)
-        if position_embeddings is not None:
-            k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-            k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
-            key_states = torch.cat([key_states, k_rot], dim=-1)
+        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
+        key_states = torch.cat([key_states, k_rot], dim=-1)
 
         # Cache update
         if past_key_values is not None:
@@ -927,7 +925,6 @@ class Glm5NextAttention(GlmMoeDsaAttention):
 # =============================================================================
 
 
-# TODO: can copy qwen 3.5 for this tbh
 class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
     def __init__(self, config: Glm5NextConfig, layer_idx: int):
         self.block_type = config.layer_types[layer_idx]
