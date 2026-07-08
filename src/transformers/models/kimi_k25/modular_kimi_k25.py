@@ -244,6 +244,7 @@ class Kimi_K25VisionAttention(VisionAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
+        max_seqlen: int | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -266,7 +267,8 @@ class Kimi_K25VisionAttention(VisionAttention):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            if max_seqlen is None:
+                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -418,8 +420,10 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             )
         )
 
-        max_seqlen = lengths.max()
         cu_seqlens = lengths.cumsum(dim=0, dtype=torch.int32)
+        max_seqlen = None
+        if is_flash_attention_requested(self.config):
+            max_seqlen = int(lengths.max().item())
 
         for block in self.layers:
             hidden_states = block(

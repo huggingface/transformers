@@ -212,6 +212,7 @@ class GlmImageVisionAttention(Glm4vVisionAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -228,7 +229,8 @@ class GlmImageVisionAttention(Glm4vVisionAttention):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            if max_seqlen is None:
+                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -305,11 +307,14 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
+        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
         cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
             The cumulative sequence lengths of each image or video feature.
+        max_seqlen (`int`, *optional*):
+            Maximum sequence length for packed variable-length attention in Flash Attention kernels.
         """
         residual = hidden_states
 
@@ -317,6 +322,7 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
         hidden_states = self.attn(
             hidden_states,
             cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -454,6 +460,9 @@ class GlmImageVisionModel(Glm4vVisionModel):
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        max_seqlen = None
+        if is_flash_attention_requested(self.config):
+            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
 
         hidden_states = self.patch_embed(pixel_values)
         seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
@@ -470,6 +479,7 @@ class GlmImageVisionModel(Glm4vVisionModel):
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
             )
 
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)

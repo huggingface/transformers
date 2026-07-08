@@ -55,7 +55,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_bilinear_indices_and_weights,
@@ -795,6 +795,9 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         # unlike Qwen which merges inside the encoder, so rotary positions here are simple (row, col).
         position_ids = get_vision_position_ids(grid_thw, 1, kwargs=kwargs)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        max_seqlen = None
+        if is_flash_attention_requested(self.config):
+            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
 
         hidden_states = inputs_embeds
         attention_mask = create_bidirectional_mask(
@@ -810,6 +813,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
             hidden_states = encoder_layer(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

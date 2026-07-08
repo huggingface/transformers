@@ -465,6 +465,8 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             (1, 0),
         )
         max_seqlens = torch.max(cu_seqlens[1:] - cu_seqlens[:-1])
+        if is_flash_attention_requested(self.config):
+            max_seqlens = int(max_seqlens.item())
 
         attn_kwargs = {
             "attention_mask": None,

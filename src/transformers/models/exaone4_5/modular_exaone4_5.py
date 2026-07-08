@@ -125,6 +125,7 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
+        max_seqlen: int | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -151,7 +152,8 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
         )
 
         if is_flash_attention_requested(self.config):
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            if max_seqlen is None:
+                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
                 self,
                 query_states,

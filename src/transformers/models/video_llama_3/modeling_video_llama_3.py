@@ -179,6 +179,7 @@ class VideoLlama3VisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
@@ -208,7 +209,8 @@ class VideoLlama3VisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            if max_seqlen is None:
+                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
@@ -270,6 +272,7 @@ class VideoLlama3VisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
@@ -277,6 +280,8 @@ class VideoLlama3VisionEncoderLayer(GradientCheckpointingLayer):
             The cumulative sequence lengths of each image or video feature.
         position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
             The cosine and sine position embeddings for vision attention.
+        max_seqlen (`int`, *optional*):
+            Maximum sequence length for packed variable-length attention in Flash Attention kernels.
         """
         residual = hidden_states
 
@@ -284,6 +289,7 @@ class VideoLlama3VisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states, _ = self.self_attn(
             hidden_states,
             cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -320,6 +326,7 @@ class VideoLlama3VisionEncoder(nn.Module):
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
@@ -327,11 +334,14 @@ class VideoLlama3VisionEncoder(nn.Module):
             The cumulative sequence lengths of each image or video feature.
         position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
             The cosine and sine position embeddings for vision attention.
+        max_seqlen (`int`, *optional*):
+            Maximum sequence length for packed variable-length attention in Flash Attention kernels.
         """
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -424,6 +434,9 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         """
         position_ids = get_vision_position_ids(grid_thw, merge_sizes, kwargs=kwargs)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        max_seqlen = None
+        if is_flash_attention_requested(self.config):
+            max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
         rotary_pos_emb = self.rotary_pos_emb(position_ids)
@@ -433,6 +446,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         encoder_outputs: BaseModelOutput = self.encoder(
             hidden_states,
             cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
             position_embeddings=position_embeddings,
             **kwargs,
         )
