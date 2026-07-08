@@ -19,8 +19,7 @@ from ...utils import add_start_docstrings
 
 
 class UnlimitedOcrGenerationConfig(GenerationConfig):
-    r"""
-    A GenerationConfig class with parameterization customized for UnlimitedOcr.
+    r"""A GenerationConfig class with parameterization customized for UnlimitedOcr.
 
     Args:
         no_repeat_ngram_window_size (`int`, *optional*):
