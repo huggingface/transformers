@@ -296,8 +296,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.idefics2.test_processing_idefics2.Idefics2ProcessorTest.test_process_interleaved_images_prompts_image_error
     def test_process_interleaved_images_prompts_image_error(self):
-        import time
-
         processor = self.get_processor()
 
         text = [
@@ -305,56 +303,39 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "In this other sentence we try some good things",
         ]
         images = [[self.image1], [self.image2]]
-        t0 = time.perf_counter()
-        _err = None
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
-        print(f"\n[error_test] case 1 (no <image>, 2 imgs): {time.perf_counter() - t0:.3f}s")
         images = [[self.image1], []]
-        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
-        print(f"[error_test] case 2 (no <image>, 1+empty): {time.perf_counter() - t0:.3f}s")
 
         text = [
             "This is a test sentence.<image>",
             "In this other sentence we try some good things<image>",
         ]
         images = [[self.image1], [self.image2, self.image3]]
-        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
-        print(f"[error_test] case 3 (1 token each, 1+2 imgs): {time.perf_counter() - t0:.3f}s")
         images = [[], [self.image2]]
-        t0 = time.perf_counter()
         with self.assertRaises((ValueError, IndexError)):
             processor(text=text, images=images, padding=True)
-        print(f"[error_test] case 4 (empty+1 img): {time.perf_counter() - t0:.3f}s")
         images = [self.image1, self.image2, self.image3]
-        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
-        print(f"[error_test] case 5 (flat list 3 imgs): {time.perf_counter() - t0:.3f}s")
         images = [self.image1]
-        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
-        print(f"[error_test] case 6 (flat list 1 img): {time.perf_counter() - t0:.3f}s")
 
         text = [
             "This is a test sentence.",
             "In this other sentence we try some good things<image>",
         ]
         images = [[self.image1], []]
-        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
-        print(f"[error_test] case 7 (mixed, 1+empty): {time.perf_counter() - t0:.3f}s")
         images = [self.image1, self.image2]
-        t0 = time.perf_counter()
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
-        print(f"[error_test] case 8 (mixed, flat 2 imgs): {time.perf_counter() - t0:.3f}s")
 
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
