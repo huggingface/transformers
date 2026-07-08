@@ -55,9 +55,8 @@ class GradientCheckpointingLayer(nn.Module):
     """
 
     gradient_checkpointing = False
-    # Layers that only *read* the KV cache (never write to or evict from it) can keep it under gradient checkpointing:
-    # the recompute in the backward pass reads the same states, so the replay is idempotent. Writers must leave this
-    # `False` so the cache is dropped and no state is appended twice on replay.
+    # Layers that only read the KV cache can set this to keep it under gradient checkpointing (the recompute reads the
+    # same states). Writers must leave it `False`, otherwise the cache is updated a second time on the backward replay.
     _can_checkpoint_with_cache = False
 
     def __call__(self, *args, **kwargs):
