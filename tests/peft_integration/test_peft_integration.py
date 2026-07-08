@@ -40,6 +40,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     require_bitsandbytes,
     require_peft,
+    require_peft_greater_or_equal,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -210,6 +211,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model_from_pretrained = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(model_from_pretrained))
 
+    @require_peft_greater_or_equal("0.20.0")
     def test_peft_save_reload_preserves_adapter_weights(self):
         """
         Regression test: after save_pretrained + from_pretrained roundtrip, the reloaded model's LoRA
@@ -1049,6 +1051,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # should be different
                 assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
 
+    @require_peft_greater_or_equal("0.20.0")
     def test_mixtral_lora_conversion(self):
         inputs = torch.arange(10).view(1, -1).to(torch_device)
         model_name = "hf-internal-testing/Mixtral-tiny"
