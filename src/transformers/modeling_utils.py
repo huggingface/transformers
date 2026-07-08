@@ -593,8 +593,21 @@ def _get_resolved_checkpoint_files(
         # If the file is a local folder (but not in the HF_HOME cache, even if it's technically local)
         if is_local:
             if transformers_explicit_filename is not None:
-                # If the filename is explicitly defined, load this by default.
-                archive_file = os.path.join(pretrained_model_name_or_path, subfolder, transformers_explicit_filename)
+                # If the filename is explicitly defined, load this by default
+                base_dir = os.path.join(pretrained_model_name_or_path, subfolder)
+                archive_file = os.path.join(base_dir, transformers_explicit_filename)
+                # Just a small check to make sure `transformers_explicit_filename` does not escape the base_dir, i.e. it does not
+                # contain `..` for example
+                try:
+                    absolute_base_dir = os.path.abspath(base_dir)
+                    absolute_archive_file = os.path.abspath(archive_file)
+                    contained = os.path.commonpath([absolute_base_dir, absolute_archive_file]) == absolute_base_dir
+                except ValueError:
+                    contained = False
+                if not contained:
+                    raise ValueError(
+                        f"`transformers_weights` must reference a file inside the model directory, got {transformers_explicit_filename}"
+                    )
                 is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
             elif use_safetensors is not False and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant))
