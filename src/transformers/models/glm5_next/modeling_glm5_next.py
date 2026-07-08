@@ -37,6 +37,7 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -692,6 +693,7 @@ class Glm5NextLinearAttention(nn.Module):
 
         self.layer_type = config.layer_types[layer_idx]
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states: torch.Tensor,
