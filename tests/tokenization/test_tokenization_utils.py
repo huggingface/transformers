@@ -397,12 +397,21 @@ class TokenizerUtilsTest(unittest.TestCase):
 
 
     def test_set_model_specific_special_tokens_accepts_legacy_list():
-        tokenizer = PreTrainedTokenizerFast()
+        tokenizer = PreTrainedTokenizer()
 
         tokenizer._set_model_specific_special_tokens(
-            ["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"]
+            [
+                "<s>NOTUSED",
+                "</s>NOTUSED",
+                "<unk>NOTUSED",
+            ]
         )
 
-        assert tokenizer._special_tokens_map["extra_special_token_0"] == "<s>NOTUSED"
-        assert tokenizer._special_tokens_map["extra_special_token_1"] == "</s>NOTUSED"
-        assert tokenizer._special_tokens_map["extra_special_token_2"] == "<unk>NOTUSED"
+        expected = {
+            "extra_special_token_0": "<s>NOTUSED",
+            "extra_special_token_1": "</s>NOTUSED",
+            "extra_special_token_2": "<unk>NOTUSED",
+        }
+
+        for key, value in expected.items():
+            assert tokenizer._special_tokens_map[key] == value
