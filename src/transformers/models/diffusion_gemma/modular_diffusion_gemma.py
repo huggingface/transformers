@@ -350,7 +350,6 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        encoder_kv: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         # The code in this function is adapted from Gemma4TextAttention. ** The modified parts are clearly indicated **
@@ -375,12 +374,8 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         value_states = self.v_norm(value_states)
         value_states = value_states.transpose(1, 2)
 
-        # CHANGED: encoder KV come in as plain tensors during training, or from the read-only cache at generation
-        if encoder_kv is not None:
-            encoder_key, encoder_value = encoder_kv
-            key_states = torch.cat([encoder_key, key_states], dim=-2)
-            value_states = torch.cat([encoder_value, value_states], dim=-2)
-        elif past_key_values is not None:
+        # CHANGED: prepend the encoder prefix KV read read-only from the shared cache to the canvas KV
+        if past_key_values is not None:
             key_states, value_states = self.append_to_cache(past_key_values, key_states, value_states)
 
         # CHANGED: removed the `if self.store_full_length_kv` branch
@@ -454,12 +449,15 @@ class DiffusionGemmaTextExperts(Gemma4TextExperts):
     pass
 
 
-class DiffusionGemmaEncoderTextLayer(GradientCheckpointingLayer):
+class DiffusionGemmaEncoderTextLayer(nn.Module):
     """Encoder layer for the diffusion encoder.
 
     Identical to `Gemma4TextDecoderLayer` except that:
     1. It doesn't have the PLE code path
     2. Doesn't pipe `shared_kv_states` around
+    3. It is not a `GradientCheckpointingLayer`: the encoder writes the shared KV cache via `update()`, and replaying
+       that write under gradient checkpointing would append a second time. Keeping the encoder prefill out of the
+       checkpointed region lets it write the cache exactly once, while the decoder reads it read-only.
     """
 
     def __init__(self, config: DiffusionGemmaConfig, layer_idx: int):
@@ -538,6 +536,10 @@ class DiffusionGemmaDecoderTextLayer(Gemma4TextDecoderLayer):
     3. Doesn't pipe `shared_kv_states` around
     """
 
+    # The decoder only reads the encoder prefix from the cache (never writes/evicts), so it is safe to keep the cache
+    # under gradient checkpointing: the backward recompute reads the same encoder states.
+    _can_checkpoint_with_cache = True
+
     def __init__(self, config: DiffusionGemmaConfig, layer_idx: int):
         GradientCheckpointingLayer.__init__()
         self.config = config
@@ -560,7 +562,6 @@ class DiffusionGemmaDecoderTextLayer(Gemma4TextDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_kv: tuple[torch.Tensor, torch.Tensor] | None = None,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -576,7 +577,6 @@ class DiffusionGemmaDecoderTextLayer(Gemma4TextDecoderLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            encoder_kv=encoder_kv,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -722,12 +722,9 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
 @dataclass
 class DiffusionGemmaEncoderOutput(BaseModelOutputWithPast):
     r"""
-    encoder_kv (`list[tuple[torch.FloatTensor, torch.FloatTensor]]`, *optional*):
-        Per-layer encoder key and value tensors. Passed to the decoder as plain tensors during training so gradient
-        checkpointing can recompute them. `None` at generation, where the decoder reads them from the KV cache.
+    Output of the DiffusionGemma encoder: `last_hidden_state` plus the `past_key_values` KV cache the decoder reads
+    read-only.
     """
-
-    encoder_kv: list[tuple[torch.FloatTensor, torch.FloatTensor]] | None = None
 
 
 class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
@@ -806,10 +803,10 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
         for layer_type in self.unique_layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # decoder layers
-        encoder_kv = []
+        # encoder layers: each writes its prefix KV into the shared cache via `update()`. These layers are not
+        # gradient-checkpointed, so the write happens exactly once and the decoder can read it read-only.
         for i, encoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states, self_kv = encoder_layer(
+            hidden_states, _ = encoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings[self.config.layer_types[i]],
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
@@ -817,14 +814,12 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
                 past_key_values=past_key_values,
                 **kwargs,
             )
-            encoder_kv.append(self_kv)
 
         hidden_states = self.norm(hidden_states)
 
         return DiffusionGemmaEncoderOutput(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            encoder_kv=encoder_kv,
         )
 
 
@@ -958,7 +953,6 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            encoder_kv=outputs.encoder_kv,
         )
 
     def get_audio_features(self, *args, **kwargs):
@@ -1047,7 +1041,6 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         self,
         decoder_input_ids: torch.LongTensor,
         past_key_values: Cache | None = None,
-        encoder_kv: list[tuple[torch.Tensor, torch.Tensor]] | None = None,
         self_conditioning_logits: torch.FloatTensor | None = None,
         self_conditioning_mask: torch.BoolTensor | None = None,
         decoder_attention_mask: torch.Tensor | dict | None = None,
@@ -1057,8 +1050,6 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, canvas_length)`):
             Token IDs for the canvas to be refined.
-        encoder_kv (`list[tuple[torch.Tensor, torch.Tensor]]`, *optional*):
-            Per-layer encoder key and value tensors, used as the read-only context during training instead of a cache.
         self_conditioning_logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):
             Self-conditioning logits from the previous denoising step, used to compute the
             self-conditioning embeddings.
@@ -1092,12 +1083,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         # canvas.
         if decoder_position_ids is None:
             canvas_length = inputs_embeds.shape[1]
-            if past_key_values is not None:
-                cache_seq_length = past_key_values.get_seq_length(layer_idx=0)
-            elif encoder_kv is not None:
-                cache_seq_length = encoder_kv[0][0].shape[-2]
-            else:
-                cache_seq_length = 0
+            cache_seq_length = past_key_values.get_seq_length(layer_idx=0) if past_key_values is not None else 0
             decoder_position_ids = torch.arange(
                 cache_seq_length,
                 cache_seq_length + canvas_length,
@@ -1107,16 +1093,14 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             decoder_position_ids = decoder_position_ids.unsqueeze(0)
 
         if not isinstance(mask_mapping := decoder_attention_mask, dict):
-            if past_key_values is not None:
-                mask_mapping = self.create_diffusion_decoder_attention_mask(
-                    config=self.text_config,
-                    inputs_embeds=inputs_embeds,
-                    past_key_values=past_key_values,
-                    decoder_attention_mask=decoder_attention_mask,
-                )
-            else:
-                # Training: encoder KV are plain tensors, attend fully over prompt and canvas
-                mask_mapping = {"full_attention": None, "sliding_attention": None}
+            # The decoder reads the encoder prefix from the read-only cache; the canvas attends bidirectionally over
+            # both the cached prefix and the canvas (training and generation alike).
+            mask_mapping = self.create_diffusion_decoder_attention_mask(
+                config=self.text_config,
+                inputs_embeds=inputs_embeds,
+                past_key_values=past_key_values,
+                decoder_attention_mask=decoder_attention_mask,
+            )
 
         # Embed positions
         hidden_states = inputs_embeds
@@ -1125,10 +1109,8 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, decoder_position_ids, layer_type)
 
         for i, decoder_layer in enumerate(self.layers[: self.text_config.num_hidden_layers]):
-            # Pass encoder KV positionally so gradient checkpointing keeps them in the graph
             hidden_states = decoder_layer(
                 hidden_states,
-                encoder_kv[i] if encoder_kv is not None else None,
                 position_embeddings=position_embeddings[self.text_config.layer_types[i]],
                 attention_mask=mask_mapping[self.text_config.layer_types[i]],
                 position_ids=decoder_position_ids,
@@ -1203,6 +1185,11 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             mask.ndim == 4 for mask in decoder_attention_mask.values()
         ):
             return decoder_attention_mask
+
+        # A padding mask can arrive as an int tensor (`1`/`0`); the mask builder preserves its dtype, so cast to bool to
+        # produce a bool/float attention mask that the attention backends accept.
+        if torch.is_tensor(decoder_attention_mask) and decoder_attention_mask.dtype not in (torch.bool, torch.float32):
+            decoder_attention_mask = decoder_attention_mask.bool()
 
         text_config = config.get_text_config()
         q_length = inputs_embeds.shape[1]
@@ -1341,13 +1328,10 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
             The position IDs for the tokens in the canvas.
         """
 
-        # No external cache means training: feed the encoder KV to the decoder as plain tensors so gradient
-        # checkpointing recomputes them. With a cache (generation) the decoder reads it instead.
-        use_tensor_kv = past_key_values is None
-
-        # 1: Encode new prompt tokens into the KV cache
+        # 1: Encode new prompt tokens into the shared KV cache. The encoder prefill is not gradient-checkpointed, so it
+        # writes the cache exactly once; the decoder then reads that same cache read-only, in training and generation
+        # alike (no second cache or plain-tensor list).
         encoder_last_hidden_state = None
-        encoder_kv = None
         if input_ids is not None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1357,10 +1341,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
                 **kwargs,
             )
             encoder_last_hidden_state = encoder_outputs.last_hidden_state
-            if use_tensor_kv:
-                encoder_kv = encoder_outputs.encoder_kv
-            else:
-                past_key_values = encoder_outputs.past_key_values
+            past_key_values = encoder_outputs.past_key_values
         elif past_key_values is None:
             raise ValueError("Either `input_ids` or `past_key_values` must be provided.")
 
@@ -1380,8 +1361,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
         # 2.b.: Run the decoder
         decoder_outputs = self.decoder(
             decoder_input_ids=decoder_input_ids,
-            past_key_values=None if use_tensor_kv else past_key_values,
-            encoder_kv=encoder_kv,
+            past_key_values=past_key_values,
             self_conditioning_logits=self_conditioning_logits,
             self_conditioning_mask=self_conditioning_mask,
             decoder_attention_mask=decoder_attention_mask,
@@ -1393,7 +1373,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
             last_hidden_state=decoder_outputs.last_hidden_state,
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
-            past_key_values=None if use_tensor_kv else past_key_values,
+            past_key_values=past_key_values,
             encoder_last_hidden_state=encoder_last_hidden_state,
         )
 
