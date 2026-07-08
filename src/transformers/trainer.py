@@ -1772,7 +1772,12 @@ class Trainer:
                             self.lr_scheduler.step()
 
                     model.zero_grad()
-                    if torch.backends.mps.is_available() and hasattr(torch.mps, "clear_graph_cache"):
+                    if (
+                        self.args.torch_empty_cache_steps is not None
+                        and self.state.global_step % self.args.torch_empty_cache_steps == 0
+                        and torch.backends.mps.is_available()
+                        and hasattr(torch.mps, "clear_graph_cache")
+                    ):
                         torch.mps.clear_graph_cache()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
