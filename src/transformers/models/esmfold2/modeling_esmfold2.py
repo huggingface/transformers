@@ -1997,15 +1997,19 @@ class ESMFold2ConfidenceHead(nn.Module):
         max_chain_id = int(expanded_asym.max().item()) if Bm > 0 else 0
         n_chains = max_chain_id + 1
         pair_chains_iptm = torch.zeros(Bm, n_chains, n_chains, device=tm_expected.device, dtype=tm_expected.dtype)
+        # pair_chains_iptm[c1, c2] = max over rows i in chain c2 of the mean over
+        # columns j in chain c1 of tm_expected[i, j] (max-of-row-mean, as in the
+        # global iptm above), so iptm equals the max off-diagonal entry.
         for c1 in range(n_chains):
             chain_c1 = (expanded_asym == c1).float() * mask_f
             if chain_c1.sum() == 0:
                 continue
+            col_mask = chain_c1.unsqueeze(-2)
+            avg_tm = (tm_expected * col_mask).sum(dim=-1) / (col_mask.sum(dim=-1) + _CONFIDENCE_EPS)
             for c2 in range(n_chains):
                 chain_c2 = (expanded_asym == c2).float() * mask_f
-                pair_m = chain_c1.unsqueeze(-1) * chain_c2.unsqueeze(-2)
-                denom = pair_m.sum(dim=(-1, -2)) + _CONFIDENCE_EPS
-                pair_chains_iptm[:, c1, c2] = (tm_expected * pair_m).sum(dim=(-1, -2)) / denom
+                row_vals = avg_tm.masked_fill(chain_c2 == 0, float("-inf"))
+                pair_chains_iptm[:, c1, c2] = row_vals.max(dim=-1).values.clamp(min=0.0)
 
         return ptm.detach(), iptm.detach(), pair_chains_iptm.detach()
 
