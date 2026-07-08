@@ -127,6 +127,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "Qwen2_5_VLModel": "Qwen2VLModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
     "Tipsv2VisionBackbone": "Tipsv2VisionModel",
+    "UnlimitedOcrTextModel": "qwen2_moe",
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
     "ASTModel": "ViTModel",
     "BeitModel": "ViTModel",
@@ -1537,21 +1538,6 @@ def _build_checkpoint_conversion_mapping():
                     "v_proj.bias",
                 ],
                 operations=[Chunk(dim=0)],
-            ),
-        ],
-        "UnlimitedOcrTextModel": [
-            WeightConverter(
-                source_patterns=[
-                    "mlp.experts.*.gate_proj.weight",
-                    "mlp.experts.*.up_proj.weight",
-                ],
-                target_patterns="mlp.experts.gate_up_proj",
-                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-            ),
-            WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight",
-                target_patterns="mlp.experts.down_proj",
-                operations=[MergeModulelist(dim=0)],
             ),
         ],
         "tipsv2": [
