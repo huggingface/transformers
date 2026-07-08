@@ -473,21 +473,25 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"^layers\.(\d+)\.hc_ffn_scale$", target_patterns=r"layers.\1.ffn_hc.scale"
             ),
+            # Forget-gate params are stored flat under `self_attn.*` in the checkpoint but
+            # live under `self_attn.forget_gate.*` in the model. Patterns are prefix-agnostic
+            # so they fire for both the flat text layout (`model.layers.*`) and the composite
+            # VLM layout (`model.language_model.layers.*`).
             WeightRenaming(
-                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.f_a_proj\.",
-                target_patterns=r"model.layers.\1.self_attn.forget_gate.f_a_proj.",
+                source_patterns=r"self_attn\.f_a_proj\.",
+                target_patterns=r"self_attn.forget_gate.f_a_proj.",
             ),
             WeightRenaming(
-                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.f_b_proj\.",
-                target_patterns=r"model.layers.\1.self_attn.forget_gate.f_b_proj.",
+                source_patterns=r"self_attn\.f_b_proj\.",
+                target_patterns=r"self_attn.forget_gate.f_b_proj.",
             ),
             WeightRenaming(
-                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.dt_bias$",
-                target_patterns=r"model.layers.\1.self_attn.forget_gate.dt_bias",
+                source_patterns=r"self_attn\.dt_bias$",
+                target_patterns=r"self_attn.forget_gate.dt_bias",
             ),
             WeightRenaming(
-                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.A_log$",
-                target_patterns=r"model.layers.\1.self_attn.forget_gate.A_log",
+                source_patterns=r"self_attn\.A_log$",
+                target_patterns=r"self_attn.forget_gate.A_log",
             ),
             WeightConverter(
                 source_patterns=[

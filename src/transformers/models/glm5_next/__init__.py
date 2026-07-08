@@ -20,7 +20,11 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_glm5_next import *
+    from .image_processing_glm5_next import *
+    from .image_processing_pil_glm5_next import *
     from .modeling_glm5_next import *
+    from .processing_glm5_next import *
+    from .video_processing_glm5_next import *
 else:
     import sys
 
