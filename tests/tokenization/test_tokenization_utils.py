@@ -32,6 +32,7 @@ from transformers import (
     TensorType,
     TokenSpan,
     is_tokenizers_available,
+    PreTrainedTokenizerBase,
 )
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 from transformers.testing_utils import (
@@ -395,9 +396,8 @@ class TokenizerUtilsTest(unittest.TestCase):
                 except import_protobuf_decode_error():
                     pass
 
-
     def test_set_model_specific_special_tokens_accepts_legacy_list():
-        tokenizer = PreTrainedTokenizerFast()
+        tokenizer = PreTrainedTokenizerBase()
 
         tokenizer._set_model_specific_special_tokens(
             [
@@ -407,11 +407,15 @@ class TokenizerUtilsTest(unittest.TestCase):
             ]
         )
 
-        expected = {
-            "extra_special_token_0": "<s>NOTUSED",
-            "extra_special_token_1": "</s>NOTUSED",
-            "extra_special_token_2": "<unk>NOTUSED",
-        }
-
-        for key, value in expected.items():
-            assert tokenizer._special_tokens_map[key] == value
+        assert (
+            tokenizer._special_tokens_map["extra_special_token_0"]
+            == "<s>NOTUSED"
+        )
+        assert (
+            tokenizer._special_tokens_map["extra_special_token_1"]
+            == "</s>NOTUSED"
+        )
+        assert (
+            tokenizer._special_tokens_map["extra_special_token_2"]
+            == "<unk>NOTUSED"
+        )

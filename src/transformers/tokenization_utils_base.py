@@ -1409,22 +1409,49 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         """
         return self.convert_tokens_to_ids(self.all_special_tokens)
 
-    def _set_model_specific_special_tokens(self, special_tokens: dict[str, str | AddedToken]) -> None:
+    def _set_model_specific_special_tokens(self, special_tokens) -> None:
         """
         Adds new model-specific special tokens (e.g., for multimodal models).
 
-        These tokens are added to the named special tokens map and will be saved in tokenizer config.
-        For example: if the model tokenizer is multimodal, we can support special image or audio tokens.
+        Supports both the current dictionary format and the legacy list format
+        found in older tokenizer configurations.
 
         Args:
-            special_tokens: Dictionary of {token_name: token_value}
+            special_tokens:
+                Either a dictionary mapping token names to token values or a
+                legacy list of special token strings.
         """
-        self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + list(special_tokens.keys())
+
+        if special_tokens is None:
+            return
+
+        # Backward compatibility for old tokenizer configs
+        if isinstance(special_tokens, list):
+            special_tokens = {
+                f"extra_special_token_{i}": token
+                for i, token in enumerate(special_tokens)
+            }
+
+        if not isinstance(special_tokens, dict):
+            raise TypeError(
+                "`special_tokens` must be a dictionary or a list, "
+                f"got {type(special_tokens).__name__}."
+            )
+
+        self.SPECIAL_TOKENS_ATTRIBUTES.extend(
+            key
+            for key in special_tokens
+            if key not in self.SPECIAL_TOKENS_ATTRIBUTES
+        )
+
         for key, value in special_tokens.items():
-            if isinstance(value, (str, AddedToken)):
-                self._special_tokens_map[key] = value
-            else:
-                raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
+            if not isinstance(value, (str, AddedToken)):
+                raise TypeError(
+                    f"Special token '{key}' must be a str or AddedToken, "
+                    f"got {type(value).__name__}."
+                )
+
+            self._special_tokens_map[key] = value
 
     @property
     def added_tokens_decoder(self) -> dict[int, AddedToken]:
