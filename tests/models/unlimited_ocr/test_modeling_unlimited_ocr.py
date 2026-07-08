@@ -154,7 +154,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
 @require_torch
 class UnlimitedOcrIntegrationTest(unittest.TestCase):
     model_id = "baidu/Unlimited-OCR"
-    # TODO: remove revision before merge
+    # TODO: remove revision before merge
     revision = "refs/pr/13"
 
     def setUp(self):
@@ -166,7 +166,9 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_small_model_integration_test_document_parsing(self):
-        model = UnlimitedOcrForConditionalGeneration.from_pretrained(self.model_id, revision=self.revision, device_map=torch_device).eval()
+        model = UnlimitedOcrForConditionalGeneration.from_pretrained(
+            self.model_id, revision=self.revision, device_map=torch_device
+        ).eval()
         image = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -193,7 +195,9 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_small_model_integration_test_document_parsing_no_skip_special_tokens(self):
-        model = UnlimitedOcrForConditionalGeneration.from_pretrained(self.model_id, revision=self.revision, device_map=torch_device).eval()
+        model = UnlimitedOcrForConditionalGeneration.from_pretrained(
+            self.model_id, revision=self.revision, device_map=torch_device
+        ).eval()
         image = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -220,7 +224,9 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_small_model_integration_test_document_parsing_batched(self):
-        model = UnlimitedOcrForConditionalGeneration.from_pretrained(self.model_id, revision=self.revision, device_map=torch_device).eval()
+        model = UnlimitedOcrForConditionalGeneration.from_pretrained(
+            self.model_id, revision=self.revision, device_map=torch_device
+        ).eval()
         image1 = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -266,7 +272,9 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_small_model_integration_test_multi_page_document_parsing(self):
-        model = UnlimitedOcrForConditionalGeneration.from_pretrained(self.model_id, revision=self.revision, device_map=torch_device).eval()
+        model = UnlimitedOcrForConditionalGeneration.from_pretrained(
+            self.model_id, revision=self.revision, device_map=torch_device
+        ).eval()
         image1 = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
