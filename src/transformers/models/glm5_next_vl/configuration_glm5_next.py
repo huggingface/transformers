@@ -17,11 +17,12 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
-class Glm5NextConfig(PreTrainedConfig):
+class Glm5NextVLTextConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of routed expert groups.
@@ -72,7 +73,8 @@ class Glm5NextConfig(PreTrainedConfig):
         KDA layers and `"full_attention"` for MLA layers.
     """
 
-    model_type = "glm5_next"
+    model_type = "glm5_next_vl_text"
+    base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     attribute_map = {
@@ -100,12 +102,12 @@ class Glm5NextConfig(PreTrainedConfig):
     vocab_size: int = 154880
     hidden_size: int = 4096
     intermediate_size: int = 12288
+    hidden_act: str = "silu"
     num_hidden_layers: int = 45
     num_attention_heads: int = 64
     num_key_value_heads: int = 64
     max_position_embeddings: int = 1104096
     initializer_range: float = 0.02
-    hidden_act = "silu"
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
     tie_word_embeddings: bool = False
@@ -148,6 +150,7 @@ class Glm5NextConfig(PreTrainedConfig):
     pad_token_id: int | None = 154820
     mlp_layer_types: list[str] | None = None
     layer_types: list[str] | None = None
+    # MoE auxiliary-loss controls (training-side; ignored by the generation path).
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
 
@@ -204,6 +207,8 @@ class Glm5NextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
         # TODO: Proper alias and checking/validating
+        # The DeepSeek-V4-based text trunk reads these two aliases directly:
+        # `head_dim` (NoPE detection / rotary sizing) and `qk_head_dim` (MLA q/k width).
         self.head_dim = self.qk_rope_head_dim
         self.qk_head_dim = self.qk_rope_head_dim + self.qk_nope_head_dim
 
@@ -226,7 +231,61 @@ class Glm5NextConfig(PreTrainedConfig):
                 )
 
         if self.q_lora_rank is None:
-            raise ValueError("For DSA usage in hte attention layers, the `q_lora_rank` is strictly required!")
+            raise ValueError("For DSA usage in the attention layers, the `q_lora_rank` is strictly required!")
 
 
-__all__ = ["Glm5NextConfig"]
+@auto_docstring(checkpoint="zai-org/GLM-5-Next")
+@strict
+class Glm5NextVLConfig(PreTrainedConfig):
+    r"""
+    image_token_id (`int`, *optional*, defaults to 154854):
+        The image token index to encode the image prompt.
+    video_token_id (`int`, *optional*, defaults to 154855):
+        The video token index to encode the video prompt.
+    image_start_token_id (`int`, *optional*, defaults to 154830):
+        The image start token index to encode the start of image.
+    image_end_token_id (`int`, *optional*, defaults to 154831):
+        The image end token index to encode the end of image.
+    video_start_token_id (`int`, *optional*, defaults to 154832):
+        The video start token index to encode the start of video.
+    video_end_token_id (`int`, *optional*, defaults to 154833):
+        The video end token index to encode the end of video.
+
+    ```python
+    >>> from transformers import Glm5NextConfig
+
+    >>> # Initializing a GLM-5-Next style configuration
+    >>> configuration = Glm5NextConfig()
+    ```"""
+
+    model_type = "glm5_next_vl"
+    sub_configs = {"vision_config": AutoConfig, "text_config": Glm5NextVLTextConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 154854
+    video_token_id: int = 154855
+    image_start_token_id: int = 154830
+    image_end_token_id: int = 154831
+    video_start_token_id: int = 154832
+    video_end_token_id: int = 154833
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
+
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
+            # Flat (text-only) GLM-5-Next checkpoints store the text fields at the
+            # top level; forward them so `text_config` is populated for BC.
+            self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        super().__post_init__(**kwargs)
+
+
+__all__ = ["Glm5NextVLConfig", "Glm5NextVLTextConfig"]

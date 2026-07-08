@@ -31,6 +31,8 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
         The output hidden size of the vision model.
+    context_size (<fill_type>):
+        <fill_docstring>
 
     Example:
 
@@ -65,6 +67,13 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 1536
     intermediate_size: int = 4096
     initializer_range: float = 0.02
+    context_size: int | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.context_size is None:
+            self.context_size = self.out_hidden_size * self.in_channels
+
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")

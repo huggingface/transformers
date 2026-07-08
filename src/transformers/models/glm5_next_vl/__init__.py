@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_glm5_next import *
-    from .modeling_glm5_next import *
+    from .configuration_glm5_next_vl import *
+    from .modeling_glm5_next_vl import *
 else:
     import sys
 

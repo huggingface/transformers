@@ -20,7 +20,6 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, LinearAttentionLayer
-from ...generation import GenerationMixin
 from ...integrations import (
     use_kernel_forward_from_hub,
     use_kernel_func_from_hub,
@@ -29,32 +28,26 @@ from ...integrations import (
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import is_flash_attention_requested
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
-from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4Model
 from ..glm4.modeling_glm4 import apply_rotary_pos_emb
-from ..glm46v.processing_glm46v import Glm46VProcessor
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaDecoderLayer
-from ..glm_ocr.modeling_glm_ocr import GlmOcrVisionModel, GlmOcrVisionPatchMerger
-from ..glmga.image_processing_glmga import GlmgaImageProcessor
-from ..glmga.image_processing_pil_glmga import GlmgaImageProcessorPil
-from ..glmga.video_processing_glmga import GlmgaVideoProcessor
 from ..llama.modeling_llama import (
-    LlamaForCausalLM,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     eager_attention_forward,
 )
 from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
+from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNormGated
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
-from .configuration_glm5_next import Glm5NextConfig, Glm5NextTextConfig, Glm5NextVisionConfig
+from .configuration_glm5_next import Glm5NextConfig
 
 
 logger = logging.get_logger(__name__)
@@ -128,22 +121,6 @@ class Glm5NextMoE(DeepseekV3MoE):
 
 class Glm5NextRotaryEmbedding(LlamaRotaryEmbedding):
     pass
-
-
-# =============================================================================
-# MHC (Manifold-Constrained Hyper-Connection) helpers
-# =============================================================================
-
-
-class Glm5NextHyperConnection(DeepseekV4HyperConnection):
-    pass
-
-
-class Glm5NextHyperHead(nn.Module):
-    """Final GLM-5-Next HC-stream collapse. Unlike DeepSeek-V4, this is an unweighted mean."""
-
-    def forward(self, hidden_streams: torch.Tensor) -> torch.Tensor:
-        return hidden_streams.mean(dim=2)
 
 
 # =============================================================================
@@ -425,7 +402,7 @@ class Glm5NextLinearAttention(nn.Module):
             kernel_size=self.conv_kernel_size,
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
-            dtype=torch.float32,  # TODO: check if this was intended
+            dtype=torch.float32,  # TODO: check if this was intended --> keep strict flag fp32
         )
 
         self.forget_gate = Glm5NextForgetGate(config)
@@ -860,22 +837,14 @@ class Glm5NextIndexer(nn.Module):
 
 
 class Glm5NextAttention(GlmMoeDsaAttention):
-    def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
+    def __init__(self, config: Glm5NextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.q_a_layernorm = (
             Glm5NextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps) if self.q_lora_rank is not None else None
         )
         self.kv_a_layernorm = Glm5NextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
-        # TODO: handle this natively via indexer_types instead being None
-        # Only build the DSA indexer when the checkpoint actually ships indexer weights.
-        # 70B sets `index_dsa_use_layernorm`/`index_topk_pattern`; the 300B carries neither,
-        # so it runs dense MLA (no sparse top-k) instead of a randomly-initialized indexer.
-        # TODO: split kpool indexing vs normal full token indexing
-        self.indexer = (
-            None
-            if self.skip_topk or (config.index_dsa_use_layernorm is None and config.index_topk_pattern is None)
-            else Glm5NextIndexer(config, layer_idx)
-        )
+        # TODO: Always kpool index
+        self.indexer = None if self.skip_topk else Glm5NextIndexer(config, layer_idx)
         self.next_skip_topk = (
             not self.skip_topk and config.indexer_types[min(layer_idx + 1, len(config.indexer_types) - 1)] == "shared"
         )
@@ -958,6 +927,7 @@ class Glm5NextAttention(GlmMoeDsaAttention):
 # =============================================================================
 
 
+# TODO: can copy qwen 3.5 for this tbh
 class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
     def __init__(self, config: Glm5NextConfig, layer_idx: int):
         self.block_type = config.layer_types[layer_idx]
@@ -967,19 +937,6 @@ class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
             Glm5NextLinearAttention(config, layer_idx)
             if self.block_type == "linear_attention"
             else Glm5NextAttention(config, layer_idx)
-        )
-
-        self.uses_mhc = config.mhc
-        self.attn_hc = Glm5NextHyperConnection(config) if config.mhc else None
-        self.ffn_hc = Glm5NextHyperConnection(config) if config.mhc else None
-
-    def apply_residual(self, post, comb, hidden_states, residual, dtype=None):
-        """Either apply normal additive residual stream or MHC residual stream"""
-        if post is None and comb is None:
-            return hidden_states + residual
-
-        return post.to(dtype).unsqueeze(-1) * hidden_states.unsqueeze(-2) + torch.matmul(
-            comb.to(dtype).transpose(-1, -2), residual
         )
 
     def forward(
@@ -993,10 +950,7 @@ class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, None]:
-        dtype = hidden_states.dtype
-
         residual = hidden_states
-        post, comb, hidden_states = self.attn_hc(hidden_states) if self.uses_mhc else (None, None, hidden_states)
         # Self attn
         topk_indices = None
         hidden_states = self.input_layernorm(hidden_states)
@@ -1018,14 +972,13 @@ class Glm5NextDecoderLayer(GlmMoeDsaDecoderLayer):
                 prev_topk_indices=prev_topk_indices,
                 **kwargs,
             )
-        hidden_states = self.apply_residual(post, comb, hidden_states, residual, dtype=dtype)
+        hidden_states = residual + hidden_states
 
         residual = hidden_states
-        post, comb, hidden_states = self.ffn_hc(hidden_states) if self.uses_mhc else (None, None, hidden_states)
         # Feed forward
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.apply_residual(post, comb, hidden_states, residual, dtype=dtype)
+        hidden_states = residual + hidden_states
 
         return hidden_states, topk_indices
 
@@ -1054,14 +1007,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(Glm5NextTopkRouter, index=0),  # noqa: F821
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
-    # Flat 70B keys live under `model.layers.*`; composite 300B under `model.language_model.layers.*`.
-    # Layer 45 is the MTP head (eh_proj/enorm/hnorm/shared_head/experts) — ignored on load for both layouts.
-    _keys_to_ignore_on_load_unexpected = [
-        r"model\.layers\.45\.",
-        r"model\.layers\.\d+\.shared_head\.",
-        r"model\.language_model\.layers\.45\.",
-        r"model\.language_model\.layers\.\d+\.shared_head\.",
-    ]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.45\.", r"model\.layers\.\d+\.shared_head\."]
     _keep_in_fp32_modules = []
     _compatible_flash_implementations = ["kernels-community/flash-mla"]
 
@@ -1083,20 +1029,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class Glm5NextTextModel(DeepseekV4Model, Glm5NextPreTrainedModel):
-    config: Glm5NextTextConfig
-
-    def __init__(self, config: Glm5NextTextConfig):
-        # TODO: get text config should not be necessary, see qwen3.5
-        # Flat 70B checkpoints resolve to the composite `Glm5NextConfig` via
-        # `AutoModelForCausalLM`; normalize to the text sub-config so the
-        # DeepSeek-V4 trunk sees `head_dim`/`qk_head_dim` and the MoE fields.
-        config = config.get_text_config()
-        super().__init__(config)
-        # Potential NoPE we detect by the head dim (alias for `qk_rope_head_dim`)
-        self.rotary_emb = Glm5NextRotaryEmbedding(config) if self.config.head_dim > 0 else None
-        self.hc_head = Glm5NextHyperHead() if config.mhc else nn.Identity()
-
+class Glm5NextModel(MixtralModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1131,18 +1064,14 @@ class Glm5NextTextModel(DeepseekV4Model, Glm5NextPreTrainedModel):
                 "position_ids": position_ids,
             }
             # Create the masks
+            # TODO: we will need a custom layer type here anyways
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = (
-            self.rotary_emb(hidden_states, position_ids=position_ids) if self.rotary_emb is not None else None
-        )
-
-        if self.config.mhc:
-            hidden_states = hidden_states.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         topk_indices = None
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
@@ -1157,7 +1086,6 @@ class Glm5NextTextModel(DeepseekV4Model, Glm5NextPreTrainedModel):
                 **kwargs,
             )
 
-        hidden_states = self.hc_head(hidden_states)
         hidden_states = self.norm(hidden_states)
 
         return MoeModelOutputWithPast(
@@ -1167,300 +1095,34 @@ class Glm5NextTextModel(DeepseekV4Model, Glm5NextPreTrainedModel):
 
 
 @auto_docstring
-class Glm5NextTextForCausalLM(LlamaForCausalLM, Glm5NextPreTrainedModel):
-    config: Glm5NextTextConfig
-
-    def __init__(self, config):
-        # TODO: get text config should not be necessary, see qwen3.5
-        # Flat 70B checkpoints resolve to the composite `Glm5NextConfig` via
-        # `AutoModelForCausalLM`; normalize to the text sub-config so the
-        # DeepSeek-V4 trunk sees `head_dim`/`qk_head_dim` and `vocab_size`/`hidden_size`.
-        config = config.get_text_config()
-        super().__init__(self, config)
-
-
-# =============================================================================
-# Vision tower (GLM-OCR ViT tower)
-# =============================================================================
-
-
-class Glm5NextVisionPatchMerger(GlmOcrVisionPatchMerger):
-    pass
-
-
-# TODO: make this inheritable in glm ocr directly
-class Glm5NextVisionModel(GlmOcrVisionModel):
-    """GLM-5-Next reuses the GLM-OCR ViT tower verbatim. The only difference is
-    the patch merger's SwiGLU intermediate width, which GLM-5-Next sizes from the
-    explicit `projection_intermediate_size` config field instead of deriving it
-    as `out_hidden_size * in_channels`."""
-
-    config: Glm5NextVisionConfig
-
-    def __init__(self, config) -> None:
-        super().__init__(config)
-        self.merger = Glm5NextVisionPatchMerger(
-            dim=config.out_hidden_size,
-            context_dim=config.projection_intermediate_size,
-            hidden_act=config.hidden_act,
-        )
-        self.post_init()
-
-
-# =============================================================================
-# Composite VLM (vision tower + text model)
-# =============================================================================
-
-
-# TODO: inherit -> auto
-class Glm5NextModel(Glm5NextPreTrainedModel):
-    base_model_prefix = "model"
-    accepts_loss_kwargs = False
-    _no_split_modules = ["Glm5NextDecoderLayer", "GlmOcrVisionBlock"]
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.visual = Glm5NextVisionModel._from_config(config.vision_config)
-        self.language_model = Glm5NextTextModel._from_config(config.text_config)
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        return vision_outputs
-
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
-        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        t = video_grid_thw[:, 0]
-        hw = video_grid_thw[:, 1:]
-        flattened_hw = torch.repeat_interleave(hw, t, dim=0)
-        prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
-        flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
-        vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        return vision_outputs
-
-    def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        video_features: torch.FloatTensor | None = None,
-    ):
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-            special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_video_mask = special_video_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-            special_video_mask = input_ids == self.config.video_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, "
-                f"features {image_features.shape[0]}"
-            )
-
-        n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
-            raise ValueError(
-                f"Video features and video tokens do not match: tokens: {n_video_tokens}, "
-                f"features {video_features.shape[0]}"
-            )
-        return special_image_mask, special_video_mask
-
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+class Glm5NextForCausalLM(MixtralForCausalLM):
+    def forward(**super_kwargs):
         r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+        Example:
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, **kwargs).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+        ```python
+        >>> from transformers import AutoTokenizer, Glm5NextForCausalLM
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs).pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+        >>> model = Glm5NextForCausalLM.from_pretrained("zai-org/GLM-5-Next")
+        >>> tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-5-Next")
 
-        outputs = self.language_model(
-            input_ids=None,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-        return BaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
 
-
-# TODO: prepare inputs and expand input functions are missing
-# TODO: possibly inherit here as well
-class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    accepts_loss_kwargs = False
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Glm5NextModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_image_features(self, pixel_values, image_grid_thw=None, **kwargs):
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
-
-    def get_video_features(self, pixel_values_videos, video_grid_thw=None, **kwargs):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-# =============================================================================
-# Processor (GLM-4.6V processor + GLM-GA vision processing stack)
-# =============================================================================
-
-
-# TODO: auto mappings instead
-class Glm5NextProcessor(Glm46VProcessor):
-    pass
-
-
-class Glm5NextImageProcessor(GlmgaImageProcessor):
-    pass
-
-
-class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
-    pass
-
-
-class Glm5NextVideoProcessor(GlmgaVideoProcessor):
-    pass
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        ```"""
+        super().forward(**super_kwargs)
 
 
 __all__ = [
     "Glm5NextPreTrainedModel",
-    "Glm5NextTextModel",
-    "Glm5NextTextForCausalLM",
-    "Glm5NextVisionModel",
     "Glm5NextModel",
-    "Glm5NextForConditionalGeneration",
-    "Glm5NextProcessor",
-    "Glm5NextImageProcessor",
-    "Glm5NextImageProcessorPil",
-    "Glm5NextVideoProcessor",
+    "Glm5NextForCausalLM",
 ]
