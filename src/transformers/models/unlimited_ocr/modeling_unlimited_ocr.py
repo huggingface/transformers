@@ -2095,8 +2095,8 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Generati
         if use_sliding_window_processor:
             logits_processor = list(logits_processor or []) + [
                 UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(
-                    no_repeat_ngram_size=no_repeat_ngram_size,
-                    no_repeat_ngram_window_size=no_repeat_ngram_window_size,
+                    ngram_size=no_repeat_ngram_size,
+                    window_size=no_repeat_ngram_window_size,
                 )
             ]
 

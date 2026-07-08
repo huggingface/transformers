@@ -14,12 +14,12 @@
 import torch
 
 from ...generation.configuration_utils import GenerationConfig
-from ...generation.logits_process import LogitsProcessor
+from ...generation.logits_process import LOGITS_PROCESSOR_INPUTS_DOCSTRING, NoRepeatNGramLogitsProcessor
+from ...utils import add_start_docstrings
 
 
 class UnlimitedOcrGenerationConfig(GenerationConfig):
-    r"""
-    A GenerationConfig class with parameterization customized for UnlimitedOcr.
+    r"""A GenerationConfig class with parameterization customized for UnlimitedOcr.
 
     Args:
         no_repeat_ngram_window_size (`int`, *optional*):
@@ -32,43 +32,26 @@ class UnlimitedOcrGenerationConfig(GenerationConfig):
         self.no_repeat_ngram_window_size = no_repeat_ngram_window_size
 
 
-class UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(LogitsProcessor):
-    r"""
-    [`LogitsProcessor`] that blocks n-gram repetitions within a sliding window over the most recently generated
-    tokens, rather than the full sequence. Aligned with SGLang's `DeepseekOCRNoRepeatNGramLogitProcessor`.
+class UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(NoRepeatNGramLogitsProcessor):
+    r"""Identical to [`NoRepeatNGramLogitsProcessor`] but blocks n-gram repetitions only within the last
+    `window_size` generated tokens, rather than the full sequence.
 
     Args:
-        no_repeat_ngram_size (`int`):
-            Size of the n-grams that are not allowed to repeat.
-        no_repeat_ngram_window_size (`int`):
+        ngram_size (`int`):
+            All ngrams of size `ngram_size` can only occur once in `window_size`.
+        window_size (`int`):
             Number of trailing tokens to search for repeated n-grams.
     """
 
-    def __init__(self, no_repeat_ngram_size: int, no_repeat_ngram_window_size: int):
-        self.no_repeat_ngram_size = no_repeat_ngram_size
-        self.no_repeat_ngram_window_size = no_repeat_ngram_window_size
+    def __init__(self, ngram_size: int, window_size: int):
+        super().__init__(ngram_size=ngram_size)
+        if not isinstance(window_size, int) or window_size <= 0:
+            raise ValueError(f"`window_size` has to be a strictly positive integer, but is {window_size}")
+        self.window_size = window_size
 
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        for batch_idx in range(input_ids.shape[0]):
-            sequence = input_ids[batch_idx].tolist()
-            if len(sequence) < self.no_repeat_ngram_size:
-                continue
-            search_start = max(0, len(sequence) - self.no_repeat_ngram_window_size)
-            search_end = len(sequence) - self.no_repeat_ngram_size + 1
-            if search_end <= search_start:
-                continue
-            if self.no_repeat_ngram_size > 1:
-                current_prefix = tuple(sequence[-(self.no_repeat_ngram_size - 1) :])
-            else:
-                current_prefix = ()
-            banned = set()
-            for idx in range(search_start, search_end):
-                ngram = sequence[idx : idx + self.no_repeat_ngram_size]
-                if self.no_repeat_ngram_size == 1 or tuple(ngram[:-1]) == current_prefix:
-                    banned.add(ngram[-1])
-            for token_id in banned:
-                scores[batch_idx, token_id] = float("-inf")
-        return scores
+        return super().__call__(input_ids[:, -self.window_size :], scores)
 
 
 __all__ = ["UnlimitedOcrGenerationConfig", "UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor"]
