@@ -52,6 +52,8 @@ from transformers.generation.continuous_batching.requests import (
     get_device_and_memory_breakdown,
 )
 from transformers.testing_utils import (
+    backend_empty_cache,
+    backend_memory_allocated,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_flash_attn_3,
@@ -1658,9 +1660,8 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
 
         # -- Allocate tensors at the exact idealized sizes the handler models --
         device = torch_device
-        accelerator = getattr(torch, device)
-        accelerator.empty_cache()
-        baseline = accelerator.memory_allocated(device)
+        backend_empty_cache(device)
+        baseline = backend_memory_allocated(device)
 
         # Tensors present regardless of which activation peak is live
         fixed = []
@@ -1698,16 +1699,16 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         }
         peak_nbytes = {name: sum(t.nbytes for t in ts) for name, ts in peaks.items()}
         dominant = max(peak_nbytes, key=peak_nbytes.get)
-        # Free the non-dominant peak so the CUDA delta reflects only the live one
+        # Free the non-dominant peak so the accelerator delta reflects only the live one
         for name in [n for n in peaks if n != dominant]:
             del peaks[name]
 
-        actual_accelerator = accelerator.memory_allocated(device) - baseline
+        actual_accelerator = backend_memory_allocated(device) - baseline
         expected_nbytes = sum(t.nbytes for t in fixed) + peak_nbytes[dominant]
         num_allocations = len(fixed) + len(peaks[dominant])
 
         del fixed, peaks
-        accelerator.empty_cache()
+        backend_empty_cache(device)
 
         # 1) Exact check: prediction must equal the sum of tensor nbytes. This validates the polynomial
         #    coefficients against the tensor shapes, with zero tolerance.
