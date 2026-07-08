@@ -30,6 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import lazy_load_kernel
+from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -140,13 +141,11 @@ class FalconMambaMixer(nn.Module):
 
         self.warn_slow_implementation()
 
+        self.layer_type = config.layer_types[layer_idx]
+
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
-        self.register_buffer(
-            "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
-        )
-        self.register_buffer(
-            "dt_rms", torch.nn.Parameter(torch.ones(self.intermediate_size), requires_grad=False), persistent=False
-        )
+        self.register_buffer("b_c_rms", torch.ones(self.ssm_state_size, requires_grad=False), persistent=False)
+        self.register_buffer("dt_rms", torch.ones(self.intermediate_size, requires_grad=False), persistent=False)
         self.rms_eps = config.mixer_rms_eps
 
     @torch.no_grad()
@@ -182,8 +181,9 @@ class FalconMambaMixer(nn.Module):
                 if is_mambapy_available():
                     logger.warning_once(
                         "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
-                        " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d"
+                        " is None. Falling back to the mamba.py backend. The recommended way to enable the fast path is `pip install kernels`, which provides the"
+                        " FalconMamba kernels (loaded on demand). Alternatively, install mamba-ssm (https://github.com/state-spaces/mamba/#installation) and"
+                        " causal-conv1d (https://github.com/Dao-AILab/causal-conv1d)."
                     )
                 else:
                     raise ImportError(
@@ -192,8 +192,10 @@ class FalconMambaMixer(nn.Module):
             else:
                 logger.warning_once(
                     "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
-                    " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. The recommended way to enable the fast path is"
+                    " `pip install kernels`, which provides the FalconMamba kernels (loaded on demand). Alternatively, install mamba-ssm"
+                    " (https://github.com/state-spaces/mamba/#installation) and causal-conv1d (https://github.com/Dao-AILab/causal-conv1d)."
+                    " For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
     def cuda_kernels_forward(
@@ -436,6 +438,7 @@ class FalconMambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
@@ -506,7 +509,7 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        std = self.config.initializer_range
+        super()._init_weights(module)
         if isinstance(module, FalconMambaMixer):
             # S4D real initialization. These are not discretized!
             # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
@@ -530,15 +533,6 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
                 # Having just p *= scale would repeatedly scale it down
                 p = module.out_proj.weight
                 p /= math.sqrt(self.config.num_hidden_layers)
-
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, FalconMambaRMSNorm):
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, std=std)
 
 
 @auto_docstring(

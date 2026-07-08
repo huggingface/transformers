@@ -355,9 +355,13 @@ class FuyuProcessor(ProcessorMixin):
         self.max_position_embeddings = 16384  # TODO Can't derive this from model files: where to set it?
         self.pad_token_id = 0
         self.dummy_image_index = -1
-        self.image_token_id = tokenizer.encode("|SPEAKER|", add_special_tokens=False)[1]
-        self.image_newline_id = tokenizer.encode("|NEWLINE|", add_special_tokens=False)[1]
-        self.image_ids = [self.image_newline_id, self.image_token_id]
+        vocab = tokenizer.get_vocab()
+        self.image_token_id = vocab["|SPEAKER|"]
+        self.image_newline_id = vocab["|NEWLINE|"]
+
+    @property
+    def image_token_ids(self) -> list[int]:
+        return [self.image_newline_id, self.image_token_id]
 
     def _left_pad_inputs_with_attention_mask(self, model_inputs: list[dict], return_attention_mask: bool):
         max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)

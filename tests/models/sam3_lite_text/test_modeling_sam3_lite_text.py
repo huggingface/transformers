@@ -521,7 +521,7 @@ class Sam3LiteTextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             with torch.no_grad():
                 text_embeds = model.get_text_features(
                     input_ids=inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"], return_dict=True
-                ).pooler_output
+                )
 
             # Forward with text_embeds (remove input_ids)
             inputs_with_embeds = {
@@ -1307,7 +1307,7 @@ class Sam3LiteTextModelIntegrationTest(unittest.TestCase):
         text_prompt = "handle"
         text_inputs = self.processor(text=text_prompt, return_tensors="pt").to(torch_device)
         with torch.no_grad():
-            text_embeds = self.model.get_text_features(**text_inputs).pooler_output
+            text_embeds = self.model.get_text_features(**text_inputs)
 
         # Run inference on multiple images reusing text embeddings
         # Note: attention_mask must be passed along with text_embeds for proper masking

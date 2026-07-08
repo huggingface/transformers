@@ -40,11 +40,11 @@ Checkpoint File → from_pretrained() → convert_and_load_state_dict_in_model()
                          │  1. Match renamed/processed source key to model parameter │
                          │  2. Shard the weight and send to device (async)           │
                          │  3. Collect tensors with the same source_pattern together │
-                         │     (e.g. MoE experts, gate_up_proj)                     │
+                         │     (e.g. MoE experts, gate_up_proj)                      │
                          │  4. Apply dequantization/deserialization (if pre-quant)   │
-                         │  5. Apply conversion (if defined)                        │
-                         │  6. Apply quantization (if enabled and step 4 not used)  │
-                         │  7. Set parameter on model                               │
+                         │  5. Apply conversion (if defined)                         │
+                         │  6. Apply quantization (if enabled and step 4 not used)   │
+                         │  7. Set parameter on model                                │
                          └───────────────────────────────────────────────────────────┘
 ```
 
@@ -356,7 +356,14 @@ register_checkpoint_conversion_mapping(
 
 ### Lookup rules
 
-When [`get_model_conversion_mapping`] processes a `PreTrainedModel`, every sub-`PreTrainedModel` is visited in DFS order (`nn.Module.named_modules()` filtered to `PreTrainedModel` instances). For each one:
+When [`get_model_conversion_mapping`] processes a `PreTrainedModel`, every sub-`PreTrainedModel` is visited in DFS order (`nn.Module.named_modules()` filtered to `PreTrainedModel` instances). Each sub-model is resolved in two stages, a custom code filter runs first, then the registered mapping is looked up.
+
+Custom code models are skipped before any lookup happens. A sub-model counts as custom code when [`~PreTrainedModel.is_custom_code`] returns `True`, which covers models loaded from the Hub with `trust_remote_code=True` and any model class not in Transformers. Custom code models don't inherit a conversion mapping because its class name or `model_type` might collide with a native model. For example, a custom architecture that sets `model_type="mixtral"` won't pick up Mixtral's built-in expert-fusion transforms.
+
+> [!IMPORTANT]
+> Register a custom code model explicitly with [`register_checkpoint_conversion_mapping`] to apply a conversion mapping. Registration adds the class name or `model_type` to the set of user-registered mappings, which exempts the model from the custom code skip and routes it through the normal lookup below.
+
+For each sub-model that clears the custom code filter:
 
 1. **Class-name lookup is tried first**, then `model_type`. If both are registered for the same module, the **class-name mapping wins** and the `model_type` one is ignored for that module — this lets a task head (e.g. `LlavaForConditionalGeneration`) override the shared `model_type` baseline (`"llava"`).
 2. The selected mapping has `scope_prefix` set to the sub-module's dotted path (`""` for the root).
@@ -681,7 +688,7 @@ At a high level, the contract looks like this:
    You can do mostly 3 things:
     - add operations to the list of converters: these will be applied on all weights except for the ones collected in any of the `WeightConverter`. These in general should be `WeightRenaming` operations
     - add operations to the list of operations of each converter: this is what happens for `Quantization`, where we just add a quantization operation after the list of operations of any `WeightConverter`.
-    - replace / map operations to your custom operations: this is what happens with `peft`. We replace the `Concatenate` operation of say `mixtral`, to be `PeftConcatenate`. This way, when the adapter checkpoint is read, the weights to be concatenated are collected, and are properly formatted for `peft`
+    - replace / map operations to your custom operations: this is what happens with `peft`. We replace the `Concatenate` operation of say `mixtral`, to be `PeftConcatenate` (which is defined in PEFT). This way, when the adapter checkpoint is read, the weights to be concatenated are collected, and are properly formatted for `peft`
 3. **Load + finalize + report.** Use the core loader to perform the conversion and populate tensors, then finalize and
    log results. Concretely, this flow is:
    - `LoadStateDictConfig(...)` + `_load_pretrained_model(...)` to load and convert.

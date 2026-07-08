@@ -116,7 +116,7 @@ from transformers import pipeline
 from transformers.pipelines.pt_utils import KeyDataset
 import datasets
 
-dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
+dataset = datasets.load_dataset("stanfordnlp/imdb", name="plain_text", split="unsupervised")
 pipe = pipeline("text-classification", device=0)
 for out in pipe(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)

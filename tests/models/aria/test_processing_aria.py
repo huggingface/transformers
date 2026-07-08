@@ -33,21 +33,24 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Optionally: prepare_processor_dict() for custom processor kwargs.
 
     processor_class = AriaProcessor
-    model_id = "m-ric/Aria_hf_2"
+    # Tiny processor created with make_tiny_processor.py from "m-ric/Aria_hf_2"
+    tiny_model_id = "hf-internal-testing/tiny-processor-aria"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image1 = load_image(
             url_to_local_path(
-                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/statue_of_liberty_64x64.jpg"
             )
         )
         cls.image2 = load_image(
-            url_to_local_path("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/chicago_64x64.jpg"
+            )
         )
         cls.image3 = load_image(
             url_to_local_path(
-                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/golden_gate_64x64.jpg"
             )
         )
         cls.bos_token = "<|im_start|>"
@@ -91,8 +94,9 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that a single image is processed correctly
         inputs = processor(images=self.image1, text="Ok<|img|>", images_kwargs={"split_image": True})
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (2, 3, 980, 980))
-        self.assertEqual(np.array(inputs["pixel_mask"]).shape, (2, 980, 980))
+        # 64x64 input is too small to split further; produces 1 tile (no sub-split)
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, 3, 980, 980))
+        self.assertEqual(np.array(inputs["pixel_mask"]).shape, (1, 980, 980))
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor = self.get_processor()
@@ -149,7 +153,7 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Pad the first input to match the second input
         pad_len = len(expected_input_ids_2) - len(expected_input_ids_1)
 
-        expected_attention_mask = [ [0] * pad_len + [1] * len(expected_input_ids_1), [1] * (len(expected_input_ids_2))]
+        expected_attention_mask = [ [1] * len(expected_input_ids_1) + [0] * pad_len, [1] * (len(expected_input_ids_2))]
 
         self.assertEqual(
             inputs["attention_mask"],

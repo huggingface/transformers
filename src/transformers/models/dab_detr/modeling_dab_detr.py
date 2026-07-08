@@ -86,10 +86,6 @@ def encode_sinusoidal_position_embedding(
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrDecoderOutput with ConditionalDetr->DabDetr,Conditional DETR->DAB-DETR,2 (anchor points)->4 (anchor points)
 class DabDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -113,8 +109,6 @@ class DabDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrModelOutput with ConditionalDetr->DabDetr,Conditional DETR->DAB-DETR,2 (anchor points)->4 (anchor points)
 class DabDetrModelOutput(Seq2SeqModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, sequence_length, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -136,7 +130,7 @@ class DabDetrModelOutput(Seq2SeqModelOutput):
 class DabDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -814,7 +808,7 @@ class DabDetrPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.init_std
+        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
 
         if isinstance(module, DabDetrMHAttentionMap):
@@ -822,19 +816,7 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             init.zeros_(module.q_linear.bias)
             init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
             init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, DabDetrForObjectDetection):
+        if isinstance(module, DabDetrForObjectDetection):
             init.constant_(module.bbox_predictor.layers[-1].weight, 0)
             init.constant_(module.bbox_predictor.layers[-1].bias, 0)
 
@@ -1291,8 +1273,8 @@ class DabDetrModel(DabDetrPreTrainedModel):
 
         # Third, flatten the feature map + object_queries of shape NxCxHxW to HWxNxC, and permute it to NxHWxC
         # In other words, turn their shape into ( sequence_length, batch_size, hidden_size)
-        flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        object_queries = object_queries_list[-1].flatten(2).permute(0, 2, 1)
+        flattened_features = projected_feature_map.flatten(2).transpose(1, 2)
+        object_queries = object_queries_list[-1].flatten(2).transpose(1, 2)
         reference_position_embeddings = self.query_refpoint_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
 
         # Fourth, sent flattened_features + flattened_mask + object_queries through encoder

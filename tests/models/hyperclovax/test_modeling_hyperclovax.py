@@ -20,6 +20,7 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     is_tensor_parallel_test,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -74,6 +75,7 @@ class HyperCLOVAXIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     def test_model_seed_think_14b_logits_bf16(self):
         # tokenizer.encode("대한민국의 수도는 서울입니다.", add_special_tokens=True)
         LOGIT_INPUT_IDS = [105319, 21028, 107115, 16969, 102949, 80052, 13]
@@ -83,6 +85,7 @@ class HyperCLOVAXIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): torch.tensor([[-1.0737, -5.0637, 0.3728, -2.9377, 2.1582, 2.8907, -3.0403]]),
                 ("cuda", (8, 6)): torch.tensor([[-1.0764, -5.0859,  0.3363, -2.9254,  2.1648,  2.9170, -2.9659]]),
+                ("xpu", None): torch.tensor([[-1.0795, -5.0821, 0.3934, -2.9110, 2.1446, 2.8589, -3.0155]]),
             }
         ).get_expectation().to(torch_device)
 
@@ -90,6 +93,7 @@ class HyperCLOVAXIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): torch.tensor([3.0156, 3.8438, 3.0625, 3.7344, 3.1250, 2.6406, 4.5625, 5.6563, 5.0000, 4.0000, 4.3750, 6.3125, 5.6250, 5.4375, 5.4375]),
                 ("cuda", (8, 6)): torch.tensor([3.0156, 3.8594, 3.0781, 3.7500, 3.1406, 2.6406, 4.5625, 5.6562, 5.0000, 4.0000, 4.3750, 6.3125, 5.6250, 5.4375, 5.4375]),
+                ("xpu", None): torch.tensor([3.0312, 3.8594, 3.0781, 3.7500, 3.1406, 2.6562, 4.5625, 5.6562, 5.0000, 4.0000, 4.3750, 6.3125, 5.6562, 5.4688, 5.4375]),
             }
         ).get_expectation().to(torch_device)
         # fmt: on
@@ -101,11 +105,16 @@ class HyperCLOVAXIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(out.logits.float().mean(-1), expected_means, atol=1e-2, rtol=1e-2))
         self.assertTrue(torch.allclose(out.logits[0, 0, :15].float(), expected_slices, atol=1e-2, rtol=1e-2))
 
+    @require_deterministic_for_xpu
     def test_model_seed_think_14b_bf16(self):
         # input_text[0]: Korean, input_text[1]: English — covers both languages
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", None): [
+                    "서울에서 부산까지 기차로 걸리는 시간은 2시간 30분에서 3시간 사이입니다. 기차 종류에 따라 시간이 달라질",
+                    "The travel time by train from Seoul to Busan is approximately 2.5 to 3 hours, depending on the type of train. The K",
+                ],
+                ("xpu", None): [
                     "서울에서 부산까지 기차로 걸리는 시간은 2시간 30분에서 3시간 사이입니다. 기차 종류에 따라 시간이 달라질",
                     "The travel time by train from Seoul to Busan is approximately 2.5 to 3 hours, depending on the type of train. The K",
                 ],

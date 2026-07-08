@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
@@ -485,13 +485,11 @@ class RfDetrDinov2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, RfDetrDinov2Embeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
@@ -1206,10 +1204,6 @@ class RfDetrModelOutput(ModelOutput):
 @dataclass
 class RfDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
@@ -1486,7 +1480,6 @@ class RfDetrModel(RfDetrPreTrainedModel):
             _cur += height * width
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        invalid_mask = padding_mask | ~output_proposals_valid.squeeze(-1)
         invalid_mask = padding_mask.unsqueeze(-1) | ~output_proposals_valid
         output_proposals = output_proposals.masked_fill(invalid_mask, float(0))
 
@@ -1531,8 +1524,8 @@ class RfDetrModel(RfDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
-        >>> model = RfDetrModel.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
+        >>> image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-base")
+        >>> model = RfDetrModel.from_pretrained("Roboflow/rf-detr-base")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -1647,9 +1640,10 @@ class RfDetrModel(RfDetrPreTrainedModel):
 
         # Step 2.
         enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
-        invalid_mask = invalid_mask.to(enc_outputs_class_proposals.device)
-        enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(invalid_mask, float("-inf"))
         delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
+        enc_outputs_class_proposals = enc_outputs_class_proposals.masked_fill(
+            invalid_mask.to(enc_outputs_class_proposals.device), float("-inf")
+        )
 
         # Step 3.
         enc_outputs_coord = refine_bboxes(output_proposals, delta_bbox)
@@ -1679,7 +1673,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
 class RfDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -1786,8 +1780,8 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
-        >>> model = RfDetrForObjectDetection.from_pretrained("stevenbucaille/rf-detr-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("Roboflow/rf-detr-base")
+        >>> model = RfDetrForObjectDetection.from_pretrained("Roboflow/rf-detr-base")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1890,7 +1884,7 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
 class RfDetrInstanceSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -1904,10 +1898,7 @@ class RfDetrInstanceSegmentationOutput(ModelOutput):
         unnormalized bounding boxes.
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
         Segmentation masks logits for all queries. See also
-        [`~DetrImageProcessor.post_process_semantic_segmentation`] or
-        [`~DetrImageProcessor.post_process_instance_segmentation`]
-        [`~DetrImageProcessor.post_process_panoptic_segmentation`] to evaluate semantic, instance and panoptic
-        segmentation masks respectively.
+        [`~RfDetrImageProcessor.post_process_instance_segmentation`] to obtain instance segmentation maps.
     auxiliary_outputs (`list[Dict]`, *optional*):
         Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
         and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and

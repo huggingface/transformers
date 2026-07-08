@@ -36,10 +36,8 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import (
-    maybe_autocast,
-    merge_with_config_defaults,
-)
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
@@ -233,15 +231,16 @@ class MllamaVisionAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=False)
 
+    @deprecate_kwarg("hidden_state", new_name="hidden_states", version="v5.20")
     def forward(
         self,
-        hidden_state: torch.Tensor,
+        hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        query = self.q_proj(hidden_state)
-        key = self.k_proj(hidden_state)
-        value = self.v_proj(hidden_state)
+        query = self.q_proj(hidden_states)
+        key = self.k_proj(hidden_states)
+        value = self.v_proj(hidden_states)
 
         batch_size, q_seq_len, _ = query.shape
         _, kv_seq_len, _ = key.shape
@@ -290,28 +289,29 @@ class MllamaVisionEncoderLayer(nn.Module):
             self.gate_attn = nn.Parameter(torch.ones(1) * math.pi / 4)
             self.gate_ffn = nn.Parameter(torch.ones(1) * math.pi / 4)
 
+    @deprecate_kwarg("hidden_state", new_name="hidden_states", version="v5.20")
     def forward(
         self,
-        hidden_state: torch.Tensor,
+        hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
     ):
         # Self Attention
-        residual = hidden_state
-        hidden_state = self.input_layernorm(hidden_state)
-        hidden_state, attn_weights = self.self_attn(hidden_state, attention_mask=attention_mask)
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, attn_weights = self.self_attn(hidden_states, attention_mask=attention_mask)
         if self.is_gated:
-            hidden_state = self.gate_attn.tanh() * hidden_state
-        hidden_state = residual + hidden_state
+            hidden_states = self.gate_attn.tanh() * hidden_states
+        hidden_states = residual + hidden_states
 
         # Feed forward
-        residual = hidden_state
-        hidden_state = self.post_attention_layernorm(hidden_state)
-        hidden_state = self.mlp(hidden_state)
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         if self.is_gated:
-            hidden_state = self.gate_ffn.tanh() * hidden_state
-        hidden_state = residual + hidden_state
+            hidden_states = self.gate_ffn.tanh() * hidden_states
+        hidden_states = residual + hidden_states
 
-        return hidden_state
+        return hidden_states
 
 
 class MllamaVisionEncoder(nn.Module):
@@ -797,23 +797,10 @@ class MllamaPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, MllamaTextRMSNorm):
-            init.ones_(module.weight)
-        elif isinstance(module, MllamaVisionModel):
+        if isinstance(module, MllamaVisionModel):
             init.normal_(module.class_embedding, std=std)
         elif isinstance(module, MllamaPrecomputedPositionEmbedding):
             init.normal_(module.embedding, std=std)
@@ -827,15 +814,6 @@ class MllamaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MllamaPrecomputedAspectRatioEmbedding):
             if module.is_gated:
                 init.zeros_(module.gate)
-        elif isinstance(module, MllamaRotaryEmbedding):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-            buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
 
 
 @auto_docstring(
@@ -1320,12 +1298,6 @@ class MllamaModel(MllamaPreTrainedModel):
         )
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1437,19 +1409,13 @@ class MllamaModel(MllamaPreTrainedModel):
     """,
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
-    # _tied_weights_keys = {"lm_head.weight": "model.language_moddel.embed_tokens.weight"}
+    # _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
         self.model = MllamaModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring

@@ -16,9 +16,9 @@ rendered properly in your Markdown viewer.
 
 # NeMo Automodel
 
-[NeMo Automodel](https://github.com/NVIDIA-NeMo/Automodel) is an open-source PyTorch DTensor-native training library from NVIDIA. It supports large and small scale pretraining and fine-tuning for [LLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/llm.html) and [VLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/vlm.html) for fast experimentation in research and production environments, with parallelism strategies including FSDP2, tensor, pipeline, expert, and context parallelism. For high throughput, it integrates kernels from DeepEP and TransformerEngine.
+[NeMo Automodel](https://github.com/NVIDIA-NeMo/Automodel) is an open-source PyTorch DTensor-native training library from NVIDIA. It supports large and small scale pretraining and fine-tuning for [LLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/large-language-models/overview) and [VLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/vision-language-models/overview) for fast experimentation in research and production environments, with parallelism strategies including FSDP2, tensor, pipeline, expert, and context parallelism. For high throughput, it integrates kernels from DeepEP and TransformerEngine.
 
-Define your training run in a YAML config file (see full [config file](https://github.com/NVIDIA-NeMo/Automodel/blob/0d05e245e0bbc9128b869b21a3908512affc6cae/examples/llm_finetune/nemotron/nemotron_nano_v3_hellaswag_peft.yaml)).
+Define your training run in a YAML config file (see full [config file](https://github.com/NVIDIA-NeMo/Automodel/blob/106e5162ef5b5d7269a3ba1ef62bfa8941b26cc6/examples/llm_finetune/nemotron/nemotron_nano_v3_hellaswag_peft.yaml)).
 
 ```yaml
 # Instantiate a Nemotron V3 Nano model
@@ -54,12 +54,12 @@ distributed:
 Launch training with `torchrun` using the command below.
 
 ```bash
-torchrun -–nproc-per-node=4 examples/llm_finetune/finetune.py -c /path/to/yaml
+torchrun --nproc-per-node=4 examples/llm_finetune/finetune.py -c /path/to/yaml
 ```
 
 ## Transformers integration
 
-- Any LLM or VLM supported in Transformers can also be instantiated through NeMo Automodel. See the [full model coverage](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/overview.html).
+- Any LLM or VLM supported in Transformers can also be instantiated through NeMo Automodel. See the [full model coverage](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/overview).
 - Built on top of Hugging Face models with [`AutoModel.from_pretrained`], with dynamic high-performance layer swaps and support for more refined parallelisms like Expert Parallelism (EP).
 - Detects the architecture field in [`AutoConfig.from_pretrained`] to automatically load custom implementations like Nemotron Nano V3.
 - Follows the Transformers API closely for drop-in compatibility.
@@ -67,6 +67,6 @@ torchrun -–nproc-per-node=4 examples/llm_finetune/finetune.py -c /path/to/yaml
 ## Resources
 
 - [NeMo Automodel](https://github.com/NVIDIA-NeMo/Automodel)
-- [NeMo Transformers API](https://docs.nvidia.com/nemo/automodel/latest/guides/huggingface-api-compatibility.html)
-- NeMo Automodel dense models and Mixture-of-Expert (MoE) [benchmarks](https://docs.nvidia.com/nemo/automodel/latest/performance-summary.html)
+- [NeMo Transformers API](https://docs.nvidia.com/nemo/automodel/latest/get-started/hf-compatibility)
+- NeMo Automodel dense models and Mixture-of-Expert (MoE) [benchmarks](https://docs.nvidia.com/nemo/automodel/latest/performance/performance-summary)
 - See the NeMo [pretraining](./nemo_automodel_pretraining) guide to learn how to use NeMo for pretraining

@@ -29,14 +29,6 @@ transformers serve \
   --attn-implementation "sdpa"
 ```
 
-Monitor continuous batching performance with [OpenTelemetry](https://opentelemetry.io). It collects traces and metrics, but you'll need a backend to visualize them.
-
-Install the OpenTelemetry dependency.
-
-```py
-pip install transformers[open-telemetry]
-```
-
 ## Quantization
 
 [Quantization](../quantization/overview) reduces memory usage by mapping weights to a lower precision. `transformers serve` is compatible with all quantization methods in Transformers. It supports pre-quantized models and runtime quantization.
@@ -68,6 +60,21 @@ An optimized [attention backend](../attention_interface) improves memory efficie
 transformers serve \
   --continuous-batching \
   --attn-implementation "flash_attention_2"
+```
+
+### Apple Silicon (Metal flash attention)
+
+Install [kernels](https://github.com/huggingface/kernels) to make `transformers serve` default to [kernels-community/metal-flash-sdpa](https://huggingface.co/kernels-community/metal-flash-sdpa) on MPS. The Metal flash kernel runs 1.66x faster than SDPA with `generate_batch` on 100 samples of gsm8k, Qwen2.5-0.5B-Instruct and MPS fp16. It matches SDPA token-for-token under greedy decoding.
+
+```sh
+pip install kernels
+transformers serve
+```
+
+A warning prints at startup confirming the auto-selection. Pass `--attn-implementation sdpa` to opt out.
+
+```sh
+transformers serve --attn-implementation sdpa
 ```
 
 ## Compile
