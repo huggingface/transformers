@@ -68,7 +68,6 @@ class TmlTextConfig(PreTrainedConfig):
     rel_extent: int = 1024
     local_layer_ids: list[int] | None = None
     layer_types: list[str] | None = None
-    cache_layer_types: list[str] | None = None
     max_position_embeddings: int = 131072
     rms_norm_eps: float = 1e-6
     conv_kernel_size: int = 4
@@ -108,7 +107,6 @@ class TmlTextConfig(PreTrainedConfig):
         if kwargs.get("dense_intermediate_size") is not None:
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
 
-        self.cache_layer_types = [f"tml_{layer_type}" for layer_type in self.layer_types]
         super().__post_init__(**kwargs)
 
 
