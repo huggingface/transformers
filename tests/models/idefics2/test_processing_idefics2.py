@@ -40,9 +40,7 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         # Use size=64 to keep pixel_values tensors small in tests.
         # Default shortest_edge=378 would upscale 64x64 inputs to 378x378 (~9x larger tensors).
-        return image_processor_class.from_pretrained(
-            cls.tiny_model_id, size={"shortest_edge": 64, "longest_edge": 64}
-        )
+        return image_processor_class.from_pretrained(cls.tiny_model_id, size={"shortest_edge": 64, "longest_edge": 64})
 
     @classmethod
     def _setup_test_attributes(cls, processor):
