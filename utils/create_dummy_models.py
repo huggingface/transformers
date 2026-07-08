@@ -737,17 +737,34 @@ def convert_feature_extractor(feature_extractor, tiny_config):
     to_convert = False
     kwargs = {}
     if hasattr(tiny_config, "image_size"):
-        kwargs["size"] = tiny_config.image_size
-        kwargs["crop_size"] = tiny_config.image_size
+        image_size = tiny_config.image_size
         to_convert = True
     elif (
         hasattr(tiny_config, "vision_config")
         and tiny_config.vision_config is not None
         and hasattr(tiny_config.vision_config, "image_size")
     ):
-        kwargs["size"] = tiny_config.vision_config.image_size
-        kwargs["crop_size"] = tiny_config.vision_config.image_size
+        image_size = tiny_config.vision_config.image_size
         to_convert = True
+    else:
+        image_size = None
+
+    if to_convert:
+        # Some processors expect `size` as a dict (e.g. {"shortest_edge": N, "longest_edge": N})
+        # rather than a plain int. If the existing processor already has a dict `size`, preserve
+        # the dict structure when converting.
+        existing_size = getattr(feature_extractor, "size", None)
+        if isinstance(existing_size, (dict, SizeDict)):
+            if "shortest_edge" in existing_size or "longest_edge" in existing_size:
+                size = {"shortest_edge": image_size, "longest_edge": image_size}
+            elif "height" in existing_size or "width" in existing_size:
+                size = {"height": image_size, "width": image_size}
+            else:
+                size = image_size
+        else:
+            size = image_size
+        kwargs["size"] = size
+        kwargs["crop_size"] = size
 
     # Speech2TextModel specific.
     if hasattr(tiny_config, "input_feat_per_channel"):
