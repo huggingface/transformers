@@ -236,7 +236,7 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
         self.sliding_window = self.sliding_window if self.use_sliding_window else None
         if self.layer_types is None:
             self.layer_types = [
-                "reference_sliding_attention" if self.use_sliding_window else "full_attention"
+                "reference_sliding_attention" if self.sliding_window is not None else "full_attention"
             ] * self.num_hidden_layers
         elif len(set(self.layer_types)) > 1:
             # This requires a custom create_causal_mask implementation for reference_sliding_attention

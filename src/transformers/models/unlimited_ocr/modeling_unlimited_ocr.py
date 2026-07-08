@@ -935,16 +935,16 @@ class UnlimitedOcrVisionModel(UnlimitedOcrPreTrainedModel):
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         sam_encoder_outputs = self.sam_encoder(pixel_values, **kwargs)
-        sam_feature_map = sam_encoder_outputs.last_hidden_state
+        sam_hidden_states = sam_encoder_outputs.last_hidden_state
 
-        vision_encoder_outputs = self.vision_encoder(sam_feature_map, **kwargs)
-        vision_encoder_hidden_state = vision_encoder_outputs.last_hidden_state
+        vision_encoder_outputs = self.vision_encoder(sam_hidden_states, **kwargs)
+        hidden_states = vision_encoder_outputs.last_hidden_state
 
-        sam_hidden_state = sam_feature_map.flatten(2).transpose(1, 2)
-        hidden_state = torch.cat([vision_encoder_hidden_state[:, 1:], sam_hidden_state], dim=-1)
+        sam_hidden_states = sam_hidden_states.flatten(2).transpose(1, 2)
+        hidden_states = torch.cat([hidden_states[:, 1:], sam_hidden_states], dim=-1)
 
         return BaseModelOutput(
-            last_hidden_state=hidden_state,
+            last_hidden_state=hidden_states,
             hidden_states=vision_encoder_outputs.hidden_states,
             attentions=vision_encoder_outputs.attentions,
         )

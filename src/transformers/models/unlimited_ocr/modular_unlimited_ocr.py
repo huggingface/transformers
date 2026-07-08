@@ -390,9 +390,10 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
         self.sliding_window = self.sliding_window if self.use_sliding_window else None
         if self.layer_types is None:
             self.layer_types = [
-                "reference_sliding_attention" if self.use_sliding_window else "full_attention"
+                "reference_sliding_attention" if self.sliding_window is not None else "full_attention"
             ] * self.num_hidden_layers
         elif len(set(self.layer_types)) > 1:
+            # TODO: check that this works now
             # This requires a custom create_causal_mask implementation for reference_sliding_attention
             # that fetches the first layer with is_sliding=True.
             raise ValueError(
@@ -568,16 +569,16 @@ class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         sam_encoder_outputs = self.sam_encoder(pixel_values, **kwargs)
-        sam_feature_map = sam_encoder_outputs.last_hidden_state
+        sam_hidden_states = sam_encoder_outputs.last_hidden_state
 
-        vision_encoder_outputs = self.vision_encoder(sam_feature_map, **kwargs)
-        vision_encoder_hidden_state = vision_encoder_outputs.last_hidden_state
+        vision_encoder_outputs = self.vision_encoder(sam_hidden_states, **kwargs)
+        hidden_states = vision_encoder_outputs.last_hidden_state
 
-        sam_hidden_state = sam_feature_map.flatten(2).transpose(1, 2)
-        hidden_state = torch.cat([vision_encoder_hidden_state[:, 1:], sam_hidden_state], dim=-1)
+        sam_hidden_states = sam_hidden_states.flatten(2).transpose(1, 2)
+        hidden_states = torch.cat([hidden_states[:, 1:], sam_hidden_states], dim=-1)
 
         return BaseModelOutput(
-            last_hidden_state=hidden_state,
+            last_hidden_state=hidden_states,
             hidden_states=vision_encoder_outputs.hidden_states,
             attentions=vision_encoder_outputs.attentions,
         )
