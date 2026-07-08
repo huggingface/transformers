@@ -77,34 +77,8 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if hasattr(self.config, "initializer_factor"):
-            init_factor = self.config.initializer_factor
-            init_range = self.config.initializer_range
-            std = init_range * init_factor
-        elif hasattr(self.config, "vision_config"):
-            init_factor = self.config.vision_config.initializer_factor
-            init_range = self.config.vision_config.initializer_range
-            std = init_range * init_factor
-
-        if hasattr(self.config, "init_std"):
-            std = self.config.init_std
-        elif hasattr(self.config, "text_config"):
-            std = self.config.text_config.init_std
-
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, (nn.LayerNorm, Kosmos2_5LayerNorm)):
-            init.ones_(module.weight)
-            if getattr(module, "bias", None) is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, Kosmos2_5ImageToTextProjection):
+        super()._init_weights(module)
+        if isinstance(module, Kosmos2_5ImageToTextProjection):
             init.normal_(module.latent_query, mean=0.0, std=1.0)
         elif isinstance(module, Kosmos2_5TextSinusoidalPositionalEmbedding):
             emb_weights = module.get_embedding(
@@ -636,7 +610,7 @@ class Kosmos2_5VisionEncoder(Kosmos2_5PreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextSinusoidalPositionalEmbedding with Kosmos2->Kosmos2_5
+# Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextSinusoidalPositionalEmbedding with Kosmos2->Kosmos2_5
 class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
@@ -970,10 +944,11 @@ class Kosmos2_5TextTransformer(Kosmos2_5PreTrainedModel):
         inputs_embeds = inputs_embeds * self.embed_scale
 
         # embed positions
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         positions = self.embed_positions(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=0,
+            past_key_values_length=past_key_values_length,
             position_ids=position_ids,
         )
         positions = positions.to(inputs_embeds.device)
@@ -1401,11 +1376,6 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
             model_inputs["image_embeds"] = None
             model_inputs["image_embeds_position_mask"] = None
 
-            # Kosmos2.5 starts position_ids at `pad_token_id`...
-            if model_inputs.get("position_ids") is not None:
-                # NOTE: we need this op out-of-place, otherwise it modifies the `model_kwargs` dict used in `generate` in-place!
-                model_inputs["position_ids"] = model_inputs["position_ids"] + 1 + self.config.pad_token_id
-
         # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
         elif image_embeds_position_mask is not None:
             batch_size, seq_len = inputs_embeds.size()[:-1] if inputs_embeds is not None else input_ids.size()
@@ -1417,8 +1387,10 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
                 ),
                 dim=1,
             )
-            # Kosmos2.5 has offset for position ids, so we need to create them correctly in PositionEmbedding layer
-            model_inputs.pop("position_ids", None)
+
+        # Kosmos2.5 position ids have a padding-idx-based offset, so we always let the PositionEmbedding layer
+        # recompute them from input_ids using the correct past_key_values_length.
+        model_inputs.pop("position_ids", None)
 
         return model_inputs
 

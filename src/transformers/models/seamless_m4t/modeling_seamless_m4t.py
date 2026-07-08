@@ -24,9 +24,9 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...distributed.fsdp import is_fsdp_managed_module
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -1339,17 +1339,8 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, SeamlessM4TConformerSelfAttention):
+        super()._init_weights(module)
+        if isinstance(module, SeamlessM4TConformerSelfAttention):
             if hasattr(module, "pos_bias_u"):
                 init.xavier_uniform_(module.pos_bias_u)
             if hasattr(module, "pos_bias_v"):
@@ -1365,13 +1356,6 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             init.uniform_(module.projection.weight, a=-k, b=k)
             init.uniform_(module.projection.bias, a=-k, b=k)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Conv1d):
             init.kaiming_normal_(module.weight)
             if module.bias is not None:
@@ -2022,7 +2006,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.model.encoder
 
     def get_decoder(self):
@@ -2468,7 +2452,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.text_encoder
 
     def get_decoder(self):
@@ -2718,7 +2702,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.speech_encoder
 
     def get_decoder(self):
@@ -2980,7 +2964,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.text_encoder
 
     def get_decoder(self):
@@ -3291,7 +3275,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         self.vocoder = SeamlessM4TCodeHifiGan(config)
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.speech_encoder
 
     def get_decoder(self):
@@ -3638,7 +3622,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
         else:
             raise ValueError(f"`modality={modality}` is not a valid modality. It must be `text` or `speech`.")
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         if self.current_modality == "text":
             return self.text_encoder
         else:

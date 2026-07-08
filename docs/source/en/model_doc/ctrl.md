@@ -13,7 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-09-11 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-09-11 and contributed to Hugging Face Transformers on 2020-11-16.*
+
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+  </div>
+</div>
 
 # CTRL
 
@@ -49,7 +56,7 @@ This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitis
   observed in the *run_generation.py* example script.
 - The PyTorch models can take the `past_key_values` as input, which is the previously computed key/value attention pairs.
   Using the `past_key_values` value prevents the model from re-computing
-  pre-computed values in the context of text generation. See the [`forward`](model_doc/ctrl#transformers.CTRLModel.forward)
+  pre-computed values in the context of text generation. See the [`~CTRLModel#forward`]
   method for more information on the usage of this argument.
 
 ## Resources

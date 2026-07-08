@@ -29,8 +29,8 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...distributed.fsdp import is_fsdp_managed_module
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -739,6 +739,7 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         # gumbel softmax requires special init
         if isinstance(module, UniSpeechGumbelVectorQuantizer):
             init.normal_(module.weight_proj.weight, mean=0.0, std=1)
@@ -755,14 +756,6 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             init.uniform_(module.projection.weight, a=-k, b=k)
             init.uniform_(module.projection.bias, a=-k, b=k)
-        elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             init.kaiming_normal_(module.weight)
 

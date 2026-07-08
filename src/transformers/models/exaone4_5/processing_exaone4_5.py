@@ -20,7 +20,6 @@
 # limitations under the License.
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-from ...video_utils import VideoInput
 
 
 class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
@@ -129,25 +128,7 @@ class Exaone4_5_Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["second_per_grid_ts", "mm_token_type_ids"]
-
-    def _process_videos(self, videos: VideoInput, **kwargs):
-        processed_data, video_replacements = super()._process_videos(videos, **kwargs)
-        video_grid_thw = processed_data["video_grid_thw"]
-
-        video_metadata = processed_data["video_metadata"]
-        fps = [metadata.sampled_fps for metadata in video_metadata]
-
-        if isinstance(fps, (int, float)):
-            second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
-        elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-            second_per_grid_ts = [self.video_processor.temporal_patch_size / tmp for tmp in fps]
-        else:
-            raise ValueError(
-                f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
-            )
-        processed_data["second_per_grid_ts"] = second_per_grid_ts
-        return processed_data, video_replacements
+        return super().model_input_names
 
 
 __all__ = ["Exaone4_5_Processor"]

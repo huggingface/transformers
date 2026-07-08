@@ -54,6 +54,7 @@ else:
     # Merge non-standard mapping names with auto-inferred `VIDEO_PROCESSOR_MAPPING_NAMES`
     MISSING_VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
+            ("cosmos3_omni", "Qwen3VLVideoProcessor"),
             ("exaone4_5", "Qwen2VLVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
             ("pe_audio_video", "PeVideoVideoProcessor"),
@@ -63,6 +64,7 @@ else:
             ("qwen3_5_moe", "Qwen3VLVideoProcessor"),
             ("qwen3_omni_moe", "Qwen2VLVideoProcessor"),
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
+            ("videoprism", "LlavaOnevisionVideoProcessor"),
         ]
     )
     VIDEO_PROCESSOR_MAPPING_NAMES.update(MISSING_VIDEO_PROCESSOR_MAPPING_NAMES)
@@ -334,15 +336,21 @@ class AutoVideoProcessor:
                 video_processor_auto_map = image_processor_auto_map.replace("ImageProcessor", "VideoProcessor")
 
         # If we don't find the video processor class in the video processor config, let's try the model config.
-        if video_processor_class is None and video_processor_auto_map is None:
-            if not isinstance(config, PreTrainedConfig):
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
-            # It could be in `config.video_processor_type``
-            video_processor_class = getattr(config, "video_processor_type", None)
-            if hasattr(config, "auto_map") and "AutoVideoProcessor" in config.auto_map:
-                video_processor_auto_map = config.auto_map["AutoVideoProcessor"]
+        if video_processor_class is None:
+            try:
+                if not isinstance(config, PreTrainedConfig):
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
+
+                # It could be in `config.video_processor_type``
+                video_processor_class = getattr(config, "video_processor_type", None)
+                if hasattr(config, "auto_map") and "AutoVideoProcessor" in config.auto_map:
+                    video_processor_auto_map = config.auto_map["AutoVideoProcessor"]
+            except ValueError:
+                # Config loading failed (unrecognized model_type, invalid config, etc.)
+                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
+                pass
 
         if video_processor_class is not None:
             video_processor_class = video_processor_class_from_name(video_processor_class)

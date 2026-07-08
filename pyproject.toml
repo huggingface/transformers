@@ -120,3 +120,4 @@ invalid-return-type = "ignore"         # Return type mismatches that would requi
 deprecated = "ignore"                  # Deprecation warnings from dependencies
 invalid-assignment = "ignore"          # Low-level assignments that are runtime-safe
 unused-ignore-comment = "ignore"       # Ignore comments that became unnecessary after adding broader per-file-ignores
+unused-type-ignore-comment = "ignore"  # A `# type: ignore` counts as "used" only when its suppressed error fires, which needs optional deps (torch, openai, ...) installed. CI's lean `quality` env lacks them, so directives used locally look unused in CI.

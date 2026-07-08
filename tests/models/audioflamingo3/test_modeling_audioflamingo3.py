@@ -22,6 +22,7 @@ from transformers import (
     AudioFlamingo3Config,
     AudioFlamingo3EncoderConfig,
     AudioFlamingo3ForConditionalGeneration,
+    AudioFlamingo3Model,
     AutoProcessor,
     Qwen2Config,
     is_torch_available,
@@ -42,6 +43,7 @@ if is_torch_available():
 
 class AudioFlamingo3ModelTester(ALMModelTester):
     config_class = AudioFlamingo3Config
+    base_model_class = AudioFlamingo3Model
     conditional_generation_class = AudioFlamingo3ForConditionalGeneration
     text_config_class = Qwen2Config
     audio_config_class = AudioFlamingo3EncoderConfig

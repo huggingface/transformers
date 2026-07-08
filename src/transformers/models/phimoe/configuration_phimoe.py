@@ -46,12 +46,13 @@ class PhimoeConfig(PreTrainedConfig):
 
     model_type = "phimoe"
     keys_to_ignore_at_inference = ["past_key_values"]
-    default_theta = 1000000.0
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
+    base_model_ep_plan = {
+        "layers.*.mlp.router": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
+    default_theta = 1000000.0
 
     vocab_size: int = 32064
     hidden_size: int = 4096
