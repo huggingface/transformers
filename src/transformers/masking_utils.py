@@ -36,10 +36,20 @@ else:
 
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 _is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
+_is_torch_greater_or_equal_than_2_10 = is_torch_greater_or_equal("2.10", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 
 if _is_torch_greater_or_equal_than_2_6:
     from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
+
+# When `varlen_attn` (torch>=2.10) is available, `sdpa_attention_forward` can run packed rows as variable-length
+# attention, so we can skip materializing the block-diagonal mask here (see `integrations/sdpa_attention.py`).
+try:
+    from torch.nn.attention.varlen import varlen_attn as _torch_varlen_attn  # noqa: F401
+
+    _is_torch_varlen_attn_available = True
+except ImportError:
+    _is_torch_varlen_attn_available = False
 
 
 logger = logging.get_logger(__name__)
@@ -368,6 +378,24 @@ def _non_vmap_expansion_sdpa(
     return batch_indices, head_indices, q_indices, kv_indices
 
 
+def _allow_torch_varlen_skip(
+    config: PreTrainedConfig, packed_sequence_mask: torch.Tensor | None, device: torch.device
+) -> bool:
+    """
+    Whether mask creation can be skipped (return `None`) for a packed-sequence row, letting
+    `sdpa_attention_forward` own document isolation via `varlen_attn` (or a block-diagonal mask it rebuilds from
+    `position_ids`). Only for packed `sdpa` rows on CUDA where `varlen_attn` is available; other devices keep
+    materializing the mask.
+    """
+    return (
+        packed_sequence_mask is not None
+        and config._attn_implementation == "sdpa"
+        and _is_torch_greater_or_equal_than_2_10
+        and _is_torch_varlen_attn_available
+        and device.type == "cuda"
+    )
+
+
 def sdpa_mask(
     batch_size: int,
     q_length: int,
@@ -379,6 +407,7 @@ def sdpa_mask(
     local_size: int | None = None,
     allow_is_causal_skip: bool = True,
     allow_is_bidirectional_skip: bool = False,
+    allow_torch_varlen_skip: bool = False,
     allow_torch_fix: bool = True,
     use_vmap: bool = False,
     device: torch.device | str = "cpu",
@@ -413,6 +442,10 @@ def sdpa_mask(
         allow_is_bidirectional_skip (`bool`, optional):
             Whether to allow to return `None` for the mask under conditions where we do not have to add any bias,
             i.e. full attention without any padding. Default to `False`.
+        allow_torch_varlen_skip (`bool`, optional):
+            Whether to allow returning `None` for a packed-sequence row that `sdpa_attention_forward` will itself
+            isolate via `varlen_attn` (or a mask it rebuilds locally). Takes priority over the other skip
+            conditions. Default to `False`.
         allow_torch_fix (`bool`, optional):
             Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
             versions. We need an arg to skip it when using eager. By default `True`.
@@ -487,6 +520,11 @@ def sdpa_mask(
     ```
 
     """
+    # `sdpa_attention_forward` handles document isolation for this row (via `varlen_attn` or a locally-rebuilt
+    # mask), so skip materializing anything here. Checked ahead of the narrower skip conditions below.
+    if allow_torch_varlen_skip:
+        return None
+
     # Potentially pad the 2D mask
     padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
 
@@ -966,6 +1004,14 @@ def create_causal_mask(
     if packed_sequence_mask is not None:
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
+    # `sdpa_attention_forward` only reconstructs plain per-document (optionally windowed) causal isolation from
+    # `position_ids`; it knows nothing about a custom overlay, so those must disable the skip.
+    allow_torch_varlen_skip = (
+        or_mask_function is None
+        and and_mask_function is None
+        and block_sequence_ids is None
+        and _allow_torch_varlen_skip(config, packed_sequence_mask, device)
+    )
     if block_sequence_ids is not None:
         block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)
         mask_factory_function = or_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
@@ -981,6 +1027,7 @@ def create_causal_mask(
         mask_function=mask_factory_function,
         attention_mask=attention_mask,
         allow_is_causal_skip=allow_is_causal_skip,  # additional kwarg for sdpa
+        allow_torch_varlen_skip=allow_torch_varlen_skip,  # additional kwarg for sdpa
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
         use_vmap=use_vmap,  # Short-circuit to non-vmap expansions for the mask
@@ -1191,6 +1238,14 @@ def create_sliding_window_causal_mask(
     if packed_sequence_mask is not None:
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
+    # `sdpa_attention_forward` only reconstructs plain per-document (optionally windowed) causal isolation from
+    # `position_ids`; it knows nothing about a custom overlay, so those must disable the skip.
+    allow_torch_varlen_skip = (
+        or_mask_function is None
+        and and_mask_function is None
+        and block_sequence_ids is None
+        and _allow_torch_varlen_skip(config, packed_sequence_mask, device)
+    )
     if block_sequence_ids is not None:
         block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)
         mask_factory_function = or_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
@@ -1206,6 +1261,7 @@ def create_sliding_window_causal_mask(
         mask_function=mask_factory_function,
         attention_mask=attention_mask,
         allow_is_causal_skip=allow_is_causal_skip,  # additional kwarg for sdpa
+        allow_torch_varlen_skip=allow_torch_varlen_skip,  # additional kwarg for sdpa
         local_size=sliding_window,  # Additional kwarg for sdpa
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
