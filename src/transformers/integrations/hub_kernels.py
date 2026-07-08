@@ -228,14 +228,16 @@ if is_kernels_available():
             "RMSNormGated": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
+                        repo_id="AntonV/fla",
                         layer_name="FusedRMSNormGated",
                         version=1,
+                        trust_remote_code=True,
                     ),
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/fla",
+                        repo_id="AntonV/fla",
                         layer_name="FusedRMSNormGated",
                         version=1,
+                        trust_remote_code=True,
                     ),
                 },
             },
@@ -327,6 +329,48 @@ if is_kernels_available():
                     )
                 }
             },
+            # TODO: only used locally or via AntonV/fla but locally modified as per the PR for FLA
+            "chunk_kimi_delta_attention": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="AntonV/fla", layer_name="chunk_kimi_delta_attention", version=1, trust_remote_code=True,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="AntonV/fla", layer_name="chunk_kimi_delta_attention", version=1, trust_remote_code=True,
+                    ),
+                },
+            },
+            "recurrent_kimi_delta_attention": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="AntonV/fla", layer_name="recurrent_kimi_delta_attention", version=1, trust_remote_code=True,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="AntonV/fla", layer_name="recurrent_kimi_delta_attention", version=1, trust_remote_code=True,
+                    ),
+                },
+            },
+            # TODO: merge and update path
+            "causal_conv1d_fn": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm", layer_name="causal_conv1d_fn", revision="pr-994", trust_remote_code=True,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm", layer_name="causal_conv1d_fn", revision="pr-994", trust_remote_code=True,
+                    ),
+                },
+            },
+            "causal_conv1d_update": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm", layer_name="causal_conv1d_update", revision="pr-994", trust_remote_code=True,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-staging/mamba-ssm", layer_name="causal_conv1d_update", revision="pr-994", trust_remote_code=True,
+                    ),
+                },
+            },
         }
 
         # Add function kernel mappings
@@ -350,48 +394,6 @@ if is_kernels_available():
                 "cuda": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: FuncRepository(
                         repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss", version=2
-                    ),
-                },
-            },
-            # TODO: only used locally or via AntonV/fla but locally modified as per the PR for FLA
-            "chunk_kimi_delta_attention": {
-                "cuda": {
-                    Mode.TRAINING: FuncRepository(
-                        repo_id="kernels-community/fla", func_name="chunk_kimi_delta_attention", version=1,
-                    ),
-                    Mode.INFERENCE: FuncRepository(
-                        repo_id="kernels-community/fla", func_name="chunk_kimi_delta_attention", version=1,
-                    ),
-                },
-            },
-            "recurrent_kimi_delta_attention": {
-                "cuda": {
-                    Mode.TRAINING: FuncRepository(
-                        repo_id="kernels-community/fla", func_name="recurrent_kimi_delta_attention", version=1,
-                    ),
-                    Mode.INFERENCE: FuncRepository(
-                        repo_id="kernels-community/fla", func_name="recurrent_kimi_delta_attention", version=1,
-                    ),
-                },
-            },
-            # TODO: merge and update path
-            "causal_conv1d_fn": {
-                "cuda": {
-                    Mode.TRAINING: FuncRepository(
-                        repo_id="kernels-staging/mamba-ssm", func_name="causal_conv1d_fn", revision="pr-994", trust_remote_code=True,
-                    ),
-                    Mode.INFERENCE: FuncRepository(
-                        repo_id="kernels-staging/mamba-ssm", func_name="causal_conv1d_fn", revision="pr-994", trust_remote_code=True,
-                    ),
-                },
-            },
-            "causal_conv1d_update": {
-                "cuda": {
-                    Mode.TRAINING: FuncRepository(
-                        repo_id="kernels-staging/mamba-ssm", func_name="causal_conv1d_update", revision="pr-994", trust_remote_code=True,
-                    ),
-                    Mode.INFERENCE: FuncRepository(
-                        repo_id="kernels-staging/mamba-ssm", func_name="causal_conv1d_update", revision="pr-994", trust_remote_code=True,
                     ),
                 },
             },
