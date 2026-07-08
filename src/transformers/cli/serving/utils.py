@@ -216,7 +216,7 @@ def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | Non
 
     Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
     """
-    parsed = processor.parse_response(generated_ids, schema)
+    parsed = processor.parse_response(generated_ids, schema, prefix="")
     # The new response_template path returns a dict like {"tool_calls": [...]}; unwrap.
     if isinstance(parsed, dict) and "tool_calls" in parsed:
         parsed = parsed["tool_calls"]

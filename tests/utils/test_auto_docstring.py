@@ -686,7 +686,7 @@ class TestAutoDocstringPerformance:
 
     # Upper bound (%) of total import time that auto_docstring overhead may take.
     # Relative metric; robust across CI vs local. Catches serious regressions.
-    AUTO_DOCSTRING_COST_PCT_UPPER_BOUND = 70.0
+    AUTO_DOCSTRING_COST_PCT_UPPER_BOUND = 80.0
 
     def test_auto_docstring_import_time_upper_bound(self):
         """

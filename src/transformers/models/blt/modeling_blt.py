@@ -443,15 +443,9 @@ class BltPreTrainedModel(PreTrainedModel):
         - Scale is ~ 1 / sqrt(model_dim) (or 1 / sqrt(hidden_dim) for FFN outputs).
         - Norm layers are set to weight = 1, bias = 0.
         """
-        class_name = module.__class__.__name__
+        super()._init_weights(module)
 
-        # Norms: RMSNorm / LayerNorm
-        if isinstance(module, (BltRMSNorm, nn.LayerNorm)) or "RMSNorm" in class_name or "LayerNorm" in class_name:
-            if getattr(module, "weight", None) is not None:
-                init.ones_(module.weight)
-            if getattr(module, "bias", None) is not None:
-                init.zeros_(module.bias)
-            return
+        class_name = module.__class__.__name__
 
         # Embeddings (encoder / patcher / hash embeddings)
         if isinstance(module, nn.Embedding):
@@ -580,16 +574,6 @@ class BltPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 init.zeros_(module.bias)
             return
-
-        if isinstance(module, BltRotaryEmbedding):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-            buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
 
 
 class BltLocalEncoder(BltPreTrainedModel):

@@ -158,7 +158,6 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_torch_exportable = False
     test_all_params_have_gradient = False
     has_attentions = True
     _is_composite = True

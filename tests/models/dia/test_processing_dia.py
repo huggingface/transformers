@@ -42,7 +42,7 @@ def check_models_equal(model1, model2):
 class DiaProcessorTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint = "AntonV/Dia-1.6B"
-        self.audio_tokenizer_checkpoint = "descript/dac_44khz"
+        self.audio_tokenizer_checkpoint = "hf-internal-testing/tiny-dac-44khz"
         self.tmpdirname = tempfile.mkdtemp()
 
         # Audio tokenizer is a bigger model so we will reuse this if possible

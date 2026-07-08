@@ -33,21 +33,13 @@ if is_torch_available():
 @require_torch
 class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Glm4vProcessor
-    model_id = "THUDM/GLM-4.1V-9B-Thinking"
+    # Use tiny repos to avoid loading the full 151k-vocab tokenizer (~309 MB)
+    # Tiny processor created with make_tiny_processor.py from "THUDM/GLM-4.1V-9B-Thinking"
+    tiny_model_id = "hf-internal-testing/tiny-processor-glm4v"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
-
-    @classmethod
-    def _setup_from_pretrained(cls, model_id, **kwargs):
-        return super()._setup_from_pretrained(
-            model_id,
-            do_sample_frames=False,
-            patch_size=4,
-            size={"shortest_edge": 12 * 12, "longest_edge": 18 * 18},
-            **kwargs,
-        )
 
     @require_torch
     @require_av
@@ -179,7 +171,7 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": url_to_local_path(
-                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
             ),
         }
 

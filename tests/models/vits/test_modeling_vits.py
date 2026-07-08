@@ -162,7 +162,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
 
     test_resize_embeddings = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent guard in duration predictor
     has_attentions = False
 
     def setUp(self):

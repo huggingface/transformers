@@ -245,14 +245,6 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip("GLM4's moe is not compatible `token_indices, weight_indices = torch.where(mask)`.")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("Error with compilation")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

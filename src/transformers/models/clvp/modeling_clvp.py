@@ -772,6 +772,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=factor * 0.02)
@@ -779,8 +780,6 @@ class ClvpPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=factor * 0.02)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, ClvpRMSNorm):
-            init.ones_(module.weight)
         elif isinstance(module, ClvpEncoderMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
@@ -811,9 +810,6 @@ class ClvpPreTrainedModel(PreTrainedModel):
             dim = max(self.config.projection_dim // (self.config.num_attention_heads * 2), 32)
             inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
             init.copy_(module.inv_freq, inv_freq)
-        if isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 class ClvpEncoder(ClvpPreTrainedModel):

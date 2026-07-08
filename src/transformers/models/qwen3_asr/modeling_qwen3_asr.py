@@ -48,7 +48,7 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3ASREncoderLayer", "Qwen3DecoderLayer"]
+    _no_split_modules = ["Qwen3DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -324,7 +324,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
     config: Qwen3ASREncoderConfig
     main_input_name = "input_features"
     input_modalities = "audio"
-    _no_split_modules = ["Qwen3ASREncoderLayer"]
+    _no_split_modules = ["Qwen3ASRAudioEncoderLayer"]
     _supports_sdpa = True
     _can_record_outputs = {
         "hidden_states": Qwen3ASRAudioEncoderLayer,
@@ -392,7 +392,9 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         chunk_lengths = (
             input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1).reshape(-1).to(torch.long)
         )
-        cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
+        cu_seqlens = get_audio_cu_seqlens(
+            chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
+        )
 
         # Chunk and process through CNN
         chunked = (

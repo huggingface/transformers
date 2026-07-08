@@ -197,11 +197,12 @@ for chunk in manager.request_id_iter(request_id="streamed"):
 
 [`ContinuousBatchingConfig`] controls the KV cache, scheduling, CUDA graphs, memory usage, and more. Pass it alongside [`GenerationConfig`] to customize continuous batching.
 
-By default, `num_blocks` and `max_batch_tokens` are inferred automatically from available GPU memory. Use the table below to help you pick the appropriate features.
+By default, `max_batch_tokens` is `8192`, bounded by available GPU memory and never below `256`, while `num_blocks` fills the remaining memory. Use the table below to help you pick the appropriate features.
 
 | Feature | Memory | Throughput | Latency |
 |---|---|---|---|
 | `max_memory_percent` / `block_size` | ✓ controls KV budget | | |
+| `max_batch_tokens` | ↑ larger input buffers | ✓ bigger prefill batches | ✓ TTFT when prefill-bound |
 | `scheduler` | | ✓ scheduling policy | ✓ TTFT |
 | CUDA graphs | ↑ graph storage | ✓ less dispatch overhead | ✓ |
 | Async batching | ↑ ~2× I/O buffers | ✓ overlaps CPU/GPU | |
@@ -229,6 +230,26 @@ outputs = model.generate_batch(
     generation_config=generation_config,
     continuous_batching_config=cb_config,
 )
+```
+
+### KV cache block size
+
+`block_size` sets how many tokens each KV cache block holds. It must be at least 4, and `generate_batch` raises a `ValueError` for any smaller value. The cache reserves two extra blocks for padding and sentinel bookkeeping, so very small blocks spend a large fraction of memory on this fixed overhead. Larger blocks cut bookkeeping but waste space when a sequence doesn't fill its last block. The default of 256 matches the `flash_attn_with_kvcache` decode kernel and works well in most cases. Keep `block_size` well above the minimum for an efficient cache.
+
+```py
+cb_config = ContinuousBatchingConfig(block_size=128)
+```
+
+### Prefill batch size
+
+`max_batch_tokens` sets the token budget for a single forward pass, the maximum number of query tokens the model processes at once. A larger budget packs more prompt tokens into each prefill, which raises prefill throughput and lowers time-to-first-token on prompt-heavy workloads. The scheduler splits prompts that exceed the budget across steps. See [chunked prefill](./continuous_batching_architecture#chunked-prefill) for how oversized prompts are handled.
+
+By default, `max_batch_tokens` is `8192`. The value is bounded by available GPU memory so the per-batch input tensors don't crowd out the KV cache, and it never falls below `256`. On a GPU with little free memory, the bound lowers it below `8192`.
+
+`max_batch_tokens` and `num_blocks` draw from the same memory budget, so they trade off against each other. A larger token budget allocates bigger input buffers and leaves fewer KV cache blocks for concurrent or long requests. Raise `max_batch_tokens` to push prefill throughput when you have more memory available, and lower it to free memory for more KV blocks or to avoid out-of-memory errors.
+
+```py
+cb_config = ContinuousBatchingConfig(max_batch_tokens=16384)
 ```
 
 ### Batch and scheduling limits

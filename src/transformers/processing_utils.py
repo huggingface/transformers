@@ -2251,7 +2251,7 @@ class ProcessorMixin(PushToHubMixin):
             schema (`Union[list, dict]`, *optional*):
                 A response template (preferred, new-style) or legacy response schema dict. If not provided, the
                 tokenizer's `response_template` or `response_schema` attribute is used (in that order).
-            prefix (`str`, token ids, 1D/2D tensor, or a list of these, *optional*):
+            prefix (`str`, token ids, 1D/2D tensor, or a list of these):
                 The prompt that came before generation. Many chat templates pre-write part of the message, so
                 this is needed to parse correctly. For a batched `response`, pass either a single prefix
                 (broadcast to every item) or one prefix per item. Only supported with new-style templates.

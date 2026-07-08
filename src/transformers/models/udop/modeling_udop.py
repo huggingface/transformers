@@ -256,14 +256,10 @@ class UdopPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, UdopLayerNorm):
             init.constant_(module.weight, factor * 1.0)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=factor)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.Conv2d):
             init.trunc_normal_(module.weight, mean=0.0, std=factor)
             if module.bias is not None:

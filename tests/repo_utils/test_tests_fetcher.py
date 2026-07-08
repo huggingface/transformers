@@ -288,6 +288,25 @@ class TestFetcherTester(unittest.TestCase):
             assert (Path(tmp_folder) / "tests_torch_test_list.txt").exists()
             assert not (Path(tmp_folder) / "tests_hub_test_list.txt").exists()
 
+    def test_create_test_list_from_filter_routes_peft_integration_tests(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            create_test_list_from_filter(
+                [
+                    "tests/peft_integration/test_peft_integration.py",
+                    "tests/trainer/test_trainer.py",
+                ],
+                out_path=tmp_folder,
+            )
+
+            with open(Path(tmp_folder) / "tests_peft_integration_test_list.txt", encoding="utf-8") as f:
+                peft_tests = f.read().splitlines()
+            with open(Path(tmp_folder) / "tests_non_model_test_list.txt", encoding="utf-8") as f:
+                non_model_tests = f.read().splitlines()
+
+            assert peft_tests == ["tests/peft_integration/test_peft_integration.py"]
+            # PEFT tests used to be included in non_model_tests
+            assert "tests/peft_integration/test_peft_integration.py" not in non_model_tests
+
     def test_infer_tests_to_run_adds_repo_utils_for_utils_changes(self):
         with ExitStack() as stack:
             stack.enter_context(patch.object(tests_fetcher, "commit_flags", {"test_all": False}, create=True))

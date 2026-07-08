@@ -25,7 +25,14 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_available,
+    logging,
+    torch_compilable_check,
+)
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
@@ -36,6 +43,9 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..auto import CONFIG_MAPPING
 from ..moonshine.modeling_moonshine import MoonshineRotaryEmbedding
+
+
+logger = logging.get_logger(__name__)
 
 
 if is_torch_available():
@@ -145,8 +155,15 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         return self.audio_bos_token + self.audio_token * num_audio_tokens + self.audio_eos_token
 
     @property
-    def audio_ids(self):
+    def audio_token_ids(self):
         return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
+
+    # Alias for BC
+    @property
+    def audio_ids(self):
+        """Deprecated alias for `audio_token_ids`; will be removed in a future release."""
+        logger.warning_once("`audio_ids` is deprecated; please use `audio_token_ids` instead.")
+        return self.audio_token_ids
 
     def apply_transcription_request(self, *args, **kwargs):
         raise NotImplementedError("This method is not supported for MusicFlamingo.")

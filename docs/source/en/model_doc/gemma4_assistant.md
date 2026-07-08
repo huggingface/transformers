@@ -27,7 +27,7 @@ Gemma 4 Assistant is a small, text-only model that enables speculative decoding 
 Multi-Token Prediction (MTP) method and associated candidate generator. Pre-trained models are provided for the IT
 variants of the Gemma 4 E2B, E4B, 31B and 26B-A4B (MoE) models.
 
-Architecturally, the Gemma 4 Assistant shares the same [`Gemma4TextModel` backbone](gemma4#transformers.Gemma4TextModel)
+Architecturally, the Gemma 4 Assistant shares the same [`Gemma4TextModel`] backbone
 as other Gemma 4 models, but differs in a few key ways:
 
 *   **The entire model uses KV sharing**. This technique, originally introduced with [Gemma 3n](./gemma3n), allows the

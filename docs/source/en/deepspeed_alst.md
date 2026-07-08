@@ -41,7 +41,7 @@ Ulysses sequence parallelism (SP) trains on very long sequences by splitting the
 
 ## Configure
 
-Sequence parallelism requires Accelerate v1.12.0 and at least 2 GPUs. Configure sequence parallelism in Accelerate's [`~accelerate.ParallelismConfig`] and pass it to [TrainingArguments.parallelism_config](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.parallelism_config) or an [Accelerate config file](./accelerate#accelerate-config-file).
+Sequence parallelism requires Accelerate v1.12.0 and at least 2 GPUs. Configure sequence parallelism in Accelerate's [`~accelerate.ParallelismConfig`] and pass it to [`~TrainingArguments#parallelism_config`] or an [Accelerate config file](./accelerate#accelerate-config-file).
 
 <hfoptions id="launch">
 <hfoption id="parallelism_config">

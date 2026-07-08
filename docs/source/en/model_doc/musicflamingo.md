@@ -232,7 +232,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     add_generation_prompt=True,
     return_dict=True,
-    output_labels=True,
+    processor_kwargs={"output_labels": True},
 ).to(model.device)
 inputs["input_features"] = inputs["input_features"].to(model.dtype)
 
