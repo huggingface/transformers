@@ -595,7 +595,7 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
     replaced by the most recent ones. The prefill tokens always remain in the cache.
     """
 
-    layer_type = "reference_sliding_attention"
+    _layer_type = "reference_sliding_attention"
 
     def __init__(self, config: PreTrainedConfig | None = None, sliding_window: int | None = None):
         super().__init__(config=config, sliding_window=sliding_window)
@@ -708,7 +708,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             The size of the sliding window.
     """
 
-    layer_type = "reference_sliding_attention"
+    _layer_type = "reference_sliding_attention"
 
     def __init__(self, max_cache_len: int, sliding_window: int):
         super().__init__(max_cache_len=max_cache_len, sliding_window=sliding_window)
@@ -919,7 +919,7 @@ def create_reference_sliding_window_causal_mask(**kwargs):
         prefill_length = float("inf")
         kv_offset = 0
     else:
-        layer = next(layer for layer in past_key_values.layers if layer.layer_type == "reference_sliding_attention")
+        layer = next(layer for layer in past_key_values.layers if layer._layer_type == "reference_sliding_attention")
         prefill_length = float("inf") if layer.prefill_length is None else layer.prefill_length
         _, kv_offset = layer.get_mask_sizes(query_length=inputs_embeds.shape[1])
 
