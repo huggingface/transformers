@@ -24,6 +24,7 @@ from ..integrations.tensor_parallel import (
     initialize_tensor_parallelism,
 )
 from ..utils import is_torch_available, is_torch_greater_or_equal
+from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import is_fsdp_managed_module
 from .utils import (
@@ -171,23 +172,44 @@ class DistributedMixin:
             save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
         return save_on_this_rank
 
-    def _ensure_dcp_save_supported(self, model_to_save) -> None:
-        """Raise if DCP save prerequisites are not met (torch>=2.7, FSDP-wrapped model)."""
+    def save_distributed_checkpoint(
+        self,
+        model_to_save,
+        save_directory: str | os.PathLike,
+        *,
+        push_to_hub: bool = False,
+        save_on_this_rank: bool = True,
+        repo_id: str | None = None,
+        files_timestamps: dict | None = None,
+        commit_message: str | None = None,
+        token: str | bool | None = None,
+        create_pr: bool = False,
+    ) -> None:
+        """Save an FSDP-wrapped model via DCP and optionally push to the Hub."""
         if not is_torch_greater_or_equal("2.7"):
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
         if not is_fsdp_managed_module(model_to_save):
             raise ValueError(
                 "save_pretrained(..., distributed_checkpoint=True) is only supported for FSDP-wrapped models."
             )
-
-    def save_distributed_checkpoint(self, model_to_save, save_directory: str | os.PathLike) -> None:
-        """Save an FSDP-wrapped model via DCP."""
         if getattr(model_to_save, "_device_mesh", None) is None:
             raise ValueError(
                 "save_pretrained(..., distributed_checkpoint=True) requires the model to have been "
                 "initialized with a distributed_config (_device_mesh is None)."
             )
         save_model_checkpoint_distributed(model_to_save, save_directory)
+
+        if push_to_hub and save_on_this_rank:
+            model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
+            model_card.save(os.path.join(save_directory, "README.md"))
+            self._upload_modified_files(
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=token,
+                create_pr=create_pr,
+            )
 
     def _gather_tp_state_dict_for_save(
         self,

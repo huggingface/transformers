@@ -3377,9 +3377,6 @@ class PreTrainedModel(
 
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
-        if distributed_checkpoint:
-            self._ensure_dcp_save_supported(model_to_save)
-
         save_on_this_rank = self.should_save_on_this_rank(is_main_process)
 
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
@@ -3430,20 +3427,23 @@ class PreTrainedModel(
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
-        # --- FSDP path: DCP save (large models, torch >= 2.7) ---
         if distributed_checkpoint:
-            self.save_distributed_checkpoint(model_to_save, save_directory)
-            if push_to_hub and save_on_this_rank:
-                model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
-                model_card.save(os.path.join(save_directory, "README.md"))
-                self._upload_modified_files(
-                    save_directory,
-                    repo_id,
-                    files_timestamps,
-                    commit_message=commit_message,
-                    token=token,
-                    create_pr=create_pr,
-                )
+            hub_kwargs = {}
+            if push_to_hub:
+                hub_kwargs = {
+                    "repo_id": repo_id,
+                    "files_timestamps": files_timestamps,
+                    "commit_message": commit_message,
+                    "create_pr": create_pr,
+                }
+            self.save_distributed_checkpoint(
+                model_to_save,
+                save_directory,
+                push_to_hub=push_to_hub,
+                save_on_this_rank=save_on_this_rank,
+                token=token,
+                **hub_kwargs,
+            )
             return
 
         needs_dist_barrier = False
