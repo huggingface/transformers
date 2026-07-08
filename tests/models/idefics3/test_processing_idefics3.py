@@ -27,7 +27,12 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 @require_vision
 class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Idefics3Processor
-    model_id = "HuggingFaceM4/Idefics3-8B-Llama3"
+    # Tiny processor created with make_tiny_processor.py from "HuggingFaceM4/Idefics3-8B-Llama3"
+    tiny_model_id = "hf-internal-testing/tiny-processor-idefics3"
+    # Default 76 is too small: idefics3 with the tiny tokenizer expands <image> to ~78 tokens, then with
+    # surrounding text tokens we exceed 76, truncation cuts through image tokens, and _check_special_mm_tokens
+    # raises a mismatch error.
+    image_unstructured_max_length = 100
 
     def get_processor(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
