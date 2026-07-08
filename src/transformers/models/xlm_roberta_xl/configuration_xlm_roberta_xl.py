@@ -19,7 +19,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="FacebookAI/xlm-roberta-xl")
+@auto_docstring(checkpoint="facebook/xlm-roberta-xl")
 @strict
 class XLMRobertaXLConfig(PreTrainedConfig):
     r"""
