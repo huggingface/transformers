@@ -83,6 +83,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "SiglipTextModel": "CLIPTextModel",
     "Siglip2TextModel": "CLIPTextModel",
     "xCLIPTextModel": "CLIPTextModel",
+    "aria": "llava",
     "paligemma": "llava",
     "aya_vision": "llava",
     "got_ocr2": "llava",
@@ -104,6 +105,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
     # class-based mappings
+    "AriaModel": "LlavaModel",
     "PaliGemmaModel": "LlavaModel",
     "AyaVisionModel": "LlavaModel",
     "GotOcr2Model": "LlavaModel",
