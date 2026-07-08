@@ -693,6 +693,78 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
         return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
 
 
+class SplitFusedAttentionGate(ConversionOps):
+    r"""
+    Split A.X-K2's vLLM-style fused ``q_b_proj`` into the canonical ``q_b_proj`` + ``linear_gate``.
+
+    The released checkpoint stores a single block-diagonal
+    ``[num_heads * (qk_head_dim + v_head_dim), 2 * q_lora_rank]`` matrix. Viewed per head as
+    ``[qk_head_dim + v_head_dim, 2 * q_lora_rank]``, the query rows read only the post-norm input half
+    and the gate rows read only the pre-norm input half (the off-diagonal blocks are exactly zero). This
+    op extracts the two nonzero blocks into ``q_b_proj`` (post-norm -> query) and ``linear_gate``
+    (pre-norm -> gate); the extraction is therefore loss-free.
+    """
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        tensors = next(iter(input_dict.values()))
+        fused = tensors[0] if isinstance(tensors, list) else tensors
+        num_heads = config.num_attention_heads
+        qk_head_dim = config.qk_head_dim
+        v_head_dim = config.v_head_dim
+        q_lora_rank = config.q_lora_rank
+        fused = fused.view(num_heads, qk_head_dim + v_head_dim, 2 * q_lora_rank)
+        q_weight = fused[:, :qk_head_dim, :q_lora_rank].reshape(num_heads * qk_head_dim, q_lora_rank)
+        gate_weight = fused[:, qk_head_dim:, q_lora_rank:].reshape(num_heads * v_head_dim, q_lora_rank)
+        return dict(zip(target_patterns, [q_weight, gate_weight]))
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return FuseAttentionGate()
+
+
+class FuseAttentionGate(ConversionOps):
+    r"""
+    Inverse of :class:`SplitFusedAttentionGate`: fuse ``q_b_proj`` + ``linear_gate`` back into the
+    block-diagonal ``q_b_proj`` layout stored in the released checkpoint (used on ``save_pretrained``).
+    """
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        def _tensor(pattern):
+            tensors = input_dict[pattern]
+            return tensors[0] if isinstance(tensors, list) else tensors
+
+        q_weight = _tensor(source_patterns[0])
+        gate_weight = _tensor(source_patterns[1])
+        num_heads = config.num_attention_heads
+        qk_head_dim = config.qk_head_dim
+        v_head_dim = config.v_head_dim
+        q_lora_rank = config.q_lora_rank
+        fused = q_weight.new_zeros(num_heads, qk_head_dim + v_head_dim, 2 * q_lora_rank)
+        fused[:, :qk_head_dim, :q_lora_rank] = q_weight.view(num_heads, qk_head_dim, q_lora_rank)
+        fused[:, qk_head_dim:, q_lora_rank:] = gate_weight.view(num_heads, v_head_dim, q_lora_rank)
+        return {target_patterns[0]: fused.reshape(num_heads * (qk_head_dim + v_head_dim), 2 * q_lora_rank)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return SplitFusedAttentionGate()
+
+
 def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     Process a target pattern for reverse mapping (when targets become sources).

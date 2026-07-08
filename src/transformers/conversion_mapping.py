@@ -26,6 +26,7 @@ from .core_model_loading import (
     Interleave,
     MergeModulelist,
     PrefixChange,
+    SplitFusedAttentionGate,
     Transpose,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -232,6 +233,21 @@ def _build_checkpoint_conversion_mapping():
         ],
         "GPTNeoXForCausalLM": [
             WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
+        ],
+        "AXK2": [
+            # The released A.X-K2 checkpoint fuses the attention output gate into `q_b_proj` (vLLM layout):
+            # a block-diagonal `[num_heads * (qk_head_dim + v_head_dim), 2 * q_lora_rank]` matrix. Split it
+            # back into the canonical `q_b_proj` (post-norm -> query) + `linear_gate` (pre-norm -> gate) at
+            # load time; the reverse op re-fuses it on save. Experts are already stored stacked, so no MoE
+            # conversion is needed.
+            WeightConverter(
+                source_patterns="self_attn.q_b_proj.weight",
+                target_patterns=[
+                    "self_attn.q_b_proj.weight",
+                    "self_attn.linear_gate.weight",
+                ],
+                operations=[SplitFusedAttentionGate()],
+            ),
         ],
         "gemma4_unified": [
             WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),

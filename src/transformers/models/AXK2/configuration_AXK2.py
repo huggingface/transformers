@@ -101,21 +101,13 @@ class AXK2Config(PreTrainedConfig):
             Whether to tie weight embeddings.
         rope_parameters ([`RopeParameters`], *optional*):
             Configuration for Rotary Position Embeddings (RoPE).
-        rope_interleave (`bool`, *optional*, defaults to `True`):
-            Whether to interleave the rotary position embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        gated_norm (`bool`, *optional*, defaults to `False`):
-            Whether to wrap input/post-attention layernorms with a low-rank input-dependent gate
-            (see `AXK2GatedRMSNorm`). When enabled, the gate is applied to `input_layernorm` for all
-            layers and to `post_attention_layernorm` only for MoE layers.
         gated_norm_rank (`int`, *optional*, defaults to 16):
-            Bottleneck rank for the low-rank gate used by `AXK2GatedRMSNorm` when `gated_norm=True`.
-        attention_output_gate (`bool`, *optional*, defaults to `False`):
-            Whether to apply an input-dependent sigmoid gate to the attention output (computed from
-            the compressed q representation) before the output projection.
+            Bottleneck rank for the low-rank input-dependent gate used by `AXK2GatedRMSNorm`. The gate wraps
+            `input_layernorm` on every layer and `post_attention_layernorm` on MoE layers.
         index_n_heads (`int`, *optional*):
             Number of heads in the SGA (Sparse Gated Attention) lightning indexer. When set together
             with `index_head_dim` and `index_topk`, each attention layer gains an indexer that selects
@@ -125,6 +117,12 @@ class AXK2Config(PreTrainedConfig):
         index_topk (`int`, *optional*):
             Number of key/value positions the SGA indexer keeps per query. The remaining positions are
             masked out before the softmax.
+        mlp_layer_types (`list[str]`, *optional*):
+            Per-layer MLP type (`"dense"` or `"sparse"`). Computed from `first_k_dense_replace` /
+            `moe_layer_freq` when not provided; the decoder reads it to pick a dense MLP or the MoE block.
+        layer_types (`list[str]`, *optional*):
+            Per-layer attention type. Every A.X-K2 layer uses `"deepseek_sparse_attention"` (SGA), which
+            drives the indexed-cache dispatch (`DynamicIndexedLayer` / `StaticIndexedLayer`).
 
     ```python
     >>> from transformers import AXK2Model, AXK2Config
@@ -194,15 +192,14 @@ class AXK2Config(PreTrainedConfig):
         pretraining_tp: int | None = 1,
         tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        rope_interleave: bool | None = True,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
-        gated_norm: bool | None = True,
         gated_norm_rank: int | None = 16,
-        attention_output_gate: bool | None = True,
         index_n_heads: int | None = 64,
         index_head_dim: int | None = 128,
         index_topk: int | None = 2048,
+        mlp_layer_types: list[str] | None = None,
+        layer_types: list[str] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -239,7 +236,6 @@ class AXK2Config(PreTrainedConfig):
 
         # RoPE
         self.rope_parameters = rope_parameters
-        self.rope_interleave = rope_interleave
 
         # General
         self.hidden_act = hidden_act
@@ -249,15 +245,28 @@ class AXK2Config(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.gated_norm = gated_norm
         self.gated_norm_rank = gated_norm_rank
-        self.attention_output_gate = attention_output_gate
 
-        # SGA (Sparse Gated Attention): lightning indexer that selects the top-k most relevant
-        # key/value positions per query. Active only when these are set (dense attention otherwise).
+        # SGA (Sparse Gated Attention): every layer runs a lightning indexer that selects the top-k
+        # most relevant key/value positions per query.
         self.index_n_heads = index_n_heads
         self.index_head_dim = index_head_dim
         self.index_topk = index_topk
+
+        # Per-layer patterns. `mlp_layer_types` picks dense vs MoE per layer (computed from
+        # `first_k_dense_replace` / `moe_layer_freq`); `layer_types` is uniformly the SGA attention type,
+        # which selects the indexed cache layer (`DynamicIndexedLayer` / `StaticIndexedLayer`).
+        if mlp_layer_types is None:
+            mlp_layer_types = [
+                "sparse"
+                if n_routed_experts is not None and i >= first_k_dense_replace and i % moe_layer_freq == 0
+                else "dense"
+                for i in range(num_hidden_layers)
+            ]
+        self.mlp_layer_types = mlp_layer_types
+        if layer_types is None:
+            layer_types = ["deepseek_sparse_attention"] * num_hidden_layers
+        self.layer_types = layer_types
 
         super().__init__(
             pad_token_id=pad_token_id,
