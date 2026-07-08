@@ -116,9 +116,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
         # The Kernel Hub `deep-gemm` build always compiles with nvcc: it ignores `DG_JIT_USE_NVRTC`
         # ("DG_JIT_USE_NVRTC is ignored in Kernel Hub builds; using NVCC"), so there is no NVRTC fallback
         # to torch's bundled libnvrtc. `CUDA_HOME` must therefore hold an nvcc of the required version.
-        # A runtime-only install (headers, no nvcc) or a too-old toolkit is rejected here — returning an
-        # error routes the caller to the Triton fallback instead of aborting mid-forward when the JIT can't
-        # find (or can't use) nvcc.
         if not os.path.isfile(os.path.join(cuda_home, "bin", "nvcc")):
             return (
                 f"DeepGEMM's JIT compiles with nvcc, but none was found in `{cuda_home}/bin`. Point "
