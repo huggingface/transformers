@@ -211,6 +211,8 @@ CHECKPOINT_REVISIONS = {
     "Ernie4_5_VL_MoeConfig": "refs/pr/10",
     "Ernie4_5_VLMoeConfig": "refs/pr/10",
     "Phi4MultimodalConfig": "refs/pr/70",
+    "VideoPrismConfig": "refs/pr/2",      # google/videoprism-lvt-base-f16r288
+    "VideoPrismVisionConfig": "refs/pr/4",  # google/videoprism-base-f16r288
 }
 
 CHECKPOINT_SUBFOLDERS = {
