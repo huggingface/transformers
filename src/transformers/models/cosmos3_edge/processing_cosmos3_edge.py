@@ -1,0 +1,278 @@
+# Copyright 2026 NVIDIA CORPORATION and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Processor for Cosmos3 Edge."""
+
+import re
+
+import numpy as np
+
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
+
+
+class Cosmos3EdgeProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_token_type_ids": False,
+            "return_mm_token_type_ids": False,
+        },
+        # Video placeholders contain timestamps, so metadata is needed while the processor expands them.
+        "videos_kwargs": {"return_metadata": True},
+    }
+
+
+@auto_docstring
+class Cosmos3EdgeProcessor(ProcessorMixin):
+    """Construct a Cosmos3 Edge multimodal prompt from image, video, and text inputs."""
+
+    valid_processor_kwargs = Cosmos3EdgeProcessorKwargs
+
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+        self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        self.vision_start_token = (
+            "<|vision_start|>" if not hasattr(tokenizer, "vision_start_token") else tokenizer.vision_start_token
+        )
+        self.vision_end_token = (
+            "<|vision_end|>" if not hasattr(tokenizer, "vision_end_token") else tokenizer.vision_end_token
+        )
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
+        self.vision_start_token_id = (
+            tokenizer.vision_start_token_id
+            if getattr(tokenizer, "vision_start_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.vision_start_token)
+        )
+        self.vision_end_token_id = (
+            tokenizer.vision_end_token_id
+            if getattr(tokenizer, "vision_end_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.vision_end_token)
+        )
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        """Expand an image placeholder to one text token per projected 2×2 patch group."""
+        merge_length = self.image_processor.merge_size**2
+        num_image_tokens = int(image_inputs["image_grid_thw"][image_idx].prod()) // merge_length
+        return self.image_token * num_image_tokens
+
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+        """Expand a video into timestamped, frame-level vision segments."""
+        grid_thw = video_inputs["video_grid_thw"][video_idx]
+        num_frames = int(grid_thw[0])
+        merge_length = self.video_processor.merge_size**2
+        num_tokens_per_frame = int(grid_thw[1:].prod()) // merge_length
+
+        metadata = None
+        if (video_metadata := video_inputs.get("video_metadata")) is not None:
+            metadata = video_metadata[video_idx]
+        fps = self._get_metadata_value(metadata, "fps")
+        if fps is None:
+            logger.warning_once(
+                "Cosmos3 Edge requires frame timestamps to construct prompts, but the input video's fps could not "
+                "be inferred. Defaulting to fps=24. Pass `video_metadata` for accurate timestamps."
+            )
+            fps = 24
+
+        frame_indices = self._get_metadata_value(metadata, "frames_indices")
+        if frame_indices is None:
+            timestamps = self._get_metadata_value(metadata, "timestamps")
+            if timestamps is None:
+                timestamps = [frame_index / fps for frame_index in range(num_frames)]
+            else:
+                timestamps = list(timestamps.tolist() if hasattr(timestamps, "tolist") else timestamps)
+        else:
+            timestamps = self._calculate_timestamps(
+                frame_indices, fps, merge_size=self.video_processor.temporal_patch_size
+            )
+
+        if not timestamps:
+            timestamps = [0.0]
+        timestamps = timestamps[:num_frames]
+        timestamps.extend([timestamps[-1]] * (num_frames - len(timestamps)))
+
+        return "".join(
+            f"<{timestamp:.1f} seconds>{self.vision_start_token}"
+            f"{self.video_token * num_tokens_per_frame}{self.vision_end_token}"
+            for timestamp in timestamps
+        )
+
+    @staticmethod
+    def _get_metadata_value(metadata, name: str):
+        if metadata is None:
+            return None
+        if isinstance(metadata, dict):
+            return metadata.get(name)
+        try:
+            return getattr(metadata, name, None)
+        except ValueError:
+            # `VideoMetadata.timestamps` intentionally raises when it cannot infer values from missing frame
+            # indices. The caller will fall back to a timestamp sequence in that case.
+            return None
+
+    @staticmethod
+    def _calculate_timestamps(
+        indices: list[int] | np.ndarray,
+        video_fps: float,
+        merge_size: int = 1,
+    ) -> list[float]:
+        """Compute one timestamp per temporal patch, using the center frame's time."""
+        indices = list(indices.tolist() if hasattr(indices, "tolist") else indices)
+        if not indices:
+            return []
+        if len(indices) % merge_size:
+            indices.extend([indices[-1]] * (merge_size - len(indices) % merge_size))
+        timestamps = [index / video_fps for index in indices]
+        return [
+            (timestamps[index] + timestamps[index + merge_size - 1]) / 2
+            for index in range(0, len(timestamps), merge_size)
+        ]
+
+    def get_text_with_replacements(
+        self,
+        text: list[str],
+        images_replacements: list[str] = [],
+        videos_replacements: list[str] = [],
+        audio_replacements: list[str] = [],
+    ) -> tuple[list[str], list[dict]]:
+        """Replace placeholders while treating the template's full video wrapper as one unit.
+
+        The Edge chat template emits ``<|vision_start|><|video_pad|><|vision_end|>``. Each video must become a
+        separate timestamped vision segment for every frame, so replacing only ``<|video_pad|>`` would leave an
+        invalid outer vision wrapper around all frames.
+        """
+        token_groups = []
+        if images_replacements:
+            token_groups.append(f"(?P<image>{re.escape(self.image_token)})")
+        if videos_replacements:
+            video_wrapper = re.escape(self.vision_start_token + self.video_token + self.vision_end_token)
+            token_groups.append(f"(?P<video>{video_wrapper}|{re.escape(self.video_token)})")
+        if audio_replacements and getattr(self, "audio_token", None) is not None:
+            token_groups.append(f"(?P<audio>{re.escape(self.audio_token)})")
+        if not token_groups:
+            return text, []
+
+        replacements = {
+            "image": iter(images_replacements),
+            "video": iter(videos_replacements),
+            "audio": iter(audio_replacements),
+        }
+        pattern = "|".join(token_groups)
+        batch_replacement_offsets = []
+
+        for batch_index, sample in enumerate(text):
+            last_end = 0
+            offset = 0
+            expanded_sample = []
+            replacement_offsets = []
+            for match in re.finditer(pattern, sample):
+                start, end = match.span()
+                expanded_sample.append(sample[last_end:start])
+                modality = match.lastgroup
+                replacement = next(replacements[modality])
+                start_with_offset = start + offset
+                replacement_offsets.append(
+                    {
+                        "type": modality,
+                        "span": (start, end),
+                        "new_span": (start_with_offset, start_with_offset + len(replacement)),
+                        "text": match.group(),
+                        "replacement": replacement,
+                    }
+                )
+                expanded_sample.append(replacement)
+                offset += len(replacement) - (end - start)
+                last_end = end
+
+            expanded_sample.append(sample[last_end:])
+            text[batch_index] = "".join(expanded_sample)
+            batch_replacement_offsets.append(replacement_offsets)
+        return text, batch_replacement_offsets
+
+    def apply_chat_template(self, conversation, *args, processor_kwargs=None, **kwargs):
+        """Route per-image pixel limits in chat content blocks to the image processor."""
+        is_batched = bool(conversation) and isinstance(conversation[0], (list, tuple))
+        conversations = conversation if is_batched else [conversation]
+        per_image_kwargs = []
+        for current_conversation in conversations:
+            for message in current_conversation:
+                content = message.get("content") if isinstance(message, dict) else None
+                if not isinstance(content, list):
+                    continue
+                for item in content:
+                    if not isinstance(item, dict) or item.get("type") not in {"image", "image_url"}:
+                        continue
+                    overrides = {key: item[key] for key in ("min_pixels", "max_pixels") if key in item}
+                    per_image_kwargs.append(overrides or None)
+
+        if any(overrides is not None for overrides in per_image_kwargs):
+            processor_kwargs = dict(processor_kwargs or {})
+            images_kwargs = dict(processor_kwargs.get("images_kwargs", {}))
+            images_kwargs.setdefault("per_image_kwargs", per_image_kwargs)
+            processor_kwargs["images_kwargs"] = images_kwargs
+
+        return super().apply_chat_template(conversation, *args, processor_kwargs=processor_kwargs, **kwargs)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """Compute placeholder counts for serving frameworks without materializing pixels."""
+        vision_data = {}
+        images_kwargs = dict(self.valid_processor_kwargs._defaults.get("images_kwargs", {}))
+        videos_kwargs = dict(self.valid_processor_kwargs._defaults.get("videos_kwargs", {}))
+        images_kwargs.update(kwargs.get("images_kwargs", kwargs))
+        videos_kwargs.update(kwargs.get("videos_kwargs", kwargs))
+
+        if image_sizes is not None:
+            merge_size = images_kwargs.get("merge_size", self.image_processor.merge_size)
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
+                for height, width in image_sizes
+            ]
+            vision_data["num_image_patches"] = num_image_patches
+            vision_data["num_image_tokens"] = [num_patches // merge_size**2 for num_patches in num_image_patches]
+
+        if video_sizes is not None:
+            merge_size = videos_kwargs.get("merge_size", self.video_processor.merge_size)
+            num_video_patches = [
+                self.video_processor.get_number_of_video_patches(num_frames, height, width, videos_kwargs)
+                for num_frames, height, width in video_sizes
+            ]
+            vision_data["num_video_tokens"] = [num_patches // merge_size**2 for num_patches in num_video_patches]
+
+        return MultiModalData(**vision_data)
+
+    def post_process_image_text_to_text(
+        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
+    ):
+        """Decode generated text."""
+        return self.tokenizer.batch_decode(
+            generated_outputs,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
+
+__all__ = ["Cosmos3EdgeProcessor"]
