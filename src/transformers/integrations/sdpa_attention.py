@@ -25,16 +25,17 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor) -> bool:
+def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
     # GQA can only be used under the following conditions
     # 1.cuda or Ascend NPU
     #   - torch version >= 2.5
     #   - attention_mask is None (otherwise it will fall back to the math kernel)
+    #   - key head_dim == value head_dim <= 256 (otherwise it will fall back to the math kernel)
     # 2.xpu
     #   - torch version >= 2.8
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
-    return _is_torch_greater_or_equal_than_2_5 and attention_mask is None
+    return _is_torch_greater_or_equal_than_2_5 and attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
 
 
 def sdpa_attention_forward(
@@ -54,12 +55,15 @@ def sdpa_attention_forward(
             " Please set your attention to `eager` if you want any of these features."
         )
     sdpa_kwargs = {}
-    if hasattr(module, "num_key_value_groups"):
-        if not use_gqa_in_sdpa(attention_mask, key):
+    if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
+        if not use_gqa_in_sdpa(attention_mask, key, value):
             key = repeat_kv(key, module.num_key_value_groups)
             value = repeat_kv(value, module.num_key_value_groups)
         else:
             sdpa_kwargs = {"enable_gqa": True}
+
+    q_length = query.shape[2]
+    kv_length = key.shape[2]
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
@@ -70,12 +74,12 @@ def sdpa_attention_forward(
     # - Internally, we marked this as compatible with causal, i.e. it is a decoder attention type
     #
     # The always-concrete conditions (non-causal module / provided mask) gate the query-length check so a
-    # plain `False` short-circuits *before* touching `query.shape[2]`, which under `torch.export` can be a
-    # data-dependent `SymBool` that SDPA rejects. When causality is still possible, keeping `query.shape[2] > 1`
+    # plain `False` short-circuits *before* touching `q_length`, which under `torch.export` can be a
+    # data-dependent `SymBool` that SDPA rejects. When causality is still possible, keeping `q_length > 1`
     # as the first `and` operand specializes a backed symint to `bool` (a trailing operand would leak the `SymBool`).
     is_causal = is_causal and attention_mask is None
     if is_causal:
-        is_causal = query.shape[2] > 1 and is_causal
+        is_causal = q_length > 1 and is_causal
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
     # We convert it to a bool for the SDPA kernel that only accepts bools.
@@ -89,6 +93,16 @@ def sdpa_attention_forward(
         if attention_mask is not None and attention_mask.dtype != torch.bool:
             # Convert to boolean type, making sdpa to force call FlashAttentionScore to improve performance.
             attention_mask = torch.logical_not(attention_mask.bool()).to(query.device)
+
+    # This scenario can only happen during prefill with an empty StaticCache. Technically, since sdpa's `is_causal` mask alignment
+    # is upper-left, `is_causal=True` is enough to correctly compute the attention. However, sdpa will only dispatch to
+    # flash kernel if and only if q_length == kv_length, therefore it is more efficient to slice here and remove the masked tokens
+    # rather than to use the other available kernels for such a case.
+    # Note that we never compile prefill, and even if the user is doing it on its own, prefill and decode are 2 separate graphs
+    # anyway, so altering the shapes is fine here
+    if is_causal and attention_mask is None and q_length > 1 and kv_length > q_length:
+        key = key[:, :, :q_length, :]
+        value = value[:, :, :q_length, :]
 
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
