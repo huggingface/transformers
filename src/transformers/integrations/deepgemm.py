@@ -102,9 +102,9 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
             arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
             return f"DeepGEMM requires {arch}; current device is SM{major}{minor}."
 
-        # A resolvable CUDA toolkit is required for *both* backends: nvcc compiles the kernels, and
-        # even NVRTC pulls headers from `$CUDA_HOME/include` (and `deep_gemm` asserts CUDA_HOME at import).
-        # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
+        # DeepGEMM's JIT needs a resolvable CUDA toolkit: nvcc compiles the kernels and `deep_gemm`
+        # asserts `CUDA_HOME` on its first compile. Per the DeepGEMM README: SM90 needs CUDA 12.3+,
+        # SM100 needs CUDA 12.9+.
         min_cuda = (12, 9) if major == 10 else (12, 3)
         cuda_home = get_cuda_home()
         if cuda_home is None:
@@ -113,36 +113,25 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
                 "Set `CUDA_HOME` to a CUDA toolkit."
             )
 
-        # The default (nvcc) backend also needs the nvcc binary at the right version. When it's missing or
-        # too old we switch to DeepGEMM's NVRTC backend rather than fail: NVRTC compiles via the already-loaded
-        # libnvrtc (torch preloads its bundled copy at import, which the linker reuses by soname) and only
-        # reuses the toolkit's headers, present now that CUDA_HOME resolved — so nvcc's absence/version is moot.
-        # `DG_JIT_USE_NVRTC` is read once by DeepGEMM's compiler singleton on first compile; nothing has
-        # compiled yet, so setting it here takes effect.
-        if os.environ.get("DG_JIT_USE_NVRTC", "0") == "0":
-            nvcc_version = get_nvcc_version()
-            if not os.path.isfile(os.path.join(cuda_home, "bin", "nvcc")):
-                reason = f"no `nvcc` found in `{cuda_home}`"
-            elif nvcc_version is not None and nvcc_version < min_cuda:
-                reason = f"nvcc {nvcc_version[0]}.{nvcc_version[1]} in `{cuda_home}` is older than {min_cuda[0]}.{min_cuda[1]}"
-            else:
-                reason = None
-            if reason is not None:
-                # Only fall back to NVRTC if torch's bundled libnvrtc (tracked by `torch.version.cuda`) is
-                # itself new enough — otherwise we'd just swap one too-old compiler for another.
-                torch_cuda = tuple(int(v) for v in (torch.version.cuda or "0.0").split(".")[:2])
-                if torch_cuda < min_cuda:
-                    return (
-                        f"DeepGEMM needs a CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolchain ({reason}), and torch's "
-                        f"bundled NVRTC ({torch_cuda[0]}.{torch_cuda[1]}) is too old to fall back to. Install a "
-                        f"CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit at `CUDA_HOME`, or torch built against it."
-                    )
-                logger.warning_once(
-                    f"DeepGEMM: {reason}; setting `DG_JIT_USE_NVRTC=1` to compile with the NVRTC backend "
-                    f"(torch's bundled libnvrtc {torch_cuda[0]}.{torch_cuda[1]}) instead. This applies to all "
-                    "DeepGEMM compiles in this process."
-                )
-                os.environ["DG_JIT_USE_NVRTC"] = "1"
+        # The Kernel Hub `deep-gemm` build always compiles with nvcc: it ignores `DG_JIT_USE_NVRTC`
+        # ("DG_JIT_USE_NVRTC is ignored in Kernel Hub builds; using NVCC"), so there is no NVRTC fallback
+        # to torch's bundled libnvrtc. `CUDA_HOME` must therefore hold an nvcc of the required version.
+        # A runtime-only install (headers, no nvcc) or a too-old toolkit is rejected here — returning an
+        # error routes the caller to the Triton fallback instead of aborting mid-forward when the JIT can't
+        # find (or can't use) nvcc.
+        if not os.path.isfile(os.path.join(cuda_home, "bin", "nvcc")):
+            return (
+                f"DeepGEMM's JIT compiles with nvcc, but none was found in `{cuda_home}/bin`. Point "
+                f"`CUDA_HOME` at a full CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit (not a runtime-only install)."
+            )
+
+        nvcc_version = get_nvcc_version()
+        if nvcc_version is not None and nvcc_version < min_cuda:
+            return (
+                f"DeepGEMM on SM{major}{minor} needs a CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit, but nvcc "
+                f"{nvcc_version[0]}.{nvcc_version[1]} in `{cuda_home}` is too old. Point `CUDA_HOME` at a "
+                f"CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit."
+            )
 
     kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:
