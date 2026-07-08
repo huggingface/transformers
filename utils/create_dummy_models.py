@@ -1355,6 +1355,21 @@ def get_config_overrides(config_class, processors):
     return config_overrides
 
 
+def _log_disk_usage(label: str) -> None:
+    """Print disk usage of the root filesystem for GitHub Actions log visibility."""
+    try:
+        import shutil
+
+        total, used, free = shutil.disk_usage("/")
+        gb = 1024**3
+        print(
+            f"[disk] {label}: total={total / gb:.1f}G  used={used / gb:.1f}G  free={free / gb:.1f}G",
+            flush=True,
+        )
+    except Exception as e:
+        print(f"[disk] {label}: could not read disk usage: {e}", flush=True)
+
+
 def build(config_class, models_to_create, output_dir, keep_model=False):
     """Create all models for a certain model type.
 
@@ -1368,6 +1383,7 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
             it.
     """
+    _log_disk_usage(f"START {config_class.__name__}")
     if data["training_ds"] is None or data["testing_ds"] is None:
         ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
         data["training_ds"] = ds["train"]
@@ -1558,6 +1574,7 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
     if not result["warnings"]:
         del result["warnings"]
 
+    _log_disk_usage(f"END   {config_class.__name__}")
     return result
 
 
