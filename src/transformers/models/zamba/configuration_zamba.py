@@ -90,6 +90,11 @@ class ZambaConfig(PreTrainedConfig):
     mamba_proj_bias: bool = False
 
     def __post_init__(self, **kwargs):
+        # Drop legacy `layers_block_type` from kwargs so super().__post_init__ doesn't overwrite
+        # the value computed below via _layers_block_type(). Old Hub checkpoints (Zyphra/Zamba-7B-v1)
+        # store stale 'mamba' entries that fail @strict validation; the computed value is always canonical.
+        kwargs.pop("layers_block_type", None)
+
         self.attention_hidden_size = self.attention_hidden_size or 2 * self.hidden_size
         self.attention_head_dim = self.attention_head_dim or 2 * self.hidden_size // self.num_attention_heads
         self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if self.mamba_dt_rank == "auto" else self.mamba_dt_rank
