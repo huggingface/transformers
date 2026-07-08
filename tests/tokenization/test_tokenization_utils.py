@@ -397,7 +397,7 @@ class TokenizerUtilsTest(unittest.TestCase):
 
 
     def test_set_model_specific_special_tokens_accepts_legacy_list():
-        tokenizer = PreTrainedTokenizer()
+        tokenizer = PreTrainedTokenizerFast()
 
         tokenizer._set_model_specific_special_tokens(
             [
