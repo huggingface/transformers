@@ -27,6 +27,7 @@ Requirements: CUDA, Hopper (SM90+), CUDA runtime ≥ 12.3, kernels-community/dee
 from __future__ import annotations
 
 import functools
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -36,7 +37,8 @@ from ..utils import logging
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
-    get_cuda_runtime_version,
+    get_cuda_home,
+    get_nvcc_version,
     is_kernels_available,
     is_torchdynamo_compiling,
     resolve_internal_import,
@@ -100,14 +102,47 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
             arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
             return f"DeepGEMM requires {arch}; current device is SM{major}{minor}."
 
+        # A resolvable CUDA toolkit is required for *both* backends: nvcc compiles the kernels, and
+        # even NVRTC pulls headers from `$CUDA_HOME/include` (and `deep_gemm` asserts CUDA_HOME at import).
         # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
-        cuda_major, cuda_minor = get_cuda_runtime_version()
         min_cuda = (12, 9) if major == 10 else (12, 3)
-        if (cuda_major, cuda_minor) < min_cuda:
+        cuda_home = get_cuda_home()
+        if cuda_home is None:
             return (
-                f"DeepGEMM on SM{major}{minor} requires CUDA runtime ≥ {min_cuda[0]}.{min_cuda[1]}, "
-                f"found {cuda_major}.{cuda_minor}."
+                f"DeepGEMM's JIT needs a CUDA toolkit ≥ {min_cuda[0]}.{min_cuda[1]}, but none was found. "
+                "Set `CUDA_HOME` to a CUDA toolkit."
             )
+
+        # The default (nvcc) backend also needs the nvcc binary at the right version. When it's missing or
+        # too old we switch to DeepGEMM's NVRTC backend rather than fail: NVRTC compiles via the already-loaded
+        # libnvrtc (torch preloads its bundled copy at import, which the linker reuses by soname) and only
+        # reuses the toolkit's headers, present now that CUDA_HOME resolved — so nvcc's absence/version is moot.
+        # `DG_JIT_USE_NVRTC` is read once by DeepGEMM's compiler singleton on first compile; nothing has
+        # compiled yet, so setting it here takes effect.
+        if os.environ.get("DG_JIT_USE_NVRTC", "0") == "0":
+            nvcc_version = get_nvcc_version()
+            if not os.path.isfile(os.path.join(cuda_home, "bin", "nvcc")):
+                reason = f"no `nvcc` found in `{cuda_home}`"
+            elif nvcc_version is not None and nvcc_version < min_cuda:
+                reason = f"nvcc {nvcc_version[0]}.{nvcc_version[1]} in `{cuda_home}` is older than {min_cuda[0]}.{min_cuda[1]}"
+            else:
+                reason = None
+            if reason is not None:
+                # Only fall back to NVRTC if torch's bundled libnvrtc (tracked by `torch.version.cuda`) is
+                # itself new enough — otherwise we'd just swap one too-old compiler for another.
+                torch_cuda = tuple(int(v) for v in (torch.version.cuda or "0.0").split(".")[:2])
+                if torch_cuda < min_cuda:
+                    return (
+                        f"DeepGEMM needs a CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolchain ({reason}), and torch's "
+                        f"bundled NVRTC ({torch_cuda[0]}.{torch_cuda[1]}) is too old to fall back to. Install a "
+                        f"CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit at `CUDA_HOME`, or torch built against it."
+                    )
+                logger.warning_once(
+                    f"DeepGEMM: {reason}; setting `DG_JIT_USE_NVRTC=1` to compile with the NVRTC backend "
+                    f"(torch's bundled libnvrtc {torch_cuda[0]}.{torch_cuda[1]}) instead. This applies to all "
+                    "DeepGEMM compiles in this process."
+                )
+                os.environ["DG_JIT_USE_NVRTC"] = "1"
 
     kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:
@@ -149,25 +184,6 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
             f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
         )
 
-    try:
-        m_alignment = int(get_mk_alignment())
-    except Exception as e:
-        return f"Failure when calling `get_mk_alignment`: {type(e).__name__}: {e}"
-
-    # Everything up to this point checks that the kernels can be compiled, but never run an actual compilation. This is
-    # done here to can catch a broken CUDA toolchain or version mismatch. A small call but better to fall back early on
-    # Triton rather than failing hard mid-forward.
-    if not is_torchdynamo_compiling():
-        try:
-            sf = torch.zeros(128, 1, dtype=torch.float32, device="cuda")
-            transform_sf_into_required_layout(sf, 128, 128, recipe=(1, 128))
-        except Exception as e:
-            return (
-                f"DeepGEMM failed to JIT-compile a probe kernel, which usually means a broken or version-mismatched "
-                "CUDA toolchain. Check that `CUDA_HOME` points to a complete and version-consistent CUDA toolkit. You "
-                f"can re-run with `DG_JIT_DEBUG=1` for the compiler output. Original error: {type(e).__name__}: {e}"
-            )
-
     return DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
         grouped_fp8_fp4_matmul_nt=grouped_fp8_fp4_matmul_nt,
@@ -179,22 +195,30 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
         transform_weights_for_mega_moe=transform_weights_for_mega_moe,
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
-        m_alignment=m_alignment,
+        m_alignment=get_mk_alignment(),
     )
 
 
 @torch._dynamo.allow_in_graph
 def _populate_deepgemm_kernel(requires_sm100: bool = False) -> None:
-    deepgemm_or_error_msg = _load_deepgemm_kernel(requires_sm100=requires_sm100)
-    if isinstance(deepgemm_or_error_msg, str):
-        raise ImportError(deepgemm_or_error_msg)
-    return None
+    """Warm the `_load_deepgemm_kernel` cache from inside a Dynamo graph without Dynamo tracing the loader.
+
+    Dynamo ignores `@functools.cache` and re-traces `_load_deepgemm_kernel` on every compile. Cold, that
+    trace descends into `lazy_load_kernel` -> `get_kernel` (a hub download + dynamic import) which Dynamo
+    can't trace and errors under `fullgraph`. Marking this `@allow_in_graph` makes Dynamo run it as an
+    opaque leaf, loading the kernel eagerly so the subsequent traced `_load_deepgemm_kernel` hits
+    `lazy_load_kernel`'s already-cached fast path.
+
+    It must return `None`, not the `DeepGEMM` bundle: an `@allow_in_graph` op's return value has to be
+    graph-representable (tensors / simple types), so returning the dataclass of Python callables makes
+    Dynamo raise `Unsupported: torch.* op returned non-Tensor`. Hence it only warms the cache; the real
+    `DeepGEMM` object is fetched by the plain `_load_deepgemm_kernel` call that follows.
+    """
+    _load_deepgemm_kernel(requires_sm100=requires_sm100)
 
 
 def load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
-    if is_torchdynamo_compiling():
-        _populate_deepgemm_kernel(requires_sm100=requires_sm100)
-
+    _populate_deepgemm_kernel(requires_sm100=requires_sm100)
     deepgemm_or_error = _load_deepgemm_kernel(requires_sm100=requires_sm100)
     if isinstance(deepgemm_or_error, str):
         raise ImportError(deepgemm_or_error)
