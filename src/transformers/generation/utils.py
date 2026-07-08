@@ -2157,20 +2157,27 @@ class GenerationMixin(ContinuousMixin):
 
     @contextmanager
     def _optimize_model_for_decode(self: "GenerativePreTrainedModel"):
-        original_experts_implementation = self.config._experts_implementation
         # On non-CPU devices, 'batched_mm' can trade off a bit of memory (by duplicating selected experts weights)
         # for much better speed during decoding, especially for smaller inputs. On CPU, grouped_mm is usually better.
-        if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
+        # The MoE may live in a submodel (e.g. a VLM's `text_config`), not the top-level config, so we look at the
+        # implementation of every (sub)config and let `set_experts_implementation` recurse the switch back and forth.
+        original_experts_implementation = self.get_experts_implementation()
+        switch = self.device.type != "cpu" and "grouped_mm" in original_experts_implementation.values()
+        if switch:
             logger.info_once(
                 "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "
                 "If you experience any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
             )
-            self.set_experts_implementation("batched_mm")
+            # We replace every "grouped_mm" with "batched_mm" in the experts implementation, but leave other values unchanged.
+            # This is meant to be safe if for whatever reason a model has multiple submodules with different experts implementations.
+            self.set_experts_implementation(
+                {k: "batched_mm" if v == "grouped_mm" else v for k, v in original_experts_implementation.items()}
+            )
 
         try:
             yield
         finally:
-            if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
+            if switch:
                 self.set_experts_implementation(original_experts_implementation)
 
     def _get_deprecated_gen_repo(
