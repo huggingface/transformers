@@ -31,28 +31,15 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
         The output hidden size of the vision model.
-    context_size (<fill_type>):
-        <fill_docstring>
-
-    Example:
-
-    ```python
-    >>> from transformers import GlmOcrVisionConfig, GlmOcrVisionModel
-
-    >>> # Initializing a GlmOcrVisionConfig GLM-4.1V-9B style configuration
-    >>> configuration = GlmOcrVisionConfig()
-
-    >>> # Initializing a model (with random weights) from the GLM-4.1V-9B configuration
-    >>> model = GlmOcrVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    context_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
+        The context size for the vision patch merger.
+    """
 
     model_type = "glm_ocr_vision"
     base_config_key = "vision_config"
 
     depth: int = 24
+
     hidden_size: int = 1024
     hidden_act: str = "silu"
     attention_bias: bool = True

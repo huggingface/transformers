@@ -57,6 +57,13 @@ class GlmOcrVisionMlp(Glm4VisionMlp):
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict
 class GlmOcrVisionConfig(Glm4vVisionConfig):
+    r"""
+    out_hidden_size (`int`, *optional*, defaults to 4096):
+        The output hidden size of the vision model.
+    context_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
+        The context size for the vision patch merger.
+    """
+
     hidden_size: int = 1024
     attention_bias: bool = True
     num_heads: int = 16

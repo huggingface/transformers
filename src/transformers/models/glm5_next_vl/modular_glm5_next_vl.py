@@ -31,7 +31,16 @@ from ...utils.output_capturing import OutputRecorder
 from ..auto.modeling_auto import AutoModel
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4Model
-from ..glm5_next.modeling_glm5_next import Glm5NextLinearAttention, Glm5NextMLP, Glm5NextMoE, Glm5NextRMSNorm
+from ..glm5_next.modeling_glm5_next import (
+    Glm5NextExperts,
+    Glm5NextForgetGate,
+    Glm5NextLinearAttention,
+    Glm5NextMLP,
+    Glm5NextMoE,
+    Glm5NextRMSNorm,
+    Glm5NextRMSNormGated,
+    Glm5NextTopkRouter,
+)
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaDecoderLayer
 from ..llama.modeling_llama import LlamaPreTrainedModel, eager_attention_forward
 from .configuration_glm5_next import Glm5NextVLConfig, Glm5NextVLTextConfig
@@ -53,8 +62,22 @@ class Glm5NextVLTextMLP(Glm5NextMLP):
     pass
 
 
-class Glm5NextVLTextMoE(Glm5NextMoE):
+class Glm5NextVLTextExperts(Glm5NextExperts):
     pass
+
+
+class Glm5NextVLTextTopkRouter(Glm5NextTopkRouter):
+    pass
+
+
+class Glm5NextVLTextMoE(Glm5NextMoE):
+    def __init__(self, config: Glm5NextVLConfig):
+        super().__init__(config)
+        self.experts = Glm5NextVLTextExperts(config)
+        self.gate = Glm5NextVLTextTopkRouter(config)
+        self.shared_experts = Glm5NextVLTextMLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
 
 
 # =============================================================================
@@ -78,8 +101,23 @@ class Glm5NextVLTextHyperHead(nn.Module):
 # =============================================================================
 
 
-class Glm5NextVLTextLinearAttention(Glm5NextLinearAttention):
+class Glm5NextVLTextForgetGate(Glm5NextForgetGate):
     pass
+
+
+class Glm5NextVLTextRMSNormGated(Glm5NextRMSNormGated):
+    pass
+
+
+class Glm5NextVLTextLinearAttention(Glm5NextLinearAttention):
+    def __init__(
+        self,
+        config: Glm5NextVLConfig,
+        layer_idx: int,
+    ):
+        super().__init__(config, layer_idx)
+        self.forget_gate = Glm5NextVLTextForgetGate(config)
+        self.o_norm = Glm5NextVLTextRMSNormGated(self.head_dim, eps=self.layer_norm_epsilon)
 
 
 # =============================================================================
@@ -223,6 +261,11 @@ class Glm5NextVLPreTrainedModel(LlamaPreTrainedModel):
 
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]  # TODO: add conv there
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
+    _can_record_outputs = {
+        "attentions": Glm5NextVLTextAttention,
+        "hidden_states": Glm5NextVLTextDecoderLayer,
+        "router_logits": OutputRecorder(Glm5NextVLTextTopkRouter, index=0),  # noqa: F821
+    }
 
     # @torch.no_grad()
     # def _init_weights(self, module):
@@ -244,11 +287,6 @@ class Glm5NextVLPreTrainedModel(LlamaPreTrainedModel):
 @auto_docstring
 class Glm5NextVLTextModel(DeepseekV4Model, Glm5NextVLPreTrainedModel):
     config: Glm5NextVLTextConfig
-    _can_record_outputs = {
-        "attentions": Glm5NextVLTextAttention,
-        "hidden_states": Glm5NextVLTextDecoderLayer,
-        "router_logits": OutputRecorder(Glm5NextTextTopkRouter, index=0),  # noqa: F821
-    }
 
     def __init__(self, config):
         super().__init__(self, config)
@@ -320,7 +358,6 @@ class Glm5NextVLTextModel(DeepseekV4Model, Glm5NextVLPreTrainedModel):
 class Glm5NextVLModel(Glm5NextVLPreTrainedModel):
     base_model_prefix = "model"
     accepts_loss_kwargs = False
-    _no_split_modules = ["Glm5NextDecoderLayer", "GlmOcrVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
