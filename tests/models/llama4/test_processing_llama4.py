@@ -23,16 +23,12 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Llama4Processor
+    tiny_model_id = "hf-internal-testing/tiny-processor-llama4"
 
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(max_patches=1, size={"height": 20, "width": 20})
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        return tokenizer_class.from_pretrained("unsloth/Llama-3.2-11B-Vision-Instruct-unsloth-bnb-4bit")
 
     @classmethod
     def _setup_test_attributes(cls, processor):
