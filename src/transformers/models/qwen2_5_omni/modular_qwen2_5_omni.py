@@ -274,10 +274,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         "layers.*": "free_full_weight",
         "norm": "keep_full_weight",
     }
-    ignore_keys_at_rope_validation = {"mrope_section"}
-
     vocab_size: int = 152064
-    hidden_size: int = 3584
     intermediate_size: int = 18944
     num_hidden_layers: int = 28
     num_attention_heads: int = 28

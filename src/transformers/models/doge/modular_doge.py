@@ -104,6 +104,8 @@ class DogeConfig(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
+
+
     vocab_size: int = 32768
     hidden_size: int = 1024
     intermediate_size: int = 2048

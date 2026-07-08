@@ -61,6 +61,13 @@ class Ernie4_5Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
+
     vocab_size: int = 103424
     hidden_size: int = 1024
     intermediate_size: int = 3072

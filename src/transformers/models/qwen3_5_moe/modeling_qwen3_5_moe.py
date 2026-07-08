@@ -1896,6 +1896,8 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
     accepts_loss_kwargs = False
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
     def __init__(self, config):
         super().__init__(config)
         self.model = Qwen3_5MoeModel(config)

@@ -64,6 +64,12 @@ class OpenAIPrivacyFilterConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
     num_hidden_layers: int = 8
     num_local_experts: int = 128
     vocab_size: int = 200064
@@ -87,11 +93,6 @@ class OpenAIPrivacyFilterConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = 199999
     attention_bias: bool = True
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
     classifier_dropout: float = 0.0
 
     def __post_init__(self, **kwargs):

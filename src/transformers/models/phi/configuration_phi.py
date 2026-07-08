@@ -60,6 +60,13 @@ class PhiConfig(PreTrainedConfig):
         "final_layernorm": (["hidden_states"], ["hidden_states"]),
     }
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
+
     vocab_size: int = 51200
     hidden_size: int = 2048
     intermediate_size: int = 8192

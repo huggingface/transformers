@@ -89,6 +89,8 @@ class Cohere2Config(PreTrainedConfig):
         "norm": "keep_full_weight",
     }
 
+
+
     vocab_size: int = 256000
     hidden_size: int = 8192
     intermediate_size: int = 22528

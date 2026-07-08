@@ -285,6 +285,12 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
+
     vocab_size: int = 2048
     hidden_size: int = 1024
     intermediate_size: int = 3072
@@ -381,6 +387,12 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 3072

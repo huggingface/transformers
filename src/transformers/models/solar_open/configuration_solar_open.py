@@ -51,6 +51,7 @@ class SolarOpenConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",
@@ -62,6 +63,7 @@ class SolarOpenConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
