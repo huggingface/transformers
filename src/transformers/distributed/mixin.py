@@ -24,7 +24,6 @@ from ..integrations.tensor_parallel import (
     gather_state_dict_for_save,
     initialize_tensor_parallelism,
 )
-from ..modeling_utils import _add_variant
 from ..utils import SAFE_WEIGHTS_INDEX_NAME, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
@@ -239,6 +238,8 @@ class DistributedMixin:
             path_to_weights = os.path.join(save_directory, weights_name)
             logger.info(f"Model weights saved in {path_to_weights}")
         else:
+            from ..modeling_utils import _add_variant
+
             save_index_file = SAFE_WEIGHTS_INDEX_NAME
             save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
             # Save the index as well
