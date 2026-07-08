@@ -329,16 +329,16 @@ class TmlExperts(nn.Module):
 class TmlTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.n_routed_experts = config.n_routed_experts
+        self.num_experts = config.n_routed_experts
         self.n_shared_experts = config.n_shared_experts
-        self.n_total_experts = self.n_routed_experts + self.n_shared_experts
+        self.n_total_experts = self.num_experts + self.n_shared_experts
         self.hidden_dim = config.hidden_size
         self.route_scale = config.route_scale
         self.top_k = config.num_experts_per_tok
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
         self.global_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
-        self.e_score_correction_bias = nn.Parameter(torch.empty(self.n_routed_experts, dtype=torch.float32))
+        self.e_score_correction_bias = nn.Parameter(torch.empty(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -362,7 +362,7 @@ class TmlTopkRouter(nn.Module):
         shared_gammas = topk_weights[..., -self.n_shared_experts :].contiguous()
         topk_weights = topk_weights[..., : self.top_k].contiguous()
 
-        return topk_indices, topk_weights, shared_gammas
+        return routed_logits, topk_weights, topk_indices, shared_gammas
 
 
 # TODO: should we make this as normal MLP with linear layers?
@@ -404,7 +404,7 @@ class TmlMoE(nn.Module):
     def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        topk_indices, topk_weights, shared_gammas = self.gate(hidden_states)
+        routed_logits, topk_weights, topk_indices, shared_gammas = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights.type_as(hidden_states)).view(
             *orig_shape
