@@ -811,7 +811,9 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         inv_attention_mask = 1 - attention_mask
         batch_size, max_seq_length = inv_attention_mask.shape
         device = inv_attention_mask.device
-        invalid_token_mask = torch.cat([inv_attention_mask, torch.zeros([batch_size, 1]).to(device)], axis=1).bool()
+        invalid_token_mask = torch.cat(
+            [inv_attention_mask, torch.zeros([batch_size, 1], dtype=inv_attention_mask.dtype, device=device)], axis=1
+        ).bool()
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             invalid_token_mask[:, None, :], torch.finfo(subsequent_token_logits.dtype).min
         )

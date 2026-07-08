@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
@@ -20,6 +19,10 @@ from .base import HfQuantizer
 
 if is_torch_available():
     import torch
+
+    from ..core_model_loading import WeightConverter
+    from ..integrations.compressed_tensors import DecompressExperts
+
 
 logger = logging.get_logger(__name__)
 
@@ -101,3 +104,45 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_serializable(self) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
         return True
+
+    def get_weight_conversions(self):
+        # Only models that have already been quantized can be loaded atm, so we can
+        # assume that if `hasattr(self, hf_quantizer)` and `has_moe_conversion(self)` and `is_moe_proj_in_config_scheme`
+        # then it needs special dequantization for MoE projections
+        # NOTE: MoE conversion should happen AFTER decompression! Already hardcoded in conversion
+        dequant_conversions = [
+            WeightConverter(
+                source_patterns=[
+                    r".weight_packed$",
+                    r".weight_scale$",
+                    r".weight_shape$",
+                ],
+                target_patterns=r"weight",
+                operations=[DecompressExperts(self)],
+            ),
+        ]
+        return dequant_conversions
+
+    def update_weight_conversions(self, weight_conversions):
+        updated: list = []
+        for conv in weight_conversions:
+            # Only WeightConverter for experts have ``.operations`` to extend with the dequant op
+            if not isinstance(conv, WeightConverter) or any("experts" not in p for p in conv.source_patterns):
+                updated.append(conv)
+                continue
+            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
+            if weight_sources:
+                packed_weight = [p + "_packed$" for p in weight_sources]
+                scale_sources = [p + "_scale$" for p in weight_sources]
+                shape_sources = [p + "_shape$" for p in weight_sources]
+                other = [p for p in conv.source_patterns if not p.endswith(".weight")]
+                new_sources = packed_weight + scale_sources + shape_sources + other
+                new_ops = [DecompressExperts(self)] + list(conv.operations)
+                conv = WeightConverter(
+                    source_patterns=new_sources,
+                    target_patterns=conv._original_target_patterns,
+                    operations=new_ops,
+                )
+            updated.append(conv)
+        updated.extend(self.get_weight_conversions())
+        return updated

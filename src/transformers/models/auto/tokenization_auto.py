@@ -85,7 +85,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("blenderbot", "BlenderbotTokenizer" if is_tokenizers_available() else None),
         ("blenderbot-small", "BlenderbotSmallTokenizer"),
         ("blip", "BertTokenizer" if is_tokenizers_available() else None),
-        ("blip-2", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("blip-2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("bridgetower", "RobertaTokenizer"),
         ("bros", "BertTokenizer" if is_tokenizers_available() else None),
         ("byt5", "ByT5Tokenizer"),
@@ -160,14 +160,16 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("groupvit", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
         ("hubert", "Wav2Vec2CTCTokenizer"),
+        ("hunyuan_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("ibert", "RobertaTokenizer"),
         ("idefics", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("idefics2", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("instructblip", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("instructblipvideo", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("instructblip", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("instructblipvideo", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("internvl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("jina_embeddings_v3", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
+        ("kimi_k25", "TokenizersBackend" if is_tokenizers_available() else None),
         ("kosmos-2", "TokenizersBackend" if is_tokenizers_available() else None),
         ("lasr_ctc", "LasrTokenizer" if is_tokenizers_available() else None),
         ("lasr_encoder", "LasrTokenizer" if is_tokenizers_available() else None),
@@ -192,6 +194,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("megatron-bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("metaclip_2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
+        ("mimo_v2_flash", "TokenizersBackend" if is_tokenizers_available() else None),
         ("minicpmv4_6", "TokenizersBackend" if is_tokenizers_available() else None),
         (
             "ministral",
@@ -234,6 +237,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("musicgen_melody", "T5Tokenizer" if is_tokenizers_available() else None),
         ("mvp", "MvpTokenizer" if is_tokenizers_available() else None),
         ("myt5", "MyT5Tokenizer"),
+        ("nemotron3_5_asr", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("nemotron_asr_streaming", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
         ("nllb", "NllbTokenizer" if is_tokenizers_available() else None),
@@ -283,6 +287,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5_moe", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_asr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_next", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_omni_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -316,6 +321,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("t5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("t5gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("tapas", "TapasTokenizer"),
+        ("tipsv2", "Tipsv2Tokenizer" if is_sentencepiece_available() else None),
         ("trocr", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("tvp", "BertTokenizer" if is_tokenizers_available() else None),
         ("udop", "UdopTokenizer" if is_tokenizers_available() else None),
@@ -352,6 +358,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("xlstm", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("xmod", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("yoso", "AlbertTokenizer" if is_tokenizers_available() else None),
+        ("zaya", "GemmaTokenizer" if is_tokenizers_available() else None),
     ]
 )
 
@@ -381,6 +388,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "janus",
     "llava",
     "llava_next",
+    "minicpm3",
     "minicpmv",
     "minimax_m2",
     "modernbert",
@@ -417,6 +425,9 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
+    "salesforce/blip2-opt-*",
+    "salesforce/blip2-flan-t5-*",
+    "salesforce/instructblip-flan-t5-*",
 ]
 
 
@@ -847,6 +858,7 @@ class AutoTokenizer:
                 ).__module__.startswith("transformers.")
             )
         )
+
         # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
         if (
             has_remote_code
@@ -856,7 +868,7 @@ class AutoTokenizer:
             has_remote_code = False
             tokenizer_auto_map = None
 
-        if has_remote_code:
+        if has_remote_code and not explicit_local_code:
             # V5: Always prefer fast tokenizer (index 1), fallback to slow (index 0)
             if tokenizer_auto_map[1] is not None:
                 class_ref = tokenizer_auto_map[1]

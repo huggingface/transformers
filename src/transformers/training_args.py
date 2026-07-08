@@ -482,7 +482,7 @@ class TrainingArguments:
             Enable Just-In-Time checkpointing on SIGTERM signal for graceful termination on
             preemptible workloads. **Important**: Configure your orchestrator's graceful shutdown
             period to allow sufficient time. For Kubernetes, set `terminationGracePeriodSeconds`
-            (default 30s is usually insufficient). For Slurm, use `--signal=USR1@<seconds>`.
+            (default 30s is usually insufficient). For Slurm, use `--signal=TERM@<seconds>`.
             Required grace period ≥ longest iteration time + checkpoint save time.
 
         > Hugging Face Hub Integration
