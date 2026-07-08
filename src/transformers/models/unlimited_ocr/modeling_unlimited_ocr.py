@@ -2149,7 +2149,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Generati
 
     def _get_logits_processor(self, generation_config, logits_processor=None, **kwargs):
         no_repeat_ngram_size = generation_config.no_repeat_ngram_size
-        no_repeat_ngram_window_size = getattr(generation_config, "no_repeat_ngram_window_size", None)
+        no_repeat_ngram_window_size = generation_config.no_repeat_ngram_window_size
 
         use_sliding_window_processor = (
             no_repeat_ngram_window_size is not None and no_repeat_ngram_size is not None and no_repeat_ngram_size > 0
