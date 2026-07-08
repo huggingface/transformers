@@ -57,7 +57,6 @@ from transformers.testing_utils import (
     require_flash_attn_3,
     require_kernels,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -1581,12 +1580,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         )
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class TestMemoryHandlerPrediction(unittest.TestCase):
-    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real GPU memory usage.
+    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real accelerator memory usage.
 
     For each configuration we allocate tensors at the *idealized* sizes modeled by the handler (same shapes, same
-    dtypes, no alignment padding or extra blocks) and compare the CUDA memory delta to the handler's prediction. The
+    dtypes, no alignment padding or extra blocks) and compare the accelerator memory delta to the handler's prediction. The
     handler derives the page size and the two activation peaks (LM head and attention) from the model config, so we
     allocate the tensors of whichever peak dominates -- that is the one ``compute_memory_footprint`` reports.
     """
@@ -1658,9 +1657,10 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         predicted = handler.compute_memory_footprint(M, self.NUM_BLOCKS)
 
         # -- Allocate tensors at the exact idealized sizes the handler models --
-        device = "cuda"
-        torch.cuda.empty_cache()
-        baseline = torch.cuda.memory_allocated(device)
+        device = torch_device
+        accelerator = getattr(torch, device)
+        accelerator.empty_cache()
+        baseline = accelerator.memory_allocated(device)
 
         # Tensors present regardless of which activation peak is live
         fixed = []
@@ -1702,12 +1702,12 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         for name in [n for n in peaks if n != dominant]:
             del peaks[name]
 
-        actual_cuda = torch.cuda.memory_allocated(device) - baseline
+        actual_accelerator = accelerator.memory_allocated(device) - baseline
         expected_nbytes = sum(t.nbytes for t in fixed) + peak_nbytes[dominant]
         num_allocations = len(fixed) + len(peaks[dominant])
 
         del fixed, peaks
-        torch.cuda.empty_cache()
+        accelerator.empty_cache()
 
         # 1) Exact check: prediction must equal the sum of tensor nbytes. This validates the polynomial
         #    coefficients against the tensor shapes, with zero tolerance.
@@ -1717,14 +1717,14 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             f"Prediction ({predicted}) != sum of tensor nbytes ({expected_nbytes})",
         )
 
-        # 2) GPU memory check: CUDA's caching allocator rounds each allocation up (typically to 512 bytes).
+        # 2) Accelerator memory check: caching allocators round each allocation up (typically to 512 bytes).
         #    We allow up to 512 bytes of overhead per allocation.
-        max_cuda_overhead = num_allocations * 512
+        max_accelerator_overhead = num_allocations * 512
         self.assertLessEqual(
-            abs(actual_cuda - predicted),
-            max_cuda_overhead,
-            f"CUDA delta ({actual_cuda}) too far from prediction ({predicted}), "
-            f"allowed overhead = {max_cuda_overhead} ({num_allocations} allocs × 512B)",
+            abs(actual_accelerator - predicted),
+            max_accelerator_overhead,
+            f"Accelerator delta ({actual_accelerator}) too far from prediction ({predicted}), "
+            f"allowed overhead = {max_accelerator_overhead} ({num_allocations} allocs × 512B)",
         )
 
 
