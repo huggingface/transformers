@@ -32,11 +32,18 @@ class DistributedConfig:
         tp_size (`int`, *optional*):
             Number of devices for tensor parallelism. If `None` and `fsdp_size` is set, defaults to 1.
         tp_plan (`dict`, *optional*):
-            Tensor parallel sharding plan. Leave as `None` to use the model's default plan.
+            Tensor parallel sharding plan. Leave as `None` to select the model's SP/TP and EP plan
+            (see ``select_parallel_plan``). Set explicitly to override.
+        enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
+            Select ``base_model_sp_plan`` (dense-only) or ``base_model_sp_ep_plan`` (with EP).
+        enable_expert_parallel (`bool`, *optional*, defaults to `False`):
+            Select ``base_model_tp_ep_plan`` or ``base_model_sp_ep_plan`` when combined with SP flag.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
-        fsdp_plan (`dict`, *optional*):
-            FSDP wrapping plan. Leave as `None` to wrap each transformer layer + root.
+        fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
+            Whether to enable CPU offloading for FSDP2.
+        fsdp_mixed_precision (`bool`, *optional*, defaults to `False`):
+            Whether to enable mixed precision for FSDP2.
     """
 
     tp_size: int | None = None
@@ -44,7 +51,8 @@ class DistributedConfig:
     enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
     fsdp_size: int | None = None
-    fsdp_plan: dict | None = None
+    fsdp_cpu_offload: bool = False
+    fsdp_mixed_precision: bool = False
 
     def __post_init__(self):
         if self.tp_size is None and self.fsdp_size is None:
@@ -61,10 +69,6 @@ class DistributedConfig:
                 raise RuntimeError(
                     f"tp_size ({self.tp_size}) * fsdp_size ({self.fsdp_size}) is not equal to world_size ({world_size})"
                 )
-        # TODO (remi-or) the check above should probably happen during actual model sharding, same as the check below
-        # elif self.tp_size > 1 or self.fsdp_size > 1:
-        #     issue = "not initialized" if torch.distributed.is_available() else "not available"
-        #     raise ValueError(f"Requested {self.tp_size = }, {self.fsdp_size = } but torch.distributed is {issue}.")
 
     @classmethod
     def from_dict(cls, config_dict: dict, **kwargs) -> "DistributedConfig":

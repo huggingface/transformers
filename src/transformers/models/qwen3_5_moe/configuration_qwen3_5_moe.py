@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -60,22 +60,31 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
-        "layers.*.mlp.shared_expert.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.shared_expert.down_proj": "rowwise",
+        "layers.*.linear_attn.in_proj_qkv": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_z": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_b": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_a": "colwise_gather_output",
+        "layers.*.linear_attn.out_proj": "colwise_gather_output",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     vocab_size: int = 248320
@@ -119,6 +128,8 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
                 "linear_attention" if bool((i + 1) % interval_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
+        else:
+            self.layer_types = remap_legacy_layer_types(self.layer_types)
 
         super().__post_init__(**kwargs)
 
@@ -184,6 +195,9 @@ class Qwen3_5MoeConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
+            # old ckpt with incorrect model type -> override manually
+            if self.vision_config.get("model_type") == "qwen3_5_moe":
+                self.vision_config["model_type"] = "qwen3_5_moe_vision"
             self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
         elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()

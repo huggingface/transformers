@@ -18,10 +18,12 @@ import os
 from typing import Union
 
 import torch
+from huggingface_hub.utils import RepositoryNotFoundError
 from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -34,19 +36,7 @@ from ...image_utils import (
     get_max_height_width,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    logging,
-)
-
-
-try:
-    from huggingface_hub import hf_hub_download
-    from huggingface_hub.utils import RepositoryNotFoundError
-except ImportError:
-    hf_hub_download = None
-    RepositoryNotFoundError = None
+from ...utils import TensorType, auto_docstring, hf_api, logging
 
 
 logger = logging.get_logger(__name__)
@@ -96,15 +86,11 @@ def load_metadata(repo_id, class_info_file):
     if not os.path.exists(fname) or not os.path.isfile(fname):
         if repo_id is None:
             raise ValueError(f"Could not file {fname} locally. repo_id must be defined if loading from the hub")
-        if hf_hub_download is None:
-            raise ImportError(
-                "huggingface_hub is required to download metadata files. Install it with `pip install huggingface_hub`"
-            )
         # We try downloading from a dataset by default for backward compatibility
         try:
-            fname = hf_hub_download(repo_id, class_info_file, repo_type="dataset")
+            fname = hf_api().hf_hub_download(repo_id, class_info_file, repo_type="dataset")
         except RepositoryNotFoundError:
-            fname = hf_hub_download(repo_id, class_info_file)
+            fname = hf_api().hf_hub_download(repo_id, class_info_file)
 
     with open(fname, "r") as f:
         class_info = json.load(f)
@@ -291,12 +277,10 @@ class OneFormerImageProcessor(TorchvisionBackend):
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
     size = {"shortest_edge": 800, "longest_edge": 1333}
-    crop_size = None
     do_resize = True
     do_rescale = True
     do_normalize = True
     default_to_square = False
-    do_center_crop = False
     do_convert_rgb = True
     rescale_factor = 1 / 255
     ignore_index = None
@@ -704,23 +688,33 @@ class OneFormerImageProcessor(TorchvisionBackend):
         return encoded_inputs
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: list[tuple[int, int]] | None = None
-    ) -> "torch.Tensor":
+        self,
+        outputs,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_segmentation_scores: bool = False,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
-        Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
+        Converts the output of [`OneFormerForUniversalSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
 
         Args:
-            outputs ([`MaskFormerForInstanceSegmentation`]):
+            outputs ([`OneFormerForUniversalSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple[int, int]]`, *optional*):
+            target_sizes (`list[tuple[int, int]]`, *optional*):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
+
         Returns:
-            `List[torch.Tensor]`:
-                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
-                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
-                `torch.Tensor` correspond to a semantic class id.
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
@@ -747,11 +741,25 @@ class OneFormerImageProcessor(TorchvisionBackend):
                     size=target_sizes[idx],
                     interpolation=tvF.InterpolationMode.BILINEAR,
                 )
-                semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
+                semantic_segmentation.append(
+                    SemanticSegmentationPostProcessorOutput(
+                        data={
+                            "segmentation": resized_logits[0].argmax(dim=0),
+                            "segmentation_scores": resized_logits[0],
+                        }
+                    )
+                )
         else:
-            semantic_segmentation = segmentation.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            semantic_map = segmentation.argmax(dim=1)
+            semantic_segmentation = [
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": semantic_map[i], "segmentation_scores": segmentation[i]}
+                )
+                for i in range(batch_size)
+            ]
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
 
         return semantic_segmentation
 

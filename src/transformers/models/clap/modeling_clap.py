@@ -524,31 +524,28 @@ class ClapAudioLayer(nn.Module):
             )
 
     def get_attn_mask(self, height, width, dtype, device):
-        if self.shift_size > 0:
-            # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, height, width, 1), dtype=dtype, device=device)
-            height_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            width_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            count = 0
-            for height_slice in height_slices:
-                for width_slice in width_slices:
-                    img_mask[:, height_slice, width_slice, :] = count
-                    count += 1
+        """Build the cyclic-shift attention mask for shifted-window MSA; returns None when shift_size is 0.
 
-            mask_windows = window_partition(img_mask, self.window_size)
-            mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
-        else:
-            attn_mask = None
+        Each (h, w) position belongs to one of 9 cyclic-shift regions (3 along each axis), encoded
+        as ``h_region * 3 + w_region``. Regions per axis:
+        - 0: indices ``[0, axis - window_size)``
+        - 1: indices ``[axis - window_size, axis - shift_size)``
+        - 2: indices ``[axis - shift_size, axis)``
+        Implementation note: a single arithmetic pass on `torch.arange` (two comparisons +
+        broadcast add) replaces the original 9-iteration nested-Python-loop slice-assignment —
+        fully vectorised, no per-cell host-side scatter, no GPU↔host sync.
+        """
+        if self.shift_size <= 0:
+            return None
+        h_idx = torch.arange(height, device=device)
+        w_idx = torch.arange(width, device=device)
+        h_region = (h_idx >= height - self.window_size).long() + (h_idx >= height - self.shift_size).long()
+        w_region = (w_idx >= width - self.window_size).long() + (w_idx >= width - self.shift_size).long()
+        img_mask = (h_region[None, :, None, None] * 3 + w_region[None, None, :, None]).to(dtype)
+        mask_windows = window_partition(img_mask, self.window_size)
+        mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
+        attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+        attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
         return attn_mask
 
     def maybe_pad(self, hidden_states, height, width):
@@ -977,7 +974,7 @@ class ClapTextEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
-                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
+                buffered_token_type_ids = self.token_type_ids.to(position_ids.device).expand(position_ids.shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
                 token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
             else:
@@ -1263,6 +1260,7 @@ class ClapPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
 
         if isinstance(module, ClapTextEmbeddings):
@@ -1275,13 +1273,6 @@ class ClapPreTrainedModel(PreTrainedModel):
             init.constant_(module.logit_scale_t, math.log(self.config.logit_scale_init_value))
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=factor * 0.02)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, (nn.Conv2d, nn.Linear)):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             init.normal_(module.weight, std=in_proj_std)

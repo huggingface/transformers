@@ -14,7 +14,6 @@
 
 import copy
 import random
-import unittest
 from inspect import signature
 from unittest.mock import patch
 
@@ -160,11 +159,6 @@ class ALMModelTest(MultiModalModelTest):
     - `all_model_classes`: Override if not using default from model_tester
     - `pipeline_model_mapping`: Override if not using default from model_tester
     """
-
-    # TODO: @eustlb, remove this once #45534 is merged
-    @unittest.skip("Audio-LMs have no separate base model without a head.")
-    def test_model_base_model_prefix(self):
-        pass
 
     def test_sdpa_can_dispatch_on_flash(self):
         # `test_sdpa_can_dispatch_on_flash` already pops the attention mask, but we cannot simply pop the

@@ -111,12 +111,14 @@ if is_torch_available():
 
 from unittest.mock import patch
 
+from tests.exporters.test_export import ExportGenerateTesterMixin
+
 
 def is_moe_model(config):
     return getattr(config, "_experts_implementation", None) is not None
 
 
-class GenerationTesterMixin:
+class GenerationTesterMixin(ExportGenerateTesterMixin):
     input_name = "input_ids"
     model_tester = None
     max_new_tokens = 3
@@ -553,6 +555,8 @@ class GenerationTesterMixin:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
                 new_model = model_class.from_pretrained(tmp_dir, device_map="auto")
+                if not hasattr(new_model, "hf_device_map") or len(set(new_model.hf_device_map.values())) == 1:
+                    self.skipTest(reason="Model is not distributed across multiple devices")
 
                 new_model.generate(
                     max_new_tokens=self.max_new_tokens,
@@ -723,9 +727,10 @@ class GenerationTesterMixin:
             generation_kwargs.update({"assistant_model": assistant_model})
             output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
-            # `gpt_oss` seems to have larger differences on CPU every other generated tokens, sth. like
-            # 1e-9, 1e-5, 1e-9, 1e-5. While on GPU, they are all very small 1e-9.
-            if is_moe_model(config):
+            # some models requires larger tolerance
+            if model.config.model_type in ["vibevoice_asr"]:
+                atol = rtol = 5e-3
+            elif is_moe_model(config):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -1486,6 +1491,8 @@ class GenerationTesterMixin:
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
                 if is_moe_model(config):
+                    # MoE routing accumulates FP noise across experts (different routing decisions
+                    # at the margin between static and dynamic cache → different expert matmuls).
                     atol = rtol = 1e-3
                 else:
                     atol = rtol = 1e-5
@@ -1603,9 +1610,13 @@ class GenerationTesterMixin:
                             else gen_out.past_key_values
                         )
                         self.assertTrue(isinstance(decoder_cache, DynamicCache))
-                        self.assertFalse(decoder_cache.is_compileable)
-                        # our auto compile should NOT have been called
-                        self.assertFalse(hasattr(model_to_be_compiled, "_compiled_call"))
+                        # Recurrent / hybrid SSM models (mamba2, lfm2, ...) populate the default DynamicCache
+                        # with statically-shaped recurrent layers, so the cache is compileable by default and
+                        # auto-compile kicks in. Skip the "default cache is non-compileable" sanity check for
+                        # those models — they're tested under their compileable path further down.
+                        if not decoder_cache.is_compileable:
+                            # our auto compile should NOT have been called
+                            self.assertFalse(hasattr(model_to_be_compiled, "_compiled_call"))
 
             # 5. get compiled results -- relies on the automatic compilation triggered by specific compilable caches
             if not has_defined_cache_implementation:
@@ -1696,7 +1707,7 @@ class GenerationTesterMixin:
                 num_beams=1,
                 max_new_tokens=self.max_new_tokens,
                 min_new_tokens=self.max_new_tokens,
-                output_attentions=True,
+                output_attentions=self.has_attentions,
                 output_hidden_states=True,
                 output_scores=True,
                 output_logits=True,
@@ -2482,11 +2493,20 @@ class GenerationTesterMixin:
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
-            query_length = (
-                prompt_length + generated_length
-                if not has_static_cache
-                else decoder_past_key_values.get_max_cache_shape()
-            )
+            if has_static_cache:
+                # Hybrid caches (e.g. Bamba: full_attention + linear_attention) have layers with no fixed
+                # max — `get_max_length(i)` returns -1 on those. Pick the first layer that reports a
+                # real length; that's the one whose attention shape we're checking against.
+                query_length = next(
+                    (
+                        decoder_past_key_values.get_max_length(i)
+                        for i in range(len(decoder_past_key_values))
+                        if decoder_past_key_values.get_max_length(i) != -1
+                    ),
+                    prompt_length + generated_length,
+                )
+            else:
+                query_length = prompt_length + generated_length
 
             expected_shape = (
                 batch_size,
@@ -2854,6 +2874,37 @@ class GenerationIntegrationTests(unittest.TestCase):
             model.generation_config.cache_implementation = "dynamic"
             model.generation_config.use_cache = None
             model.save_pretrained(tmpdirname)
+
+    @require_torch_accelerator
+    def test_generate_with_inputs_on_cpu(self):
+        """
+        Inputs deliberately kept on CPU must be moved onto the model device by `prepare_inputs_for_generation`
+        right before the forward, so generation works and matches passing on-device inputs. This lets callers keep
+        the loop's growing-tensor bookkeeping off-device (e.g. Neuron/TPU). Regression test for #44742.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        encoded = tokenizer("Hello", return_tensors="pt")
+        generation_kwargs = {"max_new_tokens": 5, "do_sample": False}
+
+        # Reference run with inputs already on the model device.
+        on_device = model.generate(
+            input_ids=encoded.input_ids.to(torch_device),
+            attention_mask=encoded.attention_mask.to(torch_device),
+            **generation_kwargs,
+        )
+
+        # Inputs left on CPU; generate must move them before the forward and produce the same tokens.
+        on_cpu = model.generate(
+            input_ids=encoded.input_ids.to("cpu"),
+            attention_mask=encoded.attention_mask.to("cpu"),
+            **generation_kwargs,
+        )
+
+        # The growing-tensor bookkeeping stays on CPU (only the forward's inputs are moved to the model device),
+        # so the output is on CPU; the generated tokens must still match the on-device run.
+        self.assertEqual(on_cpu.device.type, "cpu")
+        self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
 
     def test_generation_config_deprecation(self):
         import logging as pylogging
@@ -3800,6 +3851,24 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(test_bos_id == gen_output[0, 0])
         self.assertTrue(generation_config.bos_token_id is None)
 
+    def test_prompt_lookup_decoding_no_eos_token(self):
+        # Same setup as test_prompt_lookup_decoding_stops_at_eos, but with no EOS in effect
+        # (eos_token_id=None, e.g. open-ended generation). The EOS-cropping branch must be skipped
+        # rather than running torch.isin(chosen_ids, None), which raises a TypeError.
+
+        input_ids = torch.randint(1, 50, (1, 10), device=torch_device)  # generate inputs in range from 1-50
+        arbitrary_ngram = 51  # arbitrary OOV unigram, as in test_prompt_lookup_decoding_stops_at_eos
+        input_ids[:, 3] = arbitrary_ngram  # earlier occurrence; its continuation is what gets proposed
+        input_ids[:, -1] = arbitrary_ngram  # put arbitrary_ngram in the end for the necessary match to happen
+
+        candidate_generator = PromptLookupCandidateGenerator(
+            eos_token_id=None, num_output_tokens=4, max_matching_ngram_size=1
+        )
+        output_prompt_lookup = candidate_generator.get_candidates(input_ids)[0]
+
+        # With no EOS to stop at, PLD proposes all num_output_tokens continuation tokens (10 + 4)
+        self.assertTrue(output_prompt_lookup.shape[-1] == 14)
+
     def test_speculative_decoding_equals_regular_decoding(self):
         draft_name = "double7/vicuna-68m"
         target_name = "Qwen/Qwen2-0.5B-Instruct"
@@ -4668,6 +4737,28 @@ class GenerationIntegrationTests(unittest.TestCase):
                 trust_remote_code=True,
             )
             assert value == "success"
+
+    def test_custom_generate_local_directory_requires_trust_remote_code(self):
+        """Tests that `trust_remote_code` is required for a local-directory `custom_generate` too (not
+        just for Hub repos): otherwise a repository's `custom_generate/generate.py` would execute on
+        load without any opt-in."""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            custom_generate_dir = Path(tmp_dir) / "custom_generate"
+            custom_generate_dir.mkdir()
+            with open(custom_generate_dir / "generate.py", "w") as f:
+                f.write("def generate(*args, **kwargs):\n    return 'should_not_run'\n")
+            with self.assertRaises(ValueError):
+                model.generate(
+                    **model_inputs,
+                    max_new_tokens=10,
+                    trust_remote_code=False,
+                    custom_generate=str(tmp_dir),
+                )
 
     def test_custom_generate_callable(self):
         """Tests that passing a callable to `custom_generate` executes the callable decoding loop"""

@@ -288,3 +288,7 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("ColPaliProcessor can't process text+image inputs at the same time")
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         pass
+
+    @unittest.skip("ColPaliProcessor can't process text+image inputs at the same time")
+    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
+        pass
