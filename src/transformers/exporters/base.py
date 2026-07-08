@@ -20,9 +20,10 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableMapping
 from typing import TYPE_CHECKING
 
+from packaging import version
+
 from ..utils import logging
 from ..utils.import_utils import _is_package_available, is_torch_available
-from ..utils.versions import require_version
 from .configs import ExportConfigMixin
 from .utils import decompose_for_generation
 
@@ -79,9 +80,14 @@ class HfExporter(ABC):
             )
             raise ImportError(f"To use {type(self).__name__}, please install the following dependencies: {specs}")
 
-        # Enforce hard minimums (pip-style spec; raises a clear error with the installed version).
+        # Enforce hard minimums; collect all violations and report once, rather than failing on the first.
+        outdated = []
         for pkg, minimum in self.min_versions.items():
-            require_version(f"{pkg}>={minimum}", f"{type(self).__name__} requires {pkg}>={minimum}.")
+            _, installed = _is_package_available(pkg, return_version=True)
+            if installed == "N/A" or version.parse(installed.split("+", 1)[0]) < version.parse(minimum):
+                outdated.append(f"{pkg}>={minimum} (found {installed})")
+        if outdated:
+            raise ImportError(f"{type(self).__name__} requires newer versions of: {', '.join(outdated)}")
 
         if drift:
             details = ", ".join(f"{pkg}: installed {got}, tested {want}" for pkg, got, want in drift)
