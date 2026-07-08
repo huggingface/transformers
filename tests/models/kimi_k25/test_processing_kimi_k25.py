@@ -37,6 +37,7 @@ if is_torch_available():
 class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kimi_K25Processor
     model_id = "RaushanTurganbay/kimi2.7-processor"  # official repo has no fast tokenizer
+    tiny_model_id = "hf-internal-testing/tiny-processor-kimi_k25"
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
