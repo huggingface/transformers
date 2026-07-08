@@ -87,6 +87,11 @@ class OpenAIPrivacyFilterConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = 199999
     attention_bias: bool = True
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
     classifier_dropout: float = 0.0
 
     def __post_init__(self, **kwargs):

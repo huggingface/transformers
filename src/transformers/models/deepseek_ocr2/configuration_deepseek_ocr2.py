@@ -215,6 +215,11 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
 
     vocab_size: int = 32000
     hidden_size: int = 4096

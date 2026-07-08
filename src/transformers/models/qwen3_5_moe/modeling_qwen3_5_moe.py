@@ -1789,6 +1789,7 @@ class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: Qwen3_5MoeTextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 

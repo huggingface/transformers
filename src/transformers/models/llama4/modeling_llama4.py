@@ -589,6 +589,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "language_model"
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     config: Llama4TextConfig
 

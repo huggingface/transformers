@@ -115,6 +115,7 @@ class Gemma4UnifiedAssistantPreTrainedModel(PreTrainedModel):
 @auto_docstring(custom_intro="A model for multi-token prediction-based assisted decoding with Gemma 4.")
 class Gemma4UnifiedAssistantForCausalLM(Gemma4UnifiedAssistantPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

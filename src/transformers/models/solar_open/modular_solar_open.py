@@ -52,6 +52,11 @@ class SolarOpenConfig(Glm4MoeConfig):
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
 
     vocab_size: int = 196608
     moe_intermediate_size: int = 1280
