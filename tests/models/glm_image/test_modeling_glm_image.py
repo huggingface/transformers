@@ -116,7 +116,7 @@ class GlmImageVisionText2TextModelTester:
         self.image_end_token_id = image_end_token_id
         self.image_token_id = image_token_id
         self.text_config = text_config
-        self.vision_config = vision_config
+        self.vision_config = {**vision_config, "image_size": image_size}
         self.vq_config = vq_config
         self.batch_size = batch_size
         self.num_channels = num_channels
