@@ -27,7 +27,10 @@ Requirements: CUDA, Hopper (SM90+), CUDA runtime ≥ 12.3, kernels-community/dee
 from __future__ import annotations
 
 import functools
+import json
 import os
+import re
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -37,8 +40,6 @@ from ..utils import logging
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
-    get_cuda_home,
-    get_nvcc_version,
     is_kernels_available,
     is_torchdynamo_compiling,
     resolve_internal_import,
@@ -76,6 +77,72 @@ class DeepGEMM:
 
 
 @functools.cache
+def _get_cuda_home() -> str | None:
+    """Resolve the CUDA toolkit root the way DeepGEMM's JIT does:
+    ``CUDA_HOME`` → ``CUDA_PATH`` → dir of ``which nvcc`` → ``/usr/local/cuda`` (``None`` if none found).
+
+    Mirrors DeepGEMM's own ``_find_cuda_home`` so we agree on the path it will actually use, rather than
+    reusing ``torch.utils.cpp_extension.CUDA_HOME`` whose resolution inits a CUDA context (fork-unsafe).
+    """
+    cuda_home = os.environ.get("CUDA_HOME") or os.environ.get("CUDA_PATH")
+    if cuda_home:
+        return cuda_home
+    nvcc = shutil.which("nvcc")
+    if nvcc:
+        return os.path.dirname(os.path.dirname(nvcc))
+    if os.path.isdir("/usr/local/cuda"):
+        return "/usr/local/cuda"
+    return None
+
+
+@functools.cache
+def _get_nvcc_version() -> tuple[int, int] | None:
+    """Version of the CUDA toolkit nvcc will use, as ``(major, minor)``, read off disk without a
+    subprocess from (in order) ``{CUDA_HOME}/version.json``, ``version.txt``, or the ``CUDA_VERSION``
+    define in ``include/cuda.h``. ``None`` if unreadable. This is the compiler that builds the kernels,
+    unlike ``torch.version.cuda`` (torch's bundled runtime, which never drives a JIT compile).
+    """
+    cuda_home = _get_cuda_home()
+    if cuda_home is None:
+        return None
+
+    version_json = os.path.join(cuda_home, "version.json")
+    if os.path.isfile(version_json):
+        try:
+            with open(version_json) as f:
+                components = json.load(f)
+            version = components.get("cuda_nvcc", components.get("cuda", {})).get("version", "")
+            major, minor = version.split(".")[:2]
+            return int(major), int(minor)
+        except (OSError, ValueError, AttributeError):
+            pass
+
+    version_txt = os.path.join(cuda_home, "version.txt")
+    if os.path.isfile(version_txt):
+        try:
+            with open(version_txt) as f:
+                match = re.search(r"CUDA Version (\d+)\.(\d+)", f.read())
+            if match:
+                return int(match.group(1)), int(match.group(2))
+        except (OSError, ValueError):  # ValueError covers UnicodeDecodeError on a non-text file
+            pass
+
+    # `cuda.h` ships with every toolkit (incl. distro packages that have no version file).
+    cuda_h = os.path.join(cuda_home, "include", "cuda.h")
+    if os.path.isfile(cuda_h):
+        try:
+            with open(cuda_h) as f:
+                match = re.search(r"#define CUDA_VERSION (\d+)", f.read())
+            if match:
+                cuda_version = int(match.group(1))
+                return cuda_version // 1000, (cuda_version % 1000) // 10
+        except (OSError, ValueError):  # ValueError covers UnicodeDecodeError on a non-text file
+            pass
+
+    return None
+
+
+@functools.cache
 def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
     """Load DeepGEMM once or returns an error message if env or any required symbol is missing. This is wrapped in a
     function that will raise an `ImportError` with the error message. The reason we raise in the wrapper rather than
@@ -102,28 +169,34 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
             arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
             return f"DeepGEMM requires {arch}; current device is SM{major}{minor}."
 
-        # DeepGEMM's JIT needs a resolvable CUDA toolkit: nvcc compiles the kernels and `deep_gemm`
-        # asserts `CUDA_HOME` on its first compile. Per the DeepGEMM README: SM90 needs CUDA 12.3+,
-        # SM100 needs CUDA 12.9+.
+        # DeepGEMM JIT-compiles kernels with the system nvcc, so a resolvable CUDA toolkit is required.
+        # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
         min_cuda = (12, 9) if major == 10 else (12, 3)
-        cuda_home = get_cuda_home()
+        cuda_home = _get_cuda_home()
         if cuda_home is None:
             return (
                 f"DeepGEMM's JIT needs a CUDA toolkit ≥ {min_cuda[0]}.{min_cuda[1]}, but none was found. "
                 "Set `CUDA_HOME` to a CUDA toolkit."
             )
 
-        # The Kernel Hub `deep-gemm` build always compiles with nvcc: it ignores `DG_JIT_USE_NVRTC`
-        # ("DG_JIT_USE_NVRTC is ignored in Kernel Hub builds; using NVCC"), so there is no NVRTC fallback
-        # to torch's bundled libnvrtc. `CUDA_HOME` must therefore hold an nvcc of the required version.
+        # The Kernel Hub `deep-gemm` build always uses nvcc and ignores `DG_JIT_USE_NVRTC` (there is no
+        # NVRTC fallback), so `CUDA_HOME` must hold an nvcc of the required version.
         if not os.path.isfile(os.path.join(cuda_home, "bin", "nvcc")):
             return (
                 f"DeepGEMM's JIT compiles with nvcc, but none was found in `{cuda_home}/bin`. Point "
                 f"`CUDA_HOME` at a full CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit (not a runtime-only install)."
             )
 
-        nvcc_version = get_nvcc_version()
-        if nvcc_version is not None and nvcc_version < min_cuda:
+        # Treat an unreadable version as unsupported: `cuda.h` (with `CUDA_VERSION`) ships with every real
+        # toolkit, so `None` here means an incomplete install we can't vouch for — fail early to Triton.
+        nvcc_version = _get_nvcc_version()
+        if nvcc_version is None:
+            return (
+                f"DeepGEMM found nvcc in `{cuda_home}/bin` but could not read its CUDA version "
+                f"(no parseable `version.json`, `version.txt`, or `include/cuda.h`). Point `CUDA_HOME` at a "
+                f"complete CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit."
+            )
+        if nvcc_version < min_cuda:
             return (
                 f"DeepGEMM on SM{major}{minor} needs a CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit, but nvcc "
                 f"{nvcc_version[0]}.{nvcc_version[1]} in `{cuda_home}` is too old. Point `CUDA_HOME` at a "
@@ -187,18 +260,12 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM | str:
 
 @torch._dynamo.allow_in_graph
 def _populate_deepgemm_kernel(requires_sm100: bool = False) -> None:
-    """Warm the `_load_deepgemm_kernel` cache from inside a Dynamo graph without Dynamo tracing the loader.
+    """Warm the `_load_deepgemm_kernel` cache as an `@allow_in_graph` leaf.
 
-    Dynamo ignores `@functools.cache` and re-traces `_load_deepgemm_kernel` on every compile. Cold, that
-    trace descends into `lazy_load_kernel` -> `get_kernel` (a hub download + dynamic import) which Dynamo
-    can't trace and errors under `fullgraph`. Marking this `@allow_in_graph` makes Dynamo run it as an
-    opaque leaf, loading the kernel eagerly so the subsequent traced `_load_deepgemm_kernel` hits
-    `lazy_load_kernel`'s already-cached fast path.
-
-    It must return `None`, not the `DeepGEMM` bundle: an `@allow_in_graph` op's return value has to be
-    graph-representable (tensors / simple types), so returning the dataclass of Python callables makes
-    Dynamo raise `Unsupported: torch.* op returned non-Tensor`. Hence it only warms the cache; the real
-    `DeepGEMM` object is fetched by the plain `_load_deepgemm_kernel` call that follows.
+    Dynamo ignores `@functools.cache` and re-traces `_load_deepgemm_kernel`, whose cold path hits an
+    untraceable hub download (`lazy_load_kernel`) and errors under `fullgraph`. Running it as an opaque
+    leaf loads the kernel eagerly so the later traced call hits the cached fast path. Returns `None`
+    (not the `DeepGEMM` bundle): an `@allow_in_graph` return must be graph-representable.
     """
     _load_deepgemm_kernel(requires_sm100=requires_sm100)
 

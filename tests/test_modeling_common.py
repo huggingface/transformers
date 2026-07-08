@@ -46,6 +46,7 @@ from transformers import (
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.core_model_loading import PrefixChange, WeightRenaming, process_target_pattern
 from transformers.integrations import HfDeepSpeedConfig
+from transformers.integrations.deepgemm import _get_nvcc_version
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
     is_deepspeed_zero3_enabled,
@@ -119,7 +120,6 @@ from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
-from transformers.utils.import_utils import get_nvcc_version
 from transformers.utils.output_capturing import CompileableContextVar
 
 from .exporters.test_export import ExportTesterMixin
@@ -610,16 +610,13 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
             implementations.append("sonicmoe")
 
-        nvcc_version = get_nvcc_version() or (0, 0)
-        device_capability = torch.cuda.get_device_capability() if torch.cuda.is_available() else (0, 0)
+        nvcc_version = _get_nvcc_version() or (0, 0)
+        device_major = torch.cuda.get_device_capability()[0] if torch.cuda.is_available() else 0
         # DeepGEMM ships kernels only for Hopper (SM90, needs nvcc 12.3+) and Blackwell (SM100, needs 12.9+).
         if (
             dtype == torch.bfloat16
             and is_kernels_available()
-            and (
-                (device_capability[0] == 9 and nvcc_version >= (12, 3))
-                or (device_capability[0] == 10 and nvcc_version >= (12, 9))
-            )
+            and ((device_major == 9 and nvcc_version >= (12, 3)) or (device_major == 10 and nvcc_version >= (12, 9)))
         ):
             # DeepGEMM BF16 grouped forward requires Hopper+, a new-enough nvcc toolkit, and bf16 hidden states
             mocks["deepgemm"] = Mock(wraps=deepgemm_bf16_experts_forward)

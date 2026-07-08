@@ -225,88 +225,10 @@ def is_cuda_platform() -> bool:
 
 
 @lru_cache
-def get_cuda_home() -> str | None:
-    """Resolve the system CUDA toolkit root the way JIT backends (e.g. DeepGEMM) do:
-    ``CUDA_HOME`` → ``CUDA_PATH`` → directory of ``which nvcc`` → ``/usr/local/cuda``.
-
-    This mirrors DeepGEMM's own ``_find_cuda_home`` (so we agree with the path it will actually use)
-    rather than reusing ``torch.utils.cpp_extension.CUDA_HOME``: torch's variant calls
-    ``torch.cuda.is_available()`` while resolving, which initializes a CUDA context — unwanted here
-    (and fork-unsafe, the reason DeepGEMM reimplemented it too).
-    """
-
-    cuda_home = os.environ.get("CUDA_HOME") or os.environ.get("CUDA_PATH")
-    if cuda_home:
-        return cuda_home
-
-    nvcc = shutil.which("nvcc")
-    if nvcc:
-        return os.path.dirname(os.path.dirname(nvcc))
-
-    if os.path.isdir("/usr/local/cuda"):
-        return "/usr/local/cuda"
-    return None
-
-
-@lru_cache
-def get_nvcc_version() -> tuple[int, int] | None:
-    """Version of the CUDA toolkit ``nvcc`` will use as ``(major, minor)``, read without a
-    subprocess from (in order) ``{CUDA_HOME}/version.json``, legacy ``version.txt``, or the
-    ``CUDA_VERSION`` define in ``include/cuda.h``. ``None`` if the toolkit is absent.
-
-    This is the compiler that builds the kernels — unlike ``torch.version.cuda``, torch's
-    privately-bundled runtime, which never touches a source JIT compile.
-
-    ``version.json``/``version.txt`` are NVIDIA's documented toolkit version files (``version.txt`` is
-    also what CMake's ``FindCUDAToolkit`` parses); ``cuda.h``'s ``CUDA_VERSION`` is ``1000*major +
-    10*minor``. The ``version.txt`` → ``cuda.h`` fallback mirrors Clang (LLVM D89832).
-    """
-    cuda_home = get_cuda_home()
-    if cuda_home is None:
-        return None
-
-    version_json = os.path.join(cuda_home, "version.json")
-    if os.path.isfile(version_json):
-        try:
-            with open(version_json) as f:
-                components = json.load(f)
-            version = components.get("cuda_nvcc", components.get("cuda", {})).get("version", "")
-            major, minor = version.split(".")[:2]
-            return int(major), int(minor)
-        except (OSError, ValueError, AttributeError):
-            pass
-
-    version_txt = os.path.join(cuda_home, "version.txt")
-    if os.path.isfile(version_txt):
-        try:
-            with open(version_txt) as f:
-                match = re.search(r"CUDA Version (\d+)\.(\d+)", f.read())
-            if match:
-                return int(match.group(1)), int(match.group(2))
-        except (OSError, ValueError):  # ValueError covers UnicodeDecodeError on a non-text file
-            pass
-
-    # `cuda.h` ships with every toolkit (incl. distro-packaged installs that have no version file).
-    cuda_h = os.path.join(cuda_home, "include", "cuda.h")
-    if os.path.isfile(cuda_h):
-        try:
-            with open(cuda_h) as f:
-                match = re.search(r"#define CUDA_VERSION (\d+)", f.read())
-            if match:
-                cuda_version = int(match.group(1))
-                return cuda_version // 1000, (cuda_version % 1000) // 10
-        except (OSError, ValueError):  # ValueError covers UnicodeDecodeError on a non-text file
-            pass
-
-    return None
-
-
-@lru_cache
 def get_cuda_runtime_version() -> tuple[int, int]:
     """Deprecated. Return the CUDA runtime version as (major, minor).
 
-    Deprecated in favor of :func:`get_nvcc_version` for the CUDA toolkit compiler version, or
-    ``torch.version.cuda`` for the runtime version.
+    Deprecated in favor of ``torch.version.cuda`` for the CUDA runtime version.
 
     Prefers a direct query of ``cudaRuntimeGetVersion`` via ``libcudart.so``. If that's
     not on the system loader path (common with pip-installed torch that bundles its own
@@ -314,8 +236,8 @@ def get_cuda_runtime_version() -> tuple[int, int]:
     runtime's version for pip wheels. Returns ``(0, 0)`` for CPU-only torch.
     """
     warnings.warn(
-        "`get_cuda_runtime_version` is deprecated and will be removed in a future version. Use "
-        "`get_nvcc_version` for the CUDA toolkit compiler version, or `torch.version.cuda` for the runtime version.",
+        "`get_cuda_runtime_version` is deprecated and will be removed in v5.16. "
+        "Use `torch.version.cuda` for the CUDA runtime version.",
         FutureWarning,
         stacklevel=2,
     )
