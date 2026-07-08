@@ -312,7 +312,6 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, UnlimitedOcrVisionEmbeddings):
             factor = module.config.initializer_factor
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
 
@@ -782,14 +781,6 @@ class UnlimitedOcrVisionEmbeddings(nn.Module):
 
         self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
 
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            bias=False,
-        )
-
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
@@ -824,7 +815,6 @@ class UnlimitedOcrVisionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
-        # TODO: check if we can drop dtype cast
         target_dtype = patch_pos_embed.dtype
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.to(torch.float32),
@@ -841,8 +831,7 @@ class UnlimitedOcrVisionEmbeddings(nn.Module):
     def forward(self, patch_embeds: torch.Tensor) -> torch.Tensor:
         r"""
         patch_embeds (`torch.Tensor` of shape `(batch_size, hidden_size, grid_height, grid_width)`):
-            The SAM feature map, injected directly as the CLIP patch embeddings. The CLIP patch convolution
-            (`self.patch_embedding`) is intentionally bypassed.
+            The SAM feature map, injected directly as patch embeddings.
         """
         batch_size, _, grid_height, grid_width = patch_embeds.shape
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
@@ -903,6 +892,7 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
         "hidden_states": UnlimitedOcrEncoderLayer,
         "attentions": UnlimitedOcrAttention,
     }
+    _keys_to_ignore_on_load_unexpected = {"patch_embedding"}  # unused
 
     def __init__(self, config: UnlimitedOcrVisionEncoderConfig):
         super().__init__(config)

@@ -499,7 +499,6 @@ class UnlimitedOcrPreTrainedModel(DeepseekOcr2PreTrainedModel):
         elif isinstance(module, UnlimitedOcrVisionEmbeddings):
             factor = module.config.initializer_factor
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
 
@@ -520,7 +519,19 @@ class UnlimitedOcrEncoderLayer(CLIPEncoderLayer):
 
 
 class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
+    def __init__(self, config: UnlimitedOcrVisionConfig):
+        super().__init__(config)
+        del self.patch_embedding
+
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
         num_patches = embeddings.shape[1] - 1
         position_embedding = self.position_embedding.weight.unsqueeze(0)
         num_positions = position_embedding.shape[1] - 1
@@ -541,7 +552,6 @@ class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
-        # TODO: check if we can drop dtype cast
         target_dtype = patch_pos_embed.dtype
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.to(torch.float32),
@@ -558,8 +568,7 @@ class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
     def forward(self, patch_embeds: torch.Tensor) -> torch.Tensor:
         r"""
         patch_embeds (`torch.Tensor` of shape `(batch_size, hidden_size, grid_height, grid_width)`):
-            The SAM feature map, injected directly as the CLIP patch embeddings. The CLIP patch convolution
-            (`self.patch_embedding`) is intentionally bypassed.
+            The SAM feature map, injected directly as patch embeddings.
         """
         batch_size, _, grid_height, grid_width = patch_embeds.shape
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
@@ -578,6 +587,7 @@ class UnlimitedOcrVisionEncoder(CLIPVisionModel):
         "hidden_states": UnlimitedOcrEncoderLayer,
         "attentions": UnlimitedOcrAttention,
     }
+    _keys_to_ignore_on_load_unexpected = {"patch_embedding"}  # unused
 
     def __init__(self, config: UnlimitedOcrVisionEncoderConfig):
         super().__init__(config)
