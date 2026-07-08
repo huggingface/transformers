@@ -73,10 +73,14 @@ def sdpa_attention_forward(
     # - Attention mask is not to be provided (even if it is a causal pattern)
     # - Internally, we marked this as compatible with causal, i.e. it is a decoder attention type
     #
-    # The always-concrete conditions (non-causal module / provided mask) gate the query-length check so a
-    # plain `False` short-circuits *before* touching `q_length`, which under `torch.export` can be a
-    # data-dependent `SymBool` that SDPA rejects. When causality is still possible, keeping `q_length > 1`
-    # as the first `and` operand specializes a backed symint to `bool` (a trailing operand would leak the `SymBool`).
+    # Quirks on the conditionals:
+    # - We avoid inline passing this to the SDPA function directly to support both torch.compile's dynamic shapes and
+    #   full graph options. Otherwise, dynamic shapes are prevented from compiling.
+    # - It is important to check first for the shape, otherwise compile will fail with
+    #   `argument 'is_causal' must be bool, not SymBool`.
+    # - Under torch.export, `q_length` can instead be a data-dependent SymInt (e.g. subsampled audio lengths), whose
+    #   `> 1` comparison SDPA also rejects as a SymBool. We therefore gate the shape check behind the always-concrete
+    #   conditions first, so a plain `False` short-circuits before `q_length` is ever evaluated.
     is_causal = is_causal and attention_mask is None
     if is_causal:
         is_causal = q_length > 1 and is_causal
