@@ -127,7 +127,7 @@ model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype="
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 ```
 
-Tokenize the text and return PyTorch tensors with the tokenizer. Move the model to an accelerator if it's available to accelerate inference.
+Tokenize the text and return PyTorch tensors with the tokenizer. Move the tokenized inputs to the same device as the model before running inference so the model can process them.
 
 ```py
 model_inputs = tokenizer(["The secret to baking a good cake is "], return_tensors="pt").to(model.device)
