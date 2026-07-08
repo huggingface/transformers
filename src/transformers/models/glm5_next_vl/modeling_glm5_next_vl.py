@@ -44,7 +44,7 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
-from .configuration_glm5_next import Glm5NextVLConfig, Glm5NextVLTextConfig
+from .configuration_glm5_next_vl import Glm5NextVLConfig, Glm5NextVLTextConfig
 
 
 @use_kernel_forward_from_hub("RMSNorm")

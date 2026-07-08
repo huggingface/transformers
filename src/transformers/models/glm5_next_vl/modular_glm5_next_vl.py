@@ -43,7 +43,7 @@ from ..glm5_next.modeling_glm5_next import (
 )
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaDecoderLayer
 from ..llama.modeling_llama import LlamaPreTrainedModel, eager_attention_forward
-from .configuration_glm5_next import Glm5NextVLConfig, Glm5NextVLTextConfig
+from .configuration_glm5_next_vl import Glm5NextVLConfig, Glm5NextVLTextConfig
 
 
 logger = logging.get_logger(__name__)
