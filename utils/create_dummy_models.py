@@ -159,6 +159,9 @@ config_class_to_model_tester_map = {
 
 no_model_tester_at_all = {
     "EdgeTamVideoConfig",
+    "Gemma4AssistantConfig",
+    "Gemma4UnifiedAssistantConfig",
+    "GlmgaConfig",  # processor-only variant of glm46v; no modeling_glmga.py exists, model classes are from glm46v
     "Llama4Config",
     "Llama4TextConfig",
     "Sam2VideoConfig",
