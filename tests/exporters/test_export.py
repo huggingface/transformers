@@ -459,8 +459,8 @@ class ExportTesterMixin:
 
     # ──────────────────── torch.export tests ─────────────────────
 
-    @slow
     @DYNAMIC_EXPORT_PARAMS
+    @slow
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
@@ -491,8 +491,8 @@ class ExportTesterMixin:
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
-    @slow
     @DYNAMIC_EXPORT_PARAMS
+    @slow
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
@@ -522,8 +522,8 @@ class ExportTesterMixin:
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @slow
     @DYNAMIC_EXPORT_PARAMS
+    @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
@@ -583,8 +583,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────── torch.export tests ─────────────────────
 
-    @slow
     @DYNAMIC_EXPORT_PARAMS
+    @slow
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
@@ -615,8 +615,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
-    @slow
     @DYNAMIC_EXPORT_PARAMS
+    @slow
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
@@ -647,8 +647,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
-    @slow
     @DYNAMIC_EXPORT_PARAMS
+    @slow
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
