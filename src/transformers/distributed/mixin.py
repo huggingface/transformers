@@ -57,7 +57,7 @@ class DistributedMixin:
     _device_mesh = None
     _tp_plan: dict[str, str] | None = None
     _tp_size = None
-    _pp_plan: dict[str, tuple[str, str]] | None = None
+    _pp_plan: dict[str, tuple[str, str]] = None
     _fsdp_plan: dict[str, str] | None = None
 
     @property
@@ -196,9 +196,7 @@ class DistributedMixin:
         is_checkpoint_writer: bool = True,
     ) -> tuple[dict, bool]:
         """All-gather TP-sharded weights for checkpoint writing."""
-        full_state_dict = gather_state_dict_for_save(
-            local_state_dict, self._tp_plan, self._device_mesh, self._tp_size
-        )
+        full_state_dict = gather_state_dict_for_save(local_state_dict, self._tp_plan, self._device_mesh, self._tp_size)
         if not is_checkpoint_writer:
             full_state_dict = {}
         return full_state_dict, True
