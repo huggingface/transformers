@@ -1703,6 +1703,13 @@ class QuantizedCache(Cache):
             raise ValueError(f"Unknown quantization backend `{backend}`")
 
         config = config.get_text_config(decoder=True)
+        layer_types, _ = get_layer_types_and_kwargs(config)
+        invalid_layer_types = set(layer_types) - {"full_attention"}
+        if len(invalid_layer_types) > 0:
+            raise ValueError(
+                "`QuantizedCache` is only supported for models with only full attention layers. We found the following invalid layer "
+                f"types: {invalid_layer_types}"
+            )
         layers = [
             layer_class(nbits, axis_key, axis_value, q_group_size, residual_length)
             for _ in range(config.num_hidden_layers)
