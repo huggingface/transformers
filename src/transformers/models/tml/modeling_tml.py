@@ -287,22 +287,9 @@ class TmlMLP(nn.Module):
         return self.down_proj(up_states) * self.global_scale
 
 
-def swiglu_interleaved(gate_up: torch.Tensor) -> torch.Tensor:
-    """
-    SwiGLU over an interleaved gate/up tensor, computed in fp32
-    Note the `[..., 0::2]` instead of `x.chunk(2)`
-    """
-    input_dtype = gate_up.dtype
-    gate_up = gate_up.float()
-    return (F.silu(gate_up[..., 0::2]) * gate_up[..., 1::2]).to(input_dtype)
-
-
+# Same as DeepSeekV3, should copy!
 @use_experts_implementation
 class TmlExperts(nn.Module):
-    """Routed experts. Inherits the 3D-parameter dispatch loop and the
-    `gate_up_proj` / `down_proj` parameters verbatim; only the activation differs
-    (interleaved + fp32, and no swiglu clamp)."""
-
     def __init__(self, config: TmlConfig):
         super().__init__()
         self.num_experts = config.n_routed_experts
@@ -313,7 +300,10 @@ class TmlExperts(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
@@ -326,27 +316,25 @@ class TmlExperts(nn.Module):
             if expert_idx == self.num_experts:
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_hidden_states = hidden_states[token_idx]
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.gate_up_proj[expert_idx])
-            current_hidden_states = swiglu_interleaved(current_hidden_states)
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
         return final_hidden_states
 
 
 class TmlTopkRouter(nn.Module):
-    """Flat top-k router. No group-limited selection. Shared experts, in "sink"
-    mode, occupy the *last* `n_shared_experts` columns and are always active; the
-    additive selection bias applies to routed columns only. `forward` returns the
-    raw logits — renormalization happens in the MoE block."""
-
     def __init__(self, config):
         super().__init__()
         self.n_routed_experts = config.n_routed_experts
         self.n_shared_experts = config.n_shared_experts
         self.n_total_experts = self.n_routed_experts + self.n_shared_experts
         self.hidden_dim = config.hidden_size
+        self.route_scale = config.route_scale
+        self.top_k = config.num_experts_per_tok
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
         self.global_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
@@ -354,7 +342,27 @@ class TmlTopkRouter(nn.Module):
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
-        return F.linear(flat.type(torch.float32), self.weight.type(torch.float32))
+        router_logits = F.linear(flat.type(torch.float32), self.weight.type(torch.float32))
+
+        # same as `self.route_tokens_to_experts` from before, prob same as our MoE and can be copied
+        scores = router_logits.sigmoid()
+        routed_scores = scores[..., : -self.n_shared_experts]
+        scores_for_choice = routed_scores + self.e_score_correction_bias
+        topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
+
+        routed_logits = router_logits[..., : -self.n_shared_experts]
+        shared_logits = router_logits[..., -self.n_shared_experts :]
+        topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
+        topk_log_probs = F.logsigmoid(topk_logits)
+        topk_weights = torch.exp(topk_log_probs - torch.logsumexp(topk_log_probs, dim=-1, keepdim=True))
+
+        topk_weights = topk_weights * self.route_scale
+        topk_weights = topk_weights * self.global_scale
+
+        shared_gammas = topk_weights[..., -self.n_shared_experts :].contiguous()
+        topk_weights = topk_weights[..., : self.top_k].contiguous()
+
+        return topk_indices, topk_weights, shared_gammas
 
 
 # TODO: should we make this as normal MLP with linear layers?
@@ -383,12 +391,6 @@ class TmlSharedExperts(nn.Module):
         return out.view(input_shape)
 
 
-def _logsigmoid_normalize(logits: torch.Tensor) -> torch.Tensor:
-    """Softmax in log-probability space over `logsigmoid(logits)`."""
-    log_probs = F.logsigmoid(logits)
-    return torch.exp(log_probs - torch.logsumexp(log_probs, dim=-1, keepdim=True))
-
-
 class TmlMoE(nn.Module):
     """Gate -> routed experts (+ shared experts), TML flavour."""
 
@@ -397,18 +399,12 @@ class TmlMoE(nn.Module):
         self.config = config
         self.gate = TmlTopkRouter(config)
         self.experts = TmlExperts(config)
-
-        self.n_shared_experts = config.n_shared_experts
-        self.top_k = config.num_experts_per_tok
-        self.route_scale = config.route_scale
-        self.norm_after_topk = config.norm_after_topk
         self.shared_experts = TmlSharedExperts(config)
 
     def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
-        topk_indices, topk_weights, shared_gammas = self.route_tokens_to_experts(router_logits)
+        topk_indices, topk_weights, shared_gammas = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights.type_as(hidden_states)).view(
             *orig_shape
@@ -416,26 +412,6 @@ class TmlMoE(nn.Module):
 
         hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
         return hidden_states
-
-    def route_tokens_to_experts(self, router_logits):
-        scores = router_logits.sigmoid()
-
-        routed_scores = scores[..., : -self.n_shared_experts]
-        scores_for_choice = routed_scores + self.gate.e_score_correction_bias
-        topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
-
-        routed_logits = router_logits[..., : -self.n_shared_experts]
-        shared_logits = router_logits[..., -self.n_shared_experts :]
-        topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
-        topk_weights = _logsigmoid_normalize(topk_logits)
-
-        topk_weights = topk_weights * self.route_scale
-        topk_weights = topk_weights * self.gate.global_scale
-
-        shared_gammas = topk_weights[..., -self.n_shared_experts :].contiguous()
-        topk_weights = topk_weights[..., : self.top_k].contiguous()
-
-        return topk_indices, topk_weights, shared_gammas
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):
