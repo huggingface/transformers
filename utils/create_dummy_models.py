@@ -1356,7 +1356,7 @@ def get_config_overrides(config_class, processors):
 
 
 def _log_disk_usage(label: str) -> None:
-    """Print disk usage of the root filesystem for GitHub Actions log visibility."""
+    """Print disk and memory usage for GitHub Actions log visibility."""
     try:
         import shutil
 
@@ -1368,6 +1368,20 @@ def _log_disk_usage(label: str) -> None:
         )
     except Exception as e:
         print(f"[disk] {label}: could not read disk usage: {e}", flush=True)
+
+    try:
+        with open("/proc/meminfo") as f:
+            meminfo = {k: int(v.split()[0]) for k, v in (line.split(":", 1) for line in f)}
+        total = meminfo["MemTotal"] / 1024**2
+        free = meminfo["MemFree"] / 1024**2
+        available = meminfo["MemAvailable"] / 1024**2
+        used = total - available
+        print(
+            f"[mem]  {label}: total={total:.1f}G  used={used:.1f}G  available={available:.1f}G",
+            flush=True,
+        )
+    except Exception as e:
+        print(f"[mem]  {label}: could not read memory usage: {e}", flush=True)
 
 
 def build(config_class, models_to_create, output_dir, keep_model=False):
