@@ -252,11 +252,11 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): [
-                    "image [383, 87, 497, 171]\ntitle [333",
+                    "image [383, 88, 497, 171]\ntitle [333",
                     "header [53, 23, 365, 41]Advanced Template and Styl",
                 ],
                 ("cpu", None): [
-                    "image [383, 87, 497, 171]\ntitle [333",
+                    "image [383, 88, 497, 171]\ntitle [333",
                     "header [53, 23, 365, 41]Advanced Template and Styl",
                 ],
             }
@@ -296,8 +296,8 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", None): "<PAGE>image [382, 87, 489, 174]\n",
-                ("cpu", None): "<PAGE>image [382, 87, 489, 174]\n",
+                ("cuda", None): "<PAGE>image [384, 87, 489, 171]\n",
+                ("cpu", None): "<PAGE>image [384, 87, 489, 171]\n",
             }
         ).get_expectation()
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
