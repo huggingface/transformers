@@ -27,15 +27,10 @@ from ...utils import auto_docstring
 @strict
 class Cosmos3EdgeTextConfig(PreTrainedConfig):
     r"""
-    Configuration for the dense Nemotron-derived text tower used by Cosmos3 Edge.
-
-    Args:
-        num_logits_to_keep (`int`, *optional*, defaults to 1):
-            Number of final token logits to compute. Set to `None` to compute logits for every token.
-        rope_theta (`float` or `int`, *optional*, defaults to 100000000.0):
-            Base period used by rotary position embeddings.
-        mrope_section (`list[int]` or `tuple[int, int, int]`, *optional*, defaults to `(24, 20, 20)`):
-            Per-axis rotary-frequency sections for temporal, height, and width position IDs.
+    num_logits_to_keep (`int`, *optional*, defaults to 1):
+        Number of final token logits to compute. Set to `None` to compute logits for every token.
+    rope_theta (`float` or `int`, *optional*, defaults to 100000000.0):
+        Base period used by rotary position embeddings.
     """
 
     model_type = "cosmos3_edge_text"
@@ -56,18 +51,18 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
     mlp_hidden_act: str = "relu2"
     layer_norm_epsilon: float = 1e-5
     initializer_range: float = 0.02
-    hidden_dropout: float | int = 0.0
     use_cache: bool = True
     num_logits_to_keep: int = 1
     rope_theta: float | int = 100000000.0
     rope_parameters: dict | None = None
-    mrope_section: list[int] | tuple[int, int, int] = (24, 20, 20)
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = 11
 
     def __post_init__(self, **kwargs):
         legacy_pattern = kwargs.pop("hybrid_override_pattern", None)
+        legacy_mrope_section = kwargs.pop("mrope_section", None)
+        kwargs.pop("hidden_dropout", None)
         if self.layers_block_type is None:
             if legacy_pattern is not None:
                 mapping = {"*": "full_attention", "-": "mlp"}
@@ -86,7 +81,9 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
         self.rope_parameters = dict(self.rope_parameters or {})
         self.rope_parameters.setdefault("rope_type", "default")
         self.rope_parameters.setdefault("rope_theta", self.rope_theta)
-        self.rope_parameters.setdefault("mrope_section", list(self.mrope_section))
+        self.rope_parameters.setdefault(
+            "mrope_section", list(legacy_mrope_section) if legacy_mrope_section is not None else [24, 20, 20]
+        )
 
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
@@ -109,13 +106,8 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
 @strict
 class Cosmos3EdgeVisionConfig(PreTrainedConfig):
     r"""
-    Configuration for the SigLIP2 vision tower used by Cosmos3 Edge.
-
-    Args:
-        num_patches (`int`, *optional*, defaults to 256):
-            Number of patches in the learned reference positional-embedding grid.
-        vision_use_head (`bool`, *optional*, defaults to `False`):
-            Whether to construct the SigLIP2 pooling head. Cosmos3 Edge does not use this head.
+    num_patches (`int`, *optional*, defaults to 256):
+        Number of patches in the learned reference positional-embedding grid.
     """
 
     model_type = "cosmos3_edge_vision"
@@ -131,24 +123,20 @@ class Cosmos3EdgeVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     num_patches: int = 256
     spatial_merge_size: int = 2
-    vision_use_head: bool = False
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
 @strict
 class Cosmos3EdgeProjectorConfig(PreTrainedConfig):
     r"""
-    Configuration for the Cosmos3 Edge spatial patch merger.
-
-    Args:
-        input_hidden_size (`int`, *optional*, defaults to 1152):
-            Hidden size produced by the vision encoder before spatial merging.
-        merger_intermediate_size (`int`, *optional*, defaults to 11520):
-            Intermediate size of the projector MLP.
-        out_hidden_size (`int`, *optional*, defaults to 2048):
-            Hidden size projected into the language model.
-        use_postshuffle_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply layer normalization after spatial patches are grouped.
+    input_hidden_size (`int`, *optional*, defaults to 1152):
+        Hidden size produced by the vision encoder before spatial merging.
+    merger_intermediate_size (`int`, *optional*, defaults to 11520):
+        Intermediate size of the projector MLP.
+    out_hidden_size (`int`, *optional*, defaults to 2048):
+        Hidden size projected into the language model.
+    use_postshuffle_norm (`bool`, *optional*, defaults to `False`):
+        Whether to apply layer normalization after spatial patches are grouped.
     """
 
     model_type = "cosmos3_edge_projector"
@@ -170,9 +158,8 @@ class Cosmos3EdgeProjectorConfig(PreTrainedConfig):
 @strict
 class Cosmos3EdgeConfig(PreTrainedConfig):
     r"""
-    Args:
-        projector_config (`dict` or [`Cosmos3EdgeProjectorConfig`], *optional*):
-            Configuration of the vision-to-language patch merger.
+    projector_config (`dict` or [`Cosmos3EdgeProjectorConfig`], *optional*):
+        Configuration of the vision-to-language patch merger.
 
     Example:
 

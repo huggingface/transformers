@@ -58,7 +58,7 @@ def _tiny_config():
             "rope_theta": 100_000_000,
             # The real checkpoint uses [24, 20, 20] for head_dim=128. Keep
             # the same 2 * sum(section) == head_dim relation in this tiny config.
-            "mrope_section": [2, 1, 1],
+            "rope_parameters": {"mrope_section": [2, 1, 1]},
             "use_cache": True,
         },
         vision_config={
@@ -126,10 +126,19 @@ class Cosmos3EdgeConfigTest(unittest.TestCase):
         self.assertIsInstance(config.projector_config, Cosmos3EdgeProjectorConfig)
         self.assertEqual(config.text_config.layers_block_type, ["full_attention", "mlp"] * 2)
         self.assertEqual(config.text_config.rope_theta, 100_000_000)
-        self.assertEqual(config.text_config.mrope_section, [2, 1, 1])
+        self.assertEqual(config.text_config.rope_parameters["mrope_section"], [2, 1, 1])
 
         reloaded = Cosmos3EdgeConfig.from_dict(config.to_dict())
         self.assertEqual(reloaded.to_dict(), config.to_dict())
+
+    def test_legacy_config_fields_are_normalized_or_ignored(self):
+        text_config = Cosmos3EdgeTextConfig(hidden_dropout=0.2, mrope_section=[2, 1, 1])
+        vision_config = Cosmos3EdgeVisionConfig()
+
+        self.assertEqual(text_config.rope_parameters["mrope_section"], [2, 1, 1])
+        self.assertNotIn("hidden_dropout", text_config.to_dict())
+        self.assertNotIn("mrope_section", text_config.to_dict())
+        self.assertNotIn("vision_use_head", vision_config.to_dict())
 
     def test_projector_accepts_the_checkpoint_legacy_field_name(self):
         config = Cosmos3EdgeProjectorConfig(merger_intermedia=73)
