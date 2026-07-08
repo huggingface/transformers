@@ -53,6 +53,7 @@ from transformers import (
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.file_utils import is_torch_available
 from transformers.image_processing_utils import BaseImageProcessor
+from transformers.image_utils import SizeDict
 from transformers.models.auto.configuration_auto import AutoConfig, model_type_to_module_name
 from transformers.processing_utils import ProcessorMixin, transformers_module
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
@@ -213,6 +214,7 @@ CHECKPOINT_REVISIONS = {
 }
 
 CHECKPOINT_SUBFOLDERS = {
+    "GlmImageConfig": "processor",
     "GlmImageTextConfig": "processor",
     "GlmImageVisionConfig": "processor",
     "GlmImageVQVAEConfig": "processor",
