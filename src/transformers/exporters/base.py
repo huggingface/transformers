@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 from ..utils import logging
 from ..utils.import_utils import _is_package_available, is_torch_available
+from ..utils.versions import require_version
 from .configs import ExportConfigMixin
 from .utils import decompose_for_generation
 
@@ -45,6 +46,9 @@ class HfExporter(ABC):
     """
 
     required_packages: list[str] = []
+    # Hard minimum versions — the exporter raises below these (features it relies on are absent).
+    min_versions: dict[str, str] = {}
+    # Versions the exporter is validated against — a mismatch only warns.
     tested_versions: dict[str, str] = {}
 
     def __init__(self):
@@ -74,6 +78,10 @@ class HfExporter(ABC):
                 f"{pkg}=={self.tested_versions[pkg]}" if pkg in self.tested_versions else pkg for pkg in missing
             )
             raise ImportError(f"To use {type(self).__name__}, please install the following dependencies: {specs}")
+
+        # Enforce hard minimums (pip-style spec; raises a clear error with the installed version).
+        for pkg, minimum in self.min_versions.items():
+            require_version(f"{pkg}>={minimum}", f"{type(self).__name__} requires {pkg}>={minimum}.")
 
         if drift:
             details = ", ".join(f"{pkg}: installed {got}, tested {want}" for pkg, got, want in drift)

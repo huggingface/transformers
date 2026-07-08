@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     require_executorch,
     require_onnxruntime,
     require_onnxscript,
+    require_torch_greater_or_equal,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -305,6 +306,11 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
 # Maximum time (in seconds) for a single export test before it is killed.
 EXPORT_TEST_TIMEOUT = 1000
 
+# Minimum torch version the exporters target — older releases lack `torch.export` features the
+# exporters rely on, so the export sweep is skipped (not failed) below this. Sourced from the
+# exporter itself so the test and the runtime check can't drift apart.
+MIN_EXPORT_TORCH_VERSION = DynamoExporter.min_versions["torch"]
+
 
 # ──────────────────────────── helpers ────────────────────────────
 
@@ -457,6 +463,7 @@ class ExportTesterMixin:
     @DYNAMIC_EXPORT_PARAMS
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
         """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
         self._skip_if_not_exportable()
@@ -490,6 +497,7 @@ class ExportTesterMixin:
     @require_onnxruntime
     @pytest.mark.onnx_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     def test_onnx_export(self, dynamic):
         """Export each model class to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
@@ -519,6 +527,7 @@ class ExportTesterMixin:
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     def test_executorch_export(self, dynamic):
         """Export each model class to ExecuTorch (xnnpack on CPU, cuda on GPU) and verify no errors."""
 
@@ -538,10 +547,11 @@ class ExportTesterMixin:
                     exporter.export(model, inputs, config=config)
 
 
-class ExportGenerateTesterMixin:
+class ExportGenerateTesterMixin(ExportTesterMixin):
     """Mixin providing generation-aware export tests for torch.export, ONNX, and ExecuTorch backends.
 
-    Mix into a model test class alongside ``ExportTesterMixin`` and ``GenerationTesterMixin``.
+    Inherits ``ExportTesterMixin`` for the shared exportability gate / skip logic / input prep, and
+    is mixed into a model test class alongside ``GenerationTesterMixin``.
 
     Required attributes on the host class (in addition to those from ``ExportTesterMixin``):
     - ``all_generative_model_classes`` — iterable of generative model class objects to test.
@@ -577,6 +587,7 @@ class ExportGenerateTesterMixin:
     @DYNAMIC_EXPORT_PARAMS
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     def test_torch_export_generate(self, dynamic, atol=1e-4, rtol=1e-4):
         """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._skip_if_not_exportable()
@@ -610,6 +621,7 @@ class ExportGenerateTesterMixin:
     @require_onnxruntime
     @pytest.mark.onnx_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     def test_onnx_export_generate(self, dynamic):
         """Export prefill and decode stages to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
@@ -640,6 +652,7 @@ class ExportGenerateTesterMixin:
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     def test_executorch_export_generate(self, dynamic):
         """Export prefill and decode stages to ExecuTorch and verify no errors."""
 
