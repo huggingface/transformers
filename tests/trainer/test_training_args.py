@@ -358,6 +358,36 @@ class TestTrainingArguments(unittest.TestCase):
         )
         self.assertEqual(args.dataloader_prefetch_factor, 2)
 
+    def test_dataloader_multiprocessing_context_validation(self):
+        """Test that dataloader_multiprocessing_context requires num_workers > 0."""
+        # Requires workers > 0
+        with self.assertRaises(ValueError):
+            TrainingArguments(
+                output_dir="tmp",
+                dataloader_multiprocessing_context="spawn",
+                dataloader_num_workers=0,
+                report_to=None,
+            )
+        # Valid
+        args = TrainingArguments(
+            output_dir="tmp",
+            dataloader_multiprocessing_context="spawn",
+            dataloader_num_workers=2,
+            report_to=None,
+        )
+        self.assertEqual(args.dataloader_multiprocessing_context, "spawn")
+
+    def test_dataloader_in_order_torch_version(self):
+        """Test that dataloader_in_order=False requires torch >= 2.6."""
+        from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
+
+        if is_torch_greater_or_equal_than_2_6:
+            args = TrainingArguments(output_dir="tmp", dataloader_in_order=False, report_to=None)
+            self.assertFalse(args.dataloader_in_order)
+        else:
+            with self.assertRaises(ValueError):
+                TrainingArguments(output_dir="tmp", dataloader_in_order=False, report_to=None)
+
     def test_use_cpu_disables_pin_memory(self):
         """Test that use_cpu=True disables dataloader_pin_memory."""
         args = TrainingArguments(output_dir="tmp", use_cpu=True, report_to=None)
